@@ -1300,3 +1300,138 @@ button {
     position: fixed;
   }
 }
+
+/* ── 模型配置 CRUD（覆盖旧 model-settings/model-editor 的展示棄样式）── */
+.model-settings {
+  display: grid;
+  gap: 16px;
+}
+
+.model-loading,
+.model-empty {
+  color: #a9afb8;
+  font-size: 13px;
+  padding: 16px 0;
+}
+
+.model-list-card {
+  padding: 16px;
+}
+
+.model-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.model-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.model-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.model-list li:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.model-list li.active {
+  background: rgba(99, 102, 241, 0.16);
+}
+
+.model-list li strong {
+  display: block;
+  font-size: 13px;
+}
+
+.model-list li span {
+  display: block;
+  font-size: 11px;
+  color: #6b7280;
+  font-family: var(--font-mono, monospace);
+}
+
+.model-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.model-badges em {
+  font-style: normal;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #a9afb8;
+}
+
+.model-badges em.default {
+  background: rgba(16, 185, 129, 0.18);
+  color: #6ee7b7;
+}
+
+.model-badges button {
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
+.model-editor {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.model-editor h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.model-editor label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: #a9afb8;
+}
+
+.model-editor input {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+}
+
+.model-editor-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.model-add-dialog {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.template-picker .template-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.template-picker .template-grid button {
+  display: grid;
+  gap: 2px;
+  padding: 10px;
+  text-align: left;
+  border-radius: 8px;
+}

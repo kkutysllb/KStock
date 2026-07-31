@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -39,6 +39,16 @@ import {
   type AuthUser,
   type SetupStatus
 } from "../lib/authClient";
+import {
+  createModel,
+  deleteModel,
+  isModelsApiError,
+  listModels,
+  setDefaultModel,
+  updateModel,
+  type ModelConfig,
+  type ModelWritePayload
+} from "../lib/modelsClient";
 import {
   appendMessageToSession,
   buildReportMarkdown,
@@ -858,62 +868,264 @@ function SettingsPage({
   );
 }
 
+/** 模型配置 CRUD 页：列表 + 编辑 + 添加 + 默认模型。 */
 function ModelSettings() {
-  const [selectedTemplateId, setSelectedTemplateId] = useState(MODEL_TEMPLATES[0].id);
-  const selectedTemplate = MODEL_TEMPLATES.find((template) => template.id === selectedTemplateId) ?? MODEL_TEMPLATES[0];
+  const [models, setModels] = useState<ModelConfig[]>([]);
+  const [defaultModel, setDefaultModelState] = useState<string | null>(null);
+  const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [addTemplate, setAddTemplate] = useState<typeof MODEL_TEMPLATES[number] | null>(null);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await listModels();
+      setModels(data.models);
+      setDefaultModelState(data.default_model);
+      if (data.models.length > 0 && !selectedName) {
+        setSelectedName(data.models[0].name);
+      }
+    } catch (err) {
+      setError(isModelsApiError(err) ? err.message : "加载模型失败");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedName]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const selected = models.find((m) => m.name === selectedName) ?? null;
+
+  const handleDelete = async (name: string) => {
+    if (!window.confirm(`确认删除模型「${name}」？相关 API key 也会从 secrets.env 移除。`)) return;
+    try {
+      await deleteModel(name);
+      if (selectedName === name) setSelectedName(null);
+      await reload();
+    } catch (err) {
+      setError(isModelsApiError(err) ? err.message : "删除失败");
+    }
+  };
+
+  const handleSetDefault = async (name: string | null) => {
+    try {
+      await setDefaultModel(name);
+      setDefaultModelState(name);
+    } catch (err) {
+      setError(isModelsApiError(err) ? err.message : "设置默认模型失败");
+    }
+  };
+
+  if (loading) {
+    return <div className="model-settings"><p className="model-loading">加载模型配置…</p></div>;
+  }
 
   return (
     <div className="model-settings">
-      <section className="settings-card model-editor" aria-label="模型配置">
-        <div className="setting-row">
-          <div>
-            <strong>模板</strong>
-            <span>选择 QiLin 已适配的模型 provider</span>
-          </div>
-          <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
-            {MODEL_TEMPLATES.map((template) => (
-              <option key={template.id} value={template.id}>{template.name}</option>
+      {error && <p className="auth-error" role="alert">{error}</p>}
+
+      <section className="settings-card model-list-card" aria-label="模型列表">
+        <div className="model-list-header">
+          <strong>已配置模型</strong>
+          <button className="pill-control" type="button" onClick={() => { setAddTemplate(null); setAdding(true); }}>+ 添加模型</button>
+        </div>
+        {models.length === 0 ? (
+          <p className="model-empty">尚未配置任何模型。点击「添加模型」，从模板创建或自定义一个。</p>
+        ) : (
+          <ul className="model-list">
+            {models.map((m) => (
+              <li
+                key={m.name}
+                className={m.name === selectedName ? "active" : ""}
+                onClick={() => setSelectedName(m.name)}
+              >
+                <div>
+                  <strong>{m.display_name || m.name}</strong>
+                  <span>{m.use}</span>
+                </div>
+                <div className="model-badges">
+                  {m.supports_thinking && <em>思考</em>}
+                  {m.supports_vision && <em>视觉</em>}
+                  {defaultModel === m.name && <em className="default">默认</em>}
+                  <button type="button" onClick={(e) => { e.stopPropagation(); handleSetDefault(m.name); }} aria-label="设为默认">设默认</button>
+                </div>
+              </li>
             ))}
-          </select>
-        </div>
-        <label>
-          <span>provider</span>
-          <input readOnly value={selectedTemplate.provider} />
-        </label>
-        <label>
-          <span>model</span>
-          <input value={selectedTemplate.model} readOnly />
-        </label>
-        <label>
-          <span>{selectedTemplate.endpointKey}</span>
-          <input value={selectedTemplate.endpoint} readOnly />
-        </label>
-        <label>
-          <span>api_key</span>
-          <input value={selectedTemplate.apiKeyEnv} readOnly />
-        </label>
-        <div className="capability-row">
-          <span className={selectedTemplate.thinking ? "on" : ""}>Thinking</span>
-          <span className={selectedTemplate.vision ? "on" : ""}>Vision</span>
-          <span>{selectedTemplate.family}</span>
-        </div>
-        <p className="model-note">{selectedTemplate.note}</p>
+          </ul>
+        )}
       </section>
 
-      <section className="template-grid" aria-label="模型模板">
-        {MODEL_TEMPLATES.map((template) => (
-          <button
-            key={template.id}
-            className={template.id === selectedTemplate.id ? "active" : ""}
-            type="button"
-            onClick={() => setSelectedTemplateId(template.id)}
-          >
-            <strong>{template.name}</strong>
-            <span>{template.provider}</span>
-            <em>{template.thinking ? "支持思考" : "普通生成"} · {template.vision ? "视觉" : "文本"}</em>
-          </button>
-        ))}
-      </section>
+      {selected && (
+        <ModelEditor
+          key={selected.name}
+          model={selected}
+          onSave={async (payload) => {
+            try {
+              await updateModel(selected.name, payload);
+              await reload();
+            } catch (err) {
+              setError(isModelsApiError(err) ? err.message : "保存失败");
+            }
+          }}
+          onDelete={() => handleDelete(selected.name)}
+        />
+      )}
+
+      {adding && (
+        <ModelAddDialog
+          initialTemplate={addTemplate}
+          onPickTemplate={(t) => setAddTemplate(t)}
+          onCancel={() => setAdding(false)}
+          onSubmit={async (payload) => {
+            try {
+              await createModel(payload);
+              setAdding(false);
+              await reload();
+            } catch (err) {
+              setError(isModelsApiError(err) ? err.message : "添加失败");
+            }
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/** 单个模型编辑面板。api_key 留空表示不修改现有 key。 */
+function ModelEditor({ model, onSave, onDelete }: {
+  model: ModelConfig;
+  onSave: (payload: ModelWritePayload) => Promise<void>;
+  onDelete: () => void;
+}) {
+  const [displayName, setDisplayName] = useState(model.display_name ?? "");
+  const [useClass, setUseClass] = useState(model.use);
+  const [modelName, setModelName] = useState(model.model);
+  const [apiBase, setApiBase] = useState(model.api_base ?? "");
+  const [apiKey, setApiKey] = useState("");
+  const [thinking, setThinking] = useState(model.supports_thinking);
+  const [vision, setVision] = useState(model.supports_vision);
+  const [reasoningEffort, setReasoningEffort] = useState(model.supports_reasoning_effort);
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <section className="settings-card model-editor" aria-label="编辑模型">
+      <h3>{model.name}</h3>
+      <label><span>display_name</span><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} /></label>
+      <label><span>use（provider class）</span><input value={useClass} onChange={(e) => setUseClass(e.target.value)} /></label>
+      <label><span>model</span><input value={modelName} onChange={(e) => setModelName(e.target.value)} /></label>
+      <label><span>api_base</span><input value={apiBase} onChange={(e) => setApiBase(e.target.value)} /></label>
+      <label><span>api_key{model.api_key_env ? `（已配置 ${model.api_key_env}）` : ""}</span>
+        <input type="password" placeholder="留空不修改" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+      </label>
+      <div className="capability-row">
+        <label className="auth-remember"><input type="checkbox" checked={thinking} onChange={(e) => setThinking(e.target.checked)} /><span>Thinking</span></label>
+        <label className="auth-remember"><input type="checkbox" checked={vision} onChange={(e) => setVision(e.target.checked)} /><span>Vision</span></label>
+        <label className="auth-remember"><input type="checkbox" checked={reasoningEffort} onChange={(e) => setReasoningEffort(e.target.checked)} /><span>Reasoning Effort</span></label>
+      </div>
+      <div className="model-editor-actions">
+        <button className="hero-primary" type="button" disabled={saving} onClick={async () => {
+          setSaving(true);
+          try {
+            await onSave({
+              name: model.name,
+              display_name: displayName || null,
+              use: useClass,
+              model: modelName,
+              api_base: apiBase || null,
+              api_key: apiKey || null,
+              supports_thinking: thinking,
+              supports_vision: vision,
+              supports_reasoning_effort: reasoningEffort,
+            });
+          } finally { setSaving(false); }
+        }}>{saving ? "保存中…" : "保存"}</button>
+        <button className="link-button" type="button" onClick={onDelete}>删除模型</button>
+      </div>
+    </section>
+  );
+}
+
+/** 添加模型弹层：先选模板或空白自定义，再填表单提交。 */
+function ModelAddDialog({ initialTemplate, onPickTemplate, onCancel, onSubmit }: {
+  initialTemplate: typeof MODEL_TEMPLATES[number] | null;
+  onPickTemplate: (t: typeof MODEL_TEMPLATES[number] | null) => void;
+  onCancel: () => void;
+  onSubmit: (payload: ModelWritePayload) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [useClass, setUseClass] = useState("");
+  const [modelName, setModelName] = useState("");
+  const [apiBase, setApiBase] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [thinking, setThinking] = useState(false);
+  const [vision, setVision] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (initialTemplate) {
+      setName(initialTemplate.id);
+      setDisplayName(initialTemplate.name);
+      setUseClass(initialTemplate.provider);
+      setModelName(initialTemplate.model);
+      setApiBase(initialTemplate.endpointKey === "native" ? "" : initialTemplate.endpoint);
+      setThinking(initialTemplate.thinking);
+      setVision(initialTemplate.vision);
+    }
+  }, [initialTemplate]);
+
+  return (
+    <section className="settings-card model-add-dialog" aria-label="添加模型">
+      <div className="model-list-header">
+        <strong>添加模型</strong>
+        <button className="link-button" type="button" onClick={onCancel}>取消</button>
+      </div>
+      {!initialTemplate && (
+        <div className="template-picker">
+          <p className="model-empty">从模板快速创建，或直接空白自定义：</p>
+          <div className="template-grid">
+            {MODEL_TEMPLATES.map((t) => (
+              <button key={t.id} type="button" onClick={() => onPickTemplate(t)}>
+                <strong>{t.name}</strong><span>{t.provider}</span>
+              </button>
+            ))}
+            <button type="button" onClick={() => onPickTemplate(MODEL_TEMPLATES[0])}>
+              <strong>空白自定义</strong><span>手动填写全部字段</span>
+            </button>
+          </div>
+        </div>
+      )}
+      {initialTemplate && (
+        <>
+          <label><span>name（唯一标识）</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>
+          <label><span>display_name</span><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} /></label>
+          <label><span>use（provider class）</span><input value={useClass} onChange={(e) => setUseClass(e.target.value)} /></label>
+          <label><span>model</span><input value={modelName} onChange={(e) => setModelName(e.target.value)} /></label>
+          <label><span>api_base</span><input value={apiBase} onChange={(e) => setApiBase(e.target.value)} /></label>
+          <label><span>api_key（明文，存入 secrets.env）</span><input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} /></label>
+          <div className="capability-row">
+            <label className="auth-remember"><input type="checkbox" checked={thinking} onChange={(e) => setThinking(e.target.checked)} /><span>Thinking</span></label>
+            <label className="auth-remember"><input type="checkbox" checked={vision} onChange={(e) => setVision(e.target.checked)} /><span>Vision</span></label>
+          </div>
+          <button className="hero-primary" type="button" disabled={submitting} onClick={async () => {
+            if (!name || !useClass || !modelName) return;
+            setSubmitting(true);
+            try {
+              await onSubmit({
+                name, display_name: displayName || null,
+                use: useClass, model: modelName,
+                api_base: apiBase || null, api_key: apiKey || null,
+                supports_thinking: thinking, supports_vision: vision,
+              });
+            } finally { setSubmitting(false); }
+          }}>{submitting ? "提交中…" : "创建"}</button>
+        </>
+      )}
+    </section>
   );
 }

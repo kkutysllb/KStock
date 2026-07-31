@@ -24,6 +24,18 @@ vi.mock("../src/lib/authClient", () => ({
     "status" in e,
 }));
 
+// 模型配置 API mock：listModels 默认返回空列表（无已配置模型）。
+vi.mock("../src/lib/modelsClient", () => ({
+  listModels: vi.fn().mockResolvedValue({ models: [], default_model: null }),
+  createModel: vi.fn(),
+  updateModel: vi.fn(),
+  deleteModel: vi.fn(),
+  getDefaultModel: vi.fn().mockResolvedValue({ default_model: null }),
+  setDefaultModel: vi.fn().mockResolvedValue({ default_model: null }),
+  isModelsApiError: (e: unknown) =>
+    typeof e === "object" && e !== null && "message" in e && "status" in e,
+}));
+
 // 默认未登录；已登录场景在测试内用 mockResolvedValueOnce 覆盖。
 beforeEach(() => {
   authMock.tryGetCurrentUser.mockResolvedValue(null);
@@ -56,8 +68,9 @@ test("已登录启动后直接进入工作台并打开设置模型页", async ()
   fireEvent.click(screen.getByRole("button", { name: "模型" }));
 
   expect(screen.getByRole("heading", { name: "模型" })).toBeVisible();
-  expect(screen.getByDisplayValue("qilin.models.patched_deepseek:PatchedChatDeepSeek")).toBeVisible();
-  expect(screen.getByText("qilin.models.patched_openai:PatchedChatOpenAI")).toBeInTheDocument();
+  // 新 CRUD UI：无已配置模型时显示空状态提示与添加按钮。
+  expect(await screen.findByText("尚未配置任何模型。点击「添加模型」，从模板创建或自定义一个。")).toBeVisible();
+  expect(screen.getByRole("button", { name: "+ 添加模型" })).toBeVisible();
 });
 
 test("注册入口展示邮箱密码与确认密码表单", async () => {
