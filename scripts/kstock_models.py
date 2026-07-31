@@ -57,3 +57,46 @@ def env_name_for_model(name: str) -> str:
     if not upper:
         raise ValueError(f"模型 name 无法转为合法环境变量名: {name!r}")
     return f"KSTOCK_MODEL_{upper}_KEY"
+
+
+def load_runtime_config() -> dict[str, Any]:
+    """读 runtime.yaml 为 dict；文件不存在时返回空 dict。"""
+    path = _runtime_config_path()
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh) or {}
+
+
+def load_runtime_models() -> list[dict[str, Any]]:
+    """读 runtime.yaml 的 models 段；无则返回空列表。"""
+    cfg = load_runtime_config()
+    models = cfg.get("models")
+    if not isinstance(models, list):
+        return []
+    return [m for m in models if isinstance(m, dict)]
+
+
+def _atomic_write_yaml(path: Path, data: dict[str, Any]) -> None:
+    """备份原文件后，用临时文件 + os.replace 原子替换。"""
+    if path.exists():
+        backup_name = f"{path.name}.{int(path.stat().st_mtime * 1000)}.bak"
+        shutil.copy2(path, _backups_dir() / backup_name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    directory = str(path.parent)
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            yaml.safe_dump(data, fh, allow_unicode=True, sort_keys=False)
+        os.replace(tmp, path)
+    except Exception:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+
+
+def save_runtime_models(models: list[dict[str, Any]]) -> None:
+    """更新 runtime.yaml 的 models 段（保留其他段），原子替换。"""
+    cfg = load_runtime_config()
+    cfg["models"] = models
+    _atomic_write_yaml(_runtime_config_path(), cfg)
