@@ -176,9 +176,19 @@ export function Home() {
     }
   }, [authReady, currentUser, view]);
 
-  // 启动时加载模型列表，确定初始 activeModel：localStorage > default_model > 首个。
+  // 加载模型列表，确定初始 activeModel：localStorage > default_model > 首个。
+  // 依赖 currentUser：未登录时请求会被 401，登录成功后需要重试拉取。
+  // （原实现依赖 []，桌面端首次进入未登录时 listModels 永远拿到 401 且不重试，
+  //   导致登录后仍显示「未配置模型」。Web 端因打开时已登录放免。）
   useEffect(() => {
     let cancelled = false;
+    if (!currentUser) {
+      // 未登录时清空，避免显示他人模型列表。
+      setModels([]);
+      setModelsLoading(false);
+      return;
+    }
+    setModelsLoading(true);
     (async () => {
       try {
         const stored = localStorage.getItem("kstock.activeModel");
@@ -193,7 +203,7 @@ export function Home() {
               : (data.models[0]?.name ?? "");
         setActiveModel(initial);
       } catch {
-        // gateway 未就绪：保持空，选择器显示「未配置」。
+        // gateway 未就绪或未登录：保持空，选择器显示「未配置」。
       } finally {
         if (!cancelled) setModelsLoading(false);
       }
@@ -201,7 +211,7 @@ export function Home() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [currentUser]);
 
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) ?? sessions[0],
