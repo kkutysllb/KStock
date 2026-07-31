@@ -51,6 +51,31 @@ export async function ensureThread(): Promise<string> {
 }
 
 /**
+ * 删除引擎 thread（同步清理用户数据空间下整个 thread 目录：
+ * workspace/uploads/outputs/中间文件 + checkpoints + thread_meta）。
+ *
+ * 后端：DELETE /api/threads/{thread_id}，需 owner 权限。
+ * 返回 { success, message }；失败抛错。
+ */
+export async function deleteThread(threadId: string): Promise<void> {
+  const resp = await fetch(`${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}`, {
+    method: "DELETE",
+    credentials: "include",
+    headers: jsonHeaders()
+  });
+  if (!resp.ok) {
+    throw await toError("删除 thread 失败", resp);
+  }
+  // HTTP 2xx 即成功。后端返回 { success, message }，best-effort 消费 body
+  // （空 body 或非 JSON 不影响判定）。
+  try {
+    await resp.text();
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
  * 发起流式 run，逐帧回调 handlers.onFrame，直至 event:end 或流结束。
  * 遇 event:error / HTTP 非 2xx / 网络错误调 handlers.onError。
  * signal abort 时静默终止（不报错）。

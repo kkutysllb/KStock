@@ -25,6 +25,7 @@ import {
   Settings,
   Sparkles,
   Square,
+  Trash2,
   UserPlus,
 } from "lucide-react";
 import { Markdown } from "../lib/markdown";
@@ -62,7 +63,7 @@ import {
   updateMessageInSession,
   type ChatSession
 } from "../lib/sessionStore";
-import { ensureThread, runContextFromModel, streamRun } from "../lib/turnsClient";
+import { deleteThread, ensureThread, runContextFromModel, streamRun } from "../lib/turnsClient";
 import { initialTurn, reduceFrame } from "../lib/turnReducer";
 import { inferStage } from "../lib/stageInferrer";
 import { ChatFeed, type ChatFeedHandle } from "../components/ChatFeed";
@@ -247,6 +248,39 @@ export function Home() {
     setDraft("");
   };
 
+  // 删除历史任务：同步清理后端用户数据空间下整个 thread 目录
+  // （workspace/uploads/outputs/中间文件 + checkpoints + thread_meta）。
+  // 前端从 sessions 移除；若删的是当前 active 则切换到首个剩余会话。
+  const handleDeleteSession = async (sessionId: string) => {
+    const target = sessions.find((s) => s.id === sessionId);
+    if (!target) return;
+    const label = target.title || "该任务";
+    if (!window.confirm(`确认删除「${label}」？\n\n将同步删除后端该任务的全部对话数据、上传文件、产出与中间文件，不可恢复。`)) {
+      return;
+    }
+    // 1. 调用后端删除 thread（best-effort，后端不可达也允许前端清理）。
+    if (target.threadId) {
+      try {
+        await deleteThread(target.threadId);
+      } catch (err) {
+        // 后端删除失败时提示但仍清理前端，避免遗留无法访问的幽灵会话。
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!window.confirm(`后端数据清理失败：${msg}\n\n仍要从前端列表移除该任务吗？`)) {
+          return;
+        }
+      }
+    }
+    // 2. 前端移除该 session。
+    setSessions((current) => {
+      const next = current.filter((s) => s.id !== sessionId);
+      // 若删的是当前 active，切换到首个剩余会话；全删空则不设 active（landing）。
+      if (sessionId === activeSessionId) {
+        setActiveSessionId(next[0]?.id ?? "");
+      }
+      return next;
+    });
+  };
+
   // 发送消息：append user → ensureThread → append streaming turn → streamRun。
   // reducer 状态在闭包外维护（setSessions 异步，不能依赖最新 state 读回 turn）。
   const handleSend = async (modelName: string) => {
@@ -384,6 +418,7 @@ export function Home() {
       onNewSession={handleNewSession}
       onOpenSettings={() => setView("settings")}
       onSelectSession={setActiveSessionId}
+            onDeleteSession={handleDeleteSession}
       onSend={handleSend}
       onStop={handleStop}
       onToggleRightPanel={() => setRightPanelOpen((current) => !current)}
@@ -705,6 +740,7 @@ function WorkspaceShell({
   onNewSession,
   onOpenSettings,
   onSelectSession,
+  onDeleteSession,
   onSend,
   onStop,
   onToggleRightPanel,
@@ -727,6 +763,7 @@ function WorkspaceShell({
   onNewSession: () => void;
   onOpenSettings: () => void;
   onSelectSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string) => void;
   onSend: (model: string) => void;
   onStop: () => void;
   onToggleRightPanel: () => void;
@@ -790,18 +827,31 @@ function WorkspaceShell({
                   <p className="session-empty">暂无历史任务</p>
                 ) : (
                   sessions.map((session) => (
-                    <button
+                    <div
                       key={session.id}
                       className={`session-row ${session.id === activeSession?.id ? "active" : ""}`}
-                      type="button"
-                      onClick={() => onSelectSession(session.id)}
                     >
-                      <strong>{session.title}</strong>
-                      <span className="session-meta">
-                        <Clock size={11} />
-                        {session.updatedAt}
-                      </span>
-                    </button>
+                      <button
+                        className="session-row-main"
+                        type="button"
+                        onClick={() => onSelectSession(session.id)}
+                      >
+                        <strong>{session.title}</strong>
+                        <span className="session-meta">
+                          <Clock size={11} />
+                          {session.updatedAt}
+                        </span>
+                      </button>
+                      <button
+                        className="session-row-delete"
+                        type="button"
+                        aria-label={`删除任务 ${session.title}`}
+                        title="删除任务"
+                        onClick={() => onDeleteSession(session.id)}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
                   ))
                 )}
               </div>

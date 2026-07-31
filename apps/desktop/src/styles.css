@@ -708,21 +708,63 @@ button {
   gap: 4px;
 }
 
+/* session-row 现为容器（div），内含 main button + delete button */
 .session-row {
-  display: grid;
-  gap: 5px;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
   width: 100%;
-  border: 0;
   border-radius: 7px;
-  padding: 8px 10px 8px 16px;
+  padding: 0;
   background: transparent;
-  color: #d9dde3;
-  text-align: left;
-  cursor: pointer;
+  position: relative;
 }
 
 .session-row.active {
   background: #303438;
+}
+
+.session-row-main {
+  display: grid;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #d9dde3;
+  text-align: left;
+  padding: 8px 28px 8px 16px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.session-row-delete {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #8f96a0;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.session-row:hover .session-row-delete,
+.session-row:focus-within .session-row-delete {
+  opacity: 1;
+}
+
+.session-row-delete:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.14);
 }
 
 .session-row strong {
