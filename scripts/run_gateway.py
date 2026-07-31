@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -244,10 +245,33 @@ def _configure_gateway_security() -> None:
         os.environ["GATEWAY_CORS_ORIGINS"] = ",".join(desktop_origins)
 
 
+def _load_secrets_env(data_root: Path) -> None:
+    """加载 secrets.env 到 ``os.environ``（gateway 进程级别）。
+
+    模型 API key 明文存在 ``secrets.env``，``runtime.yaml`` 只存 ``$ENV`` 引用。
+    引擎热重载 ``runtime.yaml`` 时通过 ``os.environ`` 解析 ``$KEY`` 引用，
+    故 gateway 启动时必须把已有 secrets 加载到进程环境；运行时新增的由
+    ``kstock_models.upsert_secret`` 同步更新。
+    """
+    secrets_path = data_root / "config" / "secrets.env"
+    if not secrets_path.exists():
+        return
+    pattern = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)="(.*)"$')
+    loaded = 0
+    for line in secrets_path.read_text(encoding="utf-8").splitlines():
+        m = pattern.match(line.strip())
+        if m:
+            os.environ[m.group(1)] = m.group(2)
+            loaded += 1
+    if loaded:
+        print(f"  secrets.env   : 已加载 {loaded} 个密钥", flush=True)
+
+
 def create_app():
     """应用工厂：先打垫片、初始化用户数据空间、配 CORS，再构造 QiLin gateway。"""
     _apply_vendor_extensions_config_compat_shim()
     paths = _ensure_data_space()
+    _load_secrets_env(paths["data_root"])
     _configure_gateway_security()
     # 启动日志：明确告知用户数据落点，便于排查
     print("=" * 64, flush=True)

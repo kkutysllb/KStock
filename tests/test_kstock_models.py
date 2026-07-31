@@ -225,6 +225,19 @@ def test_default_model_endpoints(tmp_path, monkeypatch):
     assert client.get("/api/v1/kstock/default-model").json() == {"default_model": "a"}
 
 
+def test_delete_default_model_clears_default(tmp_path, monkeypatch):
+    """删除的恰是当前默认模型时，联动清除 prefs.json 悬空引用。"""
+    client = _client_under(tmp_path, monkeypatch)
+    client.post("/api/v1/kstock/models", json={
+        "name": "a", "use": "p:Q", "model": "m", "api_key": "sk-x"
+    })
+    client.put("/api/v1/kstock/default-model", json={"default_model": "a"})
+    assert client.get("/api/v1/kstock/default-model").json() == {"default_model": "a"}
+    # 删除默认模型 → default_model 应回退为 None（不悬空）
+    client.delete("/api/v1/kstock/models/a")
+    assert client.get("/api/v1/kstock/default-model").json() == {"default_model": None}
+
+
 # ── 测试辅助 ─────────────────────────────────────────────────────────
 def _runtime_config_path_under(data_root: Path) -> Path:
     return data_root / "config" / "qilin.runtime.yaml"

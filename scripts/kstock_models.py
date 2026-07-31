@@ -131,7 +131,11 @@ def _write_secrets_lines(lines: list[str]) -> None:
 
 
 def upsert_secret(key: str, value: str) -> None:
-    """写入或覆盖一个 KEY="value" 行；保持其他行不变。"""
+    """写入或覆盖一个 KEY="value" 行；保持其他行不变。
+
+    同时更新当前进程的 ``os.environ``，使引擎热重载 runtime.yaml 时能立即
+    解析 ``$KEY`` 引用（无需重启 gateway）。
+    """
     lines = _load_secrets_lines()
     target = f'{key}='
     found = False
@@ -143,16 +147,21 @@ def upsert_secret(key: str, value: str) -> None:
     if not found:
         lines.append(f'{key}="{value}"')
     _write_secrets_lines(lines)
+    os.environ[key] = value
 
 
 def remove_secret(key: str) -> None:
-    """删除指定 KEY= 行；文件不存在或无此 key 时无副作用。"""
+    """删除指定 KEY= 行；文件不存在或无此 key 时无副作用。
+
+    同步从 ``os.environ`` 移除，避免引擎热重载时引用到陈旧的值。
+    """
     lines = _load_secrets_lines()
     target = f'{key}='
     filtered = [line for line in lines if not line.startswith(target)]
     if len(filtered) == len(lines):
         return
     _write_secrets_lines(filtered)
+    os.environ.pop(key, None)
 
 
 # ── Pydantic 请求/响应模型 ─────────────────────────────────────────────
@@ -312,6 +321,9 @@ def delete_model_endpoint(name: str) -> None:
     if len(filtered) == len(models):
         raise HTTPException(status_code=404, detail=f"模型 '{name}' 不存在")
     save_runtime_models(filtered)
+    # 若被删的恰是当前默认模型，清除 prefs.json 中的悬空引用
+    if get_default_model() == name:
+        set_default_model(None)
     # secrets.env 删对应 key（name 无法生成合法环境变量名时无副作用）
     try:
         remove_secret(env_name_for_model(name))
