@@ -6,5 +6,12 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true
+  },
+  test: {
+    environment: "jsdom",
+    setupFiles: "./tests/setup.ts",
+    globals: true,
+    include: ["tests/**/*.spec.tsx"],
+    exclude: ["playwright/**"]
   }
 });
