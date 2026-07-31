@@ -1,12 +1,14 @@
 # 用户数据空间组织实施计划
 
-> **给执行者：** 必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans` 按任务执行。步骤使用复选框 `- [ ]` 跟踪。
+> **给执行者：** 必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans` 按任务执行。步骤使用复选框 `- [x]` 跟踪。
 
 **目标：** 把 KStock 的正式用户数据从仓库内 `.kstock` 迁移到跨平台应用数据目录，并让 QiLin 的 `QILIN_HOME`、SQLite、用户、线程、上传和产物空间全部走这个目录。
 
 **架构：** Tauri/Rust 负责解析系统 app data 目录并提供给前端或 sidecar；Python sidecar 负责创建数据空间、生成 QiLin 运行时配置、设置用户上下文、维护 KStock 产品索引，并继续复用 QiLin 的原生用户/线程/sandbox 目录。KStock 不重做 QiLin 的运行数据库，只额外维护项目、报告、标签和 UI 状态索引。
 
 **技术栈：** Python 3.12、Pydantic、SQLite 标准库、PyYAML（来自 QiLin 依赖路径）、QiLin embedded client、Tauri 2、Rust、React/TypeScript、pytest、Vitest、Playwright、pnpm、cargo。
+
+**执行状态：** 已完成。正式默认数据目录采用系统 app data；仓库内 `.kstock` 仅作为开发 fallback 或用户显式覆盖。任务 9 中原计划“更新 capability”经本地 schema 校验后调整为不新增不存在的 `core:path:allow-app-data-dir` 权限，改用已注册的 Rust 命令 `sidecar::app_data_dir` 暴露路径，`cargo check` 已验证通过。
 
 ---
 
@@ -36,7 +38,7 @@
 - 创建：`sidecar/src/kstock_sidecar/data_space.py`
 - 测试：`sidecar/tests/test_data_space.py`
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 写入 `sidecar/tests/test_data_space.py`：
 
@@ -75,7 +77,7 @@ def test_data_space_writes_stable_local_user(tmp_path: Path):
     assert (tmp_path / "config/kstock.settings.json").is_file()
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：
 
@@ -85,7 +87,7 @@ python -m pytest sidecar/tests/test_data_space.py -q
 
 预期：失败，提示 `No module named 'kstock_sidecar.data_space'`。
 
-- [ ] **步骤 3：实现最小数据空间**
+- [x] **步骤 3：实现最小数据空间**
 
 创建 `sidecar/src/kstock_sidecar/data_space.py`：
 
@@ -230,7 +232,7 @@ memory:
         }
 ```
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：
 
@@ -240,7 +242,7 @@ python -m pytest sidecar/tests/test_data_space.py -q
 
 预期：2 个测试通过。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add sidecar/src/kstock_sidecar/data_space.py sidecar/tests/test_data_space.py
@@ -254,7 +256,7 @@ git commit -m "feat: 添加 KStock 用户数据空间"
 - 修改：`sidecar/src/kstock_sidecar/qilin_adapter.py`
 - 修改：`sidecar/tests/test_qilin_adapter.py`
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 `sidecar/tests/test_qilin_adapter.py` 增加：
 
@@ -278,7 +280,7 @@ def test_health_uses_runtime_data_space(tmp_path: Path):
     assert Path(result["dataSpace"]["runtimeConfigPath"]).is_file()
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：
 
@@ -288,7 +290,7 @@ python -m pytest sidecar/tests/test_qilin_adapter.py::test_health_uses_runtime_d
 
 预期：失败，提示 `SidecarConfig` 不支持 `app_data_dir` 或健康结果没有 `dataSpace`。
 
-- [ ] **步骤 3：修改配置模型**
+- [x] **步骤 3：修改配置模型**
 
 把 `sidecar/src/kstock_sidecar/config.py` 改成：
 
@@ -323,7 +325,7 @@ class SidecarConfig(BaseModel):
         return self.app_data_dir.resolve() == (REPO_ROOT / ".kstock").resolve()
 ```
 
-- [ ] **步骤 4：修改 QiLinAdapter 环境初始化**
+- [x] **步骤 4：修改 QiLinAdapter 环境初始化**
 
 在 `sidecar/src/kstock_sidecar/qilin_adapter.py` 中使用 `KStockDataSpace`：
 
@@ -382,7 +384,7 @@ data_space = KStockDataSpace(info.app_data_dir, skill_root=info.skill_root).as_d
 "dataSpace": data_space,
 ```
 
-- [ ] **步骤 5：运行测试**
+- [x] **步骤 5：运行测试**
 
 运行：
 
@@ -392,7 +394,7 @@ python -m pytest sidecar/tests/test_qilin_adapter.py -q
 
 预期：所有测试通过；旧测试中 `config` 断言需要从 `config/qilin.config.yaml` 更新为 `config/qilin.runtime.yaml`。
 
-- [ ] **步骤 6：提交**
+- [x] **步骤 6：提交**
 
 ```bash
 git add sidecar/src/kstock_sidecar/config.py sidecar/src/kstock_sidecar/qilin_adapter.py sidecar/tests/test_qilin_adapter.py
@@ -405,7 +407,7 @@ git commit -m "feat: 让 QiLin 使用 KStock 数据空间"
 - 创建：`sidecar/src/kstock_sidecar/product_store.py`
 - 创建：`sidecar/tests/test_product_store.py`
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 写入 `sidecar/tests/test_product_store.py`：
 
@@ -449,7 +451,7 @@ def test_product_store_upserts_report_asset(tmp_path: Path):
     assert reports[0]["virtual_path"] == "/mnt/user-data/outputs/report.md"
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 python -m pytest sidecar/tests/test_product_store.py -q
@@ -457,7 +459,7 @@ python -m pytest sidecar/tests/test_product_store.py -q
 
 预期：失败，提示 `No module named 'kstock_sidecar.product_store'`。
 
-- [ ] **步骤 3：实现 SQLite 产品索引**
+- [x] **步骤 3：实现 SQLite 产品索引**
 
 创建 `sidecar/src/kstock_sidecar/product_store.py`：
 
@@ -630,7 +632,7 @@ class ProductStore:
         return [self._row(row) for row in rows]
 ```
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ```bash
 python -m pytest sidecar/tests/test_product_store.py -q
@@ -638,7 +640,7 @@ python -m pytest sidecar/tests/test_product_store.py -q
 
 预期：2 个测试通过。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add sidecar/src/kstock_sidecar/product_store.py sidecar/tests/test_product_store.py
@@ -651,7 +653,7 @@ git commit -m "feat: 添加 KStock 产品索引库"
 - 创建：`sidecar/src/kstock_sidecar/user_context.py`
 - 创建：`sidecar/tests/test_user_context.py`
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 写入 `sidecar/tests/test_user_context.py`：
 
@@ -666,7 +668,7 @@ def test_kstock_user_context_sets_qilin_current_user():
         assert get_effective_user_id() == "local-test-user"
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 python -m pytest sidecar/tests/test_user_context.py -q
@@ -674,7 +676,7 @@ python -m pytest sidecar/tests/test_user_context.py -q
 
 预期：失败，提示 `No module named 'kstock_sidecar.user_context'`。
 
-- [ ] **步骤 3：实现上下文包装器**
+- [x] **步骤 3：实现上下文包装器**
 
 创建 `sidecar/src/kstock_sidecar/user_context.py`：
 
@@ -702,7 +704,7 @@ def kstock_user_context(user_id: str) -> Iterator[None]:
         reset_current_user(token)
 ```
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ```bash
 python -m pytest sidecar/tests/test_user_context.py -q
@@ -710,7 +712,7 @@ python -m pytest sidecar/tests/test_user_context.py -q
 
 预期：1 个测试通过。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add sidecar/src/kstock_sidecar/user_context.py sidecar/tests/test_user_context.py
@@ -724,7 +726,7 @@ git commit -m "feat: 添加 QiLin 用户上下文桥接"
 - 修改：`sidecar/src/kstock_sidecar/qilin_adapter.py`
 - 创建：`sidecar/tests/test_server_workspace.py`
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 写入 `sidecar/tests/test_server_workspace.py`：
 
@@ -757,7 +759,7 @@ def test_workspace_info_returns_same_user(tmp_path: Path):
     assert second.result["activeUserId"] == first.result["activeUserId"]
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 python -m pytest sidecar/tests/test_server_workspace.py -q
@@ -765,7 +767,7 @@ python -m pytest sidecar/tests/test_server_workspace.py -q
 
 预期：失败，提示 `不支持的方法：workspace.init`。
 
-- [ ] **步骤 3：在 QiLinAdapter 增加 workspace 方法**
+- [x] **步骤 3：在 QiLinAdapter 增加 workspace 方法**
 
 在 `sidecar/src/kstock_sidecar/qilin_adapter.py` 增加：
 
@@ -775,7 +777,7 @@ def workspace_info(self) -> dict[str, object]:
     return KStockDataSpace(info.app_data_dir, skill_root=info.skill_root).as_dict(info)
 ```
 
-- [ ] **步骤 4：在 server 分发新方法**
+- [x] **步骤 4：在 server 分发新方法**
 
 修改 `sidecar/src/kstock_sidecar/server.py`：
 
@@ -793,7 +795,7 @@ def dispatch_request(request: Request, adapter: QiLinAdapter | None = None) -> R
     )
 ```
 
-- [ ] **步骤 5：运行测试确认通过**
+- [x] **步骤 5：运行测试确认通过**
 
 ```bash
 python -m pytest sidecar/tests/test_server_workspace.py sidecar/tests/test_server_smoke.py -q
@@ -801,7 +803,7 @@ python -m pytest sidecar/tests/test_server_workspace.py sidecar/tests/test_serve
 
 预期：全部通过。
 
-- [ ] **步骤 6：提交**
+- [x] **步骤 6：提交**
 
 ```bash
 git add sidecar/src/kstock_sidecar/server.py sidecar/src/kstock_sidecar/qilin_adapter.py sidecar/tests/test_server_workspace.py
@@ -815,7 +817,7 @@ git commit -m "feat: 添加 workspace sidecar 协议"
 - 修改：`sidecar/src/kstock_sidecar/server.py`
 - 修改：`sidecar/tests/test_server_workspace.py`
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 `sidecar/tests/test_server_workspace.py` 增加：
 
@@ -837,7 +839,7 @@ def test_thread_create_makes_qilin_thread_dirs(tmp_path: Path):
     assert (tmp_path / "runtime/qilin/users" / user_id / "threads" / thread_id / "user-data/outputs").is_dir()
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 python -m pytest sidecar/tests/test_server_workspace.py::test_thread_create_makes_qilin_thread_dirs -q
@@ -845,7 +847,7 @@ python -m pytest sidecar/tests/test_server_workspace.py::test_thread_create_make
 
 预期：失败，提示 `不支持的方法：thread.create`。
 
-- [ ] **步骤 3：实现 adapter 线程创建**
+- [x] **步骤 3：实现 adapter 线程创建**
 
 在 `sidecar/src/kstock_sidecar/qilin_adapter.py` 增加：
 
@@ -885,7 +887,7 @@ def create_thread(self, *, title: str | None = None, project_id: str | None = No
     }
 ```
 
-- [ ] **步骤 4：分发 `thread.create`**
+- [x] **步骤 4：分发 `thread.create`**
 
 修改 `sidecar/src/kstock_sidecar/server.py`：
 
@@ -901,7 +903,7 @@ if request.method == "thread.create":
     )
 ```
 
-- [ ] **步骤 5：运行测试确认通过**
+- [x] **步骤 5：运行测试确认通过**
 
 ```bash
 python -m pytest sidecar/tests/test_server_workspace.py -q
@@ -909,7 +911,7 @@ python -m pytest sidecar/tests/test_server_workspace.py -q
 
 预期：全部通过。
 
-- [ ] **步骤 6：提交**
+- [x] **步骤 6：提交**
 
 ```bash
 git add sidecar/src/kstock_sidecar/qilin_adapter.py sidecar/src/kstock_sidecar/server.py sidecar/tests/test_server_workspace.py
@@ -923,7 +925,7 @@ git commit -m "feat: 添加线程数据空间初始化"
 - 修改：`sidecar/src/kstock_sidecar/server.py`
 - 修改：`sidecar/tests/test_server_workspace.py`
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 `sidecar/tests/test_server_workspace.py` 增加：
 
@@ -944,7 +946,7 @@ def test_artifact_list_indexes_outputs(tmp_path: Path):
     assert response.result["artifacts"][0]["virtualPath"] == "/mnt/user-data/outputs/report.md"
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 python -m pytest sidecar/tests/test_server_workspace.py::test_artifact_list_indexes_outputs -q
@@ -952,7 +954,7 @@ python -m pytest sidecar/tests/test_server_workspace.py::test_artifact_list_inde
 
 预期：失败，提示 `不支持的方法：artifact.list`。
 
-- [ ] **步骤 3：实现 artifact 扫描**
+- [x] **步骤 3：实现 artifact 扫描**
 
 在 `sidecar/src/kstock_sidecar/qilin_adapter.py` 增加：
 
@@ -1002,7 +1004,7 @@ def list_artifacts(self, thread_id: str, *, project_id: str | None = None) -> di
     return {"threadId": thread_id, "count": len(artifacts), "artifacts": artifacts}
 ```
 
-- [ ] **步骤 4：分发 `artifact.list`**
+- [x] **步骤 4：分发 `artifact.list`**
 
 修改 `sidecar/src/kstock_sidecar/server.py`：
 
@@ -1022,7 +1024,7 @@ if request.method == "artifact.list":
     )
 ```
 
-- [ ] **步骤 5：运行测试确认通过**
+- [x] **步骤 5：运行测试确认通过**
 
 ```bash
 python -m pytest sidecar/tests/test_server_workspace.py sidecar/tests/test_product_store.py -q
@@ -1030,7 +1032,7 @@ python -m pytest sidecar/tests/test_server_workspace.py sidecar/tests/test_produ
 
 预期：全部通过。
 
-- [ ] **步骤 6：提交**
+- [x] **步骤 6：提交**
 
 ```bash
 git add sidecar/src/kstock_sidecar/qilin_adapter.py sidecar/src/kstock_sidecar/server.py sidecar/tests/test_server_workspace.py
@@ -1043,7 +1045,7 @@ git commit -m "feat: 添加报告产物索引"
 - 修改：`sidecar/src/kstock_sidecar/data_space.py`
 - 修改：`sidecar/tests/test_data_space.py`
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 在 `sidecar/tests/test_data_space.py` 增加：
 
@@ -1078,7 +1080,7 @@ def test_migration_does_not_overwrite_existing_runtime(tmp_path: Path):
     assert (existing / "memory.json").read_text(encoding="utf-8") == '{"new": true}'
 ```
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 ```bash
 python -m pytest sidecar/tests/test_data_space.py::test_migration_copies_dev_qilin_only_when_target_empty sidecar/tests/test_data_space.py::test_migration_does_not_overwrite_existing_runtime -q
@@ -1086,7 +1088,7 @@ python -m pytest sidecar/tests/test_data_space.py::test_migration_copies_dev_qil
 
 预期：失败，提示 `KStockDataSpace` 没有 `migrate_development_qilin_if_empty`。
 
-- [ ] **步骤 3：实现迁移保护**
+- [x] **步骤 3：实现迁移保护**
 
 在 `sidecar/src/kstock_sidecar/data_space.py` 增加：
 
@@ -1129,7 +1131,7 @@ def migrate_development_qilin_if_empty(self) -> bool:
 self.migrate_development_qilin_if_empty()
 ```
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 ```bash
 python -m pytest sidecar/tests/test_data_space.py -q
@@ -1137,7 +1139,7 @@ python -m pytest sidecar/tests/test_data_space.py -q
 
 预期：全部通过。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add sidecar/src/kstock_sidecar/data_space.py sidecar/tests/test_data_space.py
@@ -1151,7 +1153,7 @@ git commit -m "feat: 添加开发数据迁移保护"
 - 修改：`apps/desktop/src-tauri/src/main.rs`
 - 修改：`apps/desktop/src-tauri/capabilities/default.json`
 
-- [ ] **步骤 1：写 Rust 命令**
+- [x] **步骤 1：写 Rust 命令**
 
 修改 `apps/desktop/src-tauri/src/sidecar.rs`：
 
@@ -1173,7 +1175,7 @@ pub fn app_data_dir(app: AppHandle) -> Result<String, String> {
 }
 ```
 
-- [ ] **步骤 2：注册命令**
+- [x] **步骤 2：注册命令**
 
 修改 `apps/desktop/src-tauri/src/main.rs`：
 
@@ -1181,7 +1183,7 @@ pub fn app_data_dir(app: AppHandle) -> Result<String, String> {
 .invoke_handler(tauri::generate_handler![sidecar::sidecar_status, sidecar::app_data_dir])
 ```
 
-- [ ] **步骤 3：更新 capability**
+- [x] **步骤 3：更新 capability**
 
 修改 `apps/desktop/src-tauri/capabilities/default.json` 的 `permissions`：
 
@@ -1193,7 +1195,7 @@ pub fn app_data_dir(app: AppHandle) -> Result<String, String> {
 ]
 ```
 
-- [ ] **步骤 4：运行 Rust 检查**
+- [x] **步骤 4：运行 Rust 检查**
 
 ```bash
 cd apps/desktop/src-tauri && cargo check
@@ -1201,7 +1203,7 @@ cd apps/desktop/src-tauri && cargo check
 
 预期：`Finished dev profile`，没有编译错误。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add apps/desktop/src-tauri/src/sidecar.rs apps/desktop/src-tauri/src/main.rs apps/desktop/src-tauri/capabilities/default.json
@@ -1215,7 +1217,7 @@ git commit -m "feat: 暴露桌面应用数据目录"
 - 修改：`apps/desktop/src/lib/sidecarClient.ts`
 - 修改：`apps/desktop/tests/App.spec.tsx`
 
-- [ ] **步骤 1：补充类型**
+- [x] **步骤 1：补充类型**
 
 在 `apps/desktop/src/lib/sidecarTypes.ts` 增加：
 
@@ -1258,7 +1260,7 @@ export interface ArtifactListResult {
 }
 ```
 
-- [ ] **步骤 2：补充请求构造函数**
+- [x] **步骤 2：补充请求构造函数**
 
 在 `apps/desktop/src/lib/sidecarClient.ts` 增加：
 
@@ -1294,7 +1296,7 @@ export function createArtifactListRequest(threadId: string, projectId?: string):
 }
 ```
 
-- [ ] **步骤 3：写 Vitest 覆盖请求编码**
+- [x] **步骤 3：写 Vitest 覆盖请求编码**
 
 在 `apps/desktop/tests/App.spec.tsx` 增加：
 
@@ -1312,7 +1314,7 @@ it("构造用户数据空间 sidecar 请求", () => {
 });
 ```
 
-- [ ] **步骤 4：运行前端测试**
+- [x] **步骤 4：运行前端测试**
 
 ```bash
 pnpm -C apps/desktop test
@@ -1320,7 +1322,7 @@ pnpm -C apps/desktop test
 
 预期：Vitest 全部通过。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add apps/desktop/src/lib/sidecarTypes.ts apps/desktop/src/lib/sidecarClient.ts apps/desktop/tests/App.spec.tsx
@@ -1334,7 +1336,7 @@ git commit -m "feat: 添加数据空间前端协议类型"
 - 修改：`docs/运行说明.md`
 - 修改：`docs/故障排查.md`
 
-- [ ] **步骤 1：更新配置说明**
+- [x] **步骤 1：更新配置说明**
 
 在 `docs/配置说明.md` 增加：
 
@@ -1358,7 +1360,7 @@ QiLin SQLite 为：
 `<KStock 数据目录>/runtime/qilin/data/qilin.db`
 ```
 
-- [ ] **步骤 2：更新运行说明**
+- [x] **步骤 2：更新运行说明**
 
 在 `docs/运行说明.md` 的本地开发部分增加：
 
@@ -1370,7 +1372,7 @@ KSTOCK_APP_DATA_DIR=/tmp/kstock-app-data pnpm -C apps/desktop tauri:dev
 ```
 ````
 
-- [ ] **步骤 3：更新故障排查**
+- [x] **步骤 3：更新故障排查**
 
 在 `docs/故障排查.md` 增加：
 
@@ -1386,7 +1388,7 @@ KSTOCK_APP_DATA_DIR=/tmp/kstock-app-data pnpm -C apps/desktop tauri:dev
 - 当前 `activeUserId` 是否和线程目录 `runtime/qilin/users/{user_id}` 一致
 ```
 
-- [ ] **步骤 4：运行文档相关检查**
+- [x] **步骤 4：运行文档相关检查**
 
 ```bash
 git diff --check
@@ -1395,7 +1397,7 @@ bash scripts/build-sidecar.sh
 
 预期：无空白错误，`dist/kstock-sidecar.pyz` 生成。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add docs/配置说明.md docs/运行说明.md docs/故障排查.md
@@ -1408,7 +1410,7 @@ git commit -m "docs: 补充用户数据空间运行说明"
 - 修改：`task_plan.md`
 - 修改：`progress.md`
 
-- [ ] **步骤 1：运行 sidecar 测试**
+- [x] **步骤 1：运行 sidecar 测试**
 
 ```bash
 python -m pytest sidecar/tests -q
@@ -1416,7 +1418,7 @@ python -m pytest sidecar/tests -q
 
 预期：全部通过。
 
-- [ ] **步骤 2：运行前端测试**
+- [x] **步骤 2：运行前端测试**
 
 ```bash
 pnpm -C apps/desktop test
@@ -1424,7 +1426,7 @@ pnpm -C apps/desktop test
 
 预期：Vitest 全部通过。
 
-- [ ] **步骤 3：运行 Rust 检查**
+- [x] **步骤 3：运行 Rust 检查**
 
 ```bash
 cd apps/desktop/src-tauri && cargo check
@@ -1432,7 +1434,7 @@ cd apps/desktop/src-tauri && cargo check
 
 预期：`Finished dev profile`。
 
-- [ ] **步骤 4：运行 sidecar 打包**
+- [x] **步骤 4：运行 sidecar 打包**
 
 ```bash
 bash scripts/build-sidecar.sh
@@ -1443,11 +1445,11 @@ EOF
 
 预期：输出 JSON 行，`ok` 为 `true`，`result.qilinHome` 指向 `runtime/qilin`。
 
-- [ ] **步骤 5：更新计划文件**
+- [x] **步骤 5：更新计划文件**
 
 把 `task_plan.md` 阶段 14 标记为已完成，并在 `progress.md` 记录验证命令和结果。
 
-- [ ] **步骤 6：最终提交并推送**
+- [x] **步骤 6：最终提交并推送**
 
 ```bash
 git add task_plan.md progress.md

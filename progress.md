@@ -26,3 +26,14 @@
 - 已把阶段 12 标记完成，并新增阶段 13：等待用户审阅设计文档后再进入实施计划。
 - 用户已确认用户数据空间组织设计。
 - 已创建 `docs/superpowers/plans/2026-07-31-user-data-space.md`，把实现拆为数据空间、运行时配置、产品索引、用户上下文、workspace 协议、线程目录、artifact 索引、迁移保护、Tauri app data、前端协议类型、文档与全量验证。
+- 用户确认正式桌面端默认迁移到跨平台系统应用数据目录；`~/.kstock` 只作为显式覆盖或开发 fallback。
+- 已完成用户数据空间实施：新增 KStock 数据空间、QiLin 运行时配置生成、产品索引库、QiLin 用户上下文桥接、workspace/thread/artifact sidecar 协议、开发迁移保护、Tauri app data 命令和前端协议类型。
+- 已补充中文配置、运行和故障排查文档，明确 macOS/Windows/Linux 默认数据目录，以及开发模式 `KSTOCK_APP_DATA_DIR` 模拟方式。
+- 全量验证已完成：
+  - `python -m pytest sidecar/tests -q`：27 passed。
+  - `pnpm -C apps/desktop test`：3 passed。
+  - `pnpm -C apps/desktop exec tsc -p tsconfig.json --noEmit`：通过。
+  - `cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml`：通过。
+  - `bash scripts/build-sidecar.sh`：通过。
+  - `python dist/kstock-sidecar.pyz` 执行 `workspace.info`：开发 fallback 返回 `.kstock/runtime/qilin`。
+  - `KSTOCK_APP_DATA_DIR=/tmp/kstock-app-data python dist/kstock-sidecar.pyz` 执行 `workspace.info`：正式模拟路径返回 `/private/tmp/kstock-app-data/runtime/qilin`，`developmentFallback:false`。
