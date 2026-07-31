@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from scripts.kstock_models import (
     ModelWritePayload,
@@ -13,6 +15,7 @@ from scripts.kstock_models import (
     get_default_model,
     load_runtime_models,
     remove_secret,
+    router,
     save_runtime_models,
     set_default_model,
     upsert_secret,
@@ -141,6 +144,85 @@ def test_model_write_payload_requires_name():
     """缺少必填字段 name 时抛校验异常。"""
     with pytest.raises(Exception):
         ModelWritePayload(use="p:Q", model="m")
+
+
+# ── CRUD 端点（TestClient）─────────────────────────────────────────
+def _client_under(tmp_path, monkeypatch, models_yaml="models: []\n") -> TestClient:
+    _setup_data_root(tmp_path, monkeypatch, models_yaml=models_yaml)
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
+
+
+def test_list_models_empty(tmp_path, monkeypatch):
+    client = _client_under(tmp_path, monkeypatch)
+    resp = client.get("/api/v1/kstock/models")
+    assert resp.status_code == 200
+    assert resp.json() == {"models": [], "default_model": None}
+
+
+def test_create_model_writes_yaml_and_secret(tmp_path, monkeypatch):
+    client = _client_under(tmp_path, monkeypatch)
+    resp = client.post("/api/v1/kstock/models", json={
+        "name": "deepseek",
+        "use": "qilin.models.patched_deepseek:PatchedChatDeepSeek",
+        "model": "deepseek-v4",
+        "api_base": "https://api.deepseek.com",
+        "api_key": "sk-real",
+        "supports_thinking": True,
+    })
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["name"] == "deepseek"
+    assert body["api_key_env"] == "$KSTOCK_MODEL_DEEPSEEK_KEY"
+    # 明文没出现在 yaml
+    yaml_text = _runtime_config_path_under(tmp_path).read_text(encoding="utf-8")
+    assert "sk-real" not in yaml_text
+    assert "$KSTOCK_MODEL_DEEPSEEK_KEY" in yaml_text
+    # 明文出现在 secrets.env
+    env_text = (tmp_path / "config" / "secrets.env").read_text(encoding="utf-8")
+    assert 'KSTOCK_MODEL_DEEPSEEK_KEY="sk-real"' in env_text
+
+
+def test_create_model_duplicate_409(tmp_path, monkeypatch):
+    client = _client_under(tmp_path, monkeypatch)
+    payload = {"name": "a", "use": "p:Q", "model": "m"}
+    client.post("/api/v1/kstock/models", json=payload)
+    resp = client.post("/api/v1/kstock/models", json=payload)
+    assert resp.status_code == 409
+
+
+def test_update_model_keeps_empty_api_key_unchanged(tmp_path, monkeypatch):
+    client = _client_under(tmp_path, monkeypatch)
+    client.post("/api/v1/kstock/models", json={
+        "name": "a", "use": "p:Q", "model": "m", "api_key": "sk-old"
+    })
+    resp = client.put("/api/v1/kstock/models/a", json={
+        "name": "a", "use": "p:Q", "model": "m2", "api_key": ""
+    })
+    assert resp.status_code == 200
+    env_text = (tmp_path / "config" / "secrets.env").read_text(encoding="utf-8")
+    assert 'KSTOCK_MODEL_A_KEY="sk-old"' in env_text
+
+
+def test_delete_model_removes_yaml_and_secret(tmp_path, monkeypatch):
+    client = _client_under(tmp_path, monkeypatch)
+    client.post("/api/v1/kstock/models", json={
+        "name": "a", "use": "p:Q", "model": "m", "api_key": "sk-x"
+    })
+    resp = client.delete("/api/v1/kstock/models/a")
+    assert resp.status_code == 204
+    assert client.get("/api/v1/kstock/models").json()["models"] == []
+    assert "KSTOCK_MODEL_A_KEY" not in (tmp_path / "config" / "secrets.env").read_text(encoding="utf-8")
+
+
+def test_default_model_endpoints(tmp_path, monkeypatch):
+    client = _client_under(tmp_path, monkeypatch)
+    assert client.get("/api/v1/kstock/default-model").json() == {"default_model": None}
+    resp = client.put("/api/v1/kstock/default-model", json={"default_model": "a"})
+    assert resp.status_code == 200
+    assert resp.json() == {"default_model": "a"}
+    assert client.get("/api/v1/kstock/default-model").json() == {"default_model": "a"}
 
 
 # ── 测试辅助 ─────────────────────────────────────────────────────────

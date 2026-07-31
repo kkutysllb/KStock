@@ -226,3 +226,109 @@ def set_default_model(name: str | None) -> None:
     else:
         prefs["default_model"] = name
     _save_prefs(prefs)
+
+
+# ── 内部转换 ─────────────────────────────────────────────────────────
+def _model_to_item(raw: dict[str, Any]) -> ModelItem:
+    """runtime.yaml 里的一行 → 返回给前端的 ModelItem（api_key 转 env 引用）。"""
+    return ModelItem(
+        name=raw["name"],
+        display_name=raw.get("display_name"),
+        description=raw.get("description"),
+        use=raw["use"],
+        model=raw["model"],
+        api_base=raw.get("api_base"),
+        api_key_env=raw.get("api_key"),
+        supports_thinking=bool(raw.get("supports_thinking", False)),
+        supports_vision=bool(raw.get("supports_vision", False)),
+        supports_reasoning_effort=bool(raw.get("supports_reasoning_effort", False)),
+    )
+
+
+def _payload_to_raw(payload: ModelWritePayload) -> dict[str, Any]:
+    """前端负载 → runtime.yaml 行；api_key 转为 $ENV 引用。"""
+    env_var = env_name_for_model(payload.name)
+    raw: dict[str, Any] = {
+        "name": payload.name,
+        "use": payload.use,
+        "model": payload.model,
+        "api_key": f"${env_var}",
+    }
+    if payload.display_name is not None:
+        raw["display_name"] = payload.display_name
+    if payload.description is not None:
+        raw["description"] = payload.description
+    if payload.api_base:
+        raw["api_base"] = payload.api_base
+    if payload.supports_thinking:
+        raw["supports_thinking"] = True
+    if payload.supports_vision:
+        raw["supports_vision"] = True
+    if payload.supports_reasoning_effort:
+        raw["supports_reasoning_effort"] = True
+    return raw
+
+
+# ── 路由 ───────────────────────────────────────────────────────────────
+@router.get("/models")
+def list_models_endpoint() -> dict[str, Any]:
+    items = [_model_to_item(r).model_dump() for r in load_runtime_models()]
+    return {"models": items, "default_model": get_default_model()}
+
+
+@router.post("/models", status_code=201)
+def create_model_endpoint(payload: ModelWritePayload) -> ModelItem:
+    models = load_runtime_models()
+    if any(m.get("name") == payload.name for m in models):
+        raise HTTPException(status_code=409, detail=f"模型 '{payload.name}' 已存在")
+    raw = _payload_to_raw(payload)
+    models.append(raw)
+    save_runtime_models(models)
+    if payload.api_key:
+        upsert_secret(env_name_for_model(payload.name), payload.api_key)
+    return _model_to_item(raw)
+
+
+@router.put("/models/{name}")
+def update_model_endpoint(name: str, payload: ModelWritePayload) -> ModelItem:
+    if payload.name != name:
+        raise HTTPException(status_code=400, detail="name 不可变更")
+    models = load_runtime_models()
+    idx = next((i for i, m in enumerate(models) if m.get("name") == name), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail=f"模型 '{name}' 不存在")
+    raw = _payload_to_raw(payload)
+    models[idx] = raw
+    save_runtime_models(models)
+    if payload.api_key:
+        upsert_secret(env_name_for_model(payload.name), payload.api_key)
+    return _model_to_item(raw)
+
+
+@router.delete("/models/{name}", status_code=204)
+def delete_model_endpoint(name: str) -> None:
+    models = load_runtime_models()
+    filtered = [m for m in models if m.get("name") != name]
+    if len(filtered) == len(models):
+        raise HTTPException(status_code=404, detail=f"模型 '{name}' 不存在")
+    save_runtime_models(filtered)
+    # secrets.env 删对应 key（name 无法生成合法环境变量名时无副作用）
+    try:
+        remove_secret(env_name_for_model(name))
+    except ValueError:
+        pass
+
+
+class DefaultModelPayload(BaseModel):
+    default_model: str | None = None
+
+
+@router.get("/default-model")
+def get_default_model_endpoint() -> dict[str, Any]:
+    return {"default_model": get_default_model()}
+
+
+@router.put("/default-model")
+def set_default_model_endpoint(payload: DefaultModelPayload) -> dict[str, Any]:
+    set_default_model(payload.default_model)
+    return {"default_model": get_default_model()}
