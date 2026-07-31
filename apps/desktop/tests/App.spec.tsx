@@ -1,5 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { App } from "../src/App";
+import {
+  createArtifactListRequest,
+  createThreadCreateRequest,
+  createWorkspaceInfoRequest
+} from "../src/lib/sidecarClient";
 
 test("首屏展示产品入口页", () => {
   render(<App />);
@@ -23,4 +28,10 @@ test("可以进入工作台并打开设置模型页", () => {
   expect(screen.getByRole("heading", { name: "模型" })).toBeVisible();
   expect(screen.getByDisplayValue("qilin.models.patched_deepseek:PatchedChatDeepSeek")).toBeVisible();
   expect(screen.getByText("qilin.models.patched_openai:PatchedChatOpenAI")).toBeVisible();
+});
+
+test("构造用户数据空间 sidecar 请求", () => {
+  expect(createWorkspaceInfoRequest().method).toBe("workspace.info");
+  expect(createThreadCreateRequest("财报分析").params).toEqual({ title: "财报分析" });
+  expect(createArtifactListRequest("thread_001").params).toEqual({ threadId: "thread_001" });
 });

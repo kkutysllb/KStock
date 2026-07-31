@@ -8,6 +8,36 @@ export function createHealthRequest(): SidecarRequest {
   };
 }
 
+export function createWorkspaceInfoRequest(): SidecarRequest {
+  return {
+    id: crypto.randomUUID(),
+    method: "workspace.info",
+    params: {}
+  };
+}
+
+export function createThreadCreateRequest(title?: string, projectId?: string): SidecarRequest {
+  return {
+    id: crypto.randomUUID(),
+    method: "thread.create",
+    params: {
+      ...(title ? { title } : {}),
+      ...(projectId ? { projectId } : {})
+    }
+  };
+}
+
+export function createArtifactListRequest(threadId: string, projectId?: string): SidecarRequest {
+  return {
+    id: crypto.randomUUID(),
+    method: "artifact.list",
+    params: {
+      threadId,
+      ...(projectId ? { projectId } : {})
+    }
+  };
+}
+
 export function encodeSidecarRequest(request: SidecarRequest): string {
   return JSON.stringify(request);
 }
