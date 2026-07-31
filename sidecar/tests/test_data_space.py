@@ -85,3 +85,33 @@ def test_data_space_as_dict_uses_protocol_field_names(tmp_path: Path) -> None:
         "skillRoot": str(info.skill_root),
         "developmentFallback": False,
     }
+
+
+def test_migration_copies_dev_qilin_only_when_target_empty(tmp_path: Path):
+    repo_root = tmp_path / "repo"
+    dev_qilin = repo_root / ".kstock/qilin"
+    dev_qilin.mkdir(parents=True)
+    (dev_qilin / "memory.json").write_text("{}", encoding="utf-8")
+    app_data = tmp_path / "app-data"
+
+    data_space = KStockDataSpace(app_data_dir=app_data, repo_root=repo_root)
+    data_space.migrate_development_qilin_if_empty()
+
+    assert (app_data / "runtime/qilin/memory.json").is_file()
+    assert (app_data / "config/migration-state.json").is_file()
+
+
+def test_migration_does_not_overwrite_existing_runtime(tmp_path: Path):
+    repo_root = tmp_path / "repo"
+    dev_qilin = repo_root / ".kstock/qilin"
+    dev_qilin.mkdir(parents=True)
+    (dev_qilin / "memory.json").write_text('{"old": true}', encoding="utf-8")
+    app_data = tmp_path / "app-data"
+    existing = app_data / "runtime/qilin"
+    existing.mkdir(parents=True)
+    (existing / "memory.json").write_text('{"new": true}', encoding="utf-8")
+
+    data_space = KStockDataSpace(app_data_dir=app_data, repo_root=repo_root)
+    data_space.migrate_development_qilin_if_empty()
+
+    assert (existing / "memory.json").read_text(encoding="utf-8") == '{"new": true}'
