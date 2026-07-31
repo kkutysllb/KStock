@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -16,6 +16,7 @@ import {
   KeyRound,
   Library,
   Lock,
+  LogOut,
   PanelRight,
   Plus,
   Search,
@@ -26,6 +27,18 @@ import {
 } from "lucide-react";
 import { normalizeMarkdown } from "../lib/markdown";
 import { MODEL_TEMPLATES, SETTING_SECTIONS } from "../lib/qilinSettings";
+import {
+  getSetupStatus,
+  initializeAdmin as gatewayInitializeAdmin,
+  isAuthApiError,
+  login as gatewayLogin,
+  logout as gatewayLogout,
+  register as gatewayRegister,
+  tryGetCurrentUser,
+  type AuthApiError,
+  type AuthUser,
+  type SetupStatus
+} from "../lib/authClient";
 import {
   appendMessageToSession,
   buildReportMarkdown,
@@ -103,6 +116,33 @@ export function Home() {
   const [sessions, setSessions] = useState<ChatSession[]>(() => createSeedSessions());
   const [activeSessionId, setActiveSessionId] = useState<string>(() => sessions[0].id);
   const [draft, setDraft] = useState("");
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
+
+  // 启动时探测 gateway 会话与系统初始化状态。
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      tryGetCurrentUser().catch(() => null),
+      getSetupStatus().catch(() => null),
+    ]).then(([user, setup]) => {
+      if (cancelled) return;
+      if (user) setCurrentUser(user);
+      if (setup) setSetupStatus(setup);
+      setAuthReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 会话探测完成后，已登录用户自动从落地页进入工作台。
+  useEffect(() => {
+    if (authReady && currentUser && view === "landing") {
+      setView("workspace");
+    }
+  }, [authReady, currentUser, view]);
 
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) ?? sessions[0],
@@ -112,10 +152,35 @@ export function Home() {
   const reportMarkdown = activeSession?.reportMarkdown ?? buildReportMarkdown(createSession());
   const activeSetting = SETTING_SECTIONS.find((section) => section.id === settingsSectionId) ?? SETTING_SECTIONS[0];
 
-  const enterWorkspace = () => setView("workspace");
+  // 未登录点「进入工作台」不应直接进：拦截到登录页。
+  const enterWorkspace = () => {
+    if (!currentUser) {
+      setAuthMode("login");
+      setView("auth");
+      return;
+    }
+    setView("workspace");
+  };
   const openAuth = (mode: AuthMode) => {
     setAuthMode(mode);
     setView("auth");
+  };
+
+  // 注册 / 登录成功后：记录当前用户并进入工作台。
+  const handleAuthSuccess = (user: AuthUser) => {
+    setCurrentUser(user);
+    setView("workspace");
+  };
+
+  // 登出：清除 gateway 会话后回到落地页。
+  const handleLogout = async () => {
+    try {
+      await gatewayLogout();
+    } catch {
+      // 即使登出请求失败也回到落地页，避免卡在工作台。
+    }
+    setCurrentUser(null);
+    setView("landing");
   };
 
   const handleNewSession = () => {
@@ -152,6 +217,10 @@ export function Home() {
     setDraft("");
   };
 
+  if (!authReady) {
+    return <main className="app-boot" aria-label="应用启动中" />;
+  }
+
   if (view === "landing") {
     return <LandingPage onEnter={enterWorkspace} onAuth={openAuth} />;
   }
@@ -160,9 +229,11 @@ export function Home() {
     return (
       <AuthPage
         mode={authMode}
+        needsSetup={setupStatus?.needs_setup ?? false}
+        registrationEnabled={setupStatus?.registration_enabled ?? true}
         onModeChange={setAuthMode}
         onBack={() => setView("landing")}
-        onComplete={enterWorkspace}
+        onComplete={handleAuthSuccess}
       />
     );
   }
@@ -181,12 +252,14 @@ export function Home() {
   return (
     <WorkspaceShell
       activeSession={activeSession}
+      currentUser={currentUser}
       draft={draft}
       reportMarkdown={reportMarkdown}
       rightPanelOpen={rightPanelOpen}
       sessions={sessions}
       sidebarCollapsed={sidebarCollapsed}
       onDraftChange={setDraft}
+      onLogout={handleLogout}
       onNewSession={handleNewSession}
       onOpenSettings={() => setView("settings")}
       onSelectSession={setActiveSessionId}
@@ -307,16 +380,108 @@ function LogoMark({ compact = false }: { compact?: boolean }) {
 
 function AuthPage({
   mode,
+  needsSetup,
+  registrationEnabled,
   onBack,
   onComplete,
   onModeChange
 }: {
   mode: AuthMode;
+  /** gateway ``setup-status`` 的 ``needs_setup``：为 true 时注册走 ``/initialize`` 创建管理员。 */
+  needsSetup: boolean;
+  /** gateway ``setup-status`` 的 ``registration_enabled``：为 false 时禁止普通注册。 */
+  registrationEnabled: boolean;
   onBack: () => void;
-  onComplete: () => void;
+  onComplete: (user: AuthUser) => void;
   onModeChange: (mode: AuthMode) => void;
 }) {
   const isLogin = mode === "login";
+  // 首启注册=创建管理员（走 /initialize），否则=普通用户（走 /register）。
+  const isAdminBootstrap = !isLogin && needsSetup;
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 切换登录/注册模式时清空错误，避免残留提示误导用户。
+  useEffect(() => {
+    setError(null);
+  }, [mode]);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (submitting) return;
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password) {
+      setError("请填写邮箱与密码");
+      return;
+    }
+    // 注册时校验两次密码一致（登录无需）。
+    if (!isLogin && password !== passwordConfirm) {
+      setError("两次输入的密码不一致");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      if (isLogin) {
+        // 登录响应只含 token 有效期，补一次 /me 拿到账户信息。
+        await gatewayLogin(trimmedEmail, password, rememberMe);
+        const user = await tryGetCurrentUser();
+        if (!user) {
+          setError("登录成功但无法读取账户信息，请重试");
+          return;
+        }
+        onComplete(user);
+      } else if (isAdminBootstrap) {
+        // 首启：创建管理员账户（system_role=admin）。
+        const user = await gatewayInitializeAdmin({
+          email: trimmedEmail,
+          password,
+          remember_me: rememberMe,
+        });
+        onComplete(user);
+      } else {
+        // 普通注册：system_role=user。
+        const user = await gatewayRegister({
+          email: trimmedEmail,
+          password,
+          remember_me: rememberMe,
+        });
+        onComplete(user);
+      }
+    } catch (err) {
+      setError(
+        isAuthApiError(err)
+          ? err.message
+          : "操作失败，请稍后重试",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 标题 / 副标题 / 提交按钮文案随首启 / 登录 / 普通注册变化。
+  const heading = isLogin
+    ? "登录工作台"
+    : isAdminBootstrap
+      ? "初始化管理员账户"
+      : "创建本地账户";
+  const subtitle = isLogin
+    ? "本地账户由内置 QiLin gateway 管理会话，后续会接入 OIDC / SSO 与本机安全密钥存储。"
+    : isAdminBootstrap
+      ? "首次启动需要创建一个管理员账户以完成系统初始化，该账户将拥有 system_role=admin。"
+      : "注册将创建一个普通用户账户（system_role=user），管理员需在首启时初始化。";
+  const submitLabel = submitting
+    ? "处理中…"
+    : isLogin
+      ? "登录并进入"
+      : isAdminBootstrap
+        ? "初始化并进入"
+        : "注册并进入";
+
   return (
     <main className="auth-shell">
       <button className="back-button" type="button" onClick={onBack}>
@@ -326,33 +491,75 @@ function AuthPage({
       <section className="auth-panel" aria-label={isLogin ? "登录" : "注册"}>
         <div>
           <p className="eyebrow">KStock Account</p>
-          <h1>{isLogin ? "登录工作台" : "创建本地账户"}</h1>
-          <p>第一阶段使用本地账户体验，后续会接入 OIDC / SSO 和本机安全密钥存储。</p>
+          <h1>{heading}</h1>
+          <p>{subtitle}</p>
         </div>
-        <label>
-          <span>邮箱</span>
-          <input type="email" placeholder="research@kstock.local" />
-        </label>
-        <label>
-          <span>密码</span>
-          <input type="password" placeholder="至少 8 位" />
-        </label>
-        {!isLogin && (
+        <form className="auth-form" onSubmit={handleSubmit}>
           <label>
-            <span>团队名称</span>
-            <input type="text" placeholder="量化研究组" />
+            <span>邮箱</span>
+            <input
+              type="email"
+              autoComplete="email"
+              placeholder="research@kstock.dev"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
           </label>
+          <label>
+            <span>密码</span>
+            <input
+              type="password"
+              autoComplete={isLogin ? "current-password" : "new-password"}
+              placeholder="至少 8 位"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+          {!isLogin && (
+            <label>
+              <span>确认密码</span>
+              <input
+                type="password"
+                autoComplete="new-password"
+                placeholder="再次输入密码"
+                value={passwordConfirm}
+                onChange={(event) => setPasswordConfirm(event.target.value)}
+              />
+            </label>
+          )}
+          <label className="auth-remember">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(event) => setRememberMe(event.target.checked)}
+            />
+            <span>记住我（保持 7 天登录态）</span>
+          </label>
+          {error && (
+            <p className="auth-error" role="alert">
+              {error}
+            </p>
+          )}
+          <button
+            className="hero-primary full"
+            type="submit"
+            disabled={submitting}
+          >
+            <span>{submitLabel}</span>
+          </button>
+        </form>
+        {/* 首启只能初始化管理员，不提供切换到普通登录的入口；登录模式不显示切换。 */}
+        {!isAdminBootstrap && (
+          <button
+            className="link-button"
+            type="button"
+            onClick={() => onModeChange(isLogin ? "register" : "login")}
+          >
+            {isLogin
+              ? (registrationEnabled ? "没有账户？注册" : "仅管理员可登录")
+              : "已有账户？登录"}
+          </button>
         )}
-        <button className="hero-primary full" type="button" onClick={onComplete}>
-          <span>{isLogin ? "登录并进入" : "注册并进入"}</span>
-        </button>
-        <button
-          className="link-button"
-          type="button"
-          onClick={() => onModeChange(isLogin ? "register" : "login")}
-        >
-          {isLogin ? "没有账户？注册" : "已有账户？登录"}
-        </button>
       </section>
     </main>
   );
@@ -360,12 +567,14 @@ function AuthPage({
 
 function WorkspaceShell({
   activeSession,
+  currentUser,
   draft,
   reportMarkdown,
   rightPanelOpen,
   sessions,
   sidebarCollapsed,
   onDraftChange,
+  onLogout,
   onNewSession,
   onOpenSettings,
   onSelectSession,
@@ -374,12 +583,14 @@ function WorkspaceShell({
   onToggleSidebar
 }: {
   activeSession: ChatSession | undefined;
+  currentUser: AuthUser | null;
   draft: string;
   reportMarkdown: string;
   rightPanelOpen: boolean;
   sessions: ChatSession[];
   sidebarCollapsed: boolean;
   onDraftChange: (draft: string) => void;
+  onLogout: () => void;
   onNewSession: () => void;
   onOpenSettings: () => void;
   onSelectSession: (sessionId: string) => void;
@@ -436,13 +647,21 @@ function WorkspaceShell({
           </>
         )}
         <div className="sidebar-footer">
-          <button className="nav-command" type="button">
+          <button
+            className="nav-command"
+            type="button"
+            title={currentUser?.email ?? "未登录"}
+          >
             <CircleUserRound size={17} />
-            {!sidebarCollapsed && <span>本地研究员</span>}
+            {!sidebarCollapsed && <span>{currentUser?.email ?? "未登录"}</span>}
           </button>
           <button className="nav-command" type="button" onClick={onOpenSettings} aria-label="打开设置">
             <Settings size={17} />
             {!sidebarCollapsed && <span>设置</span>}
+          </button>
+          <button className="nav-command" type="button" onClick={onLogout} aria-label="退出登录">
+            <LogOut size={17} />
+            {!sidebarCollapsed && <span>退出登录</span>}
           </button>
         </div>
       </aside>

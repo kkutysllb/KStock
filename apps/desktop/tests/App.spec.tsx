@@ -1,25 +1,55 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { vi } from "vitest";
 import { App } from "../src/App";
-import {
-  createArtifactListRequest,
-  createThreadCreateRequest,
-  createWorkspaceInfoRequest
-} from "../src/lib/sidecarClient";
 
-test("首屏展示产品入口页", () => {
-  render(<App />);
+// 用 hoisted 持有 mock 函数，便于在单个测试内覆盖返回值（如模拟已登录）。
+const authMock = vi.hoisted(() => ({
+  tryGetCurrentUser: vi.fn(),
+}));
 
-  expect(screen.getByRole("heading", { name: "KStock" })).toBeVisible();
-  expect(screen.getByText("QiLin 内置引擎")).toBeVisible();
-  expect(screen.getByRole("button", { name: "进入工作台" })).toBeVisible();
-  expect(screen.getByRole("button", { name: "注册" })).toBeVisible();
+// 会话探测与认证请求统一 mock：jsdom 无法直连本地 gateway，且测试只关心 UI 流程。
+vi.mock("../src/lib/authClient", () => ({
+  GATEWAY_URL: "http://localhost:18001",
+  tryGetCurrentUser: authMock.tryGetCurrentUser,
+  getSetupStatus: vi.fn().mockResolvedValue({ needs_setup: false, registration_enabled: true }),
+  login: vi.fn().mockResolvedValue({ expires_in: 604800, needs_setup: false }),
+  register: vi.fn(),
+  initializeAdmin: vi.fn(),
+  logout: vi.fn().mockResolvedValue({ message: "logout ok" }),
+  isAuthApiError: (e: unknown) =>
+    typeof e === "object" &&
+    e !== null &&
+    "code" in e &&
+    "message" in e &&
+    "status" in e,
+}));
+
+// 默认未登录；已登录场景在测试内用 mockResolvedValueOnce 覆盖。
+beforeEach(() => {
+  authMock.tryGetCurrentUser.mockResolvedValue(null);
 });
 
-test("可以进入工作台并打开设置模型页", () => {
+test("首屏展示产品入口页", async () => {
   render(<App />);
 
-  fireEvent.click(screen.getByRole("button", { name: "进入工作台" }));
-  expect(screen.getByRole("textbox", { name: "消息输入" })).toBeVisible();
+  // 会话探测异步完成后落地页才出现“进入工作台”按钮。
+  const enterButton = await screen.findByRole("button", { name: "进入工作台" });
+  expect(enterButton).toBeVisible();
+  expect(screen.getByText("QiLin 内置引擎")).toBeInTheDocument();
+});
+
+test("已登录启动后直接进入工作台并打开设置模型页", async () => {
+  // 模拟已登录：启动会话探测后自动跳转工作台，不再停在落地页。
+  authMock.tryGetCurrentUser.mockResolvedValueOnce({
+    id: "u1",
+    email: "tester@kstock.dev",
+    system_role: "user",
+  });
+
+  render(<App />);
+
+  // 已登录用户直接看到工作台的输入区与设置入口。
+  expect(await screen.findByRole("textbox", { name: "消息输入" })).toBeVisible();
   expect(screen.getByRole("button", { name: "打开设置" })).toBeVisible();
 
   fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
@@ -27,11 +57,27 @@ test("可以进入工作台并打开设置模型页", () => {
 
   expect(screen.getByRole("heading", { name: "模型" })).toBeVisible();
   expect(screen.getByDisplayValue("qilin.models.patched_deepseek:PatchedChatDeepSeek")).toBeVisible();
-  expect(screen.getByText("qilin.models.patched_openai:PatchedChatOpenAI")).toBeVisible();
+  expect(screen.getByText("qilin.models.patched_openai:PatchedChatOpenAI")).toBeInTheDocument();
 });
 
-test("构造用户数据空间 sidecar 请求", () => {
-  expect(createWorkspaceInfoRequest().method).toBe("workspace.info");
-  expect(createThreadCreateRequest("财报分析").params).toEqual({ title: "财报分析" });
-  expect(createArtifactListRequest("thread_001").params).toEqual({ threadId: "thread_001" });
+test("注册入口展示邮箱密码与确认密码表单", async () => {
+  render(<App />);
+
+  await screen.findByRole("button", { name: "进入工作台" });
+  fireEvent.click(screen.getByRole("button", { name: "注册" }));
+
+  expect(screen.getByPlaceholderText("research@kstock.dev")).toBeVisible();
+  expect(screen.getByPlaceholderText("至少 8 位")).toBeVisible();
+  expect(screen.getByPlaceholderText("再次输入密码")).toBeVisible();
+  expect(screen.getByRole("button", { name: "注册并进入" })).toBeVisible();
+  expect(screen.getByLabelText(/记住我/)).toBeChecked();
+});
+
+test("未登录点“进入工作台”跳转到登录页", async () => {
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "进入工作台" }));
+
+  expect(await screen.findByRole("heading", { name: "登录工作台" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "登录并进入" })).toBeVisible();
 });

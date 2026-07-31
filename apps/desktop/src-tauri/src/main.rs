@@ -1,4 +1,4 @@
-mod sidecar;
+mod gateway;
 
 use tauri::Manager;
 use tauri::tray::TrayIconBuilder;
@@ -17,7 +17,7 @@ fn main() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![sidecar::sidecar_status, sidecar::app_data_dir])
+    .invoke_handler(tauri::generate_handler![gateway::sidecar_status, gateway::app_data_dir])
     .run(tauri::generate_context!())
     .expect("failed to run tauri application");
 }

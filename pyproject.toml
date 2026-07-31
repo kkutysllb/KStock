@@ -1,0 +1,37 @@
+# KStock 桌面端 Python 运行时（uv 管理）。
+#
+# 这个 pyproject.toml 不打包任何 KStock 自有 Python 包，只用于：
+#   1. 在项目根目录创建并管理 .venv 虚拟环境
+#   2. 以 editable 方式安装内置的 vendor/qilin 引擎
+#   3. 补全 QiLin gateway (app.gateway) 运行所需的 Web / 认证依赖
+#      （vendor/qilin/pyproject.toml 未声明 fastapi/uvicorn/bcrypt 等，
+#       它们只属于 gateway 运行面，在这里集中补齐更可控）
+#
+# 运行 gateway：
+#   uv run python -m uvicorn app.gateway.app:app --reload --port 8001
+
+[project]
+name = "kstock"
+version = "0.1.0"
+description = "KStock Stock Quant Agent Desktop — uv-managed Python runtime for the QiLin gateway."
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    # 内置 QiLin 引擎（editable，来自 vendor/qilin）
+    "qilin",
+    # ── QiLin gateway (app.gateway) 运行面依赖 ──────────────────────────
+    # vendor/qilin/pyproject.toml 只声明了 agent runtime 依赖，
+    # gateway 的 Web 与本地认证链路还需要以下包：
+    "fastapi>=0.115",          # FastAPI 框架（app.gateway.app:create_app）
+    "uvicorn[standard]>=0.30", # ASGI 服务器
+    "bcrypt>=4.0",             # 本地账户密码哈希（auth/password.py）
+    "email-validator>=2.0",    # pydantic EmailStr（auth/routers/auth.py）
+    "python-multipart>=0.0.9", # OAuth2PasswordRequestForm / Form 解析
+]
+
+[tool.uv]
+# 根项目本身没有可打包的 Python 包，仅作为依赖容器。
+package = false
+
+[tool.uv.sources]
+# 以 editable 方式安装内置 QiLin 快照，修改 vendor/qilin 源码即时生效。
+qilin = { path = "vendor/qilin", editable = true }

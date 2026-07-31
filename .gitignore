@@ -14,8 +14,14 @@ apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/build/
 apps/desktop/test-results/
 .kstock/
+# QiLin 引擎相对 CWD 默认落点 —— 正式运行时数据应走系统 app data 目录
+# （见 scripts/run_gateway.py 与 docs/用户数据空间组织设计.md），这里作为防御。
+.qilin/
+.kstock/
 sidecar/build/
 sidecar/dist/
 sidecar/*.egg-info/
 *.egg-info/
 *.log
+# uv 锁文件提交以保证可复现，但 uv 本地缓存不入库
+# （uv.lock 应提交，此处不忽略它）
