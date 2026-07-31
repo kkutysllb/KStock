@@ -59,7 +59,7 @@
 | `/api/v1/kstock/models` | POST | 新增模型：写 runtime.yaml models 段 + 写 secrets.env（若提供 key） |
 | `/api/v1/kstock/models/{name}` | PUT | 编辑现有模型：更新 runtime.yaml 对应条目 + 同步 secrets.env |
 | `/api/v1/kstock/models/{name}` | DELETE | 删除模型：从 runtime.yaml 移除 + 从 secrets.env 删对应 key |
-| `/api/v1/kstock/default-model` | GET/PUT | 读写 runtime.yaml 顶层 `default_model` 字段 |
+| `/api/v1/kstock/default-model` | GET/PUT | 读写 KStock 偏好文件 `prefs.json` 的 `default_model` 字段（引擎 `AppConfig` 无此字段，这是 KStock 自己的偏好，见下方说明） |
 
 ### 文件写入安全
 
@@ -72,9 +72,13 @@
 
 `KSTOCK_MODEL_<UPPER_NAME>_KEY`，其中 `<UPPER_NAME>` 由模型 name 转大写、非字母数字字符转下划线得到。例如 name=`deepseek-v4` → `KSTOCK_MODEL_DEEPSEEK_V4_KEY`。
 
+### 默认模型存储说明
+
+引擎 `AppConfig` 无 `default_model` 顶层字段（调研确认：模型选择是 run 级别的，通过发起 run 时的 `context.model_name` 传入，而非配置级默认值）。因此「默认模型」是 **KStock 自己的前端偏好**，存到独立的偏好文件 ``<data_root>/config/prefs.json``，字段名 ``default_model``。该文件由 KStock 写入层独占管理，与 runtime.yaml 解耦，不影响引擎热重载。
+
 ### 热重载触发
 
-runtime.yaml 被原子替换后 mtime 变化，引擎 `get_app_config()` 下次调用自动重载——无需主动通知，无需重启 gateway。
+runtime.yaml 被原子替换后 mtime 变化，引擎 `get_app_config()` 下次调用自动重载——无需主动通知，无需重启 gateway。偏好文件 ``prefs.json`` 不影响引擎，仅供前端读取。
 
 ## 前端：modelsClient.ts（新增）
 
