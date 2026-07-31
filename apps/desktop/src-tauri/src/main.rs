@@ -17,7 +17,7 @@ fn main() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![sidecar::sidecar_status])
+    .invoke_handler(tauri::generate_handler![sidecar::sidecar_status, sidecar::app_data_dir])
     .run(tauri::generate_context!())
     .expect("failed to run tauri application");
 }
