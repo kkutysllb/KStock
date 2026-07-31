@@ -16,7 +16,9 @@
 
 **后端（Python）**
 - 新建 `scripts/kstock_models.py` — KStock 模型配置写入层（FastAPI 路由 + runtime.yaml/secrets.env/prefs.json 读写工具）。职责：CRUD 端点、环境变量命名、原子替换、备份、偏好读写
-- 新建 `scripts/test_kstock_models.py` — 后端 pytest 覆盖
+- 新建 `tests/test_kstock_models.py` — 后端 pytest 覆盖（测试统一放仓库根 `tests/`，与前端 `apps/desktop/tests` 并列）
+- 新建 `tests/__init__.py` + `tests/conftest.py` — 使 `tests` 成为可导入包，conftest 把仓库根加入 sys.path 以便 `from scripts.kstock_models import ...`
+- 修改 `pyproject.toml` — 配置 `[tool.pytest.ini_options] testpaths = ["tests"]`，让 `uv run pytest` 默认从 tests 目录收集
 - 修改 `scripts/run_gateway.py` — 在 `create_app()` 里 `app.include_router(kstock_models.router)`
 
 **前端（TypeScript/React）**
@@ -37,11 +39,43 @@
 
 **Files:**
 - Create: `scripts/kstock_models.py`
-- Test: `scripts/test_kstock_models.py`
+- Create: `tests/test_kstock_models.py`
+- Create: `tests/__init__.py`（空文件，使 tests 成为包）
+- Create: `tests/conftest.py`（把仓库根加入 sys.path）
+- Modify: `pyproject.toml`（配置 testpaths）
 
-- [ ] **Step 1: 写第一个失败测试——环境变量命名规则**
+- [ ] **Step 1: 配置 pytest testpaths + conftest**
 
-创建 `scripts/test_kstock_models.py`：
+修改 `pyproject.toml`，在末尾追加：
+
+```toml
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+```
+
+创建 `tests/__init__.py`（空文件）。
+
+创建 `tests/conftest.py`：
+
+```python
+"""pytest 全局配置。
+
+仓库根未被作为 Python 包安装（pyproject package=false），这里把仓库根
+加入 sys.path，让测试可以用 ``from scripts.kstock_models import ...``
+直接导入 scripts 目录下的模块。
+"""
+import sys
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+```
+
+- [ ] **Step 2: 写第一个失败测试——环境变量命名规则**
+
+创建 `tests/test_kstock_models.py`：
 
 ```python
 """KStock 模型配置写入层单元测试。
@@ -68,7 +102,7 @@ def test_env_name_for_model_basic():
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `cd /Users/libing/kk_Projects/KStock && uv run python -m pytest scripts/test_kstock_models.py -v`
+Run: `cd /Users/libing/kk_Projects/KStock && uv run pytest tests/test_kstock_models.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'scripts.kstock_models'`
 
 - [ ] **Step 3: 创建 kstock_models.py 的工具函数部分**
@@ -139,13 +173,13 @@ def env_name_for_model(name: str) -> str:
 
 - [ ] **Step 4: 运行测试确认通过**
 
-Run: `cd /Users/libing/kk_Projects/KStock && uv run python -m pytest scripts/test_kstock_models.py -v`
+Run: `cd /Users/libing/kk_Projects/KStock && uv run pytest tests/test_kstock_models.py -v`
 Expected: PASS（1 passed）
 
 - [ ] **Step 5: commit**
 
 ```bash
-git add scripts/kstock_models.py scripts/test_kstock_models.py
+git add scripts/kstock_models.py tests/ pyproject.toml
 git commit -m "feat(kstock_models): 模型配置写入层骨架与环境变量命名规则"
 ```
 
@@ -155,11 +189,11 @@ git commit -m "feat(kstock_models): 模型配置写入层骨架与环境变量�
 
 **Files:**
 - Modify: `scripts/kstock_models.py`
-- Test: `scripts/test_kstock_models.py`
+- Test: `tests/test_kstock_models.py`
 
 - [ ] **Step 1: 追加失败测试——读写与原子替换**
 
-在 `scripts/test_kstock_models.py` 末尾追加：
+在 `tests/test_kstock_models.py` 末尾追加：
 
 ```python
 def test_load_runtime_models_empty(tmp_path, monkeypatch):
@@ -220,7 +254,7 @@ def _setup_data_root(data_root: Path, monkeypatch, models_yaml: str) -> Path:
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `cd /Users/libing/kk_Projects/KStock && uv run python -m pytest scripts/test_kstock_models.py -v`
+Run: `cd /Users/libing/kk_Projects/KStock && uv run pytest tests/test_kstock_models.py -v`
 Expected: FAIL with `ImportError: cannot import name 'load_runtime_models'`
 
 - [ ] **Step 3: 实现 load/save 工具函数**
@@ -273,13 +307,13 @@ def save_runtime_models(models: list[dict[str, Any]]) -> None:
 
 - [ ] **Step 4: 运行测试确认通过**
 
-Run: `cd /Users/libing/kk_Projects/KStock && uv run python -m pytest scripts/test_kstock_models.py -v`
+Run: `cd /Users/libing/kk_Projects/KStock && uv run pytest tests/test_kstock_models.py -v`
 Expected: PASS（4 passed）
 
 - [ ] **Step 5: commit**
 
 ```bash
-git add scripts/kstock_models.py scripts/test_kstock_models.py
+git add scripts/kstock_models.py tests/test_kstock_models.py
 git commit -m "feat(kstock_models): runtime.yaml 原子读写与备份"
 ```
 
@@ -289,11 +323,11 @@ git commit -m "feat(kstock_models): runtime.yaml 原子读写与备份"
 
 **Files:**
 - Modify: `scripts/kstock_models.py`
-- Test: `scripts/test_kstock_models.py`
+- Test: `tests/test_kstock_models.py`
 
 - [ ] **Step 1: 追加失败测试——secrets.env 增删改与权限**
 
-在 `scripts/test_kstock_models.py` 末尾追加：
+在 `tests/test_kstock_models.py` 末尾追加：
 
 ```python
 def test_upsert_secret_creates_file_with_600(tmp_path, monkeypatch):
@@ -334,7 +368,7 @@ import os  # 顶部已有 import，此行确保模块级可见（如已在顶部
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `cd /Users/libing/kk_Projects/KStock && uv run python -m pytest scripts/test_kstock_models.py -v`
+Run: `cd /Users/libing/kk_Projects/KStock && uv run pytest tests/test_kstock_models.py -v`
 Expected: FAIL with `ImportError: cannot import name 'upsert_secret'`
 
 - [ ] **Step 3: 实现 secrets.env 工具函数**
@@ -396,13 +430,13 @@ def remove_secret(key: str) -> None:
 
 - [ ] **Step 4: 运行测试确认通过**
 
-Run: `cd /Users/libing/kk_Projects/KStock && uv run python -m pytest scripts/test_kstock_models.py -v`
+Run: `cd /Users/libing/kk_Projects/KStock && uv run pytest tests/test_kstock_models.py -v`
 Expected: PASS（7 passed）
 
 - [ ] **Step 5: commit**
 
 ```bash
-git add scripts/kstock_models.py scripts/test_kstock_models.py
+git add scripts/kstock_models.py tests/test_kstock_models.py
 git commit -m "feat(kstock_models): secrets.env 读写与 600 权限"
 ```
 
@@ -412,11 +446,11 @@ git commit -m "feat(kstock_models): secrets.env 读写与 600 权限"
 
 **Files:**
 - Modify: `scripts/kstock_models.py`
-- Test: `scripts/test_kstock_models.py`
+- Test: `tests/test_kstock_models.py`
 
 - [ ] **Step 1: 追加失败测试——偏好读写与 Pydantic 校验**
 
-在 `scripts/test_kstock_models.py` 末尾追加：
+在 `tests/test_kstock_models.py` 末尾追加：
 
 ```python
 from scripts.kstock_models import (
@@ -460,7 +494,7 @@ def test_model_write_payload_requires_name():
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `cd /Users/libing/kk_Projects/KStock && uv run python -m pytest scripts/test_kstock_models.py -v`
+Run: `cd /Users/libing/kk_Projects/KStock && uv run pytest tests/test_kstock_models.py -v`
 Expected: FAIL with `ImportError: cannot import name 'ModelWritePayload'`
 
 - [ ] **Step 3: 实现 Pydantic 模型与偏好读写**
@@ -560,13 +594,13 @@ class ModelWritePayload(BaseModel):
 
 - [ ] **Step 4: 运行测试确认通过**
 
-Run: `cd /Users/libing/kk_Projects/KStock && uv run python -m pytest scripts/test_kstock_models.py -v`
+Run: `cd /Users/libing/kk_Projects/KStock && uv run pytest tests/test_kstock_models.py -v`
 Expected: PASS（11 passed）
 
 - [ ] **Step 5: commit**
 
 ```bash
-git add scripts/kstock_models.py scripts/test_kstock_models.py
+git add scripts/kstock_models.py tests/test_kstock_models.py
 git commit -m "feat(kstock_models): Pydantic 负载与 prefs.json 偏好读写"
 ```
 
@@ -576,11 +610,11 @@ git commit -m "feat(kstock_models): Pydantic 负载与 prefs.json 偏好读写"
 
 **Files:**
 - Modify: `scripts/kstock_models.py`
-- Test: `scripts/test_kstock_models.py`
+- Test: `tests/test_kstock_models.py`
 
 - [ ] **Step 1: 追加失败测试——CRUD 端点（用 TestClient）**
 
-在 `scripts/test_kstock_models.py` 末尾追加：
+在 `tests/test_kstock_models.py` 末尾追加：
 
 ```python
 from fastapi import FastAPI
@@ -669,7 +703,7 @@ def test_default_model_endpoints(tmp_path, monkeypatch):
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `cd /Users/libing/kk_Projects/KStock && uv run python -m pytest scripts/test_kstock_models.py -v`
+Run: `cd /Users/libing/kk_Projects/KStock && uv run pytest tests/test_kstock_models.py -v`
 Expected: FAIL（端点未实现，路由 404 / AttributeError）
 
 - [ ] **Step 3: 实现 CRUD 端点**
@@ -785,13 +819,13 @@ def set_default_model_endpoint(payload: DefaultModelPayload) -> dict[str, Any]:
 
 - [ ] **Step 4: 运行测试确认通过**
 
-Run: `cd /Users/libing/kk_Projects/KStock && uv run python -m pytest scripts/test_kstock_models.py -v`
+Run: `cd /Users/libing/kk_Projects/KStock && uv run pytest tests/test_kstock_models.py -v`
 Expected: PASS（17 passed）
 
 - [ ] **Step 5: commit**
 
 ```bash
-git add scripts/kstock_models.py scripts/test_kstock_models.py
+git add scripts/kstock_models.py tests/test_kstock_models.py
 git commit -m "feat(kstock_models): 模型 CRUD 与默认模型偏好端点"
 ```
 
@@ -1740,7 +1774,7 @@ git commit -m "docs: 模型配置说明与首次运行配置步骤"
 | ModelSettings 重构为 CRUD（列表/编辑/添加弹层） | `apps/desktop/src/pages/Home.tsx` | ✅ |
 | 输入框模型选择器 + localStorage 持久化 | `apps/desktop/src/pages/Home.tsx` | ✅ |
 | 会话消息 model 元数据记录 | `apps/desktop/src/lib/sessionStore.ts` | ✅ |
-| 后端 pytest 覆盖 | `scripts/test_kstock_models.py` | ✅ |
+| 后端 pytest 覆盖 | `tests/test_kstock_models.py` | ✅ |
 | 前端 vitest 覆盖 | `apps/desktop/tests/App.spec.tsx` | ✅ |
 | 配置说明 + 首次运行文档更新 | `docs/配置说明.md`, `docs/运行说明.md` | ✅ |
 

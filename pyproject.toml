@@ -35,3 +35,12 @@ package = false
 [tool.uv.sources]
 # 以 editable 方式安装内置 QiLin 快照，修改 vendor/qilin 源码即时生效。
 qilin = { path = "vendor/qilin", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
