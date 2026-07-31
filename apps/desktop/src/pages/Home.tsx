@@ -215,6 +215,24 @@ export function Home() {
     };
   }, [currentUser]);
 
+  // 设置页（ModelSettings）增删改后回调：同步本组件的 models state，并校正
+  // activeModel —— 若当前选中的模型已被删除，回退到默认模型或列表首个。
+  // 否则输入框选择器不刷新（ModelSettings 有自己独立的 models state）。
+  const handleModelsChanged = useCallback(
+    (next: ModelConfig[], defaultModel: string | null) => {
+      setModels(next);
+      setActiveModel((prev) => {
+        if (prev && next.some((m) => m.name === prev)) return prev;
+        // 当前选中被删除：localStorage 记忆 > default_model > 首个
+        const stored = localStorage.getItem("kstock.activeModel");
+        if (stored && next.some((m) => m.name === stored)) return stored;
+        if (defaultModel && next.some((m) => m.name === defaultModel)) return defaultModel;
+        return next[0]?.name ?? "";
+      });
+    },
+    []
+  );
+
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) ?? sessions[0],
     [activeSessionId, sessions]
@@ -432,6 +450,7 @@ export function Home() {
         activeSectionId={settingsSectionId}
         onBack={enterWorkspace}
         onSelectSection={setSettingsSectionId}
+        onModelsChanged={handleModelsChanged}
       />
     );
   }
@@ -1082,12 +1101,14 @@ function SettingsPage({
   activeSection,
   activeSectionId,
   onBack,
-  onSelectSection
+  onSelectSection,
+  onModelsChanged
 }: {
   activeSection: (typeof SETTING_SECTIONS)[number];
   activeSectionId: string;
   onBack: () => void;
   onSelectSection: (id: string) => void;
+  onModelsChanged?: (models: ModelConfig[], defaultModel: string | null) => void;
 }) {
   const grouped = SETTING_SECTIONS.reduce<Record<string, typeof SETTING_SECTIONS>>((acc, section) => {
     acc[section.group] = [...(acc[section.group] ?? []), section];
@@ -1137,7 +1158,7 @@ function SettingsPage({
         </div>
 
         {activeSection.id === "models" ? (
-          <ModelSettings />
+          <ModelSettings onModelsChanged={onModelsChanged} />
         ) : activeSection.id === "memory" ? (
           <MemorySettings />
         ) : activeSection.id === "database" ? (
@@ -1161,7 +1182,7 @@ function SettingsPage({
 }
 
 /** 模型配置 CRUD 页：列表 + 编辑 + 添加 + 默认模型。 */
-function ModelSettings() {
+function ModelSettings({ onModelsChanged }: { onModelsChanged?: (models: ModelConfig[], defaultModel: string | null) => void }) {
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [defaultModel, setDefaultModelState] = useState<string | null>(null);
   const [selectedName, setSelectedName] = useState<string | null>(null);
@@ -1180,12 +1201,15 @@ function ModelSettings() {
       if (data.models.length > 0 && !selectedName) {
         setSelectedName(data.models[0].name);
       }
+      // 同步外部（Home 的输入框选择器）：设置页增删改后，输入框选择器需要
+      // 反映最新列表，且当前选中的模型被删除时要回退到默认/首个。
+      onModelsChanged?.(data.models, data.default_model);
     } catch (err) {
       setError(isModelsApiError(err) ? err.message : "加载模型失败");
     } finally {
       setLoading(false);
     }
-  }, [selectedName]);
+  }, [selectedName, onModelsChanged]);
 
   useEffect(() => {
     reload();

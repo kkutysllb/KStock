@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 import { App } from "../src/App";
-import { listModels } from "../src/lib/modelsClient";
+import { createModel, listModels } from "../src/lib/modelsClient";
 
 // 用 hoisted 持有 mock 函数，便于在单个测试内覆盖返回值（如模拟已登录）。
 const authMock = vi.hoisted(() => ({
@@ -124,6 +124,77 @@ test("无模型时输入框选择器显示未配置且发送禁用", async () =>
   expect(await screen.findByRole("textbox", { name: "消息输入" })).toBeVisible();
   expect(screen.getByText("未配置模型（请到设置页添加）")).toBeVisible();
   expect(screen.getByRole("button", { name: "发送消息" })).toBeDisabled();
+});
+
+test("设置页添加模型后输入框选择器同步刷新（不重启）", async () => {
+  // 场景：登录后 listModels 初次返回空（未配置），进设置页添加模型后
+  // ModelSettings.reload 再次调 listModels 返回新列表，onModelsChanged
+  // 回调把数据同步到 Home 的 models state，输入框选择器立即刷新。
+  authMock.tryGetCurrentUser.mockResolvedValueOnce({
+    id: "u1", email: "t@k.dev", system_role: "user",
+  });
+  vi.mocked(listModels)
+    // Home 启动加载（未配置）
+    .mockResolvedValueOnce({ models: [], default_model: null })
+    // ModelSettings 首次 reload（进设置页，未配置）
+    .mockResolvedValueOnce({ models: [], default_model: null })
+    // ModelSettings 添加模型后 reload（有 1 个模型）
+    .mockResolvedValueOnce({
+      models: [{
+        name: "deepseek",
+        display_name: "DeepSeek V4",
+        description: null,
+        use: "qilin.models.patched_deepseek:PatchedChatDeepSeek",
+        model: "deepseek-v4",
+        api_base: "https://api.deepseek.com",
+        api_key_env: "$KSTOCK_MODEL_DEEPSEEK_KEY",
+        supports_thinking: false,
+        supports_vision: false,
+        supports_reasoning_effort: false,
+      }],
+      default_model: null,
+    });
+  vi.mocked(createModel).mockResolvedValueOnce({
+    name: "deepseek",
+    display_name: "DeepSeek V4",
+    description: null,
+    use: "qilin.models.patched_deepseek:PatchedChatDeepSeek",
+    model: "deepseek-v4",
+    api_base: "https://api.deepseek.com",
+    api_key_env: "$KSTOCK_MODEL_DEEPSEEK_KEY",
+    supports_thinking: false,
+    supports_vision: false,
+    supports_reasoning_effort: false,
+  });
+
+  render(<App />);
+
+  expect(await screen.findByRole("textbox", { name: "消息输入" })).toBeVisible();
+  // 初始：未配置模型
+  expect(screen.getByText("未配置模型（请到设置页添加）")).toBeVisible();
+
+  // 进设置页 → 模型
+  fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
+  fireEvent.click(screen.getByRole("button", { name: "模型" }));
+  expect(await screen.findByText(/尚未配置任何模型/)).toBeVisible();
+
+  // 添加模型：点「+ 添加模型」 → 选空白自定义 → 等表单出现 → 填表 → 提交
+  fireEvent.click(screen.getByRole("button", { name: "+ 添加模型" }));
+  fireEvent.click(screen.getByRole("button", { name: /空白自定义/ }));
+  // 等表单出现（initialTemplate 非空后才渲染表单字段）
+  const nameInput = await screen.findByLabelText(/name（唯一标识）/);
+  fireEvent.change(nameInput, { target: { value: "deepseek" } });
+  fireEvent.change(screen.getByLabelText(/display_name/), { target: { value: "DeepSeek V4" } });
+  fireEvent.click(screen.getByRole("button", { name: "创建" }));
+
+  // 回到工作台（返回应用）
+  fireEvent.click(screen.getByRole("button", { name: "返回应用" }));
+
+  // 输入框选择器现在显示新模型（不再显示「未配置」）
+  const select = await screen.findByRole("combobox");
+  expect(select).toBeVisible();
+  expect(screen.queryByText("未配置模型（请到设置页添加）")).toBeNull();
+  expect((select as HTMLSelectElement).value).toBe("deepseek");
 });
 
 test("发消息触发流式 run 并逐帧累积 assistant 文本", async () => {
