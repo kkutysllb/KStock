@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleUserRound,
+  Clock,
   Command,
   Cpu,
   Database,
@@ -736,6 +737,8 @@ function WorkspaceShell({
   const feedRef = useRef<ChatFeedHandle>(null);
   const [feedAtBottom, setFeedAtBottom] = useState(true);
   const scrollToBottom = () => feedRef.current?.scrollToBottom("smooth");
+  // 历史任务分组折叠状态（默认展开）。
+  const [historyCollapsed, setHistoryCollapsed] = useState(false);
   return (
     <div className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="codex-sidebar" aria-label="工作区侧边栏">
@@ -767,20 +770,42 @@ function WorkspaceShell({
         </div>
         {!sidebarCollapsed && (
           <>
-            <p className="side-section-label">优先级</p>
-            <div className="session-strip">
-              {sessions.map((session) => (
-                <button
-                  key={session.id}
-                  className={`session-row ${session.id === activeSession?.id ? "active" : ""}`}
-                  type="button"
-                  onClick={() => onSelectSession(session.id)}
-                >
-                  <strong>{session.title}</strong>
-                  <span><Folder size={12} /> KStock</span>
-                </button>
-              ))}
-            </div>
+            <button
+              type="button"
+              className="side-section-header"
+              aria-expanded={!historyCollapsed}
+              onClick={() => setHistoryCollapsed((c) => !c)}
+            >
+              <span className="side-section-label">历史任务</span>
+              <span className="side-section-count">{sessions.length}</span>
+              <ChevronRight
+                size={13}
+                className={!historyCollapsed ? "chevron-expanded" : ""}
+                aria-hidden="true"
+              />
+            </button>
+            {!historyCollapsed && (
+              <div className="session-strip">
+                {sessions.length === 0 ? (
+                  <p className="session-empty">暂无历史任务</p>
+                ) : (
+                  sessions.map((session) => (
+                    <button
+                      key={session.id}
+                      className={`session-row ${session.id === activeSession?.id ? "active" : ""}`}
+                      type="button"
+                      onClick={() => onSelectSession(session.id)}
+                    >
+                      <strong>{session.title}</strong>
+                      <span className="session-meta">
+                        <Clock size={11} />
+                        {session.updatedAt}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </>
         )}
         <div className="sidebar-footer">
