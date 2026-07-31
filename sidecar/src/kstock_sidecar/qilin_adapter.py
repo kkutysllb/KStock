@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 import os
 import sys
 from pathlib import Path
 from typing import Any
+import uuid
 
 from .config import SidecarConfig
 from .data_space import DataSpaceInfo, KStockDataSpace
@@ -97,3 +99,33 @@ class QiLinAdapter:
 
     def workspace_info(self) -> dict[str, object]:
         return self._data_space_payload()
+
+    def create_thread(self, *, title: str | None = None, project_id: str | None = None) -> dict[str, object]:
+        self._ensure_qilin_environment()
+        info = self._ensure_data_space()
+        thread_id = f"thread_{uuid.uuid4().hex[:16]}"
+
+        from qilin.config.paths import get_paths
+
+        paths = get_paths()
+        paths.ensure_thread_dirs(thread_id, user_id=info.active_user_id)
+
+        if project_id:
+            from .product_store import ProductStore
+
+            store = ProductStore(info.product_db_path)
+            store.ensure_schema()
+            store.link_thread(project_id, thread_id, title=title)
+
+        return {
+            "threadId": thread_id,
+            "userId": info.active_user_id,
+            "title": title,
+            "createdAt": datetime.now(UTC).isoformat(),
+            "paths": {
+                "workspace": "/mnt/user-data/workspace",
+                "uploads": "/mnt/user-data/uploads",
+                "outputs": "/mnt/user-data/outputs",
+                "hostThreadDir": str(paths.thread_dir(thread_id, user_id=info.active_user_id)),
+            },
+        }

@@ -24,3 +24,20 @@ def test_workspace_info_returns_same_user(tmp_path: Path):
 
     assert second.ok is True
     assert second.result["activeUserId"] == first.result["activeUserId"]
+
+
+def test_thread_create_makes_qilin_thread_dirs(tmp_path: Path):
+    adapter = QiLinAdapter(client_factory=lambda: object(), config=SidecarConfig(app_data_dir=tmp_path))
+
+    response = dispatch_request(
+        Request(id="1", method="thread.create", params={"title": "财报分析"}),
+        adapter=adapter,
+    )
+
+    assert response.ok is True
+    user_id = response.result["userId"]
+    thread_id = response.result["threadId"]
+    assert response.result["title"] == "财报分析"
+    assert (tmp_path / "runtime/qilin/users" / user_id / "threads" / thread_id / "user-data/workspace").is_dir()
+    assert (tmp_path / "runtime/qilin/users" / user_id / "threads" / thread_id / "user-data/uploads").is_dir()
+    assert (tmp_path / "runtime/qilin/users" / user_id / "threads" / thread_id / "user-data/outputs").is_dir()

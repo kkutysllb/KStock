@@ -13,6 +13,17 @@ def dispatch_request(request: Request, adapter: QiLinAdapter | None = None) -> R
         return Response(id=request.id, ok=True, result=adapter.health())
     if request.method in {"workspace.init", "workspace.info"}:
         return Response(id=request.id, ok=True, result=adapter.workspace_info())
+    if request.method == "thread.create":
+        title = request.params.get("title")
+        project_id = request.params.get("projectId")
+        return Response(
+            id=request.id,
+            ok=True,
+            result=adapter.create_thread(
+                title=title if isinstance(title, str) else None,
+                project_id=project_id if isinstance(project_id, str) else None,
+            ),
+        )
     return Response(
         id=request.id,
         ok=False,
