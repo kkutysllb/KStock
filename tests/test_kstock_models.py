@@ -8,10 +8,13 @@ from pathlib import Path
 import pytest
 
 from scripts.kstock_models import (
+    ModelWritePayload,
     env_name_for_model,
+    get_default_model,
     load_runtime_models,
     remove_secret,
     save_runtime_models,
+    set_default_model,
     upsert_secret,
 )
 
@@ -105,6 +108,39 @@ def test_remove_secret(tmp_path, monkeypatch):
     text = (tmp_path / "config" / "secrets.env").read_text(encoding="utf-8")
     assert "KSTOCK_MODEL_A_KEY" not in text
     assert 'KSTOCK_MODEL_B_KEY="2"' in text
+
+
+# ── prefs.json 偏好与 Pydantic 负载 ────────────────────────────────
+def test_default_model_roundtrip(tmp_path, monkeypatch):
+    """未设置时返回 None；设置后返回 name。"""
+    _setup_data_root(tmp_path, monkeypatch, models_yaml="models: []\n")
+    assert get_default_model() is None
+    set_default_model("deepseek")
+    assert get_default_model() == "deepseek"
+
+
+def test_default_model_overwrite(tmp_path, monkeypatch):
+    _setup_data_root(tmp_path, monkeypatch, models_yaml="models: []\n")
+    set_default_model("a")
+    set_default_model("b")
+    assert get_default_model() == "b"
+
+
+def test_model_write_payload_strips_api_key():
+    """api_key 为空字符串时视为未提供（不修改）。"""
+    payload = ModelWritePayload(
+        name="x",
+        use="p:Q",
+        model="m",
+        api_key="",
+    )
+    assert payload.api_key is None
+
+
+def test_model_write_payload_requires_name():
+    """缺少必填字段 name 时抛校验异常。"""
+    with pytest.raises(Exception):
+        ModelWritePayload(use="p:Q", model="m")
 
 
 # ── 测试辅助 ─────────────────────────────────────────────────────────

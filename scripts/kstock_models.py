@@ -20,7 +20,7 @@ from typing import Any
 
 import yaml
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 router = APIRouter(prefix="/api/v1/kstock", tags=["kstock-models"])
 
@@ -153,3 +153,76 @@ def remove_secret(key: str) -> None:
     if len(filtered) == len(lines):
         return
     _write_secrets_lines(filtered)
+
+
+# ── Pydantic 请求/响应模型 ─────────────────────────────────────────────
+class ModelWritePayload(BaseModel):
+    """前端提交的模型写入负载。api_key 留空表示不修改。"""
+    name: str = Field(..., min_length=1)
+    display_name: str | None = None
+    description: str | None = None
+    use: str = Field(..., min_length=1)           # provider class path
+    model: str = Field(..., min_length=1)         # 模型标识
+    api_base: str | None = None                   # endpoint（OpenAI 系）
+    api_key: str | None = None                    # 明文；None=不改，非空=写入
+    supports_thinking: bool = False
+    supports_vision: bool = False
+    supports_reasoning_effort: bool = False
+
+    @field_validator("api_key", mode="before")
+    @classmethod
+    def _blank_to_none(cls, v: str | None) -> str | None:
+        """空字符串视为未提供（不修改现有 key）。"""
+        return v if v else None
+
+
+class ModelItem(BaseModel):
+    """返回给前端的模型条目。api_key_env 是 $ENV 引用，非明文。"""
+    name: str
+    display_name: str | None = None
+    description: str | None = None
+    use: str
+    model: str
+    api_base: str | None = None
+    api_key_env: str | None = None
+    supports_thinking: bool = False
+    supports_vision: bool = False
+    supports_reasoning_effort: bool = False
+
+
+# ── 偏好（prefs.json，引擎无关）──────────────────────────────────────
+def _load_prefs() -> dict[str, Any]:
+    path = _prefs_path()
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) or {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _save_prefs(prefs: dict[str, Any]) -> None:
+    path = _prefs_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".prefs.", suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(prefs, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+    except Exception:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+
+
+def get_default_model() -> str | None:
+    return _load_prefs().get("default_model")
+
+
+def set_default_model(name: str | None) -> None:
+    prefs = _load_prefs()
+    if name is None:
+        prefs.pop("default_model", None)
+    else:
+        prefs["default_model"] = name
+    _save_prefs(prefs)
