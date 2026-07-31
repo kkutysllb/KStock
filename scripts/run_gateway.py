@@ -59,6 +59,11 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# 直接运行 ``python scripts/run_gateway.py`` 时 sys.path[0] 是 scripts/ 而非
+# 仓库根，需显式注入才能 ``from scripts.xxx import ...``（kstock_models 等）。
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 
 def _apply_vendor_extensions_config_compat_shim() -> None:
     """为 vendor/qilin 快照缺失的 extensions_config 符号注入兼容实现。
@@ -255,7 +260,13 @@ def create_app():
     print("=" * 64, flush=True)
     from app.gateway.app import create_app as _create_app
 
-    return _create_app()
+    app = _create_app()
+
+    # KStock 自有的模型配置写入层（vendor 引擎只读，本路由提供 CRUD）
+    from scripts.kstock_models import router as kstock_models_router
+
+    app.include_router(kstock_models_router)
+    return app
 
 
 # uvicorn 通过模块路径加载时需要模块级 ``app``
