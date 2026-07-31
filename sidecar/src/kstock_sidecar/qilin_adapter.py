@@ -6,7 +6,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .config import REPO_ROOT, SidecarConfig
+from .config import SidecarConfig
+from .data_space import DataSpaceInfo, KStockDataSpace
 
 
 class QiLinAdapter:
@@ -19,15 +20,29 @@ class QiLinAdapter:
         self._client_factory = client_factory or self._default_client_factory
         self._client: Any | None = None
         self._client_error: str | None = None
+        self._data_space_info: DataSpaceInfo | None = None
+
+    def _ensure_data_space(self) -> DataSpaceInfo:
+        if self._data_space_info is None:
+            data_space = KStockDataSpace(
+                app_data_dir=self._config.app_data_dir,
+                skill_root=self._config.skill_root,
+                repo_root=self._config.repo_root,
+                development_fallback=self._config.development_fallback,
+            )
+            self._data_space_info = data_space.ensure()
+        return self._data_space_info
 
     def _ensure_qilin_environment(self) -> Path:
+        info = self._ensure_data_space()
         qilin_repo_path = self._config.qilin_repo_path.resolve()
         if str(qilin_repo_path) not in sys.path:
             sys.path.insert(0, str(qilin_repo_path))
-        os.environ.setdefault("QILIN_PROJECT_ROOT", str(REPO_ROOT))
-        os.environ.setdefault("QILIN_CONFIG_PATH", str(self._config.qilin_config_path.resolve()))
-        os.environ.setdefault("QILIN_HOME", str(self._config.qilin_home.resolve()))
-        os.environ.setdefault("QILIN_SKILLS_PATH", str(self._config.skill_root.resolve()))
+        os.environ["QILIN_PROJECT_ROOT"] = str(self._config.repo_root.resolve())
+        os.environ["QILIN_CONFIG_PATH"] = str(info.runtime_config_path.resolve())
+        os.environ["QILIN_HOME"] = str(info.qilin_home.resolve())
+        os.environ["QILIN_SKILLS_PATH"] = str(info.skill_root.resolve())
+        os.environ["KSTOCK_APP_DATA_DIR"] = str(info.app_data_dir.resolve())
         return qilin_repo_path
 
     def _default_client_factory(self) -> Any | None:
@@ -50,6 +65,13 @@ class QiLinAdapter:
 
     def health(self) -> dict[str, Any]:
         qilin_repo_path = self._ensure_qilin_environment()
+        info = self._ensure_data_space()
+        data_space = KStockDataSpace(
+            info.app_data_dir,
+            skill_root=info.skill_root,
+            repo_root=self._config.repo_root,
+            development_fallback=info.is_development_fallback,
+        ).as_dict(info)
         client = self._client_or_none()
         if client is None:
             return {
@@ -57,12 +79,14 @@ class QiLinAdapter:
                 "engine": "qilin",
                 "detail": self._client_error or "QiLin 引擎尚未就绪",
                 "source": str(qilin_repo_path),
-                "config": str(self._config.qilin_config_path.resolve()),
+                "config": str(info.runtime_config_path.resolve()),
+                "dataSpace": data_space,
             }
         return {
             "status": "ok",
             "engine": "qilin",
             "detail": "QiLin 引擎可用",
             "source": str(qilin_repo_path),
-            "config": str(self._config.qilin_config_path.resolve()),
+            "config": str(info.runtime_config_path.resolve()),
+            "dataSpace": data_space,
         }
