@@ -12,9 +12,17 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = REPO_ROOT / "vendor/skills/approved-skills.json"
 DEFAULT_VENDOR_ROOT = REPO_ROOT / "vendor/skills"
+DEFAULT_QILIN_VENDOR_ROOT = REPO_ROOT / "vendor/qilin"
 DEFAULT_QILIN_ROOT = Path("/Users/libing/kk_Projects/QiLin")
 DEFAULT_KSKILLS_ROOT = Path("/Users/libing/kk_Projects/KSkills")
 DEFAULT_LOCK_PATH = REPO_ROOT / "upstream.lock.json"
+COPY_IGNORE_NAMES = {
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    "dist",
+    "build",
+}
 
 
 @dataclass(frozen=True)
@@ -104,13 +112,34 @@ def sync_skill_pack(
     return plan
 
 
+def sync_qilin_engine(
+    source_root: Path = DEFAULT_QILIN_ROOT,
+    vendor_root: Path = DEFAULT_QILIN_VENDOR_ROOT,
+) -> None:
+    if not source_root.exists():
+        raise FileNotFoundError(f"找不到 QiLin 源目录：{source_root}")
+    if vendor_root.exists():
+        shutil.rmtree(vendor_root)
+
+    def _ignore(_dir: str, names: list[str]) -> set[str]:
+        ignored = {name for name in names if name in COPY_IGNORE_NAMES}
+        ignored.update(name for name in names if name.endswith(".egg-info"))
+        ignored.update(name for name in names if name.endswith(".pyc"))
+        return ignored
+
+    vendor_root.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source_root, vendor_root, ignore=_ignore)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="同步 QiLin / KSkills 到 KStock 本地镜像。")
     parser.add_argument("--refresh-lock", action="store_true", help="刷新上游锁文件。")
+    parser.add_argument("--sync-qilin", action="store_true", help="同步 QiLin 引擎源码快照。")
     parser.add_argument("--sync-skills", action="store_true", help="同步精选技能包。")
     parser.add_argument("--qilin-root", type=Path, default=DEFAULT_QILIN_ROOT)
     parser.add_argument("--kskills-root", type=Path, default=DEFAULT_KSKILLS_ROOT)
     parser.add_argument("--vendor-root", type=Path, default=DEFAULT_VENDOR_ROOT)
+    parser.add_argument("--qilin-vendor-root", type=Path, default=DEFAULT_QILIN_VENDOR_ROOT)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--lock-path", type=Path, default=DEFAULT_LOCK_PATH)
     args = parser.parse_args()
@@ -122,6 +151,13 @@ def main() -> None:
             kskills_root=args.kskills_root,
         )
         print(f"已刷新锁文件：{args.lock_path}")
+
+    if args.sync_qilin:
+        sync_qilin_engine(
+            source_root=args.qilin_root,
+            vendor_root=args.qilin_vendor_root,
+        )
+        print(f"已同步 QiLin 引擎到：{args.qilin_vendor_root}")
 
     if args.sync_skills:
         sync_skill_pack(

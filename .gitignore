@@ -13,7 +13,9 @@ apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/build/
 apps/desktop/test-results/
+.kstock/
 sidecar/build/
 sidecar/dist/
 sidecar/*.egg-info/
+*.egg-info/
 *.log
