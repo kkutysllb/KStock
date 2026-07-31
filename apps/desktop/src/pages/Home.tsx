@@ -26,7 +26,7 @@ import {
   Square,
   UserPlus,
 } from "lucide-react";
-import { normalizeMarkdown } from "../lib/markdown";
+import { Markdown } from "../lib/markdown";
 import { MODEL_TEMPLATES, SETTING_SECTIONS } from "../lib/qilinSettings";
 import {
   getSetupStatus,
@@ -921,7 +921,9 @@ function WorkspaceShell({
         ))}
         <div className="context-divider" />
         <strong className="mini-heading">报告预览</strong>
-        <pre>{normalizeMarkdown(reportMarkdown)}</pre>
+        <div className="context-report-preview">
+          {reportMarkdown ? <Markdown>{reportMarkdown}</Markdown> : <em>暂无报告</em>}
+        </div>
       </aside>
     </div>
   );

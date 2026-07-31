@@ -1,5 +1,5 @@
 import { FileText } from "lucide-react";
-import { normalizeMarkdown } from "../lib/markdown";
+import { Markdown } from "../lib/markdown";
 
 interface ReportPanelProps {
   reportMarkdown: string;
@@ -11,11 +11,13 @@ export function ReportPanel({ reportMarkdown }: ReportPanelProps) {
       <div className="panel-heading">
         <div>
           <h2>报告</h2>
-          <p>Markdown 预览</p>
+          <p>报告预览</p>
         </div>
         <FileText size={16} />
       </div>
-      <pre className="report-preview">{normalizeMarkdown(reportMarkdown)}</pre>
+      <div className="report-preview">
+        {reportMarkdown ? <Markdown>{reportMarkdown}</Markdown> : <p className="report-empty">暂无报告内容</p>}
+      </div>
     </section>
   );
 }

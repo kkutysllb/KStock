@@ -5,7 +5,7 @@
 
 import { AlertTriangle, Sparkles, Zap } from "lucide-react";
 import type { ChatMessage } from "../lib/sessionStore";
-import { normalizeMarkdown } from "../lib/markdown";
+import { Markdown } from "../lib/markdown";
 import { StageBadge } from "./StageBadge";
 import { ReasoningBlock } from "./ReasoningBlock";
 import { ToolCard } from "./ToolCard";
@@ -53,7 +53,7 @@ export function AssistantTurn({ msg, isStreaming }: AssistantTurnProps) {
 
         {msg.text && (
           <div className="turn-text">
-            {normalizeMarkdown(msg.text)}
+            <Markdown>{msg.text}</Markdown>
             {streaming && <span className="streaming-cursor" aria-hidden="true" />}
           </div>
         )}

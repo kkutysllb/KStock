@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { Brain, ChevronRight } from "lucide-react";
 import type { ReasoningBlock as ReasoningData } from "../lib/sessionStore";
+import { Markdown } from "../lib/markdown";
 
 interface ReasoningBlockProps {
   reasoning: ReasoningData;
@@ -37,7 +38,11 @@ export function ReasoningBlock({ reasoning, streaming, thinkingMs }: ReasoningBl
         <ChevronRight size={12} className={expanded ? "chevron-expanded" : ""} />
       </button>
       {expanded && (
-        <div className="reasoning-text">{reasoning.text || (inProgress ? "…" : "")}</div>
+        <div className="reasoning-text">
+          {reasoning.text
+            ? <Markdown>{reasoning.text}</Markdown>
+            : (inProgress ? "…" : "")}
+        </div>
       )}
     </div>
   );
