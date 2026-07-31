@@ -1,7 +1,8 @@
-// reasoning 思考流展示：
-// - 流式中（streaming 且 endedAt 未填）：带头像流式输出，标题"思考中…"
-// - 完成后（有 endedAt）：折叠为「已思考 Ns」，点击展开查看全文
+// reasoning 思考流展示（默认折叠）：
+// - 流式中（streaming 且 endedAt 未填）：折叠态显示「思考中…」动画摘要，展开看流式全文
+// - 完成后（有 endedAt）：折叠态显示「已思考 Ns」，展开看完整思考内容
 // - <1s 显示「已思考 <1s」
+// 两种态默认折叠；用户点击摘要条展开/收起。
 
 import { useState } from "react";
 import { Brain, ChevronRight } from "lucide-react";
@@ -19,24 +20,12 @@ export function ReasoningBlock({ reasoning, streaming, thinkingMs }: ReasoningBl
   const [expanded, setExpanded] = useState(false);
   const inProgress = streaming && reasoning.endedAt == null;
 
-  if (inProgress) {
-    return (
-      <div className="reasoning-block in-progress" aria-label="思考中">
-        <div className="reasoning-header">
-          <Brain size={13} />
-          <span>思考中…</span>
-        </div>
-        <div className="reasoning-text">{reasoning.text || "…"}</div>
-      </div>
-    );
-  }
-
   const ms =
     thinkingMs ??
     (reasoning.endedAt != null ? reasoning.endedAt - reasoning.startedAt : 0);
 
   return (
-    <div className="reasoning-block collapsed">
+    <div className={`reasoning-block ${expanded ? "expanded" : "collapsed"}${inProgress ? " in-progress" : ""}`} aria-label={inProgress ? "思考中" : "已思考"}>
       <button
         type="button"
         className="reasoning-summary"
@@ -44,10 +33,12 @@ export function ReasoningBlock({ reasoning, streaming, thinkingMs }: ReasoningBl
         onClick={() => setExpanded((e) => !e)}
       >
         <Brain size={13} />
-        <span>已思考 {formatDuration(ms)}</span>
+        <span>{inProgress ? "思考中…" : `已思考 ${formatDuration(ms)}`}</span>
         <ChevronRight size={12} className={expanded ? "chevron-expanded" : ""} />
       </button>
-      {expanded && <div className="reasoning-text">{reasoning.text}</div>}
+      {expanded && (
+        <div className="reasoning-text">{reasoning.text || (inProgress ? "…" : "")}</div>
+      )}
     </div>
   );
 }

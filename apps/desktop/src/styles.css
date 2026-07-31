@@ -1592,30 +1592,17 @@ button {
   opacity: 0.85;
 }
 
-/* reasoning 思考流 */
+/* reasoning 思考流（默认折叠） */
 .reasoning-block {
   border-left: 2px solid rgba(49, 199, 162, 0.28);
   padding-left: 12px;
 }
 
-.reasoning-block.in-progress .reasoning-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #31c7a2;
-  margin-bottom: 6px;
+.reasoning-block.in-progress {
+  border-left-color: rgba(96, 165, 250, 0.5);
 }
 
-.reasoning-text {
-  font-size: 13px;
-  line-height: 1.7;
-  color: #a9afb8;
-  font-style: italic;
-  white-space: pre-wrap;
-}
-
-.reasoning-block.collapsed .reasoning-summary {
+.reasoning-summary {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1628,13 +1615,26 @@ button {
   cursor: pointer;
 }
 
-.reasoning-block.collapsed .reasoning-summary:hover {
+.reasoning-block.in-progress .reasoning-summary {
+  color: #60a5fa;
+}
+
+.reasoning-summary:hover {
   background: rgba(255, 255, 255, 0.05);
   color: #c9cdd4;
 }
 
-.reasoning-block.collapsed .reasoning-text {
+.reasoning-block.in-progress .reasoning-summary:hover {
+  color: #93c5fd;
+}
+
+.reasoning-text {
   margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #a9afb8;
+  font-style: italic;
+  white-space: pre-wrap;
 }
 
 .chevron-expanded {
@@ -1679,14 +1679,55 @@ button {
   color: #31c7a2;
 }
 
-.tool-args-summary {
+.tool-status-label {
   color: #6b7280;
   font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   flex: 1;
   min-width: 0;
+}
+
+.tool-card-detail {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 8px 10px;
+}
+
+.tool-args {
+  margin: 0 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tool-arg-row {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.6;
+  align-items: flex-start;
+}
+
+.tool-arg-row > dt {
+  flex: 0 0 auto;
+  min-width: 60px;
+  color: #8f96a0;
+  font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
+}
+
+.tool-arg-row > dd {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  color: #c9cdd4;
+  font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.tool-card-detail .tool-result {
+  margin: 0;
+  padding: 0;
+  border-top: none;
+  background: transparent;
 }
 
 .tool-card.status-running .tool-card-header {
