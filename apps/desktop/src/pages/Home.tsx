@@ -64,7 +64,7 @@ import {
 import { ensureThread, runContextFromModel, streamRun } from "../lib/turnsClient";
 import { initialTurn, reduceFrame } from "../lib/turnReducer";
 import { inferStage } from "../lib/stageInferrer";
-import { ChatFeed } from "../components/ChatFeed";
+import { ChatFeed, type ChatFeedHandle } from "../components/ChatFeed";
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings";
 type AuthMode = "login" | "register";
@@ -732,6 +732,10 @@ function WorkspaceShell({
   onToggleSidebar: () => void;
 }) {
   const messages = activeSession?.messages ?? [];
+  // ChatFeed 命令式 ref + 贴底状态：驱动「回到底部」浮动按钮。
+  const feedRef = useRef<ChatFeedHandle>(null);
+  const [feedAtBottom, setFeedAtBottom] = useState(true);
+  const scrollToBottom = () => feedRef.current?.scrollToBottom("smooth");
   return (
     <div className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="codex-sidebar" aria-label="工作区侧边栏">
@@ -831,8 +835,10 @@ function WorkspaceShell({
             <em>QiLin 已连接</em>
           </div>
           <ChatFeed
+            ref={feedRef}
             messages={messages}
             streamingId={streamingId ?? undefined}
+            onAtBottomChange={setFeedAtBottom}
             emptySlot={
               <div className="workspace-empty">
                 <p className="eyebrow">Research Mode</p>
@@ -851,6 +857,16 @@ function WorkspaceShell({
         </section>
 
         <section className="composer-dock" aria-label="消息输入区">
+          {!feedAtBottom && (
+            <button
+              type="button"
+              className="scroll-to-bottom-button"
+              aria-label="回到底部"
+              onClick={scrollToBottom}
+            >
+              <ChevronDown size={18} />
+            </button>
+          )}
           <textarea
             aria-label="消息输入"
             value={draft}
