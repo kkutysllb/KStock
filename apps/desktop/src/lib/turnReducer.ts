@@ -73,22 +73,58 @@ function reduceMessages(
   if (!Array.isArray(data) || data.length === 0) return state;
   const msg = data[0];
   if (!msg || typeof msg !== "object") return state;
+  const m = msg as Record<string, unknown>;
 
-  const ak = (msg as Record<string, unknown>).additional_kwargs as
-    | Record<string, unknown>
-    | undefined;
+  const ak = m.additional_kwargs as Record<string, unknown> | undefined;
   // system reminder 隐藏标记：跳过（不累加 text，不触发 reasoning）
   if (ak?.hide_from_ui === true) return state;
 
-  const type = (msg as Record<string, unknown>).type as string;
-  // 流式 chunk 的 type 是 "AIMessageChunk"（langchain_openai 流式输出），
-  // 非流式最终快照是 "ai"。两者都走 ai message 处理。
-  if (type === "ai" || type === "AIMessageChunk")
-    return reduceAiMessage(state, msg as Record<string, unknown>, now);
-  if (type === "tool" || type === "ToolMessage")
-    return reduceToolMessage(state, msg as Record<string, unknown>);
-  // human / system /未知：reducer 不处理（human 由 handleSend append）
+  // ── 路由策略：语义优先，type 兜底 ──
+  // 不依赖具体 type 字符串，以语义特征跨 provider 通用适配
+  //（MiniMax/DeepSeek/Claude/vLLM/MindIE/StepFun 等均自动覆盖）。
+  const type = typeof m.type === "string" ? (m.type as string) : "";
+  const lowered = type.toLowerCase();
+
+  // 1. human / system 消息：跳过（human 由 handleSend append；system 无信号时也不渲染）
+  //    langchain 规范：HumanMessage/HumanMessageChunk/SystemMessage/SystemMessageChunk
+  if (lowered.includes("human") || lowered.includes("system")) return state;
+
+  // 2. 按语义特征路由（跨 provider 通用）
+  //    tool message 回填：有 tool_call_id（唯一可靠特征，只有工具结果带）
+  if (typeof m.tool_call_id === "string" && m.tool_call_id)
+    return reduceToolMessage(state, m);
+  //    ai 信号：reasoning 流 / 正文增量 / 工具调用请求 / 用量 / provider error 兖底
+  if (hasAiSignal(m, ak)) return reduceAiMessage(state, m, now);
+
+  // 3. type 兖底：语义信号缺失时，按已知 type 变体识别
+  //    （空 content 的纯状态帧、未来 provider 的非标准字段等）
+  if (lowered === "tool" || lowered === "toolmessage" || lowered === "toolmessagechunk")
+    return reduceToolMessage(state, m);
+  if (lowered === "ai" || lowered === "aimessage" || lowered === "aimessagechunk")
+    return reduceAiMessage(state, m, now);
+
+  // 未识别的消息：保守忽略（避免污染 assistant turn）
   return state;
+}
+
+/**
+ * 判断消息是否携带 AI 信号字段（用于跨 provider 语义路由）。
+ *
+ * 覆盖：正文增量 content / reasoning 流 / 工具调用请求 / token 用量 /
+ * provider error 兖底（qilin_error_fallback）。满足任一即认为是 AI 产生的内容。
+ */
+function hasAiSignal(
+  msg: Record<string, unknown>,
+  ak: Record<string, unknown> | undefined
+): boolean {
+  if (ak?.qilin_error_fallback === true) return true;
+  const rc = (ak?.reasoning_content ?? ak?.reasoning) as unknown;
+  if (typeof rc === "string" && rc) return true;
+  if (typeof msg.content === "string" && msg.content) return true;
+  if (Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) return true;
+  const um = msg.usage_metadata;
+  if (um && typeof um === "object") return true;
+  return false;
 }
 
 function reduceAiMessage(

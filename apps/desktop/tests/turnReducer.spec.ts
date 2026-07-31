@@ -305,6 +305,120 @@ describe("messages 事件", () => {
   });
 });
 
+// ── 语义路由（跨 provider 通用适配） ────────────────────────────────
+describe("语义路由：不依赖 type 字符串", () => {
+  it("tool message 缺 type 字段但有 tool_call_id → 路由到 tool 回填", () => {
+    // 先发 tool_call 请求，再发无 type 的 tool 结果
+    let s = initialTurn();
+    s = reduceFrame(
+      s,
+      frame("messages", msg({ type: "ai", tool_calls: [{ id: "tc1", name: "f", args: {} }] })),
+      1
+    );
+    s = reduceFrame(
+      s,
+      frame("messages", msg({ tool_call_id: "tc1", content: "结果" })),
+      2
+    );
+    expect(s.toolCalls?.[0].status).toBe("done");
+    expect(s.toolCalls?.[0].result).toBe("结果");
+  });
+
+  it("ai message 缺 type 字段但有 content → 路由到 ai 正文累加", () => {
+    const s = reduceFrame(
+      initialTurn(),
+      frame("messages", msg({ content: "无 type 的 AI 文本" })),
+      1
+    );
+    expect(s.text).toBe("无 type 的 AI 文本");
+  });
+
+  it("human message 有 content 但 type=human → 跳过不误判为 ai", () => {
+    // 引擎 input echo：human message 可能携带 content
+    const s = reduceFrame(
+      initialTurn(),
+      frame("messages", msg({ type: "human", content: "用户输入" })),
+      1
+    );
+    expect(s.text).toBe("");
+  });
+
+  it("HumanMessageChunk（流式回显）也跳过", () => {
+    const s = reduceFrame(
+      initialTurn(),
+      frame("messages", msg({ type: "HumanMessageChunk", content: "x" })),
+      1
+    );
+    expect(s.text).toBe("");
+  });
+
+  it("SystemMessageChunk 跳过", () => {
+    const s = reduceFrame(
+      initialTurn(),
+      frame("messages", msg({ type: "SystemMessageChunk", content: "sys" })),
+      1
+    );
+    expect(s.text).toBe("");
+  });
+
+  it("未知 type 但有 AI 信号（reasoning_content）→ 路由到 ai", () => {
+    // 模拟未来新增 provider：非标准 type 名，但字段语义一致
+    const s = reduceFrame(
+      initialTurn(),
+      frame(
+        "messages",
+        msg({ type: "FutureProviderMsg", additional_kwargs: { reasoning_content: "未来思考" } })
+      ),
+      100
+    );
+    expect(s.reasoning?.text).toBe("未来思考");
+  });
+
+  it("未知 type 且有 tool_calls → 路由到 ai（tool_call 请求分支）", () => {
+    const s = reduceFrame(
+      initialTurn(),
+      frame(
+        "messages",
+        msg({ type: "CustomAI", tool_calls: [{ id: "tc1", name: "search", args: { q: "a" } }] })
+      ),
+      1
+    );
+    expect(s.toolCalls?.[0].name).toBe("search");
+    expect(s.toolCalls?.[0].status).toBe("running");
+  });
+
+  it("空 content + 无任何 AI 信号的帧 → 不产生副作用", () => {
+    // 流式初始帧：content="" 且无其他字段，仅有 type 和 id
+    // 走 type 兖底路由到 ai，但空 content / 无 reasoning / 无 tool_calls → 状态不变
+    const initial = initialTurn();
+    const s = reduceFrame(
+      initial,
+      frame("messages", msg({ type: "AIMessageChunk", content: "", id: "m1" })),
+      1
+    );
+    expect(s.text).toBe("");
+    expect(s.reasoning).toBeUndefined();
+    expect(s.toolCalls).toBeUndefined();
+    expect(s.usage).toBeUndefined();
+  });
+
+  it("usage_metadata 单独出现（finish chunk）→ 路由到 ai 填用量", () => {
+    const s = reduceFrame(
+      initialTurn(),
+      frame(
+        "messages",
+        msg({
+          type: "AIMessageChunk",
+          content: "",
+          usage_metadata: { input_tokens: 100, output_tokens: 20, total_tokens: 120 }
+        })
+      ),
+      1
+    );
+    expect(s.usage?.total_tokens).toBe(120);
+  });
+});
+
 // ── custom 事件（task 分组） ─────────────────────────────────────────
 
 describe("custom 事件：task 分组", () => {
