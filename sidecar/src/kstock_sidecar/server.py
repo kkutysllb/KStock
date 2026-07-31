@@ -24,6 +24,19 @@ def dispatch_request(request: Request, adapter: QiLinAdapter | None = None) -> R
                 project_id=project_id if isinstance(project_id, str) else None,
             ),
         )
+    if request.method == "artifact.list":
+        thread_id = request.params.get("threadId")
+        if not isinstance(thread_id, str) or not thread_id:
+            return Response(id=request.id, ok=False, error="缺少 threadId")
+        project_id = request.params.get("projectId")
+        return Response(
+            id=request.id,
+            ok=True,
+            result=adapter.list_artifacts(
+                thread_id,
+                project_id=project_id if isinstance(project_id, str) else None,
+            ),
+        )
     return Response(
         id=request.id,
         ok=False,

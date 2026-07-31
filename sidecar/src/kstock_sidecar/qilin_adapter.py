@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+import mimetypes
 import os
 import sys
 from pathlib import Path
@@ -129,3 +130,45 @@ class QiLinAdapter:
                 "hostThreadDir": str(paths.thread_dir(thread_id, user_id=info.active_user_id)),
             },
         }
+
+    def list_artifacts(self, thread_id: str, *, project_id: str | None = None) -> dict[str, object]:
+        self._ensure_qilin_environment()
+        info = self._ensure_data_space()
+
+        from qilin.config.paths import get_paths
+
+        from .product_store import ProductStore
+
+        outputs_dir = get_paths().sandbox_outputs_dir(thread_id, user_id=info.active_user_id)
+        outputs_dir.mkdir(parents=True, exist_ok=True)
+
+        store = ProductStore(info.product_db_path)
+        store.ensure_schema()
+
+        artifacts: list[dict[str, object]] = []
+        for path in sorted(outputs_dir.iterdir()):
+            if not path.is_file():
+                continue
+            mime_type, _ = mimetypes.guess_type(path.name)
+            resolved_mime_type = mime_type or "application/octet-stream"
+            virtual_path = f"/mnt/user-data/outputs/{path.name}"
+            report = store.upsert_report_asset(
+                thread_id=thread_id,
+                project_id=project_id,
+                title=path.stem,
+                filename=path.name,
+                virtual_path=virtual_path,
+                host_path=str(path),
+                mime_type=resolved_mime_type,
+            )
+            artifacts.append(
+                {
+                    "id": report["id"],
+                    "filename": path.name,
+                    "virtualPath": virtual_path,
+                    "hostPath": str(path),
+                    "mimeType": resolved_mime_type,
+                    "size": path.stat().st_size,
+                }
+            )
+        return {"threadId": thread_id, "count": len(artifacts), "artifacts": artifacts}
