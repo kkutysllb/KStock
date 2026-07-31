@@ -67,6 +67,7 @@ import { deleteThread, ensureThread, runContextFromModel, streamRun } from "../l
 import { initialTurn, reduceFrame } from "../lib/turnReducer";
 import { inferStage } from "../lib/stageInferrer";
 import { ChatFeed, type ChatFeedHandle } from "../components/ChatFeed";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings";
 type AuthMode = "login" | "register";
@@ -145,6 +146,11 @@ export function Home() {
   // 流式 run 状态。
   const [streamingId, setStreamingId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // 删除历史任务的二次确认状态（替代 window.confirm，在 Tauri webview 中可靠弹窗）。
+  // pendingDeleteSessionId：待删除的 session id；后端失败时填 confirmError 提示二次确认。
+  const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [deleteDeleting, setDeleteDeleting] = useState(false);
 
   // 启动时探测 gateway 会话与系统初始化状态。
   useEffect(() => {
@@ -248,16 +254,26 @@ export function Home() {
     setDraft("");
   };
 
-  // 删除历史任务：同步清理后端用户数据空间下整个 thread 目录
-  // （workspace/uploads/outputs/中间文件 + checkpoints + thread_meta）。
-  // 前端从 sessions 移除；若删的是当前 active 则切换到首个剩余会话。
-  const handleDeleteSession = async (sessionId: string) => {
+  // 删除历史任务：点击删除按钮只打开确认对话框，不立即执行。
+  // 同步清理后端用户数据空间下整个 thread 目录（workspace/uploads/outputs/
+  // 中间文件 + checkpoints + thread_meta）。
+  const handleRequestDeleteSession = (sessionId: string) => {
     const target = sessions.find((s) => s.id === sessionId);
     if (!target) return;
-    const label = target.title || "该任务";
-    if (!window.confirm(`确认删除「${label}」？\n\n将同步删除后端该任务的全部对话数据、上传文件、产出与中间文件，不可恢复。`)) {
+    setConfirmError(null);
+    setPendingDeleteSessionId(sessionId);
+  };
+
+  // 用户在确认对话框点「确认」后执行真正删除。
+  const handleConfirmDeleteSession = async () => {
+    const sessionId = pendingDeleteSessionId;
+    if (!sessionId || deleteDeleting) return;
+    const target = sessions.find((s) => s.id === sessionId);
+    if (!target) {
+      setPendingDeleteSessionId(null);
       return;
     }
+    setDeleteDeleting(true);
     // 1. 调用后端删除 thread（best-effort，后端不可达也允许前端清理）。
     if (target.threadId) {
       try {
@@ -265,20 +281,29 @@ export function Home() {
       } catch (err) {
         // 后端删除失败时提示但仍清理前端，避免遗留无法访问的幽灵会话。
         const msg = err instanceof Error ? err.message : String(err);
-        if (!window.confirm(`后端数据清理失败：${msg}\n\n仍要从前端列表移除该任务吗？`)) {
-          return;
-        }
+        setDeleteDeleting(false);
+        // 首次失败：在同一个对话框里展示错误，二次确认是否仍移除前端列表。
+        setConfirmError(msg);
+        return;
       }
     }
-    // 2. 前端移除该 session。
+    // 2. 前端移除该 session。若删的是当前 active，切换到首个剩余会话。
     setSessions((current) => {
       const next = current.filter((s) => s.id !== sessionId);
-      // 若删的是当前 active，切换到首个剩余会话；全删空则不设 active（landing）。
       if (sessionId === activeSessionId) {
         setActiveSessionId(next[0]?.id ?? "");
       }
       return next;
     });
+    setDeleteDeleting(false);
+    setConfirmError(null);
+    setPendingDeleteSessionId(null);
+  };
+
+  const handleCancelDeleteSession = () => {
+    if (deleteDeleting) return;
+    setPendingDeleteSessionId(null);
+    setConfirmError(null);
   };
 
   // 发送消息：append user → ensureThread → append streaming turn → streamRun。
@@ -399,8 +424,14 @@ export function Home() {
     );
   }
 
+  // 待删除 session 的标题（对话框展示用）。
+  const pendingDeleteTitle = pendingDeleteSessionId
+    ? (sessions.find((s) => s.id === pendingDeleteSessionId)?.title ?? "该任务")
+    : "";
+
   return (
-    <WorkspaceShell
+    <>
+      <WorkspaceShell
       activeSession={activeSession}
       currentUser={currentUser}
       draft={draft}
@@ -418,12 +449,26 @@ export function Home() {
       onNewSession={handleNewSession}
       onOpenSettings={() => setView("settings")}
       onSelectSession={setActiveSessionId}
-            onDeleteSession={handleDeleteSession}
+      onDeleteSession={handleRequestDeleteSession}
       onSend={handleSend}
       onStop={handleStop}
       onToggleRightPanel={() => setRightPanelOpen((current) => !current)}
       onToggleSidebar={() => setSidebarCollapsed((current) => !current)}
     />
+      <ConfirmDialog
+        open={pendingDeleteSessionId !== null}
+        title={confirmError ? "后端删除失败" : `删除「${pendingDeleteTitle}」`}
+        description={
+          confirmError
+            ? `后端数据清理失败：${confirmError}\n\n仍要从前端列表移除该任务吗？（后端残留数据可能需要手动清理）`
+            : `将同步删除后端该任务的全部对话数据、上传文件、产出与中间文件，不可恢复。`
+        }
+        confirmText={confirmError ? "仍从前端移除" : "确认删除"}
+        tone="danger"
+        onConfirm={handleConfirmDeleteSession}
+        onCancel={handleCancelDeleteSession}
+      />
+    </>
   );
 }
 

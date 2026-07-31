@@ -2078,6 +2078,136 @@ button {
   font-size: 11px;
 }
 
+/* ── 确认对话框（替代 window.confirm）── */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  animation: confirm-overlay-in 0.15s ease-out;
+}
+
+@keyframes confirm-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.confirm-dialog {
+  width: min(420px, 92vw);
+  padding: 20px 22px 18px;
+  border-radius: 12px;
+  background: #23262b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
+  animation: confirm-dialog-in 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@keyframes confirm-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.confirm-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.confirm-icon {
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+
+.confirm-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: #f1f3f5;
+  word-break: break-word;
+}
+
+.confirm-desc {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #a9afb8;
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-btn {
+  min-width: 76px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, transform 0.06s ease;
+}
+
+.confirm-btn:active {
+  transform: translateY(1px);
+}
+
+.confirm-btn.cancel {
+  background: transparent;
+  color: #c9cdd4;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.confirm-btn.cancel:hover,
+.confirm-btn.cancel:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f1f3f5;
+}
+
+.confirm-btn.danger {
+  background: #dc2626;
+  color: #fff;
+}
+
+.confirm-btn.danger:hover,
+.confirm-btn.danger:focus-visible {
+  background: #b91c1c;
+}
+
+.confirm-btn.primary {
+  background: #31c7a2;
+  color: #0c1d18;
+}
+
+.confirm-btn.primary:hover,
+.confirm-btn.primary:focus-visible {
+  background: #28b390;
+}
+
+.confirm-btn:focus-visible {
+  outline: 2px solid rgba(99, 179, 237, 0.6);
+  outline-offset: 2px;
+}
+
 /* turn error */
 .turn-error {
   display: flex;
