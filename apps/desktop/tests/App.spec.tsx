@@ -94,3 +94,14 @@ test("未登录点“进入工作台”跳转到登录页", async () => {
   expect(await screen.findByRole("heading", { name: "登录工作台" })).toBeVisible();
   expect(screen.getByRole("button", { name: "登录并进入" })).toBeVisible();
 });
+
+test("无模型时输入框选择器显示未配置且发送禁用", async () => {
+  authMock.tryGetCurrentUser.mockResolvedValueOnce({
+    id: "u1", email: "t@k.dev", system_role: "user",
+  });
+  render(<App />);
+
+  expect(await screen.findByRole("textbox", { name: "消息输入" })).toBeVisible();
+  expect(screen.getByText("未配置模型（请到设置页添加）")).toBeVisible();
+  expect(screen.getByRole("button", { name: "发送消息" })).toBeDisabled();
+});

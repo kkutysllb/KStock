@@ -1435,3 +1435,34 @@ button {
   text-align: left;
   border-radius: 8px;
 }
+
+/* ── 输入框模型选择器 ────────────────────────────────────────── */
+.model-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #a9afb8;
+}
+
+.model-picker select {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: inherit;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+.model-picker.empty {
+  color: #f59e0b;
+}
+
+.model-picker.loading {
+  opacity: 0.6;
+}
+
+.send-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

@@ -200,9 +200,9 @@ export function Home() {
     setDraft("");
   };
 
-  const handleSend = () => {
+  const handleSend = (model: string) => {
     const input = draft.trim();
-    if (!input || !activeSession) {
+    if (!input || !activeSession || !model) {
       return;
     }
 
@@ -212,7 +212,7 @@ export function Home() {
         if (session.id !== activeSession.id) {
           return session;
         }
-        const nextSession = appendMessageToSession(session, "user", input);
+        const nextSession = appendMessageToSession(session, "user", input, model);
         const withAssistant = appendMessageToSession(nextSession, "assistant", assistantReply.message);
         return {
           ...withAssistant,
@@ -604,10 +604,44 @@ function WorkspaceShell({
   onNewSession: () => void;
   onOpenSettings: () => void;
   onSelectSession: (sessionId: string) => void;
-  onSend: () => void;
+  onSend: (model: string) => void;
   onToggleRightPanel: () => void;
   onToggleSidebar: () => void;
 }) {
+  const [models, setModels] = useState<ModelConfig[]>([]);
+  const [activeModel, setActiveModel] = useState<string>("");
+  const [modelsLoading, setModelsLoading] = useState(true);
+
+  // 启动时加载模型列表，确定初始 activeModel：localStorage > default_model > 首个。
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = localStorage.getItem("kstock.activeModel");
+        const data = await listModels();
+        if (cancelled) return;
+        setModels(data.models);
+        const initial =
+          stored && data.models.some((m) => m.name === stored)
+            ? stored
+            : data.default_model && data.models.some((m) => m.name === data.default_model)
+              ? data.default_model
+              : (data.models[0]?.name ?? "");
+        setActiveModel(initial);
+      } catch {
+        // gateway 未就绪：保持空，选择器显示「未配置」。
+      } finally {
+        if (!cancelled) setModelsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleModelChange = (name: string) => {
+    setActiveModel(name);
+    localStorage.setItem("kstock.activeModel", name);
+  };
+
   const messages = activeSession?.messages ?? [];
   return (
     <div className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
@@ -742,7 +776,21 @@ function WorkspaceShell({
           <div className="composer-toolbar">
             <span><FileText size={15} /> 研究模式</span>
             <span><Cpu size={15} /> QiLin 已连接</span>
-            <button className="send-button" type="button" onClick={onSend} aria-label="发送消息">
+            {modelsLoading ? (
+              <span className="model-picker loading">模型加载中…</span>
+            ) : models.length === 0 ? (
+              <span className="model-picker empty">未配置模型（请到设置页添加）</span>
+            ) : (
+              <label className="model-picker">
+                <Cpu size={15} />
+                <select value={activeModel} onChange={(e) => handleModelChange(e.target.value)}>
+                  {models.map((m) => (
+                    <option key={m.name} value={m.name}>{m.display_name || m.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <button className="send-button" type="button" onClick={() => onSend(activeModel)} disabled={!activeModel} aria-label="发送消息">
               <Send size={18} />
             </button>
           </div>

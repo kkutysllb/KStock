@@ -5,6 +5,8 @@ export interface ChatMessage {
   role: ChatRole;
   content: string;
   createdAt: string;
+  /** 用户消息关联的模型选择（用于后续对接引擎 run）。 */
+  model?: string;
 }
 
 export interface ChatSession {
@@ -43,12 +45,13 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function createMessage(role: ChatRole, content: string): ChatMessage {
+function createMessage(role: ChatRole, content: string, model?: string): ChatMessage {
   return {
     id: crypto.randomUUID(),
     role,
     content,
-    createdAt: nowIso()
+    createdAt: nowIso(),
+    ...(model ? { model } : {})
   };
 }
 
@@ -81,9 +84,10 @@ export function createSeedSessions(): ChatSession[] {
 export function appendMessageToSession(
   session: ChatSession,
   role: ChatRole,
-  content: string
+  content: string,
+  model?: string
 ): ChatSession {
-  const nextMessages = [...session.messages, createMessage(role, content)];
+  const nextMessages = [...session.messages, createMessage(role, content, model)];
   const nextTitle = session.messages.length === 0 && role === "user" ? content.slice(0, 18) : session.title;
   return {
     ...session,
