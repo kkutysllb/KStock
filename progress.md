@@ -24,3 +24,5 @@
 - 已读取 QiLin `client.py`、`database_config.py`、`paths.py` 和 KStock sidecar 配置，确认下一阶段需要把正式用户数据目录、SQLite、QiLin `QILIN_HOME`、线程文件空间统一设计。
 - 已完成 `docs/用户数据空间组织设计.md`，采用“QiLin 运行真源 + KStock 产品索引层”的混合方案。
 - 已把阶段 12 标记完成，并新增阶段 13：等待用户审阅设计文档后再进入实施计划。
+- 用户已确认用户数据空间组织设计。
+- 已创建 `docs/superpowers/plans/2026-07-31-user-data-space.md`，把实现拆为数据空间、运行时配置、产品索引、用户上下文、workspace 协议、线程目录、artifact 索引、迁移保护、Tauri app data、前端协议类型、文档与全量验证。
