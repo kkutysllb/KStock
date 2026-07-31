@@ -163,20 +163,36 @@ def _generate_runtime_config(
     ``DatabaseConfig.sqlite_dir`` 默认值 ``.qilin/data`` 是相对 CWD 的，
     不显式配置就会写到仓库里。
 
-    关键修复：仅当 ``runtime.yaml`` **不存在**时才生成。已存在时直接返回——
+    关键修复：仅当 ``runtime.yaml`` **不存在**时才生成。已存在时保留用户配置——
     用户通过设置页 API 写入的 models / memory / database 等配置必须跨重启
     持久化。早期实现每次启动都从模板重新生成，会覆盖整个文件，导致「每次
     重启都要重新配置模型」。
-    """
-    # 已存在则保留用户配置，绝不覆盖（首次启动 / 数据空间被清空后才生成）。
-    if runtime_config_path.exists():
-        return
 
+    已存在时的增量合并策略：仅合并模板里 ``tools`` 段（产品自带的内置工具
+    清单，如金融数据/新闻搜索）。这是修复「老用户 runtime.yaml 缺 tools 段
+    导致 agent 不识别工具」的关键——老版本首次启动生成的 yaml 没有这段，
+    后续模板加上的内置工具必须能增量同步过来，否则 ``config.tools`` 为空，
+    LLM 看不到任何工具。``tools`` 段是产品级配置（不是用户级），覆盖安全。
+    """
     import yaml
 
     template_path = repo_root / "config" / "qilin.config.yaml"
     with template_path.open("r", encoding="utf-8") as fh:
-        cfg: dict[str, Any] = yaml.safe_load(fh) or {}
+        template_cfg: dict[str, Any] = yaml.safe_load(fh) or {}
+
+    # 已存在：保留用户配置，仅合并模板的 ``tools`` 段（产品级，非用户级）
+    if runtime_config_path.exists():
+        with runtime_config_path.open("r", encoding="utf-8") as fh:
+            existing: dict[str, Any] = yaml.safe_load(fh) or {}
+        template_tools = template_cfg.get("tools")
+        if template_tools and existing.get("tools") != template_tools:
+            existing["tools"] = template_tools
+            with runtime_config_path.open("w", encoding="utf-8") as fh:
+                yaml.safe_dump(existing, fh, allow_unicode=True, sort_keys=False)
+        return
+
+    # 首次生成：以模板为基础
+    cfg = template_cfg
 
     # ── 持久化层：强制 SQLite 落到用户数据目录的绝对路径 ──────────────
     database = dict(cfg.get("database") or {})
@@ -199,6 +215,15 @@ def _generate_runtime_config(
         yaml.safe_dump(cfg, fh, allow_unicode=True, sort_keys=False)
 
 
+def _write_default_extensions_config(path: Path) -> None:
+    """写入空的 extensions_config.json（MCP server CRUD 的初始真源文件）。"""
+    empty = {"middlewares": [], "mcpServers": {}, "skills": {}}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as fh:
+        json.dump(empty, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+
+
 def _ensure_data_space() -> dict[str, Path]:
     """初始化 KStock 用户数据空间并注入运行时环境变量。
 
@@ -219,14 +244,21 @@ def _ensure_data_space() -> dict[str, Path]:
     runtime_config_path = config_dir / "qilin.runtime.yaml"
     _generate_runtime_config(runtime_config_path, qilin_data_dir, REPO_ROOT)
 
+    # 确保 extensions_config.json 存在（MCP server / skills 管理用）
+    extensions_config_path = config_dir / "extensions_config.json"
+    if not extensions_config_path.exists():
+        _write_default_extensions_config(extensions_config_path)
+
     # 注入运行时环境变量（设计文档「配置生成」）
     os.environ["KSTOCK_APP_DATA_DIR"] = str(data_root)
     os.environ["QILIN_CONFIG_PATH"] = str(runtime_config_path)
+    os.environ["QILIN_EXTENSIONS_CONFIG_PATH"] = str(extensions_config_path)
     os.environ["QILIN_HOME"] = str(runtime_qilin)
 
     return {
         "data_root": data_root,
         "runtime_config": runtime_config_path,
+        "extensions_config": extensions_config_path,
         "qilin_home": runtime_qilin,
         "qilin_data_dir": qilin_data_dir,
     }
@@ -318,9 +350,11 @@ def create_app():
     from scripts.kstock_gateway_control import router as kstock_gateway_control_router
     from scripts.kstock_models import router as kstock_models_router
     from scripts.kstock_runtime_config import router as kstock_runtime_config_router
+    from scripts.kstock_extensions_config import router as kstock_extensions_config_router
 
     app.include_router(kstock_models_router)
     app.include_router(kstock_runtime_config_router)
+    app.include_router(kstock_extensions_config_router)
     app.include_router(kstock_gateway_control_router)
     return app
 

@@ -77,6 +77,8 @@ import { DatabaseSettings } from "../components/DatabaseSettings";
 import { MemorySettings } from "../components/MemorySettings";
 import { SandboxSettings } from "../components/SandboxSettings";
 import { RuntimeSettings } from "../components/RuntimeSettings";
+import { GuardrailsSettings } from "../components/GuardrailsSettings";
+import { SearchSettings } from "../components/SearchSettings";
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings";
 type AuthMode = "login" | "register";
@@ -1177,6 +1179,10 @@ function SettingsPage({
           <SandboxSettings />
         ) : activeSection.id === "runtime" ? (
           <RuntimeSettings />
+        ) : activeSection.id === "guardrails" ? (
+          <GuardrailsSettings />
+        ) : activeSection.id === "search" ? (
+          <SearchSettings />
         ) : (
           <section className="settings-card" aria-label={`${activeSection.title}配置`}>
             {activeSection.fields.map((field) => (

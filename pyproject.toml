@@ -21,11 +21,14 @@ dependencies = [
     # ── QiLin gateway (app.gateway) 运行面依赖 ──────────────────────────
     # vendor/qilin/pyproject.toml 只声明了 agent runtime 依赖，
     # gateway 的 Web 与本地认证链路还需要以下包：
-    "fastapi>=0.115",          # FastAPI 框架（app.gateway.app:create_app）
+    "fastapi>=0.115", # FastAPI 框架（app.gateway.app:create_app）
     "uvicorn[standard]>=0.30", # ASGI 服务器
-    "bcrypt>=4.0",             # 本地账户密码哈希（auth/password.py）
-    "email-validator>=2.0",    # pydantic EmailStr（auth/routers/auth.py）
+    "bcrypt>=4.0", # 本地账户密码哈希（auth/password.py）
+    "email-validator>=2.0", # pydantic EmailStr（auth/routers/auth.py）
     "python-multipart>=0.0.9", # OAuth2PasswordRequestForm / Form 解析
+    # ── KStock 金融搜索工具 ────────────────────────────────────────────
+    # akshare：A 股/港股/美股金融数据 + 财经新闻（东方财富/新浪，国内免费无限流）
+    "akshare>=1.18.81",
 ]
 
 [tool.uv]

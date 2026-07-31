@@ -80,6 +80,51 @@ export interface TokenBudgetConfig {
   hard_stop_threshold: number;
 }
 
+// ── 权限与护栏 ──
+
+export interface GuardrailsConfig {
+  enabled: boolean;
+  fail_closed: boolean;
+  passport: string | null;
+  provider: { use: string; config: Record<string, unknown> } | null;
+}
+
+export interface AuthorizationConfig {
+  enabled: boolean;
+  fail_closed: boolean;
+  default_role: string;
+  provider: { use: string; config: Record<string, unknown> } | null;
+}
+
+export interface InputPolishConfig {
+  enabled: boolean;
+  max_chars: number;
+  model_name: string | null;
+}
+
+export interface LoopDetectionConfig {
+  enabled: boolean;
+  warn_threshold: number;
+  hard_limit: number;
+  window_size: number;
+  max_tracked_threads: number;
+  tool_freq_warn: number;
+  tool_freq_hard_limit: number;
+  tool_freq_overrides: Record<string, { warn: number; hard_limit: number }>;
+}
+
+export interface SafetyFinishReasonConfig {
+  enabled: boolean;
+  detectors: Array<{ use: string; config: Record<string, unknown> }> | null;
+}
+
+// ── 搜索与来源 ──
+
+export interface ToolSearchConfig {
+  enabled: boolean;
+  auto_promote_top_k: number;
+}
+
 export interface RuntimeConfig {
   memory: MemoryRuntimeConfig;
   summarization: SummarizationConfig;
@@ -88,6 +133,15 @@ export interface RuntimeConfig {
   sandbox: SandboxConfig;
   token_usage: TokenUsageConfig;
   token_budget: TokenBudgetConfig;
+  // 权限与护栏
+  guardrails: GuardrailsConfig;
+  authorization: AuthorizationConfig;
+  input_polish: InputPolishConfig;
+  loop_detection: LoopDetectionConfig;
+  safety_finish_reason: SafetyFinishReasonConfig;
+  // 搜索与来源
+  tool_search: ToolSearchConfig;
+  // 顶层标量字段
   max_recursion_limit: number;
 }
 
@@ -99,7 +153,13 @@ export type RuntimeConfigSection =
   | "database"
   | "sandbox"
   | "token_usage"
-  | "token_budget";
+  | "token_budget"
+  | "guardrails"
+  | "authorization"
+  | "input_polish"
+  | "loop_detection"
+  | "safety_finish_reason"
+  | "tool_search";
 
 /** 顶层标量字段名（走 updateTopLevelField）。 */
 export type RuntimeTopLevelField = "max_recursion_limit";

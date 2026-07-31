@@ -35,6 +35,14 @@ _SECTION_MODELS: dict[str, str] = {
     "sandbox": "qilin.config.sandbox_config:SandboxConfig",
     "token_usage": "qilin.config.token_usage_config:TokenUsageConfig",
     "token_budget": "qilin.config.token_budget_config:TokenBudgetConfig",
+    # 权限与护栏
+    "guardrails": "qilin.config.guardrails_config:GuardrailsConfig",
+    "authorization": "qilin.config.authorization_config:AuthorizationConfig",
+    "input_polish": "qilin.config.input_polish_config:InputPolishConfig",
+    "loop_detection": "qilin.config.loop_detection_config:LoopDetectionConfig",
+    "safety_finish_reason": "qilin.config.safety_finish_reason_config:SafetyFinishReasonConfig",
+    # 搜索与来源
+    "tool_search": "qilin.config.tool_search_config:ToolSearchConfig",
 }
 
 # 段缺失时的兜底默认值（仅对含必填字段的 section 需要，如 sandbox.use）。
@@ -143,6 +151,15 @@ class RuntimeConfigResponse(BaseModel):
     sandbox: dict[str, Any]
     token_usage: dict[str, Any]
     token_budget: dict[str, Any]
+    # 权限与护栏
+    guardrails: dict[str, Any]
+    authorization: dict[str, Any]
+    input_polish: dict[str, Any]
+    loop_detection: dict[str, Any]
+    safety_finish_reason: dict[str, Any]
+    # 搜索与来源
+    tool_search: dict[str, Any]
+    # 顶层标量字段
     max_recursion_limit: int
 
 

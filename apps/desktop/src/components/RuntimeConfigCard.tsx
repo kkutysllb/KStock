@@ -40,6 +40,10 @@ export interface FieldDef {
   step?: number;
   /** 嵌套字段路径前缀（如 "backend_config."），用于读写深层对象 */
   prefix?: string;
+  /** 是否禁用该字段（灰色不可交互）。用于依赖其他字段的联动场景 */
+  disabled?: boolean;
+  /** 禁用原因：在字段下方以警告样式显示，解释为什么不能编辑 */
+  disabledReason?: string;
 }
 
 export interface RuntimeConfigCardProps {
@@ -193,6 +197,7 @@ function FieldRenderer({
             id={id}
             type="checkbox"
             checked={Boolean(value)}
+            disabled={field.disabled}
             onChange={(e) => onChange(e.target.checked)}
           />
           <span>{value ? "开启" : "关闭"}</span>
@@ -204,6 +209,7 @@ function FieldRenderer({
         <select
           id={id}
           value={String(value ?? "")}
+          disabled={field.disabled}
           onChange={(e) => onChange(e.target.value)}
         >
           {field.options?.map((opt) => (
@@ -222,6 +228,7 @@ function FieldRenderer({
           max={field.max}
           step={field.step}
           placeholder={field.placeholder}
+          disabled={field.disabled}
           onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
         />
       );
@@ -233,6 +240,7 @@ function FieldRenderer({
           type="text"
           value={value === null || value === undefined ? "" : String(value)}
           placeholder={field.placeholder ?? "留空 = 使用默认"}
+          disabled={field.disabled}
           onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
         />
       );
@@ -244,6 +252,7 @@ function FieldRenderer({
           type="text"
           value={Array.isArray(value) ? value.join(", ") : ""}
           placeholder={field.placeholder ?? "逗号分隔"}
+          disabled={field.disabled}
           onChange={(e) =>
             onChange(
               e.target.value
@@ -261,6 +270,7 @@ function FieldRenderer({
         <div className="rcf-context-size">
           <select
             value={cs.type}
+            disabled={field.disabled}
             onChange={(e) => onChange({ type: e.target.value, value: cs.value })}
           >
             <option value="messages">按消息数</option>
@@ -272,6 +282,7 @@ function FieldRenderer({
             value={cs.value}
             min={0}
             step={cs.type === "fraction" ? 0.1 : 1}
+            disabled={field.disabled}
             onChange={(e) => onChange({ type: cs.type, value: Number(e.target.value) })}
           />
         </div>
@@ -285,16 +296,20 @@ function FieldRenderer({
           type="text"
           value={String(value ?? "")}
           placeholder={field.placeholder}
+          disabled={field.disabled}
           onChange={(e) => onChange(e.target.value)}
         />
       );
   }
 
   return (
-    <div className={`rcf-field ${error ? "has-error" : ""}`}>
+    <div className={`rcf-field ${error ? "has-error" : ""} ${field.disabled ? "is-disabled" : ""}`}>
       {labelEl}
       <div className="rcf-control">{control}</div>
       {error && <span className="rcf-error">{error}</span>}
+      {field.disabled && field.disabledReason && (
+        <span className="rcf-disabled-reason">⚠ {field.disabledReason}</span>
+      )}
     </div>
   );
 }

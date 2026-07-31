@@ -29,3 +29,12 @@ sandbox:
 
 memory:
   enabled: false
+
+# KStock 自有金融搜索工具（首次启动即生效，数据源 akshare 国内免费无限流）
+tools:
+  - name: finance_data_search
+    group: search
+    use: scripts.kstock_tools.akshare_data_tool:finance_data_search_tool
+  - name: finance_news_search
+    group: search
+    use: scripts.kstock_tools.akshare_news_tool:finance_news_search_tool

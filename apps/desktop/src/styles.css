@@ -2940,6 +2940,17 @@ button {
   color: #f87171;
 }
 
+/* 字段禁用状态（如依赖其他字段未配置） */
+.rcf-field.is-disabled {
+  opacity: 0.6;
+}
+
+.rcf-disabled-reason {
+  font-size: 11px;
+  color: #f59e0b; /* amber-500，警告色 */
+  line-height: 1.4;
+}
+
 /* ── 数据库设置页 ─────────────────────────────────────── */
 .database-settings {
   display: grid;
