@@ -461,3 +461,46 @@ describe("无关帧", () => {
     expect(after).toBe(before); // 引用相等（未变）
   });
 });
+
+// ── qilin_error_fallback（引擎把 provider error 包装成 ai message） ──
+
+describe("qilin_error_fallback", () => {
+  it("带 qilin_error_fallback 的 ai message 标记为 error 而非正文", () => {
+    const s = reduceFrame(
+      initialTurn(),
+      frame(
+        "messages",
+        aiMsg({
+          id: "m1",
+          content: "The configured LLM provider rejected the request.",
+          additional_kwargs: {
+            qilin_error_fallback: true,
+            error_type: "AuthenticationError",
+            error_reason: "auth",
+          },
+        })
+      ),
+      1000
+    );
+    expect(s.status).toBe("error");
+    expect(s.error).toBe("The configured LLM provider rejected the request.");
+    expect(s.text).toBe(""); // 不作为正文累积
+  });
+
+  it("qilin_error_fallback 空 content 时用兜底文案", () => {
+    const s = reduceFrame(
+      initialTurn(),
+      frame(
+        "messages",
+        aiMsg({
+          id: "m2",
+          content: "",
+          additional_kwargs: { qilin_error_fallback: true },
+        })
+      ),
+      1000
+    );
+    expect(s.status).toBe("error");
+    expect(s.error).toBe("引擎处理出错");
+  });
+});

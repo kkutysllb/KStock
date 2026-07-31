@@ -94,6 +94,20 @@ function reduceAiMessage(
 ): AssistantTurnState {
   const next: AssistantTurnState = { ...state };
 
+  const ak = msg.additional_kwargs as Record<string, unknown> | undefined;
+
+  // qilin_error_fallback：引擎把 provider error 包装成 ai message，
+  // 不作为正文累积，标记为 error 让 UI 用错误样式呈现。
+  if (ak?.qilin_error_fallback === true) {
+    next.status = "error";
+    const fallbackContent = msg.content;
+    next.error =
+      typeof fallbackContent === "string" && fallbackContent
+        ? fallbackContent
+        : "引擎处理出错";
+    return next;
+  }
+
   // 正文增量（空 content 忽略：values 快照补发的空 content 不影响）
   const content = msg.content;
   if (typeof content === "string" && content) {
@@ -101,7 +115,6 @@ function reduceAiMessage(
   }
 
   // reasoning 流：兼容 reasoning_content（DeepSeek/o1）与 reasoning（其他 provider）
-  const ak = msg.additional_kwargs as Record<string, unknown> | undefined;
   const rc = ak?.reasoning_content ?? ak?.reasoning;
   if (typeof rc === "string" && rc) {
     const prev = next.reasoning;
