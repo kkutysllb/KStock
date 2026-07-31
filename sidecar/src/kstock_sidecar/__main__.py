@@ -1,5 +1,4 @@
-def main() -> None:
-    print("KStock sidecar 尚未启动完整服务。")
+from .server import main
 
 
 if __name__ == "__main__":

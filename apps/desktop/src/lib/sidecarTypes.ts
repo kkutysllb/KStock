@@ -10,3 +10,5 @@ export interface SidecarResponse<T = unknown> {
   result?: T;
   error?: string;
 }
+
+export type SidecarTransport = (payload: string) => Promise<string>;

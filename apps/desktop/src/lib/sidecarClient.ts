@@ -1,4 +1,4 @@
-import type { SidecarRequest, SidecarResponse } from "./sidecarTypes";
+import type { SidecarRequest, SidecarResponse, SidecarTransport } from "./sidecarTypes";
 
 export function createHealthRequest(): SidecarRequest {
   return {
@@ -8,12 +8,18 @@ export function createHealthRequest(): SidecarRequest {
   };
 }
 
-export async function sendSidecarRequest(
-  request: SidecarRequest
-): Promise<SidecarResponse> {
-  return {
-    id: request.id,
-    ok: true,
-    result: { method: request.method }
-  };
+export function encodeSidecarRequest(request: SidecarRequest): string {
+  return JSON.stringify(request);
+}
+
+export function decodeSidecarResponse<T>(payload: string): SidecarResponse<T> {
+  return JSON.parse(payload) as SidecarResponse<T>;
+}
+
+export async function sendSidecarRequest<T>(
+  request: SidecarRequest,
+  transport: SidecarTransport
+): Promise<SidecarResponse<T>> {
+  const payload = await transport(encodeSidecarRequest(request));
+  return decodeSidecarResponse<T>(payload);
 }
