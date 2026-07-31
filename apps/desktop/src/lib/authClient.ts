@@ -11,6 +11,7 @@
  * - gateway 的错误响应有三种形态，``parseGatewayError`` 统一归一为
  *   ``AuthApiError``，供 UI 按 ``code`` 给出中文友好提示。
  */
+import { GATEWAY_URL, readCsrfToken } from "./gatewayUrl";
 
 /** gateway /api/v1/auth/me 与注册响应中的用户对象。 */
 export interface AuthUser {
@@ -64,23 +65,6 @@ export interface InitializeAdminPayload {
 export interface SetupStatus {
   needs_setup: boolean;
   registration_enabled: boolean;
-}
-
-/**
- * gateway 基地址。
- *
- * Tauri dev / 浏览器预览默认走 Vite dev server (``http://localhost:1420``)，
- * 与 gateway ``http://localhost:18001`` 同属 ``localhost`` registrable domain，
- * 属于 same-site，``samesite=lax`` 的 access_token cookie 可随 fetch 发送。
- * 打包态可经 ``VITE_GATEWAY_URL`` 覆盖。
- */
-export const GATEWAY_URL: string =
-  (import.meta.env.VITE_GATEWAY_URL as string | undefined) ?? "http://localhost:18001";
-
-/** 读取 JS 可读的 csrf_token cookie（gateway 登录后下发）。 */
-function readCsrfToken(): string | null {
-  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
 }
 
 /** gateway 错误码 → 中文友好提示。 */
