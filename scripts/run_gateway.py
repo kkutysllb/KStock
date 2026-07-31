@@ -50,6 +50,7 @@ gateway 之前为上述三个符号注入兼容实现（带 ``hasattr`` 防御�
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
@@ -270,6 +271,15 @@ def _load_secrets_env(data_root: Path) -> None:
 def create_app():
     """应用工厂：先打垫片、初始化用户数据空间、配 CORS，再构造 QiLin gateway。"""
     _apply_vendor_extensions_config_compat_shim()
+    # ── 开发日志：先清空网关负责的两个文件（覆写模式，不残留上次运行）──
+    from scripts.kstock_dev_logs import (
+        LOGS_DIR as DEV_LOGS_DIR,
+        clear_server_logs,
+        ensure_logs_dir,
+        install_gateway_log_handlers,
+    )
+    ensure_logs_dir()
+    clear_server_logs()
     paths = _ensure_data_space()
     _load_secrets_env(paths["data_root"])
     _configure_gateway_security()
@@ -281,10 +291,19 @@ def create_app():
     print(f"  QILIN_HOME     : {paths['qilin_home']}", flush=True)
     print(f"  SQLite 数据库  : {paths['qilin_data_dir'] / 'qilin.db'}", flush=True)
     print(f"  CORS origins   : {os.environ['GATEWAY_CORS_ORIGINS']}", flush=True)
+    print(f"  开发日志       : {DEV_LOGS_DIR} (gateway.log / langgraph.log)", flush=True)
     print("=" * 64, flush=True)
     from app.gateway.app import create_app as _create_app
 
     app = _create_app()
+
+    # ── 追加文件日志 handler（vendor app 构造后、lifespan 前）──────────────
+    # vendor 的 configure_logging（lifespan）只调整 handler 的 filter/formatter，
+    # 不清除已有 handler，所以这里追加的 FileHandler 会安全保留。
+    install_gateway_log_handlers()
+    logging.getLogger("scripts.run_gateway").info(
+        "KStock gateway 开发日志已启用 → %s", DEV_LOGS_DIR
+    )
 
     # KStock 自有的模型配置写入层（vendor 引擎只读，本路由提供 CRUD）
     from scripts.kstock_models import router as kstock_models_router
