@@ -232,6 +232,77 @@ describe("messages 事件", () => {
     s = reduceFrame(s, frame("messages", msg({ type: "system", content: "系统消息" })), 2);
     expect(s.text).toBe("");
   });
+
+  // 流式 chunk（langchain_openai ChatOpenAI 系）：type 是 "AIMessageChunk"
+  it("AIMessageChunk 流式 chunk 的 content 增量累加", () => {
+    let s = initialTurn();
+    s = reduceFrame(
+      s,
+      frame(
+        "messages",
+        msg({
+          type: "AIMessageChunk",
+          content: "收到",
+          id: "lc_run--chunk-1",
+          additional_kwargs: {},
+        })
+      ),
+      1
+    );
+    s = reduceFrame(
+      s,
+      frame(
+        "messages",
+        msg({
+          type: "AIMessageChunk",
+          content: "消息！",
+          id: "lc_run--chunk-1",
+          additional_kwargs: {},
+        })
+      ),
+      2
+    );
+    expect(s.text).toBe("收到消息！");
+  });
+
+  it("AIMessageChunk 的 reasoning_content 同样触发 reasoning 流", () => {
+    let s = initialTurn();
+    s = reduceFrame(
+      s,
+      frame(
+        "messages",
+        msg({
+          type: "AIMessageChunk",
+          content: "",
+          additional_kwargs: { reasoning_content: "思考中" },
+        })
+      ),
+      100
+    );
+    expect(s.reasoning?.text).toBe("思考中");
+    expect(s.reasoning?.startedAt).toBe(100);
+  });
+
+  it("AIMessageChunk 与 ai 混合序列累加正确", () => {
+    // 模拟真实场景：流式 chunk 后接 values 快照的最终 ai message
+    let s = initialTurn();
+    s = reduceFrame(
+      s,
+      frame("messages", msg({ type: "AIMessageChunk", content: "流式", id: "m1" })),
+      1
+    );
+    s = reduceFrame(
+      s,
+      frame("messages", msg({ type: "AIMessageChunk", content: "增量", id: "m1" })),
+      2
+    );
+    s = reduceFrame(
+      s,
+      frame("messages", msg({ type: "ai", content: "", id: "m1" })),
+      3
+    );
+    expect(s.text).toBe("流式增量");
+  });
 });
 
 // ── custom 事件（task 分组） ─────────────────────────────────────────

@@ -81,8 +81,12 @@ function reduceMessages(
   if (ak?.hide_from_ui === true) return state;
 
   const type = (msg as Record<string, unknown>).type as string;
-  if (type === "ai") return reduceAiMessage(state, msg as Record<string, unknown>, now);
-  if (type === "tool") return reduceToolMessage(state, msg as Record<string, unknown>);
+  // 流式 chunk 的 type 是 "AIMessageChunk"（langchain_openai 流式输出），
+  // 非流式最终快照是 "ai"。两者都走 ai message 处理。
+  if (type === "ai" || type === "AIMessageChunk")
+    return reduceAiMessage(state, msg as Record<string, unknown>, now);
+  if (type === "tool" || type === "ToolMessage")
+    return reduceToolMessage(state, msg as Record<string, unknown>);
   // human / system /未知：reducer 不处理（human 由 handleSend append）
   return state;
 }
