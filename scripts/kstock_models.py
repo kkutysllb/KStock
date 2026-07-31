@@ -100,3 +100,56 @@ def save_runtime_models(models: list[dict[str, Any]]) -> None:
     cfg = load_runtime_config()
     cfg["models"] = models
     _atomic_write_yaml(_runtime_config_path(), cfg)
+
+
+# ── secrets.env 读写 ────────────────────────────────────────────────
+def _load_secrets_lines() -> list[str]:
+    path = _secrets_env_path()
+    if not path.exists():
+        return []
+    return path.read_text(encoding="utf-8").splitlines()
+
+
+def _write_secrets_lines(lines: list[str]) -> None:
+    path = _secrets_env_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    is_new = not path.exists()
+    fd, tmp = tempfile.mkstemp(prefix=".secrets.env.", suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines))
+            if lines:
+                fh.write("\n")
+        os.replace(tmp, path)
+    except Exception:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+    # 仅 Unix 有意义：文件创建即收紧权限
+    if is_new and os.name != "nt":
+        os.chmod(path, 0o600)
+
+
+def upsert_secret(key: str, value: str) -> None:
+    """写入或覆盖一个 KEY="value" 行；保持其他行不变。"""
+    lines = _load_secrets_lines()
+    target = f'{key}='
+    found = False
+    for i, line in enumerate(lines):
+        if line.startswith(target):
+            lines[i] = f'{key}="{value}"'
+            found = True
+            break
+    if not found:
+        lines.append(f'{key}="{value}"')
+    _write_secrets_lines(lines)
+
+
+def remove_secret(key: str) -> None:
+    """删除指定 KEY= 行；文件不存在或无此 key 时无副作用。"""
+    lines = _load_secrets_lines()
+    target = f'{key}='
+    filtered = [line for line in lines if not line.startswith(target)]
+    if len(filtered) == len(lines):
+        return
+    _write_secrets_lines(filtered)

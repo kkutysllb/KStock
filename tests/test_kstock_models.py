@@ -2,6 +2,7 @@
 
 用 tmp_path 隔离运行时目录与 secrets.env，不触碰真实用户数据空间。
 """
+import os
 from pathlib import Path
 
 import pytest
@@ -9,7 +10,9 @@ import pytest
 from scripts.kstock_models import (
     env_name_for_model,
     load_runtime_models,
+    remove_secret,
     save_runtime_models,
+    upsert_secret,
 )
 
 
@@ -68,6 +71,40 @@ def test_save_runtime_models_atomic_and_backup(tmp_path, monkeypatch):
     assert config_path.stat().st_mtime != old_mtime
     backups = list((tmp_path / "backups").glob("qilin.runtime.yaml.*"))
     assert len(backups) == 1
+
+
+# ── secrets.env 读写 ────────────────────────────────────────────────
+def test_upsert_secret_creates_file_with_600(tmp_path, monkeypatch):
+    """首次写入创建 secrets.env，权限 600（Windows 跳过权限断言）。"""
+    _setup_data_root(tmp_path, monkeypatch, models_yaml="models: []\n")
+    upsert_secret("KSTOCK_MODEL_X_KEY", "sk-abc")
+    env_file = tmp_path / "config" / "secrets.env"
+    assert env_file.exists()
+    text = env_file.read_text(encoding="utf-8")
+    assert 'KSTOCK_MODEL_X_KEY="sk-abc"' in text
+    if os.name != "nt":
+        assert oct(env_file.stat().st_mode)[-3:] == "600"
+
+
+def test_upsert_secret_updates_existing(tmp_path, monkeypatch):
+    """同 key 二次写入覆盖旧值，不产生重复行。"""
+    _setup_data_root(tmp_path, monkeypatch, models_yaml="models: []\n")
+    upsert_secret("KSTOCK_MODEL_X_KEY", "old")
+    upsert_secret("KSTOCK_MODEL_X_KEY", "new")
+    text = (tmp_path / "config" / "secrets.env").read_text(encoding="utf-8")
+    assert 'KSTOCK_MODEL_X_KEY="new"' in text
+    assert text.count("KSTOCK_MODEL_X_KEY=") == 1
+
+
+def test_remove_secret(tmp_path, monkeypatch):
+    """删除 key 后该行消失，保留其他 key。"""
+    _setup_data_root(tmp_path, monkeypatch, models_yaml="models: []\n")
+    upsert_secret("KSTOCK_MODEL_A_KEY", "1")
+    upsert_secret("KSTOCK_MODEL_B_KEY", "2")
+    remove_secret("KSTOCK_MODEL_A_KEY")
+    text = (tmp_path / "config" / "secrets.env").read_text(encoding="utf-8")
+    assert "KSTOCK_MODEL_A_KEY" not in text
+    assert 'KSTOCK_MODEL_B_KEY="2"' in text
 
 
 # ── 测试辅助 ─────────────────────────────────────────────────────────
