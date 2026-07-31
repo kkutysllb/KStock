@@ -68,6 +68,7 @@ import { initialTurn, reduceFrame } from "../lib/turnReducer";
 import { inferStage } from "../lib/stageInferrer";
 import { ChatFeed, type ChatFeedHandle } from "../components/ChatFeed";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { MemorySettings } from "../components/MemorySettings";
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings";
 type AuthMode = "login" | "register";
@@ -1136,6 +1137,8 @@ function SettingsPage({
 
         {activeSection.id === "models" ? (
           <ModelSettings />
+        ) : activeSection.id === "memory" ? (
+          <MemorySettings />
         ) : (
           <section className="settings-card" aria-label={`${activeSection.title}配置`}>
             {activeSection.fields.map((field) => (

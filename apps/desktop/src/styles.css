@@ -2400,3 +2400,346 @@ button {
   color: #6b7280;
   font-style: italic;
 }
+
+/* ── 记忆与配置管理面板 ─────────────────────────────── */
+.memory-settings {
+  display: grid;
+  gap: 14px;
+}
+
+.memory-loading,
+.memory-empty {
+  margin: 0;
+  padding: 18px;
+  color: #8a8f99;
+  font-size: 13px;
+  text-align: center;
+}
+
+.memory-empty-card {
+  text-align: left;
+}
+
+/* 配置卡 */
+.memory-config-card {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.memory-config-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-config-title strong {
+  font-size: 14px;
+}
+
+.memory-config-status {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.memory-config-status.on {
+  background: rgba(34, 197, 94, 0.16);
+  color: #4ade80;
+}
+
+.memory-config-status.off {
+  background: rgba(148, 163, 184, 0.16);
+  color: #94a3b8;
+}
+
+.memory-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.memory-config-item {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.memory-config-key {
+  font-size: 11px;
+  color: #8a8f99;
+}
+
+.memory-config-val {
+  font-size: 13px;
+  color: #e6e8eb;
+  word-break: break-word;
+}
+
+.memory-config-backend summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #8a8f99;
+  padding: 4px 0;
+}
+
+.memory-config-backend dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  margin: 8px 0 0;
+}
+
+.memory-config-backend dt {
+  font-size: 12px;
+  color: #8a8f99;
+  font-family: var(--font-mono, monospace);
+}
+
+.memory-config-backend dd {
+  margin: 0;
+  font-size: 12px;
+  color: #c9cdd4;
+  font-family: var(--font-mono, monospace);
+  word-break: break-all;
+}
+
+/* 操作工具条 */
+.memory-actions-card {
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.memory-actions-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.memory-actions-header strong {
+  font-size: 14px;
+}
+
+.memory-hint {
+  margin-left: auto;
+  font-size: 12px;
+  color: #8a8f99;
+}
+
+.memory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.memory-actions .pill-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.memory-actions .pill-control.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.memory-actions .pill-control.danger {
+  color: #f87171;
+}
+
+/* 上下文摘要 */
+.memory-context-card {
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.memory-context-card > strong {
+  font-size: 14px;
+}
+
+.memory-context-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.memory-context-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.memory-context-label span {
+  font-size: 12px;
+  font-weight: 600;
+  color: #c9cdd4;
+}
+
+.memory-context-label time {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.memory-context-summary {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #a9afb8;
+}
+
+.memory-meta {
+  margin: 0;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+/* 事实列表 */
+.memory-facts-card {
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.memory-fact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.memory-fact-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.memory-fact-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.memory-fact-content {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #e6e8eb;
+  word-break: break-word;
+}
+
+.memory-fact-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  color: #8a8f99;
+}
+
+.memory-fact-cat {
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.16);
+  color: #a5b4fc;
+}
+
+.memory-fact-conf {
+  color: #6b7280;
+}
+
+.memory-fact-source {
+  color: #6b7280;
+}
+
+.memory-fact-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.memory-fact-actions .link-button.danger {
+  color: #f87171;
+}
+
+/* 事实编辑弹层 */
+.memory-fact-dialog {
+  width: min(480px, 92vw);
+  max-height: 86vh;
+  overflow: auto;
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: #23262b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
+  display: grid;
+  gap: 12px;
+  animation: confirm-dialog-in 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.memory-fact-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.memory-fact-dialog-header strong {
+  font-size: 15px;
+  color: #f1f3f5;
+}
+
+.memory-fact-field {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  color: #a9afb8;
+}
+
+.memory-fact-field textarea,
+.memory-fact-field input,
+.memory-fact-field select {
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #e6e8eb;
+  font-size: 13px;
+  padding: 8px 10px;
+  font-family: inherit;
+}
+
+.memory-fact-field textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.memory-fact-field input[type="range"] {
+  padding: 0;
+  height: 20px;
+}
+
+.memory-fact-row-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.memory-fact-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

@@ -233,12 +233,8 @@ export const SETTING_SECTIONS: SettingSection[] = [
     title: "记忆与摘要",
     group: "智能体",
     icon: MemoryStick,
-    summary: "长期记忆、会话摘要、标题生成和后续建议。",
-    fields: [
-      { name: "Memory", value: "关闭", hint: "第一阶段默认不写入长期记忆" },
-      { name: "Summarization", value: "开启", hint: "长会话压缩" },
-      { name: "Title", value: "开启", hint: "自动命名研究任务" }
-    ]
+    summary: "管理长期记忆配置、上下文摘要与记忆事实（增删改 / 导入导出 / 清空）。",
+    fields: []
   },
   {
     id: "subagents",
