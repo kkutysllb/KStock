@@ -45,6 +45,15 @@ class QiLinAdapter:
         os.environ["KSTOCK_APP_DATA_DIR"] = str(info.app_data_dir.resolve())
         return qilin_repo_path
 
+    def _data_space_payload(self, info: DataSpaceInfo | None = None) -> dict[str, object]:
+        info = info or self._ensure_data_space()
+        return KStockDataSpace(
+            info.app_data_dir,
+            skill_root=info.skill_root,
+            repo_root=self._config.repo_root,
+            development_fallback=info.is_development_fallback,
+        ).as_dict(info)
+
     def _default_client_factory(self) -> Any | None:
         self._ensure_qilin_environment()
         try:
@@ -66,12 +75,7 @@ class QiLinAdapter:
     def health(self) -> dict[str, Any]:
         qilin_repo_path = self._ensure_qilin_environment()
         info = self._ensure_data_space()
-        data_space = KStockDataSpace(
-            info.app_data_dir,
-            skill_root=info.skill_root,
-            repo_root=self._config.repo_root,
-            development_fallback=info.is_development_fallback,
-        ).as_dict(info)
+        data_space = self._data_space_payload(info)
         client = self._client_or_none()
         if client is None:
             return {
@@ -90,3 +94,6 @@ class QiLinAdapter:
             "config": str(info.runtime_config_path.resolve()),
             "dataSpace": data_space,
         }
+
+    def workspace_info(self) -> dict[str, object]:
+        return self._data_space_payload()

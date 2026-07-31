@@ -11,6 +11,8 @@ def dispatch_request(request: Request, adapter: QiLinAdapter | None = None) -> R
     adapter = adapter or QiLinAdapter()
     if request.method == "health":
         return Response(id=request.id, ok=True, result=adapter.health())
+    if request.method in {"workspace.init", "workspace.info"}:
+        return Response(id=request.id, ok=True, result=adapter.workspace_info())
     return Response(
         id=request.id,
         ok=False,
