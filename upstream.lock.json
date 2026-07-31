@@ -1,0 +1,16 @@
+{
+  "generated_at": "2026-07-31",
+  "repositories": {
+    "QiLin": {
+      "path": "/Users/libing/kk_Projects/QiLin",
+      "branch": "main",
+      "commit": "012a0758b6f818e15070f07f5417aa2cc9818160"
+    },
+    "KSkills": {
+      "path": "/Users/libing/kk_Projects/KSkills",
+      "branch": "main",
+      "commit": "e48e5326bcf6c8f6f0c191837a31182fedfa142b"
+    }
+  },
+  "skills_manifest": "vendor/skills/approved-skills.json"
+}
