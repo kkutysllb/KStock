@@ -162,7 +162,16 @@ def _generate_runtime_config(
     这是修复数据库错误落到项目根 ``.qilin/`` 的核心：vendor 的
     ``DatabaseConfig.sqlite_dir`` 默认值 ``.qilin/data`` 是相对 CWD 的，
     不显式配置就会写到仓库里。
+
+    关键修复：仅当 ``runtime.yaml`` **不存在**时才生成。已存在时直接返回——
+    用户通过设置页 API 写入的 models / memory / database 等配置必须跨重启
+    持久化。早期实现每次启动都从模板重新生成，会覆盖整个文件，导致「每次
+    重启都要重新配置模型」。
     """
+    # 已存在则保留用户配置，绝不覆盖（首次启动 / 数据空间被清空后才生成）。
+    if runtime_config_path.exists():
+        return
+
     import yaml
 
     template_path = repo_root / "config" / "qilin.config.yaml"
@@ -305,12 +314,14 @@ def create_app():
         "KStock gateway 开发日志已启用 → %s", DEV_LOGS_DIR
     )
 
-    # KStock 自有的模型配置写入层（vendor 引擎只读，本路由提供 CRUD）
+    # KStock 自有的路由层（vendor 引擎只读，以下路由提供 KStock CRUD / 控制）
+    from scripts.kstock_gateway_control import router as kstock_gateway_control_router
     from scripts.kstock_models import router as kstock_models_router
     from scripts.kstock_runtime_config import router as kstock_runtime_config_router
 
     app.include_router(kstock_models_router)
     app.include_router(kstock_runtime_config_router)
+    app.include_router(kstock_gateway_control_router)
     return app
 
 
@@ -318,18 +329,61 @@ def create_app():
 app = create_app()
 
 
-if __name__ == "__main__":
+def _run_server() -> None:
+    """启动 uvicorn server（由 supervisor 作为子进程启动）。
+
+    绑定 localhost（而非 127.0.0.1）：与前端 Vite dev (localhost:1420) 同属
+    localhost registrable domain，浏览器将 access_token cookie 视为 same-site，
+    fetch 带 credentials:"include" 时可正常携带。直接传 app 对象：脚本入口
+    运行时 cwd 不一定是项目根，字符串导入会找不到 scripts 包；传对象更稳健。
+    """
     import uvicorn
 
-    # 绑定 localhost（而非 127.0.0.1）：与前端 Vite dev (localhost:1420) 同属
-    # localhost registrable domain，浏览器将 access_token cookie 视为 same-site，
-    # fetch 带 credentials:"include" 时可正常携带。
     host = os.environ.get("GATEWAY_HOST", "localhost")
     port = int(os.environ.get("GATEWAY_PORT", "18001"))
-    # 直接传 app 对象：脚本入口运行时 cwd 不一定是项目根，字符串导入会
-    # 找不到 scripts 包；传对象更稳健，且本入口不启用 reload。
-    uvicorn.run(
-        app,
-        host=host,
-        port=port,
-    )
+    uvicorn.run(app, host=host, port=port)
+
+
+def _run_supervisor() -> None:
+    """supervisor 模式：启动并监控子进程，子进程以 RESTART_EXIT_CODE 退出时自动重启。
+
+    桌面端设置页的「重启后端」按钮通过 ``/api/v1/kstock/restart`` 端点让子进程
+    以 ``RESTART_EXIT_CODE`` 退出，supervisor 检测到后自动重启干净的子进程——
+    无需重启整个桌面端即可让配置变更（数据库后端切换、secrets 更新等）完全生效。
+
+    模块级 ``app = create_app()`` 仍会执行（幂等：建目录 / 清日志 / 加载 secrets
+    均无副作用），但 supervisor 本身不调用 uvicorn，只管理子进程生命周期。
+    """
+    import subprocess
+    import time as _time
+
+    from scripts.kstock_gateway_control import RESTART_EXIT_CODE, SUPERVISOR_PID_ENV
+
+    env = os.environ.copy()
+    env[SUPERVISOR_PID_ENV] = str(os.getpid())
+    cmd = [sys.executable, str(Path(__file__).resolve()), "--serve"]
+
+    attempt = 0
+    while True:
+        print(f"[supervisor] 启动 gateway 子进程（第 {attempt + 1} 次）…", flush=True)
+        proc = subprocess.Popen(cmd, env=env)
+        code = proc.wait()
+        if code == RESTART_EXIT_CODE:
+            attempt += 1
+            print(
+                f"[supervisor] 子进程请求重启（exit {code}），1 秒后重新启动…",
+                flush=True,
+            )
+            _time.sleep(1)
+            continue
+        print(f"[supervisor] 子进程退出（exit {code}），supervisor 结束。", flush=True)
+        sys.exit(code)
+
+
+if __name__ == "__main__":
+    if "--serve" in sys.argv:
+        # server 模式：真正的 uvicorn 进程，由 supervisor 启动。
+        _run_server()
+    else:
+        # 默认 supervisor 模式：管理子进程生命周期，支持「重启后端」。
+        _run_supervisor()

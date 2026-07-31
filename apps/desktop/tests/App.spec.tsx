@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import { App } from "../src/App";
 import { createModel, listModels } from "../src/lib/modelsClient";
@@ -12,6 +12,12 @@ const authMock = vi.hoisted(() => ({
 const turnsMock = vi.hoisted(() => ({
   ensureThread: vi.fn(),
   streamRun: vi.fn(),
+}));
+
+// gatewayControl mock：restartGateway / waitForGateway 由各测试覆盖返回值。
+const controlMock = vi.hoisted(() => ({
+  restartGateway: vi.fn(),
+  waitForGateway: vi.fn(),
 }));
 
 // 会话探测与认证请求统一 mock：jsdom 无法直连本地 gateway，且测试只关心 UI 流程。
@@ -54,11 +60,21 @@ vi.mock("../src/lib/turnsClient", () => ({
   fetchThreadMessages: vi.fn(),
 }));
 
+// gatewayControlClient mock：重启后端的 restart + 健康轮询由各测试覆盖。
+vi.mock("../src/lib/gatewayControlClient", () => ({
+  restartGateway: controlMock.restartGateway,
+  waitForGateway: controlMock.waitForGateway,
+  isGatewayControlApiError: (e: unknown) =>
+    typeof e === "object" && e !== null && "message" in e && "status" in e,
+}));
+
 // 默认未登录；已登录场景在测试内用 mockResolvedValueOnce 覆盖。
 beforeEach(() => {
   authMock.tryGetCurrentUser.mockResolvedValue(null);
   turnsMock.ensureThread.mockResolvedValue("thread-test");
   turnsMock.streamRun.mockReset();
+  controlMock.restartGateway.mockReset();
+  controlMock.waitForGateway.mockReset();
 });
 
 test("首屏展示产品入口页", async () => {
@@ -237,4 +253,38 @@ test("发消息触发流式 run 并逐帧累积 assistant 文本", async () => {
   const runOpts = turnsMock.streamRun.mock.calls[0][0];
   expect(runOpts.threadId).toBe("thread-test");
   expect(runOpts.input.messages[0].content).toBe("分析茅台");
+});
+
+test("设置页重启后端：点按钮弹 ConfirmDialog，确认后触发 restart", async () => {
+  authMock.tryGetCurrentUser.mockResolvedValueOnce({
+    id: "u1", email: "t@k.dev", system_role: "user",
+  });
+  controlMock.restartGateway.mockResolvedValueOnce({ message: "ok", supervised: true });
+  controlMock.waitForGateway.mockResolvedValueOnce(true);
+
+  render(<App />);
+
+  await screen.findByRole("textbox", { name: "消息输入" });
+  fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
+
+  // 点「重启后端」按钮 → 弹出 ConfirmDialog（不是原生 window.confirm）
+  const restartBtn = screen.getByRole("button", { name: "重启后端" });
+  expect(restartBtn).toBeEnabled();
+  fireEvent.click(restartBtn);
+
+  // ConfirmDialog 出现，包含标题与描述
+  expect(await screen.findByRole("heading", { name: "重启后端" })).toBeVisible();
+  expect(screen.getByText(/约 2-3 秒恢复/)).toBeVisible();
+  // 此时 restart 尚未被调用（等用户点「确认重启」）
+  expect(controlMock.restartGateway).not.toHaveBeenCalled();
+
+  // 点「确认重启」→ 触发真正的重启流程
+  fireEvent.click(screen.getByRole("button", { name: "确认重启" }));
+
+  // restart + waitForGateway 依次被调用
+  await waitFor(() => expect(controlMock.restartGateway).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(controlMock.waitForGateway).toHaveBeenCalledTimes(1));
+
+  // 成功状态提示
+  expect(await screen.findByText("后端已恢复。")).toBeVisible();
 });

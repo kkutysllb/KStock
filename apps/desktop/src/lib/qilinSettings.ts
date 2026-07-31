@@ -1,6 +1,4 @@
 import {
-  Blocks,
-  Bot,
   Brain,
   Braces,
   Database,
@@ -9,8 +7,6 @@ import {
   GitBranch,
   KeyRound,
   MemoryStick,
-  MessageSquareText,
-  Network,
   Plug,
   Search,
   Shield,
@@ -181,18 +177,6 @@ export const SETTING_SECTIONS: SettingSection[] = [
     ]
   },
   {
-    id: "qilin-engine",
-    title: "QiLin 引擎",
-    group: "引擎",
-    icon: Bot,
-    summary: "内置引擎路径、配置文件、运行目录和 sidecar 健康状态。",
-    fields: [
-      { name: "引擎源码", value: "vendor/qilin", hint: "发布包使用的 QiLin 内置快照" },
-      { name: "配置文件", value: "config/qilin.config.yaml", hint: "KStock 管理的 QiLin 配置入口" },
-      { name: "运行目录", value: ".kstock/qilin", hint: "本地记忆、线程和运行缓存" }
-    ]
-  },
-  {
     id: "models",
     title: "模型",
     group: "引擎",
@@ -293,18 +277,6 @@ export const SETTING_SECTIONS: SettingSection[] = [
     ]
   },
   {
-    id: "sync",
-    title: "上游同步",
-    group: "系统",
-    icon: Network,
-    summary: "QiLin / KSkills 版本锁、同步来源和发布输入校验。",
-    fields: [
-      { name: "QiLin", value: "vendor/qilin", hint: "由 scripts/sync_upstreams.py --sync-qilin 更新" },
-      { name: "KSkills", value: "vendor/skills", hint: "只同步批准清单" },
-      { name: "锁文件", value: "upstream.lock.json", hint: "记录上游 commit" }
-    ]
-  },
-  {
     id: "reports",
     title: "报告输出",
     group: "研究",
@@ -350,30 +322,6 @@ export const SETTING_SECTIONS: SettingSection[] = [
       { name: "配置格式", value: "YAML", hint: "写入 config/qilin.config.yaml" },
       { name: "可见字段", value: "provider / model / endpoint / key", hint: "敏感值只引用环境变量" },
       { name: "验证", value: "sidecar health", hint: "检查 QiLin 初始化状态" }
-    ]
-  },
-  {
-    id: "workspace",
-    title: "工作树",
-    group: "编码",
-    icon: Blocks,
-    summary: "本地产物、报告目录、任务归档和项目切换。",
-    fields: [
-      { name: "任务目录", value: ".kstock/workspaces", hint: "每个研究会话独立输出" },
-      { name: "归档", value: "手动", hint: "后续支持自动归档" },
-      { name: "差异展示", value: "报告与配置变更", hint: "主界面右侧环境信息" }
-    ]
-  },
-  {
-    id: "conversation",
-    title: "对话体验",
-    group: "个人",
-    icon: MessageSquareText,
-    summary: "输入器、研究模式、右侧面板和消息密度。",
-    fields: [
-      { name: "默认模式", value: "研究 / 分析 / 报告", hint: "符合当前产品定位" },
-      { name: "右侧面板", value: "自动隐藏", hint: "需要时展开为浮动面板" },
-      { name: "输入器", value: "底部固定", hint: "参考 Codex 工作台" }
     ]
   }
 ];

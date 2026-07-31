@@ -66,6 +66,11 @@ import {
 import { deleteThread, ensureThread, runContextFromModel, streamRun } from "../lib/turnsClient";
 import { initialTurn, reduceFrame } from "../lib/turnReducer";
 import { inferStage } from "../lib/stageInferrer";
+import {
+  isGatewayControlApiError,
+  restartGateway,
+  waitForGateway,
+} from "../lib/gatewayControlClient";
 import { ChatFeed, type ChatFeedHandle } from "../components/ChatFeed";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DatabaseSettings } from "../components/DatabaseSettings";
@@ -1157,6 +1162,9 @@ function SettingsPage({
           </div>
         </div>
 
+        {/* 后端维护操作条：跨设置 section 的全局按钮 */}
+        <BackendControlBar />
+
         {activeSection.id === "models" ? (
           <ModelSettings onModelsChanged={onModelsChanged} />
         ) : activeSection.id === "memory" ? (
@@ -1178,6 +1186,73 @@ function SettingsPage({
         )}
       </main>
     </div>
+  );
+}
+
+/** 后端维护操作条：跨设置 section 的全局按钮，重启 gateway 无需重启整个桌面端。 */
+function BackendControlBar() {
+  const [state, setState] = useState<"idle" | "restarting" | "success" | "error">("idle");
+  const [statusText, setStatusText] = useState("");
+  // 二次确认用受控 ConfirmDialog（window.confirm 在 Tauri webview 中不弹窗）。
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const handleRestart = async () => {
+    // 点「确认重启」后才走这里；先关对话框，再发起重启。
+    setConfirmOpen(false);
+    setState("restarting");
+    setStatusText("正在发送重启请求…");
+    try {
+      await restartGateway();
+      setStatusText("后端重启中，等待恢复…");
+      const ok = await waitForGateway(20000, (n) =>
+        setStatusText(`等待后端恢复…（第 ${n} 次）`)
+      );
+      if (ok) {
+        setState("success");
+        setStatusText("后端已恢复。");
+      } else {
+        setState("error");
+        setStatusText("后端恢复超时，请检查 gateway 是否正常运行。");
+      }
+    } catch (err) {
+      setState("error");
+      setStatusText(isGatewayControlApiError(err) ? err.message : "重启失败");
+    }
+  };
+
+  return (
+    <>
+      <section className="settings-card backend-bar" aria-label="后端维护">
+        <div className="backend-bar-info">
+          <strong>后端引擎（gateway）</strong>
+          <span>修改配置后重启 gateway 使变更完全生效（如数据库后端切换），无需重启整个桌面端。</span>
+        </div>
+        <div className="backend-bar-action">
+          {statusText && (
+            <span className={`backend-status backend-status--${state}`} role="status">
+              {statusText}
+            </span>
+          )}
+          <button
+            className="pill-control backend-restart-btn"
+            type="button"
+            onClick={() => setConfirmOpen(true)}
+            disabled={state === "restarting"}
+          >
+            {state === "restarting" ? "重启中…" : "重启后端"}
+          </button>
+        </div>
+      </section>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="重启后端"
+        description="重启期间对话将短暂不可用，约 2-3 秒恢复。配置文件（模型 / 记忆等）不会丢失。"
+        confirmText="确认重启"
+        tone="primary"
+        onConfirm={handleRestart}
+        onCancel={() => setConfirmOpen(false)}
+      />
+    </>
   );
 }
 

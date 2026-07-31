@@ -1225,6 +1225,53 @@ button {
   overflow: hidden;
 }
 
+/* 后端维护操作条（跨设置 section 的全局重启按钮） */
+.backend-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.backend-bar-info strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.backend-bar-info span {
+  color: #9da4ae;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.backend-bar-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.backend-status {
+  font-size: 11px;
+  color: #9da4ae;
+  white-space: nowrap;
+}
+
+.backend-status--error { color: #ffb8b8; }
+.backend-status--success { color: #7ee2a8; }
+
+.backend-restart-btn {
+  cursor: pointer;
+}
+
+.backend-restart-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .setting-row {
   display: flex;
   align-items: center;
