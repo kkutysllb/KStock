@@ -1,0 +1,15 @@
+{
+  "name": "kstock",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "test:sidecar": "python -m pytest sidecar/tests -q",
+    "dev:desktop": "pnpm -C apps/desktop dev",
+    "test:desktop": "pnpm -C apps/desktop test",
+    "build:desktop": "pnpm -C apps/desktop build"
+  }
+}
