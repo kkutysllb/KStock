@@ -1,10 +1,10 @@
-# Stock Quant Agent Desktop 设计稿
+# 股票量化智能体桌面端设计稿
 
-日期: 2026-07-31
+日期：2026-07-31
 
 ## 1. 目标
 
-KStock 将重做为一个跨平台桌面端 Stock Quant Agent，体验上接近 Codex：以对话为中心，围绕“问问题 -> 调技能 -> 产出分析/报告 -> 继续追问”的工作流完成股票量化任务。
+KStock 重做为一个跨平台桌面端 Stock Quant Agent，体验上接近 Codex：以对话为中心，围绕“提问 -> 调用技能 -> 产出分析 / 报告 -> 继续追问”的工作流完成股票量化任务。
 
 核心约束：
 
@@ -28,7 +28,7 @@ KStock 将重做为一个跨平台桌面端 Stock Quant Agent，体验上接近 
 
 - 真实交易执行
 - 全量技能市场
-- 全量 coding/dev 技能进产品运行时
+- 全量 coding / dev 技能进入产品运行时
 - 复杂策略库默认暴露
 - 云端强依赖
 
@@ -38,9 +38,9 @@ KStock 将重做为一个跨平台桌面端 Stock Quant Agent，体验上接近 
 
 ### 3.1 组件分工
 
-- **Renderer**: React + TypeScript UI，负责聊天、报告视图、技能面板、历史、设置
-- **Tauri Host**: 负责窗口、文件访问、原生菜单、系统托盘、更新、sidecar 进程管理
-- **QiLin Sidecar**: 本地 Python 服务进程，负责对话编排、工具调用、技能加载、子代理、状态管理
+- **渲染层**：React + TypeScript 界面，负责聊天、报告视图、技能面板、历史、设置
+- **Tauri 主进程**：负责窗口、文件访问、原生菜单、系统托盘、更新、sidecar 进程管理
+- **QiLin Sidecar**：本地 Python 服务进程，负责对话编排、工具调用、技能加载、子代理、状态管理
 
 ### 3.2 为什么这样拆
 
@@ -48,18 +48,18 @@ KStock 将重做为一个跨平台桌面端 Stock Quant Agent，体验上接近 
 - QiLin 保持现有引擎能力，不重写 agent runtime
 - sidecar 让 Python 引擎和桌面壳解耦，CI 和发布也更清晰
 - 上游仓库继续独立演进，KStock 只消费镜像和锁定版本
-- 发布态 sidecar 不是依赖用户本机 Python，而是平台专用的可执行产物
+- 发布态 sidecar 是平台专用可执行产物，不依赖用户本机 Python
 
 ### 3.3 运行流
 
 ```text
 用户输入
-  -> React chat panel
-  -> Tauri command layer
+  -> React 聊天面板
+  -> Tauri 命令层
   -> QiLin sidecar
-  -> QiLin engine / skill loader / tools
-  -> report artifacts + charts
-  -> UI render
+  -> QiLin 引擎 / 技能加载器 / 工具
+  -> 报告产物 + 图表
+  -> 界面渲染
 ```
 
 ## 4. 技能策略
@@ -97,12 +97,12 @@ KSkills 不整包进入产品运行时，只做精选导入。
 
 - 产品只读取“已批准技能清单”
 - 技能入口以 `SKILL.md` 为准
-- Runtime 只看产品自己的 skill manifest，不直接扫描整个 KSkills 仓库
+- 运行时只看产品自己的技能清单，不直接扫描整个 KSkills 仓库
 - 新技能必须先进入“候选池”，通过前置评审后才进入默认包
 
 ## 5. 上游版本跟踪
 
-KStock 维护自己的版本锁定，不改 upstream。
+KStock 维护自己的版本锁定，不改上游仓库。
 
 ### 5.1 约定的本地来源
 
@@ -122,10 +122,10 @@ KStock 维护自己的版本锁定，不改 upstream。
 ### 5.3 同步方式
 
 1. 先更新本地镜像仓库
-2. 读取新 commit hash
-3. 比对 lock
+2. 读取新的 commit hash
+3. 比对锁定文件
 4. 只同步被批准的 QiLin 接口变化和精选技能
-5. 运行校验与 smoke test
+5. 运行校验与冒烟测试
 6. 通过后再提交到 KStock
 
 ### 5.4 隔离原则
@@ -150,7 +150,7 @@ KStock 维护自己的版本锁定，不改 upstream。
 - 配置：本地 JSON / YAML
 - 会话和任务元数据：SQLite
 - 报告与图表：本地工作区目录
-- 临时文件：受控的 app data 目录
+- 临时文件：受控的应用数据目录
 
 ## 7. 发布与 CI
 
@@ -159,8 +159,8 @@ KStock 维护自己的版本锁定，不改 upstream。
 1. 构建前端
 2. 构建 QiLin sidecar（平台专用可执行产物）
 3. 执行 `tauri build`
-4. 跑跨平台 smoke test
-5. 产出安装包与 release artifact
+4. 跑跨平台冒烟测试
+5. 产出安装包与发布产物
 
 ### 7.2 CI 原则
 
@@ -184,14 +184,14 @@ Tauri 本身不是最大风险点。真正的风险主要来自：
 - 在 CI 中先验证 sidecar 可启动，再执行 Tauri 打包
 - release 才启用正式签名
 
-## 8. UI 方向
+## 8. 界面方向
 
 - 首屏就是聊天工作台，不做营销页
 - 左侧：会话、工作区、技能、历史
 - 中间：对话
 - 右侧：报告、图表、引用数据、技能激活状态
 - 输出优先支持 Markdown 和可视化看板
-- UI 风格偏专业、克制、密度高，适合长期研究工作
+- 界面风格偏专业、克制、密度高，适合长期研究工作
 
 ## 9. 验收标准
 
@@ -199,7 +199,7 @@ Tauri 本身不是最大风险点。真正的风险主要来自：
 - 能连上本地 QiLin sidecar
 - 默认技能包可正常加载
 - 研究 / 分析 / 报告任务可闭环
-- 上游仓库更新后，KStock 可在不污染 upstream 的情况下同步
+- 上游仓库更新后，KStock 可在不污染上游的情况下同步
 - CI 能通过 PR 构建和 release 构建
 
 ## 10. 后续演进
