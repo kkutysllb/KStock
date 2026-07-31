@@ -21,13 +21,23 @@ export interface ToolCall {
   artifact?: unknown;
 }
 
+/** subagent 单步进展（对应引擎 task_running 的 message）。 */
+export interface SubagentStep {
+  /** 引擎 task_running 的 message_index（1-based）。 */
+  index: number;
+  /** subagent ai 正文（完整消息内容，非增量）。 */
+  text?: string;
+  /** subagent 自己发起的工具调用（若有）。 */
+  toolCalls?: ToolCall[];
+}
+
 /** 并行 subagent（引擎 task_tool 产出，按 task_id 分组）。 */
 export interface SubagentTask {
   taskId: string;
   description?: string;
   model?: string;
   status: "running" | "completed" | "failed" | "cancelled" | "timed_out";
-  steps: ToolCall[];
+  steps: SubagentStep[];
 }
 
 export interface TurnUsage {
@@ -51,6 +61,8 @@ export interface ChatMessage {
   reasoning?: ReasoningBlock;
   toolCalls?: ToolCall[];
   subagents?: SubagentTask[];
+  /** turn 产出（引擎 values 快照的 artifacts）。 */
+  artifacts?: unknown[];
   /** pipeline_stage（前端推断兜底）。 */
   stage?: string;
   status?: TurnStatus;
