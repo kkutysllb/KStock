@@ -32,6 +32,21 @@ _SECTION_MODELS: dict[str, str] = {
     "summarization": "qilin.config.summarization_config:SummarizationConfig",
     "title": "qilin.config.title_config:TitleConfig",
     "database": "qilin.config.database_config:DatabaseConfig",
+    "sandbox": "qilin.config.sandbox_config:SandboxConfig",
+    "token_usage": "qilin.config.token_usage_config:TokenUsageConfig",
+    "token_budget": "qilin.config.token_budget_config:TokenBudgetConfig",
+}
+
+# 段缺失时的兜底默认值（仅对含必填字段的 section 需要，如 sandbox.use）。
+# GET 端点读不到段时用这些值补齐必填字段，再让 pydantic 回填其余默认值。
+_SECTION_FALLBACK: dict[str, dict[str, Any]] = {
+    "sandbox": {"use": "qilin.sandbox.local:LocalSandboxProvider"},
+}
+
+# 顶层标量字段（挂在 yaml 根级，不在任何 section 内）。
+# key → (python 类型, 引擎默认值, pydantic 约束 kwargs)
+_TOP_LEVEL_FIELDS: dict[str, dict[str, Any]] = {
+    "max_recursion_limit": {"type": int, "default": 1000, "ge": 1},
 }
 
 # 写入时从明文转 $ENV 引用的敏感字段路径（section → list of (nested keys, env factory)）
@@ -119,12 +134,16 @@ def _extract_secret_refs(section: str, payload: dict[str, Any]) -> tuple[dict[st
 
 
 class RuntimeConfigResponse(BaseModel):
-    """四段配置的合并响应。"""
+    """所有配置段 + 顶层字段的合并响应。"""
 
     memory: dict[str, Any]
     summarization: dict[str, Any]
     title: dict[str, Any]
     database: dict[str, Any]
+    sandbox: dict[str, Any]
+    token_usage: dict[str, Any]
+    token_budget: dict[str, Any]
+    max_recursion_limit: int
 
 
 class SectionUpdateResponse(BaseModel):
@@ -134,32 +153,79 @@ class SectionUpdateResponse(BaseModel):
 
 @router.get("/runtime-config", response_model=RuntimeConfigResponse)
 def get_runtime_config_endpoint() -> RuntimeConfigResponse:
-    """读取 runtime.yaml 的四个配置段。
+    """读取 runtime.yaml 的所有配置段 + 顶层字段。
 
-    段缺失时返回该段的 pydantic 默认值（保证前端总能拿到完整结构）。
-    读的是文件内容，不是引擎单例——避免热重载时序导致的读写不一致。
+    段缺失时返回该段的 pydantic 默认值（含必填字段的 section 用兜底值补齐，
+    保证前端总能拿到完整结构）。读的是文件内容，不是引擎单例——避免热重载
+    时序导致的读写不一致。
     """
     cfg = load_runtime_config()
-    sections: dict[str, dict[str, Any]] = {}
+    result: dict[str, Any] = {}
     for section, dotted in _SECTION_MODELS.items():
         raw = cfg.get(section)
         if isinstance(raw, dict):
-            sections[section] = raw
+            result[section] = raw
         else:
-            # 段缺失：返回默认值
+            # 段缺失：用兜底默认值补齐必填字段（如 sandbox.use），再让 pydantic 回填
             model_cls = _resolve_model(dotted)
-            sections[section] = model_cls().model_dump()
-    return RuntimeConfigResponse(**sections)
+            fallback = _SECTION_FALLBACK.get(section, {})
+            try:
+                result[section] = model_cls().model_dump()
+            except Exception:
+                result[section] = model_cls(**fallback).model_dump()
+    # 顶层标量字段：缺失时返回引擎默认值
+    for field_name, spec in _TOP_LEVEL_FIELDS.items():
+        raw = cfg.get(field_name)
+        result[field_name] = raw if isinstance(raw, spec["type"]) else spec["default"]
+    return RuntimeConfigResponse(**result)
 
 
 @router.put("/runtime-config/{section}", response_model=SectionUpdateResponse)
 def update_runtime_config_section_endpoint(section: str, payload: dict[str, Any]) -> SectionUpdateResponse:
-    """更新 runtime.yaml 的单个配置段。
+    """更新 runtime.yaml 的单个配置段或顶层字段。
 
-    1. pydantic 校验 payload（无效值返回 400 + 字段明细）
-    2. 明文敏感值转 $ENV 引用，明文写入 secrets.env
-    3. 原子替换 runtime.yaml（备份原文件到 <数据根>/backups/）
+    - **标准 section**（memory / database / sandbox / ...）：body 为段 dict，
+      pydantic 校验后原子写入 yaml。
+    - **顶层字段**（max_recursion_limit）：body 为 ``{field: value}``，校验类型
+      和约束后写到 yaml 根级。
+
+    无效值返回 400 + 字段明细。
     """
+    # ── 顶层标量字段分支 ──
+    if section in _TOP_LEVEL_FIELDS:
+        spec = _TOP_LEVEL_FIELDS[section]
+        raw = payload.get(section)
+        errors: list[dict[str, str]] = []
+        if not isinstance(raw, spec["type"]):
+            errors.append({
+                "field": section,
+                "message": f"{section} 必须是 {spec['type'].__name__}",
+                "type": "type_error",
+            })
+        else:
+            for op, limit in {k: v for k, v in spec.items() if k in ("ge", "le", "gt", "lt")}.items():
+                if op == "ge" and raw < limit or op == "gt" and raw <= limit \
+                        or op == "le" and raw > limit or op == "lt" and raw >= limit:
+                    errors.append({
+                        "field": section,
+                        "message": f"{section} 不满足约束 {op} {limit}",
+                        "type": "value_error",
+                    })
+        if errors:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "validation_failed",
+                    "message": f"{section} 配置校验失败",
+                    "errors": errors,
+                },
+            )
+        cfg = load_runtime_config()
+        cfg[section] = raw
+        _atomic_write_yaml(_runtime_config_path(), cfg)
+        return SectionUpdateResponse(section=section, value={section: raw})
+
+    # ── 标准 section 分支 ──
     if section not in _SECTION_MODELS:
         raise HTTPException(
             status_code=400,

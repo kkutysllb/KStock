@@ -58,14 +58,51 @@ export interface DatabaseConfig {
   checkpoint_graph_cache: { accessor_graph_max: number };
 }
 
+export interface SandboxConfig {
+  use: string;
+  allow_host_bash: boolean;
+  bash_command_timeout: number;
+  bash_output_max_chars: number;
+  read_file_output_max_chars: number;
+  ls_output_max_chars: number;
+}
+
+export interface TokenUsageConfig {
+  enabled: boolean;
+}
+
+export interface TokenBudgetConfig {
+  enabled: boolean;
+  max_tokens: number;
+  max_input_tokens: number | null;
+  max_output_tokens: number | null;
+  warn_threshold: number;
+  hard_stop_threshold: number;
+}
+
 export interface RuntimeConfig {
   memory: MemoryRuntimeConfig;
   summarization: SummarizationConfig;
   title: TitleConfig;
   database: DatabaseConfig;
+  sandbox: SandboxConfig;
+  token_usage: TokenUsageConfig;
+  token_budget: TokenBudgetConfig;
+  max_recursion_limit: number;
 }
 
-export type RuntimeConfigSection = keyof RuntimeConfig;
+/** 可编辑的配置段（dict 值，走 updateRuntimeConfigSection）。 */
+export type RuntimeConfigSection =
+  | "memory"
+  | "summarization"
+  | "title"
+  | "database"
+  | "sandbox"
+  | "token_usage"
+  | "token_budget";
+
+/** 顶层标量字段名（走 updateTopLevelField）。 */
+export type RuntimeTopLevelField = "max_recursion_limit";
 
 // ── 错误归一 ──
 
@@ -136,19 +173,30 @@ async function runtimeConfigFetch<T>(
 
 // ── API ─────────────────────────────────────────────────────────────
 
-/** 读取 runtime.yaml 的四段配置。段缺失时后端返回 pydantic 默认值。 */
+/** 读取 runtime.yaml 的所有配置段 + 顶层字段。段缺失时后端返回默认值。 */
 export function getRuntimeConfig(): Promise<RuntimeConfig> {
   return runtimeConfigFetch<RuntimeConfig>("/api/v1/kstock/runtime-config");
 }
 
-/** 更新单个配置段。后端 pydantic 校验，失败抛 400 + fieldErrors。 */
+/** 更新单个配置段（dict 值）。后端 pydantic 校验，失败抛 400 + fieldErrors。 */
 export function updateRuntimeConfigSection<S extends RuntimeConfigSection>(
   section: S,
-  value: RuntimeConfig[S]
-): Promise<{ section: S; value: RuntimeConfig[S] }> {
-  return runtimeConfigFetch<{ section: S; value: RuntimeConfig[S] }>(
+  value: Record<string, unknown>
+): Promise<{ section: S; value: Record<string, unknown> }> {
+  return runtimeConfigFetch<{ section: S; value: Record<string, unknown> }>(
     `/api/v1/kstock/runtime-config/${encodeURIComponent(section)}`,
     { method: "PUT", body: JSON.stringify(value) }
+  );
+}
+
+/** 更新顶层标量字段（max_recursion_limit）。body 为 {field: value}。 */
+export function updateTopLevelField(
+  field: RuntimeTopLevelField,
+  value: number
+): Promise<{ section: string; value: Record<string, unknown> }> {
+  return runtimeConfigFetch<{ section: string; value: Record<string, unknown> }>(
+    `/api/v1/kstock/runtime-config/${encodeURIComponent(field)}`,
+    { method: "PUT", body: JSON.stringify({ [field]: value }) }
   );
 }
 

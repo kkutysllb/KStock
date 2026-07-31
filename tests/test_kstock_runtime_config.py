@@ -39,12 +39,15 @@ def _client_under(tmp_path, monkeypatch, yaml_text: str = "") -> TestClient:
 # ── GET /runtime-config ─────────────────────────────────────────────
 
 def test_get_runtime_config_returns_defaults_when_empty(tmp_path, monkeypatch):
-    """runtime.yaml 为空时，四段返回各自 pydantic 默认值。"""
+    """runtime.yaml 为空时，各段返回各自 pydantic 默认值。"""
     client = _client_under(tmp_path, monkeypatch, yaml_text="")
     resp = client.get("/api/v1/kstock/runtime-config")
     assert resp.status_code == 200
     body = resp.json()
-    assert set(body.keys()) == {"memory", "summarization", "title", "database"}
+    assert set(body.keys()) == {
+        "memory", "summarization", "title", "database",
+        "sandbox", "token_usage", "token_budget", "max_recursion_limit",
+    }
     # title 默认 enabled=True, max_words=6
     assert body["title"]["enabled"] is True
     assert body["title"]["max_words"] == 6

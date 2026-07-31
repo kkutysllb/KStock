@@ -75,6 +75,8 @@ import { ChatFeed, type ChatFeedHandle } from "../components/ChatFeed";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DatabaseSettings } from "../components/DatabaseSettings";
 import { MemorySettings } from "../components/MemorySettings";
+import { SandboxSettings } from "../components/SandboxSettings";
+import { RuntimeSettings } from "../components/RuntimeSettings";
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings";
 type AuthMode = "login" | "register";
@@ -1171,6 +1173,10 @@ function SettingsPage({
           <MemorySettings />
         ) : activeSection.id === "database" ? (
           <DatabaseSettings />
+        ) : activeSection.id === "tools" ? (
+          <SandboxSettings />
+        ) : activeSection.id === "runtime" ? (
+          <RuntimeSettings />
         ) : (
           <section className="settings-card" aria-label={`${activeSection.title}配置`}>
             {activeSection.fields.map((field) => (
