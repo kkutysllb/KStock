@@ -15,7 +15,17 @@ import {
   importMemory,
   isMemoryApiError,
 } from "../lib/memoryClient";
+import {
+  type RuntimeConfig,
+  type MemoryRuntimeConfig,
+  type SummarizationConfig,
+  type TitleConfig,
+  getRuntimeConfig,
+  updateRuntimeConfigSection,
+  isRuntimeConfigApiError,
+} from "../lib/runtimeConfigClient";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { RuntimeConfigCard, type FieldDef } from "./RuntimeConfigCard";
 
 /**
  * 记忆与配置管理面板。
@@ -38,6 +48,8 @@ export function MemorySettings() {
   const [pendingImport, setPendingImport] = useState<MemoryData | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
+  const [refreshEffectedAt, setRefreshEffectedAt] = useState(0);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -65,7 +77,63 @@ export function MemorySettings() {
     } finally {
       setLoading(false);
     }
+    // runtime.yaml 配置（读写层），独立加载，失败不阻断记忆事实面板
+    try {
+      const rc = await getRuntimeConfig();
+      setRuntimeConfig(rc);
+    } catch {
+      // 忽略：配置编辑卡将在 runtimeConfig === null 时不渲染
+    }
   }, []);
+
+  // 保存 runtime.yaml 某段后，轮询刷新引擎只读生效值（热重载 1-2s 内生效）
+  useEffect(() => {
+    if (refreshEffectedAt === 0) return;
+    let cancelled = false;
+    const poll = async () => {
+      // 重试 3 次，每次间隔 800ms
+      for (let i = 0; i < 3; i++) {
+        await new Promise((r) => setTimeout(r, 800));
+        if (cancelled) return;
+        try {
+          const cfg = await getMemoryConfig();
+          if (!cancelled) setConfig(cfg);
+          return;
+        } catch {
+          // 继续重试
+        }
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [refreshEffectedAt]);
+
+  const handleSaveSection = useCallback(
+    async <S extends keyof RuntimeConfig>(section: S, value: RuntimeConfig[S]) => {
+      await updateRuntimeConfigSection(section, value);
+      setRuntimeConfig((prev) => (prev ? { ...prev, [section]: value } : prev));
+      setRefreshEffectedAt(Date.now());
+    },
+    []
+  );
+
+  const handleSaveMemory = useCallback(
+    (value: Record<string, unknown>) =>
+      handleSaveSection("memory", value as unknown as MemoryRuntimeConfig),
+    [handleSaveSection]
+  );
+
+  const handleSaveSummarization = useCallback(
+    (value: Record<string, unknown>) =>
+      handleSaveSection("summarization", value as unknown as SummarizationConfig),
+    [handleSaveSection]
+  );
+
+  const handleSaveTitle = useCallback(
+    (value: Record<string, unknown>) =>
+      handleSaveSection("title", value as unknown as TitleConfig),
+    [handleSaveSection]
+  );
 
   useEffect(() => {
     reload();
@@ -185,6 +253,35 @@ export function MemorySettings() {
       )}
 
       {config && <MemoryConfigCard config={config} />}
+
+      {runtimeConfig && (
+        <>
+          <RuntimeConfigCard
+            title="记忆机制配置"
+            description="改写 runtime.yaml 的 memory 段。保存后引擎 1-2 秒内热重载，上方「生效值」随之刷新。"
+            fields={MEMORY_FIELDS}
+            initialValue={runtimeConfig.memory as unknown as Record<string, unknown>}
+            onSave={handleSaveMemory}
+            savedHint="已写入 runtime.yaml，引擎将在 1-2 秒内热重载。"
+          />
+          <RuntimeConfigCard
+            title="摘要配置"
+            description="长会话达到阈值时自动压缩历史。trigger 为 OR 逻辑（任一满足即触发）。"
+            fields={SUMMARIZATION_FIELDS}
+            initialValue={runtimeConfig.summarization as unknown as Record<string, unknown>}
+            onSave={handleSaveSummarization}
+            savedHint="已写入 runtime.yaml，引擎将在 1-2 秒内热重载。"
+          />
+          <RuntimeConfigCard
+            title="标题生成配置"
+            description="自动为每个会话生成标题。model_name 留空则用本地快途回退。"
+            fields={TITLE_FIELDS}
+            initialValue={runtimeConfig.title as unknown as Record<string, unknown>}
+            onSave={handleSaveTitle}
+            savedHint="已写入 runtime.yaml，引擎将在 1-2 秒内热重载。"
+          />
+        </>
+      )}
 
       <section className="settings-card memory-actions-card" aria-label="记忆操作">
         <div className="memory-actions-header">
@@ -598,3 +695,56 @@ function formatTimestamp(iso: string): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
+
+// ── 配置字段定义（记忆/摘要/标题三段）──────────────────────────────
+
+const MEMORY_FIELDS: FieldDef[] = [
+  { key: "enabled", label: "启用记忆机制", type: "boolean", hint: "总开关（call-site gate）" },
+  {
+    key: "mode", label: "运行模式", type: "select",
+    hint: "middleware 被动摘要 / tool 模型主动调用",
+    options: [
+      { value: "middleware", label: "中间件（被动摘要）" },
+      { value: "tool", label: "工具（模型主动调用）" },
+    ],
+  },
+  { key: "injection_enabled", label: "注入系统提示", type: "boolean", hint: "把记忆注入到 system prompt" },
+  {
+    key: "shutdown_flush_timeout_seconds", label: "关闭刷新超时", type: "number",
+    min: 1, max: 300, step: 1, hint: "优雅关闭时刷入记忆的最大秒数",
+  },
+  {
+    key: "manager_class", label: "后端选择器", type: "string",
+    hint: "deermem / noop / mem0 或点分路径",
+  },
+];
+
+const SUMMARIZATION_FIELDS: FieldDef[] = [
+  { key: "enabled", label: "启用摘要", type: "boolean", hint: "长会话压缩" },
+  {
+    key: "model_name", label: "摘要模型", type: "nullable-string",
+    hint: "留空 = 用运行模型生成",
+  },
+  {
+    key: "trigger", label: "触发阈值", type: "context-size",
+    hint: "达到阈值时触发压缩",
+  },
+  {
+    key: "keep", label: "保留策略", type: "context-size",
+    hint: "压缩后保留多少历史",
+  },
+  {
+    key: "trim_tokens_to_summarize", label: "截断 token 上限", type: "number",
+    min: 0, step: 100, hint: "准备消息时的最大 token 数",
+  },
+];
+
+const TITLE_FIELDS: FieldDef[] = [
+  { key: "enabled", label: "启用标题生成", type: "boolean" },
+  { key: "max_words", label: "最大词数", type: "number", min: 1, max: 20, step: 1 },
+  { key: "max_chars", label: "最大字符数", type: "number", min: 10, max: 200, step: 1 },
+  {
+    key: "model_name", label: "标题模型", type: "nullable-string",
+    hint: "留空 = 本地快速回退",
+  },
+];

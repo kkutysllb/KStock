@@ -233,7 +233,7 @@ export const SETTING_SECTIONS: SettingSection[] = [
     title: "记忆与摘要",
     group: "智能体",
     icon: MemoryStick,
-    summary: "管理长期记忆配置、上下文摘要与记忆事实（增删改 / 导入导出 / 清空）。",
+    summary: "同页配置记忆机制、会话摘要、标题生成；管理记忆事实（增删改 / 导入导出 / 清空）。",
     fields: []
   },
   {
@@ -277,12 +277,8 @@ export const SETTING_SECTIONS: SettingSection[] = [
     title: "数据与持久化",
     group: "系统",
     icon: Database,
-    summary: "sqlite/postgres、run events、反馈、去重和检查点。",
-    fields: [
-      { name: "数据库", value: "sqlite", hint: "默认 .qilin/data" },
-      { name: "Checkpointer", value: "内存 / sqlite", hint: "按配置切换" },
-      { name: "Run Events", value: "开启", hint: "研究过程可追踪" }
-    ]
+    summary: "后端选择（memory/sqlite/postgres）、连接池、检查点模式。后端切换需重启 gateway。",
+    fields: []
   },
   {
     id: "auth",

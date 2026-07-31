@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── mock memoryClient：所有 API 返回可控 promise ──
@@ -18,6 +18,19 @@ vi.mock("../src/lib/memoryClient", () => ({
   __esModule: true,
   ...mockModule,
   isMemoryApiError: (e: unknown) =>
+    typeof e === "object" && e !== null && "message" in e && "status" in e,
+}));
+
+// ── mock runtimeConfigClient：配置编辑卡的读写层 ──
+const mockRuntimeModule = vi.hoisted(() => ({
+  getRuntimeConfig: vi.fn(),
+  updateRuntimeConfigSection: vi.fn(),
+}));
+
+vi.mock("../src/lib/runtimeConfigClient", () => ({
+  __esModule: true,
+  ...mockRuntimeModule,
+  isRuntimeConfigApiError: (e: unknown) =>
     typeof e === "object" && e !== null && "message" in e && "status" in e,
 }));
 
@@ -57,9 +70,46 @@ const memoryConfig = {
   backend_config: { max_facts: 100, storage_path: "/x/.qilin" },
 };
 
+const runtimeConfig = {
+  memory: {
+    enabled: false,
+    mode: "middleware" as const,
+    injection_enabled: false,
+    shutdown_flush_timeout_seconds: 30,
+    manager_class: "deermem",
+    backend_config: {},
+  },
+  summarization: {
+    enabled: true,
+    model_name: null,
+    trigger: { type: "tokens" as const, value: 32000 },
+    keep: { type: "messages" as const, value: 10 },
+    trim_tokens_to_summarize: 15564,
+    summary_prompt: null,
+    skill_file_read_tool_names: ["read_file"],
+  },
+  title: {
+    enabled: true,
+    max_words: 6,
+    max_chars: 60,
+    model_name: null,
+  },
+  database: {
+    backend: "sqlite" as const,
+    sqlite_dir: ".qilin/data",
+    postgres_url: "",
+  },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockModule.getMemoryStatus.mockResolvedValue({ config: memoryConfig, data: memoryData });
+  mockModule.getMemoryConfig.mockResolvedValue(memoryConfig);
+  mockRuntimeModule.getRuntimeConfig.mockResolvedValue(runtimeConfig);
+  mockRuntimeModule.updateRuntimeConfigSection.mockResolvedValue({
+    section: "title",
+    value: runtimeConfig.title,
+  });
 });
 
 afterEach(() => {
@@ -75,13 +125,14 @@ describe("MemorySettings 加载与展示", () => {
       expect(screen.getByText("记忆配置")).toBeInTheDocument();
     });
     expect(mockModule.getMemoryStatus).toHaveBeenCalledTimes(1);
-    // 配置展示
-    expect(screen.getByText("已启用")).toBeInTheDocument();
-    expect(screen.getByText("中间件（被动摘要）")).toBeInTheDocument();
-    expect(screen.getByText("deermem")).toBeInTheDocument();
+    // 配置展示（限定在只读生效值卡内，避免与下方配置编辑卡的 select option 文本冲突）
+    const configCard = screen.getByLabelText("记忆配置");
+    expect(within(configCard).getByText("已启用")).toBeInTheDocument();
+    expect(within(configCard).getByText("中间件（被动摘要）")).toBeInTheDocument();
+    expect(within(configCard).getByText("deermem")).toBeInTheDocument();
     // 后端私有配置
-    expect(screen.getByText("max_facts")).toBeInTheDocument();
-    expect(screen.getByText("100")).toBeInTheDocument();
+    expect(within(configCard).getByText("max_facts")).toBeInTheDocument();
+    expect(within(configCard).getByText("100")).toBeInTheDocument();
     // facts 列表
     expect(screen.getByText("User prefers TypeScript")).toBeInTheDocument();
     expect(screen.getByText("Working on QiLin")).toBeInTheDocument();
@@ -119,9 +170,11 @@ describe("MemorySettings fact CRUD", () => {
     await waitFor(() => screen.getByText("User prefers TypeScript"));
 
     fireEvent.click(screen.getByText("新增"));
-    const textarea = await screen.findByPlaceholderText(/用户偏好简洁回复/);
+    const dialog = await screen.findByRole("dialog", { name: "新增记忆事实" });
+    const textarea = within(dialog).getByPlaceholderText(/用户偏好简洁回复/);
     fireEvent.change(textarea, { target: { value: "喜欢深色主题" } });
-    fireEvent.click(screen.getAllByText("保存")[0]);
+    // 在弹层内查找保存按钮（页面上还有多个配置编辑卡的保存按钮）
+    fireEvent.click(within(dialog).getByRole("button", { name: /保存/ }));
 
     await waitFor(() => {
       expect(mockModule.createFact).toHaveBeenCalledWith({
@@ -200,6 +253,105 @@ describe("MemorySettings 重新加载", () => {
     fireEvent.click(screen.getByTitle("从存储文件重新加载（刷新缓存）"));
     await waitFor(() => {
       expect(mockModule.reloadMemory).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+// ── 配置编辑卡（memory/summarization/title）──────────────────────
+
+describe("MemorySettings 配置编辑卡", () => {
+  it("加载后展示三段配置编辑卡标题", async () => {
+    render(<MemorySettings />);
+    await waitFor(() => {
+      expect(screen.getByText("记忆机制配置")).toBeInTheDocument();
+    });
+    expect(screen.getByText("摘要配置")).toBeInTheDocument();
+    expect(screen.getByText("标题生成配置")).toBeInTheDocument();
+  });
+
+  it("修改标题 max_words 后保存调用 PUT title 段", async () => {
+    render(<MemorySettings />);
+    await waitFor(() => {
+      expect(screen.getByText("标题生成配置")).toBeInTheDocument();
+    });
+
+    // 标题配置区有一个 max_words=6 的 number 输入
+    const inputs = screen.getAllByRole("spinbutton");
+    const maxWordsInput = inputs.find(
+      (i) => (i as HTMLInputElement).value === "6"
+    ) as HTMLInputElement;
+    fireEvent.change(maxWordsInput, { target: { value: "8" } });
+
+    // 找到标题配置卡内的保存按钮：该 section 的 aria-label 是 "标题生成配置"
+    const titleSection = screen.getByLabelText("标题生成配置");
+    const saveBtn = Array.from(titleSection.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("保存")
+    )!;
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockRuntimeModule.updateRuntimeConfigSection).toHaveBeenCalledTimes(1);
+    });
+    const [section, value] = mockRuntimeModule.updateRuntimeConfigSection.mock.calls[0];
+    expect(section).toBe("title");
+    expect(value.max_words).toBe(8);
+  });
+
+  it("保存记忆段后触发引擎生效值轮询（getMemoryConfig）", async () => {
+    render(<MemorySettings />);
+    await waitFor(() => {
+      expect(screen.getByText("记忆机制配置")).toBeInTheDocument();
+    });
+
+    // 修改记忆段的 enabled 开关
+    const memSection = screen.getByLabelText("记忆机制配置");
+    const checkbox = memSection.querySelector("input[type=checkbox]") as HTMLInputElement;
+    fireEvent.click(checkbox);
+
+    const saveBtn = Array.from(memSection.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("保存")
+    )!;
+    fireEvent.click(saveBtn);
+
+    // updateRuntimeConfigSection 被调用
+    await waitFor(() => {
+      expect(mockRuntimeModule.updateRuntimeConfigSection).toHaveBeenCalledWith(
+        "memory",
+        expect.objectContaining({ enabled: true })
+      );
+    });
+    // 保存后轮询 getMemoryConfig（引擎热重载刷新生效值）
+    await waitFor(
+      () => {
+        expect(mockModule.getMemoryConfig).toHaveBeenCalled();
+      },
+      { timeout: 3000 }
+    );
+  });
+
+  it("配置编辑卡保存失败回显错误", async () => {
+    mockRuntimeModule.updateRuntimeConfigSection.mockRejectedValue(
+      new Error("runtime.yaml 不可写")
+    );
+    render(<MemorySettings />);
+    await waitFor(() => {
+      expect(screen.getByText("标题生成配置")).toBeInTheDocument();
+    });
+
+    const titleSection = screen.getByLabelText("标题生成配置");
+    const inputs = titleSection.querySelectorAll("input[type=number]");
+    const maxWordsInput = Array.from(inputs).find(
+      (i) => (i as HTMLInputElement).value === "6"
+    ) as HTMLInputElement;
+    fireEvent.change(maxWordsInput, { target: { value: "10" } });
+
+    const saveBtn = Array.from(titleSection.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("保存")
+    )!;
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("runtime.yaml 不可写");
     });
   });
 });

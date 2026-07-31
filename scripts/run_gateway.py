@@ -288,8 +288,10 @@ def create_app():
 
     # KStock 自有的模型配置写入层（vendor 引擎只读，本路由提供 CRUD）
     from scripts.kstock_models import router as kstock_models_router
+    from scripts.kstock_runtime_config import router as kstock_runtime_config_router
 
     app.include_router(kstock_models_router)
+    app.include_router(kstock_runtime_config_router)
     return app
 
 
