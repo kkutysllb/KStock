@@ -139,15 +139,7 @@ export function createSession(title = "新研究会话"): ChatSession {
     createdAt: nowIso(),
     updatedAt: nowLabel(),
     messages: [],
-    reportMarkdown: buildReportMarkdown({
-      id: "preview",
-      title,
-      createdAt: nowIso(),
-      updatedAt: nowLabel(),
-      messages: [],
-      reportMarkdown: "",
-      activeSkills: DEFAULT_ACTIVE_SKILLS
-    }),
+    reportMarkdown: "",
     activeSkills: [...DEFAULT_ACTIVE_SKILLS]
   };
 }
@@ -201,39 +193,4 @@ export function updateMessageInSession(
   };
 }
 
-// ── 以下两个为过渡期假桩，Task 9 接入真实 run 后移除 ──
-/** @deprecated Task 9 接入引擎 run 后移除。 */
-export function synthesizeAssistantReply(query: string): {
-  message: string;
-  activeSkills: string[];
-} {
-  return {
-    message: `已接收研究请求：${query}。正在调用精选技能生成结构化分析与报告。`,
-    activeSkills: [...DEFAULT_ACTIVE_SKILLS]
-  };
-}
 
-/** @deprecated Task 9 改为从 turn artifacts 真实来源生成。 */
-export function buildReportMarkdown(session: ChatSession): string {
-  const lastUserMessage = [...session.messages].reverse().find((message) => message.role === "user");
-  const query = lastUserMessage?.content ?? "等待用户输入";
-  return `
-# ${session.title}
-
-## 研究问题
-
-${query}
-
-## 当前结论
-
-- 已启用精选技能：${session.activeSkills.join(" / ")}
-- 适合继续补充财报、估值、行业、公告和宏观数据
-- 报告输出将保持 Markdown 结构
-
-## 下一步
-
-1. 拉取最新数据
-2. 汇总关键指标
-3. 生成报告和图表
-`.trim();
-}

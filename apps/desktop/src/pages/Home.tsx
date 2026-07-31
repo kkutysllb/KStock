@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -23,6 +23,7 @@ import {
   Send,
   Settings,
   Sparkles,
+  Square,
   UserPlus,
 } from "lucide-react";
 import { normalizeMarkdown } from "../lib/markdown";
@@ -51,13 +52,19 @@ import {
 } from "../lib/modelsClient";
 import {
   appendMessageToSession,
-  buildReportMarkdown,
+  appendTurnToSession,
+  bindThreadId,
+  createAssistantTurn,
   createSeedSessions,
   createSession,
   DEFAULT_ACTIVE_SKILLS,
-  synthesizeAssistantReply,
+  updateMessageInSession,
   type ChatSession
 } from "../lib/sessionStore";
+import { ensureThread, runContextFromModel, streamRun } from "../lib/turnsClient";
+import { initialTurn, reduceFrame } from "../lib/turnReducer";
+import { inferStage } from "../lib/stageInferrer";
+import { ChatFeed } from "../components/ChatFeed";
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings";
 type AuthMode = "login" | "register";
@@ -129,6 +136,13 @@ export function Home() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
+  // 模型配置（提升到 Home，供 handleSend 构造 RunContext）。
+  const [models, setModels] = useState<ModelConfig[]>([]);
+  const [activeModel, setActiveModel] = useState<string>("");
+  const [modelsLoading, setModelsLoading] = useState(true);
+  // 流式 run 状态。
+  const [streamingId, setStreamingId] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // 启动时探测 gateway 会话与系统初始化状态。
   useEffect(() => {
@@ -154,12 +168,39 @@ export function Home() {
     }
   }, [authReady, currentUser, view]);
 
+  // 启动时加载模型列表，确定初始 activeModel：localStorage > default_model > 首个。
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = localStorage.getItem("kstock.activeModel");
+        const data = await listModels();
+        if (cancelled) return;
+        setModels(data.models);
+        const initial =
+          stored && data.models.some((m) => m.name === stored)
+            ? stored
+            : data.default_model && data.models.some((m) => m.name === data.default_model)
+              ? data.default_model
+              : (data.models[0]?.name ?? "");
+        setActiveModel(initial);
+      } catch {
+        // gateway 未就绪：保持空，选择器显示「未配置」。
+      } finally {
+        if (!cancelled) setModelsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) ?? sessions[0],
     [activeSessionId, sessions]
   );
 
-  const reportMarkdown = activeSession?.reportMarkdown ?? buildReportMarkdown(createSession());
+  const reportMarkdown = activeSession?.reportMarkdown ?? "";
   const activeSetting = SETTING_SECTIONS.find((section) => section.id === settingsSectionId) ?? SETTING_SECTIONS[0];
 
   // 未登录点「进入工作台」不应直接进：拦截到登录页。
@@ -193,6 +234,11 @@ export function Home() {
     setView("landing");
   };
 
+  const handleModelChange = (name: string) => {
+    setActiveModel(name);
+    localStorage.setItem("kstock.activeModel", name);
+  };
+
   const handleNewSession = () => {
     const nextSession = createSession("新研究会话");
     setSessions((current) => [nextSession, ...current]);
@@ -200,31 +246,90 @@ export function Home() {
     setDraft("");
   };
 
-  const handleSend = (model: string) => {
+  // 发送消息：append user → ensureThread → append streaming turn → streamRun。
+  // reducer 状态在闭包外维护（setSessions 异步，不能依赖最新 state 读回 turn）。
+  const handleSend = async (modelName: string) => {
     const input = draft.trim();
-    if (!input || !activeSession || !model) {
+    if (!input || !activeSession || !modelName || streamingId) {
+      return;
+    }
+    const session = activeSession;
+    const model = models.find((m) => m.name === modelName);
+    if (!model) {
       return;
     }
 
-    const assistantReply = synthesizeAssistantReply(input);
-    setSessions((current) =>
-      current.map((session) => {
-        if (session.id !== activeSession.id) {
-          return session;
-        }
-        const nextSession = appendMessageToSession(session, "user", input, model);
-        const withAssistant = appendMessageToSession(nextSession, "assistant", assistantReply.message);
-        return {
-          ...withAssistant,
-          reportMarkdown: buildReportMarkdown({
-            ...withAssistant,
-            activeSkills: assistantReply.activeSkills
-          }),
-          activeSkills: assistantReply.activeSkills
-        };
-      })
-    );
     setDraft("");
+
+    // 1. append user message
+    setSessions((current) =>
+      current.map((s) => (s.id === session.id ? appendMessageToSession(s, "user", input, modelName) : s))
+    );
+
+    // 2. ensure thread（首次发消息时创建引擎 thread 并绑定）
+    let threadId = session.threadId;
+    if (!threadId) {
+      try {
+        threadId = await ensureThread();
+        setSessions((current) =>
+          current.map((s) => (s.id === session.id ? bindThreadId(s, threadId!) : s))
+        );
+      } catch (err) {
+        const errTurn = createAssistantTurn(modelName);
+        errTurn.status = "error";
+        errTurn.error = `创建会话失败：${err instanceof Error ? err.message : String(err)}`;
+        setSessions((current) =>
+          current.map((s) => (s.id === session.id ? appendTurnToSession(s, errTurn) : s))
+        );
+        return;
+      }
+    }
+
+    // 3. append 空 streaming assistant turn
+    const turn = createAssistantTurn(modelName);
+    setStreamingId(turn.id);
+    setSessions((current) =>
+      current.map((s) => (s.id === session.id ? appendTurnToSession(s, turn) : s))
+    );
+
+    // 4. streamRun：逐帧 reduceFrame + inferStage 回写 turn
+    const controller = new AbortController();
+    abortRef.current = controller;
+    let turnState = initialTurn();
+
+    const patchTurn = () =>
+      setSessions((current) =>
+        current.map((s) => (s.id === session.id ? updateMessageInSession(s, turn.id, turnState) : s))
+      );
+
+    try {
+      await streamRun({
+        threadId,
+        input: { messages: [{ role: "user", content: input }] },
+        context: runContextFromModel(model),
+        signal: controller.signal,
+        handlers: {
+          onFrame: (frame) => {
+            const now = Date.now();
+            turnState = reduceFrame(turnState, frame, now);
+            turnState.stage = inferStage(turnState.stage, frame);
+            patchTurn();
+          },
+          onError: (error) => {
+            turnState = { ...turnState, status: "error", error: error.message };
+            patchTurn();
+          }
+        }
+      });
+    } finally {
+      abortRef.current = null;
+      setStreamingId((id) => (id === turn.id ? null : id));
+    }
+  };
+
+  // 停止生成：abort 当前 streamRun（静默终止，不报错）
+  const handleStop = () => {
+    abortRef.current?.abort();
   };
 
   if (!authReady) {
@@ -268,12 +373,18 @@ export function Home() {
       rightPanelOpen={rightPanelOpen}
       sessions={sessions}
       sidebarCollapsed={sidebarCollapsed}
+      models={models}
+      activeModel={activeModel}
+      modelsLoading={modelsLoading}
+      streamingId={streamingId}
+      onModelChange={handleModelChange}
       onDraftChange={setDraft}
       onLogout={handleLogout}
       onNewSession={handleNewSession}
       onOpenSettings={() => setView("settings")}
       onSelectSession={setActiveSessionId}
       onSend={handleSend}
+      onStop={handleStop}
       onToggleRightPanel={() => setRightPanelOpen((current) => !current)}
       onToggleSidebar={() => setSidebarCollapsed((current) => !current)}
     />
@@ -583,12 +694,18 @@ function WorkspaceShell({
   rightPanelOpen,
   sessions,
   sidebarCollapsed,
+  models,
+  activeModel,
+  modelsLoading,
+  streamingId,
+  onModelChange,
   onDraftChange,
   onLogout,
   onNewSession,
   onOpenSettings,
   onSelectSession,
   onSend,
+  onStop,
   onToggleRightPanel,
   onToggleSidebar
 }: {
@@ -599,49 +716,21 @@ function WorkspaceShell({
   rightPanelOpen: boolean;
   sessions: ChatSession[];
   sidebarCollapsed: boolean;
+  models: ModelConfig[];
+  activeModel: string;
+  modelsLoading: boolean;
+  streamingId: string | null;
+  onModelChange: (name: string) => void;
   onDraftChange: (draft: string) => void;
   onLogout: () => void;
   onNewSession: () => void;
   onOpenSettings: () => void;
   onSelectSession: (sessionId: string) => void;
   onSend: (model: string) => void;
+  onStop: () => void;
   onToggleRightPanel: () => void;
   onToggleSidebar: () => void;
 }) {
-  const [models, setModels] = useState<ModelConfig[]>([]);
-  const [activeModel, setActiveModel] = useState<string>("");
-  const [modelsLoading, setModelsLoading] = useState(true);
-
-  // 启动时加载模型列表，确定初始 activeModel：localStorage > default_model > 首个。
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const stored = localStorage.getItem("kstock.activeModel");
-        const data = await listModels();
-        if (cancelled) return;
-        setModels(data.models);
-        const initial =
-          stored && data.models.some((m) => m.name === stored)
-            ? stored
-            : data.default_model && data.models.some((m) => m.name === data.default_model)
-              ? data.default_model
-              : (data.models[0]?.name ?? "");
-        setActiveModel(initial);
-      } catch {
-        // gateway 未就绪：保持空，选择器显示「未配置」。
-      } finally {
-        if (!cancelled) setModelsLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  const handleModelChange = (name: string) => {
-    setActiveModel(name);
-    localStorage.setItem("kstock.activeModel", name);
-  };
-
   const messages = activeSession?.messages ?? [];
   return (
     <div className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
@@ -735,14 +824,16 @@ function WorkspaceShell({
 
         <section className="message-canvas" aria-label="对话工作台">
           <div className="research-status-bar" aria-label="研究状态">
-            <span className="status-light" />
+            <span className={`status-light ${streamingId ? "active" : ""}`} />
             <strong>研究模式</strong>
             <span className="status-separator">/</span>
-            <span>等待研究任务</span>
+            <span>{streamingId ? "生成中…" : "等待研究任务"}</span>
             <em>QiLin 已连接</em>
           </div>
-          <div className="chat-column">
-            {messages.length === 0 ? (
+          <ChatFeed
+            messages={messages}
+            streamingId={streamingId ?? undefined}
+            emptySlot={
               <div className="workspace-empty">
                 <p className="eyebrow">Research Mode</p>
                 <h1>把股票、行业或宏观问题直接交给 KStock。</h1>
@@ -755,15 +846,8 @@ function WorkspaceShell({
                   ))}
                 </div>
               </div>
-            ) : (
-              messages.map((message) => (
-                <article key={message.id} className={`chat-message ${message.role}`}>
-                  <strong>{message.role === "user" ? "你" : "KStock"}</strong>
-                  <p>{message.content}</p>
-                </article>
-              ))
-            )}
-          </div>
+            }
+          />
         </section>
 
         <section className="composer-dock" aria-label="消息输入区">
@@ -783,16 +867,22 @@ function WorkspaceShell({
             ) : (
               <label className="model-picker">
                 <Cpu size={15} />
-                <select value={activeModel} onChange={(e) => handleModelChange(e.target.value)}>
+                <select value={activeModel} onChange={(e) => onModelChange(e.target.value)}>
                   {models.map((m) => (
                     <option key={m.name} value={m.name}>{m.display_name || m.name}</option>
                   ))}
                 </select>
               </label>
             )}
-            <button className="send-button" type="button" onClick={() => onSend(activeModel)} disabled={!activeModel} aria-label="发送消息">
-              <Send size={18} />
-            </button>
+            {streamingId ? (
+              <button className="send-button stop" type="button" onClick={onStop} aria-label="停止生成">
+                <Square size={16} fill="currentColor" />
+              </button>
+            ) : (
+              <button className="send-button" type="button" onClick={() => onSend(activeModel)} disabled={!activeModel} aria-label="发送消息">
+                <Send size={18} />
+              </button>
+            )}
           </div>
         </section>
       </main>

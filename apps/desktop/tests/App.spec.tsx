@@ -1,10 +1,17 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 import { App } from "../src/App";
+import { listModels } from "../src/lib/modelsClient";
 
 // 用 hoisted 持有 mock 函数，便于在单个测试内覆盖返回值（如模拟已登录）。
 const authMock = vi.hoisted(() => ({
   tryGetCurrentUser: vi.fn(),
+}));
+
+// turnsClient mock：streamRun 的实现由各测试用 mockImplementation 覆盖。
+const turnsMock = vi.hoisted(() => ({
+  ensureThread: vi.fn(),
+  streamRun: vi.fn(),
 }));
 
 // 会话探测与认证请求统一 mock：jsdom 无法直连本地 gateway，且测试只关心 UI 流程。
@@ -36,9 +43,22 @@ vi.mock("../src/lib/modelsClient", () => ({
     typeof e === "object" && e !== null && "message" in e && "status" in e,
 }));
 
+// turnsClient mock：ensureThread 默认返回固定 thread_id；streamRun 默认空实现（各测试覆盖）。
+vi.mock("../src/lib/turnsClient", () => ({
+  ensureThread: turnsMock.ensureThread,
+  streamRun: turnsMock.streamRun,
+  runContextFromModel: () => ({
+    model_name: "test-model",
+    thinking_enabled: false,
+  }),
+  fetchThreadMessages: vi.fn(),
+}));
+
 // 默认未登录；已登录场景在测试内用 mockResolvedValueOnce 覆盖。
 beforeEach(() => {
   authMock.tryGetCurrentUser.mockResolvedValue(null);
+  turnsMock.ensureThread.mockResolvedValue("thread-test");
+  turnsMock.streamRun.mockReset();
 });
 
 test("首屏展示产品入口页", async () => {
@@ -104,4 +124,46 @@ test("无模型时输入框选择器显示未配置且发送禁用", async () =>
   expect(await screen.findByRole("textbox", { name: "消息输入" })).toBeVisible();
   expect(screen.getByText("未配置模型（请到设置页添加）")).toBeVisible();
   expect(screen.getByRole("button", { name: "发送消息" })).toBeDisabled();
+});
+
+test("发消息触发流式 run 并逐帧累积 assistant 文本", async () => {
+  authMock.tryGetCurrentUser.mockResolvedValueOnce({
+    id: "u1", email: "t@k.dev", system_role: "user",
+  });
+  vi.mocked(listModels).mockResolvedValueOnce({
+    models: [{
+      name: "test-model",
+      display_name: "Test",
+      use: "openai",
+      model: "gpt-4",
+      supports_thinking: false,
+      supports_vision: false,
+    }],
+    default_model: "test-model",
+  });
+  turnsMock.streamRun.mockImplementation(async (opts) => {
+    opts.handlers.onFrame({ event: "messages", data: [{ type: "ai", content: "你好", id: "m1" }, {}] });
+    opts.handlers.onFrame({ event: "messages", data: [{ type: "ai", content: "，世界", id: "m1" }, {}] });
+    opts.handlers.onFrame({ event: "end", data: null });
+  });
+
+  render(<App />);
+
+  const textarea = await screen.findByRole("textbox", { name: "消息输入" });
+  // 等待模型列表加载完成（select 出现 = models 非空，发送按钮 enabled）
+  await screen.findByRole("combobox");
+  fireEvent.change(textarea, { target: { value: "分析茅台" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+
+  // user message 渲染（在 UserBubble 的 <p> 中；session title/topbar 也有同文本需 selector 精确定位）
+  expect(await screen.findByText("分析茅台", { selector: "p" })).toBeVisible();
+  // assistant 流式文本累积（"你好" + "，世界"）
+  expect(await screen.findByText(/你好.*世界/)).toBeVisible();
+  // ensureThread 被调用
+  expect(turnsMock.ensureThread).toHaveBeenCalledTimes(1);
+  // streamRun 被调用，参数包含正确的 threadId 与 input
+  expect(turnsMock.streamRun).toHaveBeenCalledTimes(1);
+  const runOpts = turnsMock.streamRun.mock.calls[0][0];
+  expect(runOpts.threadId).toBe("thread-test");
+  expect(runOpts.input.messages[0].content).toBe("分析茅台");
 });
