@@ -1159,6 +1159,12 @@ body.sidebar-resizing {
   -webkit-app-region: drag;
 }
 
+/* 侧边栏完全隐藏后顶栏会贴到窗口左缘，需要避开 macOS 红绿灯控制区。
+   104px 同时覆盖三枚窗口按钮及右侧呼吸空间。 */
+.workspace-shell.sidebar-collapsed .workspace-topbar {
+  padding-left: 104px;
+}
+
 .workspace-topbar button {
   -webkit-app-region: no-drag;
 }
