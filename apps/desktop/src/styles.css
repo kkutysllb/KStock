@@ -1183,12 +1183,6 @@ body.sidebar-resizing {
   background: rgba(255, 255, 255, 0.025);
 }
 
-/* Overlay 标题栏的原生红绿灯中心线高于 54px 应用顶栏中心；折叠态
-   按钮位于原生控制区同一行，需要单独上移与三枚窗口按钮对齐。 */
-.workspace-shell.sidebar-collapsed .workspace-sidebar-toggle {
-  transform: translateY(-10px);
-}
-
 .workspace-sidebar-toggle:hover {
   border-color: rgba(68, 198, 160, 0.26);
   background: rgba(68, 198, 160, 0.08);
