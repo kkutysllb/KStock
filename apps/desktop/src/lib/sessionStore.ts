@@ -21,6 +21,33 @@ export interface ToolCall {
   artifact?: unknown;
 }
 
+/**
+ * ask_clarification 工具的结构化 payload（引擎 ClarificationMiddleware 生成）。
+ * 存放在 ask_clarification 的 ToolMessage.artifact.human_input 里。
+ * 协议见 vendor/qilin/qilin/agents/middlewares/clarification_middleware.py
+ * _build_human_input_payload。
+ */
+export interface ClarificationOption {
+  id: string;
+  label: string;
+  value: string;
+}
+
+export interface HumanInputPayload {
+  kind: "human_input_request";
+  source: "ask_clarification";
+  request_id?: string;
+  clarification_type?: string;
+  question: string;
+  /** free_text / choice_with_other / form；本期仅渲染 choice_with_other。 */
+  input_mode: "free_text" | "choice_with_other" | "form";
+  context?: string | null;
+  /** input_mode=choice_with_other 时的候选项。 */
+  options?: ClarificationOption[];
+  /** input_mode=form 时的表单字段（本期不渲染）。 */
+  fields?: unknown[];
+}
+
 /** subagent 单步进展（对应引擎 task_running 的 message）。 */
 export interface SubagentStep {
   /** 引擎 task_running 的 message_index（1-based）。 */
@@ -144,10 +171,44 @@ export function createSession(title = "新研究会话"): ChatSession {
   };
 }
 
-export function createSeedSessions(): ChatSession[] {
-  const first = createSession("贵州茅台财报复盘");
-  const second = createSession("行业与宏观跟踪");
-  return [first, second];
+/**
+ * 从引擎 thread 恢复一个 ChatSession。
+ *
+ * 用于启动时从 POST /api/threads/search 拉回的历史会话。这些 thread 已在后端
+ * 有真实数据（消息 / 上传 / 产出），切回时需要懒加载 messages（首次发消息
+ * 或用户点进该会话时才调 fetchThreadMessages）。
+ *
+ * 与 createSession 的区别：threadId 已绑定，title 优先从 values.title 取，
+ * updated_at 用后端返回的时间戳（本地化为 MM-DD 展示）。
+ */
+export function threadToSession(thread: {
+  thread_id: string;
+  created_at?: string;
+  updated_at?: string;
+  values?: Record<string, unknown>;
+}): ChatSession {
+  const titleRaw = thread.values?.title;
+  const title = typeof titleRaw === "string" && titleRaw.trim()
+    ? titleRaw.slice(0, 40)
+    : "历史任务";
+  return {
+    id: crypto.randomUUID(),
+    title,
+    createdAt: thread.created_at || nowIso(),
+    updatedAt: formatUpdatedAt(thread.updated_at),
+    threadId: thread.thread_id,
+    messages: [],
+    reportMarkdown: "",
+    activeSkills: [...DEFAULT_ACTIVE_SKILLS]
+  };
+}
+
+/** 把后端 ISO 时间戳转成本地 MM-DD 展示（与 nowLabel 一致）。失败回退 nowLabel()。 */
+function formatUpdatedAt(iso?: string): string {
+  if (!iso) return nowLabel();
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return nowLabel();
+  return d.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
 }
 
 export function appendMessageToSession(

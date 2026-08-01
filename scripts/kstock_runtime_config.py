@@ -43,6 +43,8 @@ _SECTION_MODELS: dict[str, str] = {
     "safety_finish_reason": "qilin.config.safety_finish_reason_config:SafetyFinishReasonConfig",
     # 搜索与来源
     "tool_search": "qilin.config.tool_search_config:ToolSearchConfig",
+    # 智能体
+    "subagents": "qilin.config.subagents_config:SubagentsAppConfig",
 }
 
 # 段缺失时的兜底默认值（仅对含必填字段的 section 需要，如 sandbox.use）。
@@ -159,6 +161,8 @@ class RuntimeConfigResponse(BaseModel):
     safety_finish_reason: dict[str, Any]
     # 搜索与来源
     tool_search: dict[str, Any]
+    # 智能体
+    subagents: dict[str, Any]
     # 顶层标量字段
     max_recursion_limit: int
 

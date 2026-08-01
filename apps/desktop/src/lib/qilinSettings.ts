@@ -225,11 +225,11 @@ export const SETTING_SECTIONS: SettingSection[] = [
     title: "子代理",
     group: "智能体",
     icon: GitBranch,
-    summary: "研究拆解、子代理并发、预算和技能白名单。",
+    summary: "预置 5 个量化研究角色（行情/个股/缠论/回测/报告），全局超时与轮次配置。",
     fields: [
-      { name: "总子代理数", value: "受 QiLin 默认限制", hint: "对应 subagents.total_subagents_per_run" },
-      { name: "技能继承", value: "继承精选技能", hint: "可按子代理覆盖 skills" },
-      { name: "超时", value: "按 agent 配置", hint: "对应 subagents timeout" }
+      { name: "预置角色", value: "5 个", hint: "market-data / stock-researcher / chan-theory / backtest / report-writer" },
+      { name: "全局超时", value: "1800 秒", hint: "对应 subagents.timeout_seconds" },
+      { name: "每轮上限", value: "6 次", hint: "对应 subagents.max_total_per_run" }
     ]
   },
   {
@@ -302,14 +302,14 @@ export const SETTING_SECTIONS: SettingSection[] = [
   },
   {
     id: "integrations",
-    title: "插件与通道",
+    title: "插件与技能",
     group: "集成",
     icon: Plug,
-    summary: "MCP servers、浏览器、IM 通道和扩展中间件。",
+    summary: "MCP server CRUD（含股票类模板）+ 预置技能启停管理。",
     fields: [
-      { name: "Extensions", value: "按需加载", hint: "对应 extensions.middlewares" },
-      { name: "Channel Connections", value: "未连接", hint: "后续支持飞书/Slack 等通道" },
-      { name: "Browser Tools", value: "可配置", hint: "Browserless / Crawl4AI / 搜索服务" }
+      { name: "MCP Server", value: "支持模板快捷添加", hint: "Tushare / AKShare / Wind / Choice 模板" },
+      { name: "预置技能", value: "12 个", hint: "10 个股票类 + 2 个通用类，可单独启停" },
+      { name: "生效方式", value: "重启后加载", hint: "变更写入配置文件，重启 gateway 生效" }
     ]
   },
   {

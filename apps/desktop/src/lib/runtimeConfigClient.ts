@@ -125,6 +125,34 @@ export interface ToolSearchConfig {
   auto_promote_top_k: number;
 }
 
+// ── 智能体 ──
+
+/** 用户自定义子代理角色（对应引擎 CustomSubagentConfig）。 */
+export interface CustomSubagentConfig {
+  description: string;
+  system_prompt: string;
+  /** 工具白名单，null = 继承父代理全部工具 */
+  tools: string[] | null;
+  /** 工具黑名单（默认含 task / ask_clarification / present_files） */
+  disallowed_tools: string[] | null;
+  /** 技能白名单，null = 继承全部启用技能，[] = 无技能 */
+  skills: string[] | null;
+  /** 模型名，'inherit' = 继承父代理模型 */
+  model: string;
+  max_turns: number;
+  timeout_seconds: number;
+}
+
+/** 子代理全局配置段（对应引擎 SubagentsAppConfig，不含 token_budget 私有字段）。 */
+export interface SubagentsConfig {
+  timeout_seconds: number;
+  max_turns: number | null;
+  max_total_per_run: number;
+  token_budget: TokenBudgetConfig;
+  agents: Record<string, unknown>;
+  custom_agents: Record<string, CustomSubagentConfig>;
+}
+
 export interface RuntimeConfig {
   memory: MemoryRuntimeConfig;
   summarization: SummarizationConfig;
@@ -141,6 +169,8 @@ export interface RuntimeConfig {
   safety_finish_reason: SafetyFinishReasonConfig;
   // 搜索与来源
   tool_search: ToolSearchConfig;
+  // 智能体
+  subagents: SubagentsConfig;
   // 顶层标量字段
   max_recursion_limit: number;
 }
@@ -159,7 +189,8 @@ export type RuntimeConfigSection =
   | "input_polish"
   | "loop_detection"
   | "safety_finish_reason"
-  | "tool_search";
+  | "tool_search"
+  | "subagents";
 
 /** 顶层标量字段名（走 updateTopLevelField）。 */
 export type RuntimeTopLevelField = "max_recursion_limit";

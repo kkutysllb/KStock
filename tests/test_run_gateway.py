@@ -216,3 +216,139 @@ def test_user_writes_config_then_restart_backend_preserves_it(tmp_path):
     # tools 段也应存在（增量合并）
     assert "tools" in final
     assert "finance_data_search" in {t["name"] for t in final["tools"]}
+
+
+# ── 增量合并：subagents.custom_agents 段 ┄─────────────────────────────
+
+
+# 模板中预置的 5 个子代理角色名（与 config/qilin.config.yaml 一致）
+_PRESET_AGENT_NAMES = {
+    "market-data-analyst",
+    "stock-researcher",
+    "chan-theory-analyst",
+    "backtest-executor",
+    "report-writer",
+}
+
+
+def test_merges_custom_agents_for_legacy_users(tmp_path):
+    """老版本首次启动生成的 yaml 缺 subagents.custom_agents，重启后应增量合并。
+
+    场景：用户在早期版本首次启动（那时模板还没预置子代理角色），后续版本
+    给模板加了 5 个预置角色。用户重启 gateway 后，_generate_runtime_config
+    应把模板 custom_agents 段合并进现有 yaml——否则 Lead Agent 分派子代理时
+    看不到任何预置角色。
+    """
+    from scripts.run_gateway import REPO_ROOT
+
+    runtime_cfg = tmp_path / "config" / "qilin.runtime.yaml"
+    runtime_cfg.parent.mkdir(parents=True, exist_ok=True)
+    qilin_data_dir = tmp_path / "runtime" / "qilin" / "data"
+
+    # 模拟老版本生成的 yaml：有用户配置，但没有 subagents 段
+    legacy_cfg = {
+        "models": [{"name": "my-model", "use": "openai", "model": "gpt-4"}],
+        "database": {"backend": "sqlite", "sqlite_dir": str(qilin_data_dir)},
+        # 注意：没有 subagents 段
+    }
+    runtime_cfg.write_text(yaml.safe_dump(legacy_cfg, allow_unicode=True), encoding="utf-8")
+
+    _generate_runtime_config(runtime_cfg, qilin_data_dir, REPO_ROOT)
+
+    merged = yaml.safe_load(runtime_cfg.read_text(encoding="utf-8"))
+
+    # 1. subagents.custom_agents 已合并（5 个预置角色全部到位）
+    assert "subagents" in merged, "老 yaml 缺 subagents 段时必须增量合并"
+    custom_agents = merged["subagents"].get("custom_agents", {})
+    merged_names = set(custom_agents.keys())
+    assert _PRESET_AGENT_NAMES.issubset(merged_names), (
+        f"5 个预置角色必须全部合并进来，实际只有: {merged_names}"
+    )
+    # 每个预置角色都有 system_prompt
+    for name in _PRESET_AGENT_NAMES:
+        assert "system_prompt" in custom_agents[name], f"{name} 缺 system_prompt"
+
+    # 2. 用户配置原样保留（未被模板覆盖）
+    assert merged["models"][0]["name"] == "my-model"
+
+
+def test_preserves_user_custom_agents_not_in_template(tmp_path):
+    """用户自定义的独立角色（不在模板里）必须保留。"""
+    from scripts.run_gateway import REPO_ROOT
+
+    runtime_cfg = tmp_path / "config" / "qilin.runtime.yaml"
+    runtime_cfg.parent.mkdir(parents=True, exist_ok=True)
+    qilin_data_dir = tmp_path / "data"
+
+    # 模拟用户已有一个自定义角色 + 修改过的全局参数
+    user_cfg = {
+        "models": [{"name": "my-model"}],
+        "subagents": {
+            "timeout_seconds": 3600,  # 用户改了全局超时
+            "max_turns": 50,
+            "custom_agents": {
+                # 用户自己新增的角色（不在模板里）
+                "my-custom-analyst": {
+                    "description": "我自己加的分析师",
+                    "system_prompt": "你是自定义子代理",
+                    "tools": ["finance_data_search"],
+                },
+            },
+        },
+    }
+    runtime_cfg.write_text(yaml.safe_dump(user_cfg, allow_unicode=True), encoding="utf-8")
+
+    _generate_runtime_config(runtime_cfg, qilin_data_dir, REPO_ROOT)
+
+    merged = yaml.safe_load(runtime_cfg.read_text(encoding="utf-8"))
+    custom_agents = merged["subagents"]["custom_agents"]
+
+    # 用户自定义角色保留
+    assert "my-custom-analyst" in custom_agents, "用户自定义角色不应被模板合并删除"
+    assert custom_agents["my-custom-analyst"]["system_prompt"] == "你是自定义子代理"
+    # 5 个预置角色也合并进来
+    assert _PRESET_AGENT_NAMES.issubset(set(custom_agents.keys()))
+    # 用户改过的全局参数保留（不被模板覆盖）
+    assert merged["subagents"]["timeout_seconds"] == 3600
+    assert merged["subagents"]["max_turns"] == 50
+
+
+def test_template_roles_override_user_modifications(tmp_path):
+    """模板预置角色定义权威：用户改过的同名预置角色会被模板版本覆盖。
+
+    场景：用户改了 market-data-analyst 的 system_prompt（想微调），但产品
+    迭代后模板里该角色的定义也变了（比如加了新约束）。重启后用户改动被
+    覆盖——这是有意为之，保证产品级角色定义权威，避免用户的旧版微调与
+    新版模板定义冲突。
+    """
+    from scripts.run_gateway import REPO_ROOT
+
+    runtime_cfg = tmp_path / "config" / "qilin.runtime.yaml"
+    runtime_cfg.parent.mkdir(parents=True, exist_ok=True)
+    qilin_data_dir = tmp_path / "data"
+
+    # 模拟用户改过的预置角色（与模板定义不同）
+    user_cfg = {
+        "models": [{"name": "my-model"}],
+        "subagents": {
+            "custom_agents": {
+                "market-data-analyst": {
+                    "description": "我改过的描述",
+                    "system_prompt": "这不是模板版本，是用户微调版",
+                    "tools": ["bash"],  # 用户加了 bash
+                },
+            },
+        },
+    }
+    runtime_cfg.write_text(yaml.safe_dump(user_cfg, allow_unicode=True), encoding="utf-8")
+
+    _generate_runtime_config(runtime_cfg, qilin_data_dir, REPO_ROOT)
+
+    merged = yaml.safe_load(runtime_cfg.read_text(encoding="utf-8"))
+    market_agent = merged["subagents"]["custom_agents"]["market-data-analyst"]
+
+    # 用户改动被模板版本覆盖
+    assert market_agent["system_prompt"] != "这不是模板版本，是用户微调版"
+    assert "bash" not in (market_agent.get("tools") or []), "用户的工具改动应被模板覆盖"
+    # 其他预置角色也到位
+    assert _PRESET_AGENT_NAMES.issubset(set(merged["subagents"]["custom_agents"].keys()))

@@ -9,12 +9,36 @@ const mockExtModule = vi.hoisted(() => ({
   deleteMcpServer: vi.fn(),
 }));
 
-vi.mock("../src/lib/extensionsClient", () => ({
-  __esModule: true,
-  ...mockExtModule,
-  isExtensionsApiError: (e: unknown) =>
-    typeof e === "object" && e !== null && "message" in e && "status" in e,
-}));
+vi.mock("../src/lib/extensionsClient", () => {
+  // 模板常量（与 extensionsClient.ts 中的真实模板保持一致的结构）
+  const MOCK_TEMPLATES = [
+    {
+      id: "tushare",
+      label: "Tushare 数据",
+      name: "tushare-mcp",
+      description: "Tushare Pro 金融数据",
+      config: {
+        enabled: true,
+        type: "stdio",
+        command: "npx",
+        args: ["-y", "@tushare/mcp-server"],
+        env: { TUSHARE_TOKEN: "填入你的 Tushare Pro token" },
+        url: null,
+        headers: {},
+        description: "Tushare Pro 金融数据接口",
+        tool_call_timeout: 60,
+      },
+      notice: "需在 Tushare Pro 官网注册获取 token",
+    },
+  ];
+  return {
+    __esModule: true,
+    ...mockExtModule,
+    MCP_SERVER_TEMPLATES: MOCK_TEMPLATES,
+    isExtensionsApiError: (e: unknown) =>
+      typeof e === "object" && e !== null && "message" in e && "status" in e,
+  };
+});
 
 import { McpExtensionsCard } from "../src/components/McpExtensionsCard";
 
@@ -212,5 +236,53 @@ describe("McpExtensionsCard 切换 enabled", () => {
     const [name, config] = mockExtModule.updateMcpServer.mock.calls[0];
     expect(name).toBe("filesystem");
     expect(config.enabled).toBe(false); // 原来是 true，切换后 false
+  });
+});
+
+// ── 从模板添加 ────────────────────────────────────────────────────
+
+describe("McpExtensionsCard 从模板添加", () => {
+  it("点击从模板添加后展示模板列表", async () => {
+    mockExtModule.getExtensions.mockResolvedValue(emptyConfig);
+    render(<McpExtensionsCard />);
+    await waitFor(() => {
+      expect(screen.getByText("新增 Server")).toBeInTheDocument();
+    });
+
+    // 点击「从模板添加」
+    fireEvent.click(screen.getByText(/从模板添加/));
+
+    // 模板列表出现
+    await waitFor(() => {
+      expect(screen.getByText("Tushare 数据")).toBeInTheDocument();
+    });
+  });
+
+  it("选中模板后预填表单字段", async () => {
+    mockExtModule.getExtensions.mockResolvedValue(emptyConfig);
+    mockExtModule.createMcpServer.mockResolvedValue({ name: "tushare-mcp", action: "created" });
+    render(<McpExtensionsCard />);
+    await waitFor(() => {
+      expect(screen.getByText("新增 Server")).toBeInTheDocument();
+    });
+
+    // 点击「从模板添加」
+    fireEvent.click(screen.getByText(/从模板添加/));
+
+    // 选择 Tushare 模板
+    await waitFor(() => {
+      expect(screen.getByText("Tushare 数据")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("Tushare 数据"));
+
+    // 表单出现，名称已预填
+    await waitFor(() => {
+      const nameInput = screen.getByPlaceholderText("my-server") as HTMLInputElement;
+      expect(nameInput.value).toBe("tushare-mcp");
+    });
+
+    // command 也应预填
+    const commandInput = screen.getByPlaceholderText("npx") as HTMLInputElement;
+    expect(commandInput.value).toBe("npx");
   });
 });

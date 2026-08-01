@@ -6,7 +6,7 @@
       "name": "analysis-report",
       "source_repo": "KSkills",
       "source_path": "common/analysis-report",
-      "target_path": "common/analysis-report",
+      "target_path": "public/analysis-report",
       "kind": "common",
       "enabled_by_default": true
     },
@@ -14,7 +14,7 @@
       "name": "chart-visualization",
       "source_repo": "KSkills",
       "source_path": "common/chart-visualization",
-      "target_path": "common/chart-visualization",
+      "target_path": "public/chart-visualization",
       "kind": "common",
       "enabled_by_default": true
     },
@@ -22,7 +22,7 @@
       "name": "kk-common",
       "source_repo": "KSkills",
       "source_path": "stock/kk-common",
-      "target_path": "stock/kk-common",
+      "target_path": "public/kk-common",
       "kind": "stock",
       "enabled_by_default": true
     },
@@ -30,7 +30,7 @@
       "name": "kk-stock-analysis",
       "source_repo": "KSkills",
       "source_path": "stock/kk-stock-analysis",
-      "target_path": "stock/kk-stock-analysis",
+      "target_path": "public/kk-stock-analysis",
       "kind": "stock",
       "enabled_by_default": true
     },
@@ -38,7 +38,7 @@
       "name": "kk-financial-statement",
       "source_repo": "KSkills",
       "source_path": "stock/kk-financial-statement",
-      "target_path": "stock/kk-financial-statement",
+      "target_path": "public/kk-financial-statement",
       "kind": "stock",
       "enabled_by_default": true
     },
@@ -46,7 +46,7 @@
       "name": "kk-valuation-model",
       "source_repo": "KSkills",
       "source_path": "stock/kk-valuation-model",
-      "target_path": "stock/kk-valuation-model",
+      "target_path": "public/kk-valuation-model",
       "kind": "stock",
       "enabled_by_default": true
     },
@@ -54,7 +54,7 @@
       "name": "kk-industry-analysis",
       "source_repo": "KSkills",
       "source_path": "stock/kk-industry-analysis",
-      "target_path": "stock/kk-industry-analysis",
+      "target_path": "public/kk-industry-analysis",
       "kind": "stock",
       "enabled_by_default": true
     },
@@ -62,7 +62,7 @@
       "name": "kk-news-search",
       "source_repo": "KSkills",
       "source_path": "stock/kk-news-search",
-      "target_path": "stock/kk-news-search",
+      "target_path": "public/kk-news-search",
       "kind": "stock",
       "enabled_by_default": true
     },
@@ -70,7 +70,7 @@
       "name": "kk-report-search",
       "source_repo": "KSkills",
       "source_path": "stock/kk-report-search",
-      "target_path": "stock/kk-report-search",
+      "target_path": "public/kk-report-search",
       "kind": "stock",
       "enabled_by_default": true
     },
@@ -78,7 +78,7 @@
       "name": "kk-announcement-search",
       "source_repo": "KSkills",
       "source_path": "stock/kk-announcement-search",
-      "target_path": "stock/kk-announcement-search",
+      "target_path": "public/kk-announcement-search",
       "kind": "stock",
       "enabled_by_default": true
     },
@@ -86,7 +86,7 @@
       "name": "kk-business-query",
       "source_repo": "KSkills",
       "source_path": "stock/kk-business-query",
-      "target_path": "stock/kk-business-query",
+      "target_path": "public/kk-business-query",
       "kind": "stock",
       "enabled_by_default": true
     },
@@ -94,7 +94,7 @@
       "name": "kk-macro-query",
       "source_repo": "KSkills",
       "source_path": "stock/kk-macro-query",
-      "target_path": "stock/kk-macro-query",
+      "target_path": "public/kk-macro-query",
       "kind": "stock",
       "enabled_by_default": true
     }

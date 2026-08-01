@@ -168,11 +168,16 @@ def _generate_runtime_config(
     持久化。早期实现每次启动都从模板重新生成，会覆盖整个文件，导致「每次
     重启都要重新配置模型」。
 
-    已存在时的增量合并策略：仅合并模板里 ``tools`` 段（产品自带的内置工具
-    清单，如金融数据/新闻搜索）。这是修复「老用户 runtime.yaml 缺 tools 段
-    导致 agent 不识别工具」的关键——老版本首次启动生成的 yaml 没有这段，
-    后续模板加上的内置工具必须能增量同步过来，否则 ``config.tools`` 为空，
-    LLM 看不到任何工具。``tools`` 段是产品级配置（不是用户级），覆盖安全。
+    已存在时的增量合并策略（产品级配置覆盖安全，用户级配置保留）：
+    - ``tools`` 段：直接用模板覆盖。这是修复「老用户 runtime.yaml 缺 tools 段
+      导致 agent 不识别工具」的关键——老版本首次启动生成的 yaml 没有这段，
+      后续模板加上的内置工具必须能增量同步过来，否则 ``config.tools`` 为空，
+      LLM 看不到任何工具。
+    - ``subagents.custom_agents`` 段：按 name key 合并。模板里定义的预置角色
+      （如 market-data-analyst）是产品级定义，覆盖用户改动（保证角色定义权威）；
+      用户自己新增的同名以外的角色保留。其他 subagents 子字段
+      （timeout_seconds / max_turns / max_total_per_run / agents / token_budget）
+      一律保留用户配置。
     """
     import yaml
 
@@ -180,13 +185,35 @@ def _generate_runtime_config(
     with template_path.open("r", encoding="utf-8") as fh:
         template_cfg: dict[str, Any] = yaml.safe_load(fh) or {}
 
-    # 已存在：保留用户配置，仅合并模板的 ``tools`` 段（产品级，非用户级）
+    # 已存在：保留用户配置，增量合并产品级段（tools / subagents.custom_agents）
     if runtime_config_path.exists():
         with runtime_config_path.open("r", encoding="utf-8") as fh:
             existing: dict[str, Any] = yaml.safe_load(fh) or {}
+        changed = False
+
+        # 1) tools 段：直接用模板覆盖（产品级，非用户级）
         template_tools = template_cfg.get("tools")
         if template_tools and existing.get("tools") != template_tools:
             existing["tools"] = template_tools
+            changed = True
+
+        # 2) subagents.custom_agents 段：按 name key 合并
+        #    模板里的预置角色 → 覆盖用户同名角色（产品级定义权威）
+        #    用户自定义的独立 name → 保留
+        template_subagents = template_cfg.get("subagents") or {}
+        template_custom_agents = template_subagents.get("custom_agents") or {}
+        if template_custom_agents:
+            existing_subagents = dict(existing.get("subagents") or {})
+            existing_custom_agents = dict(existing_subagents.get("custom_agents") or {})
+            for agent_name, agent_def in template_custom_agents.items():
+                if existing_custom_agents.get(agent_name) != agent_def:
+                    existing_custom_agents[agent_name] = agent_def
+                    changed = True
+            if existing_custom_agents != existing_subagents.get("custom_agents"):
+                existing_subagents["custom_agents"] = existing_custom_agents
+                existing["subagents"] = existing_subagents
+
+        if changed:
             with runtime_config_path.open("w", encoding="utf-8") as fh:
                 yaml.safe_dump(existing, fh, allow_unicode=True, sort_keys=False)
         return

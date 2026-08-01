@@ -211,3 +211,216 @@ def delete_mcp_server(name: str) -> McpServerActionResponse:
         _atomic_write_json(_extensions_config_path(), data)
 
     return McpServerActionResponse(name=name, action="deleted", server=None)
+
+
+# ── Skills 启停管理 ┄───────────────────────────────────────────────────
+#
+# 与 MCP servers 不同：skills 不是用户自由的 CRUD，而是 vendor/skills 下预置的
+# 技能包（股票类 / 通用类）。用户只能启用/禁用某个 skill，不能新增/删除。
+# extensions_config.json 的 ``skills`` 字段是 dict[name, {enabled: bool}]，
+# 不在里面的 skill 默认 enabled=true（引擎默认行为）。
+
+
+def _skills_root() -> Path:
+    """解析 vendor/skills 目录绝对路径。
+
+    模板里是相对路径 ``vendor/skills``，需结合仓库根解析。
+    """
+    repo_root = Path(__file__).resolve().parent.parent
+    skills_root = repo_root / "vendor" / "skills"
+    return skills_root
+
+
+# 技能目录布局：vendor/skills/public/<name>/SKILL.md
+# 引擎 SkillCategory 只认 public/custom/integrations/legacy，预置技能全部
+# 放 public（只读）。``group``（stock/common）保留为前端展示用的分类标签，
+# 从 approved-skills.json 的 ``kind`` 字段读取。
+_SKILLS_PUBLIC_DIR = "public"
+
+
+def _load_skill_kind_map() -> dict[str, str]:
+    """从 approved-skills.json 读 name→kind 映射（stock / common）。
+
+    用于给前端提供 ``group`` 分类标签。失败时返回空 dict（group 回退
+    为 "public"，不影响加载）。
+    """
+    manifest_path = _skills_root() / "approved-skills.json"
+    if not manifest_path.exists():
+        return {}
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return {entry["name"]: entry.get("kind", "public") for entry in manifest.get("skills", [])}
+    except (json.JSONDecodeError, KeyError):
+        return {}
+
+
+def _parse_skill_frontmatter(skill_md_path: Path) -> dict[str, str]:
+    """从 SKILL.md 提取 YAML frontmatter 的 name / description / version / category。
+
+    frontmatter 格式：
+        ---
+        name: xxx
+        description: xxx
+        version: x.y.z
+        category: finance
+        ---
+
+    返回的 dict 仅含上述字段，解析失败返回空 dict。
+    """
+    try:
+        text = skill_md_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return {}
+    # 仅取首个 --- ... --- 之间的内容
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    frontmatter_lines: list[str] = []
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        frontmatter_lines.append(line)
+    else:
+        # 未闭合的 frontmatter
+        return {}
+    try:
+        import yaml
+
+        meta = yaml.safe_load("\n".join(frontmatter_lines)) or {}
+    except Exception:
+        return {}
+    if not isinstance(meta, dict):
+        return {}
+    # 只提取我们关心的字段
+    return {k: str(meta[k]) for k in ("name", "description", "version", "category") if k in meta}
+
+
+def _scan_available_skills() -> list[dict[str, str]]:
+    """扫描 vendor/skills/public/*/SKILL.md，返回所有预置技能的元信息。
+
+    每项包含：name（目录名 + frontmatter name）、path、title、description、
+    version、category、group（stock / common，来自 approved-skills.json 的
+    kind 字段；缺失时回退 "public"）。
+    """
+    root = _skills_root()
+    if not root.exists():
+        return []
+    public_dir = root / _SKILLS_PUBLIC_DIR
+    if not public_dir.is_dir():
+        return []
+    kind_map = _load_skill_kind_map()
+    results: list[dict[str, str]] = []
+    for skill_dir in sorted(public_dir.iterdir()):
+        if not skill_dir.is_dir():
+            continue
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.exists():
+            continue
+        meta = _parse_skill_frontmatter(skill_md)
+        # name 优先用 frontmatter 的，其次目录名
+        skill_name = meta.get("name") or skill_dir.name
+        results.append({
+            "name": skill_name,
+            "dir_name": skill_dir.name,
+            "group": kind_map.get(skill_name, _SKILLS_PUBLIC_DIR),
+            "path": str(skill_dir.relative_to(root)),
+            "title": meta.get("name", skill_dir.name),
+            "description": meta.get("description", ""),
+            "version": meta.get("version", ""),
+            "category": meta.get("category", ""),
+        })
+    return results
+
+
+class SkillInfo(BaseModel):
+    """单个预置技能的展示信息 + 启用状态。"""
+    name: str = Field(description="技能唯一名（frontmatter.name）")
+    dir_name: str = Field(description="目录名")
+    group: str = Field(description="stock / common / public（展示分类标签）")
+    path: str = Field(description="相对 vendor/skills 的路径")
+    title: str = Field(description="展示标题")
+    description: str = Field(default="", description="一句话描述")
+    version: str = Field(default="")
+    category: str = Field(default="")
+    enabled: bool = Field(default=True, description="当前是否启用")
+
+
+class AvailableSkillsResponse(BaseModel):
+    skills: list[SkillInfo] = Field(default_factory=list)
+
+
+class SkillStatePayload(BaseModel):
+    enabled: bool
+
+
+class SkillActionResponse(BaseModel):
+    name: str
+    enabled: bool
+    action: str  # enabled / disabled / deleted
+
+
+@router.get("/available-skills", response_model=AvailableSkillsResponse)
+def list_available_skills() -> AvailableSkillsResponse:
+    """扫描 vendor/skills 预置技能，合并 extensions_config.json 里的启用状态。
+
+    未在 extensions_config.json.skills 中显式记录的技能默认 enabled=true。
+    """
+    data = _read_extensions_json()
+    stored_skills = data.get("skills", {}) or {}
+    skills: list[SkillInfo] = []
+    for raw in _scan_available_skills():
+        stored = stored_skills.get(raw["name"], None)
+        # 显式 stored 存在时用其 enabled，否则默认启用
+        enabled = stored.get("enabled", True) if isinstance(stored, dict) else True
+        skills.append(SkillInfo(**raw, enabled=bool(enabled)))
+    return AvailableSkillsResponse(skills=skills)
+
+
+@router.put("/skills/{name}", response_model=SkillActionResponse)
+def set_skill_enabled(name: str, payload: SkillStatePayload) -> SkillActionResponse:
+    """启用/禁用某个预置技能。
+
+    payload.enabled=true 时 upsert 到 skills dict（enabled=true）。
+    payload.enabled=false 时 upsert 为 enabled=false。
+    技能不存在（不在 vendor/skills）返回 404。
+    """
+    # 验证 name 是预置技能之一（防止写入无效 key）
+    valid_names = {s["name"] for s in _scan_available_skills()}
+    if name not in valid_names:
+        raise HTTPException(
+            status_code=404,
+            detail=f"技能 '{name}' 不在预置技能列表中。",
+        )
+    with _write_lock:
+        data = _read_extensions_json()
+        skills = data.get("skills", {}) or {}
+        skills[name] = {"enabled": payload.enabled}
+        data["skills"] = skills
+        _atomic_write_json(_extensions_config_path(), data)
+
+    return SkillActionResponse(
+        name=name,
+        enabled=payload.enabled,
+        action="enabled" if payload.enabled else "disabled",
+    )
+
+
+@router.delete("/skills/{name}", response_model=SkillActionResponse)
+def delete_skill_state(name: str) -> SkillActionResponse:
+    """从 extensions_config.json 的 skills dict 移除某项（恢复默认启用状态）。
+
+    不存在返回 404。删除后该技能回到默认 enabled=true。
+    """
+    with _write_lock:
+        data = _read_extensions_json()
+        skills = data.get("skills", {}) or {}
+        if name not in skills:
+            raise HTTPException(
+                status_code=404,
+                detail=f"技能 '{name}' 状态记录不存在。",
+            )
+        del skills[name]
+        data["skills"] = skills
+        _atomic_write_json(_extensions_config_path(), data)
+
+    return SkillActionResponse(name=name, enabled=True, action="deleted")

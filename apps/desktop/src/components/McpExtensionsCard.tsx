@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
-import { Plus, Trash2, Pencil, RotateCcw, Save, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown, Plus, Trash2, Pencil, RotateCcw, Save, Sparkles, X } from "lucide-react";
 import {
   type ExtensionsConfig,
   type McpServerConfig,
   type McpTransportType,
+  type McpServerTemplate,
+  MCP_SERVER_TEMPLATES,
   getExtensions,
   createMcpServer,
   updateMcpServer,
@@ -53,6 +55,13 @@ export function McpExtensionsCard() {
     setEditingName("new");
     setEditName("");
     setEditDraft(makeEmptyServer());
+    setEditError(null);
+  }, []);
+
+  const startCreateFromTemplate = useCallback((template: McpServerTemplate) => {
+    setEditingName("new");
+    setEditName(template.name);
+    setEditDraft({ ...template.config });
     setEditError(null);
   }, []);
 
@@ -159,9 +168,12 @@ export function McpExtensionsCard() {
           </p>
         </div>
         {editingName === null && (
-          <button className="hero-primary" type="button" onClick={startCreate}>
-            <Plus size={13} /> 新增 Server
-          </button>
+          <div className="mcp-add-actions">
+            <McpTemplateDropdown onSelect={startCreateFromTemplate} />
+            <button className="hero-primary" type="button" onClick={startCreate}>
+              <Plus size={13} /> 新增 Server
+            </button>
+          </div>
         )}
       </div>
 
@@ -473,6 +485,71 @@ function McpServerForm({
           <X size={13} /> 取消
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── 模板下拉 ────────────────────────────────────────────────────────
+
+function McpTemplateDropdown({
+  onSelect,
+}: {
+  onSelect: (template: McpServerTemplate) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 点击外部关闭下拉
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  return (
+    <div className="mcp-template-dropdown" ref={containerRef}>
+      <button
+        type="button"
+        className="link-button mcp-template-btn"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        <Sparkles size={13} /> 从模板添加 <ChevronDown size={12} />
+      </button>
+      {open && (
+        <div className="mcp-template-menu" role="menu">
+          {MCP_SERVER_TEMPLATES.map((tpl) => (
+            <button
+              key={tpl.id}
+              type="button"
+              className="mcp-template-item"
+              role="menuitem"
+              onClick={() => {
+                onSelect(tpl);
+                setOpen(false);
+              }}
+            >
+              <div className="mcp-template-item-main">
+                <strong>{tpl.label}</strong>
+                <span className="mcp-template-item-desc">{tpl.description}</span>
+              </div>
+              <span className="mcp-template-item-notice">{tpl.notice}</span>
+            </button>
+          ))}
+          <p className="mcp-template-hint">
+            模板仅供参考配置，需自行安装对应 MCP server。
+          </p>
+        </div>
+      )}
     </div>
   );
 }

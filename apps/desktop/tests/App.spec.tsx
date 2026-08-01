@@ -50,6 +50,7 @@ vi.mock("../src/lib/modelsClient", () => ({
 }));
 
 // turnsClient mock：ensureThread 默认返回固定 thread_id；streamRun 默认空实现（各测试覆盖）。
+// listThreads 默认返回空数组（无历史会话）；deleteThread 默认成功；cancelRun 默认成功。
 vi.mock("../src/lib/turnsClient", () => ({
   ensureThread: turnsMock.ensureThread,
   streamRun: turnsMock.streamRun,
@@ -58,6 +59,9 @@ vi.mock("../src/lib/turnsClient", () => ({
     thinking_enabled: false,
   }),
   fetchThreadMessages: vi.fn(),
+  listThreads: vi.fn().mockResolvedValue([]),
+  deleteThread: vi.fn().mockResolvedValue(undefined),
+  cancelRun: vi.fn().mockResolvedValue(undefined),
 }));
 
 // gatewayControlClient mock：重启后端的 restart + 健康轮询由各测试覆盖。

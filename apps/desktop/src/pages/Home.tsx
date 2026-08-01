@@ -57,13 +57,13 @@ import {
   appendTurnToSession,
   bindThreadId,
   createAssistantTurn,
-  createSeedSessions,
   createSession,
   DEFAULT_ACTIVE_SKILLS,
+  threadToSession,
   updateMessageInSession,
   type ChatSession
 } from "../lib/sessionStore";
-import { deleteThread, ensureThread, runContextFromModel, streamRun } from "../lib/turnsClient";
+import { cancelRun, deleteThread, ensureThread, listThreads, runContextFromModel, streamRun } from "../lib/turnsClient";
 import { initialTurn, reduceFrame } from "../lib/turnReducer";
 import { inferStage } from "../lib/stageInferrer";
 import {
@@ -79,6 +79,9 @@ import { SandboxSettings } from "../components/SandboxSettings";
 import { RuntimeSettings } from "../components/RuntimeSettings";
 import { GuardrailsSettings } from "../components/GuardrailsSettings";
 import { SearchSettings } from "../components/SearchSettings";
+import { SubagentsSettings } from "../components/SubagentsSettings";
+import { McpExtensionsCard } from "../components/McpExtensionsCard";
+import { SkillsExtensionsCard } from "../components/SkillsExtensionsCard";
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings";
 type AuthMode = "login" | "register";
@@ -144,8 +147,9 @@ export function Home() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [settingsSectionId, setSettingsSectionId] = useState("general");
-  const [sessions, setSessions] = useState<ChatSession[]>(() => createSeedSessions());
-  const [activeSessionId, setActiveSessionId] = useState<string>(() => sessions[0].id);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>("");
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [draft, setDraft] = useState("");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -157,6 +161,11 @@ export function Home() {
   // 流式 run 状态。
   const [streamingId, setStreamingId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // 当前正在执行的 run 标识（threadId + runId），由 streamRun 的 onRunId 回调填入。
+  // handleStop 用它显式调 cancel API 即时停止 agent/subagent，而不只靠 abort 断流。
+  const activeRunRef = useRef<{ threadId: string; runId: string } | null>(null);
+  // 防止重复点击停止（cancelRun 是异步请求，连点会发多次）。
+  const stoppingRef = useRef(false);
   // 删除历史任务的二次确认状态（替代 window.confirm，在 Tauri webview 中可靠弹窗）。
   // pendingDeleteSessionId：待删除的 session id；后端失败时填 confirmError 提示二次确认。
   const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
@@ -186,6 +195,31 @@ export function Home() {
       setView("workspace");
     }
   }, [authReady, currentUser, view]);
+
+  // 登录后从后端拉取历史会话列表（POST /api/threads/search）。
+  // 修复「预置假会话重启后重复出现」的 bug：以前用 createSeedSessions() 硬编码
+  // 两个假会话作为初始 state，用户删除后重启又会重新生成；现在改为从后端加载
+  // 真实 thread，无 thread 时显示空态。
+  useEffect(() => {
+    if (!currentUser) {
+      setSessions([]);
+      setActiveSessionId("");
+      setSessionsLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const threads = await listThreads(100);
+      if (cancelled) return;
+      const restored = threads.map(threadToSession);
+      setSessions(restored);
+      setActiveSessionId(restored[0]?.id ?? "");
+      setSessionsLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser]);
 
   // 加载模型列表，确定初始 activeModel：localStorage > default_model > 首个。
   // 依赖 currentUser：未登录时请求会被 401，登录成功后需要重试拉取。
@@ -349,10 +383,16 @@ export function Home() {
   // reducer 状态在闭包外维护（setSessions 异步，不能依赖最新 state 读回 turn）。
   const handleSend = async (modelName: string) => {
     const input = draft.trim();
-    if (!input || !activeSession || !modelName || streamingId) {
+    if (!input || !modelName || streamingId) {
       return;
     }
-    const session = activeSession;
+    // 无 activeSession（首次进入空台）时自动创建一个，再继续发送。
+    let session = activeSession;
+    if (!session) {
+      session = createSession(input.slice(0, 18));
+      setSessions((current) => [session!, ...current]);
+      setActiveSessionId(session.id);
+    }
     const model = models.find((m) => m.name === modelName);
     if (!model) {
       return;
@@ -408,6 +448,10 @@ export function Home() {
         context: runContextFromModel(model),
         signal: controller.signal,
         handlers: {
+          onRunId: (runId) => {
+            // 捕获 run_id 供 handleStop 显式 cancel；幂等赋值（重连场景安全）。
+            activeRunRef.current = { threadId, runId };
+          },
           onFrame: (frame) => {
             const now = Date.now();
             turnState = reduceFrame(turnState, frame, now);
@@ -422,12 +466,26 @@ export function Home() {
       });
     } finally {
       abortRef.current = null;
+      activeRunRef.current = null;
+      stoppingRef.current = false;
       setStreamingId((id) => (id === turn.id ? null : id));
     }
   };
 
-  // 停止生成：abort 当前 streamRun（静默终止，不报错）
-  const handleStop = () => {
+  // 停止生成：显式 cancel 后端 run（即时停止 agent + subagent）+ abort SSE 断流兼兜底。
+  // 双保险：cancelRun 直接通知 RunManager 取消（不等断连检测延迟）；abort 确保 fetch 连接断开。
+  // cancelRun 失败不阻断——仍走 abort，后端 on_disconnect=cancel 也会兑底取消。
+  const handleStop = async () => {
+    if (stoppingRef.current) return;
+    stoppingRef.current = true;
+    const run = activeRunRef.current;
+    if (run) {
+      try {
+        await cancelRun(run.threadId, run.runId);
+      } catch {
+        // cancel 失败不报错：abort 仍会执行，后端断连检测会兼底 cancel。
+      }
+    }
     abortRef.current?.abort();
   };
 
@@ -999,6 +1057,10 @@ function WorkspaceShell({
             messages={messages}
             streamingId={streamingId ?? undefined}
             onAtBottomChange={setFeedAtBottom}
+            onClarifyPick={(text) =>
+              onDraftChange(draft.trim() ? `${draft.trimEnd()}
+${text}` : text)
+            }
             emptySlot={
               <div className="workspace-empty">
                 <p className="eyebrow">Research Mode</p>
@@ -1183,6 +1245,13 @@ function SettingsPage({
           <GuardrailsSettings />
         ) : activeSection.id === "search" ? (
           <SearchSettings />
+        ) : activeSection.id === "subagents" ? (
+          <SubagentsSettings />
+        ) : activeSection.id === "integrations" ? (
+          <div className="subagents-settings">
+            <McpExtensionsCard />
+            <SkillsExtensionsCard />
+          </div>
         ) : (
           <section className="settings-card" aria-label={`${activeSection.title}配置`}>
             {activeSection.fields.map((field) => (

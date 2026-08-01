@@ -31,12 +31,14 @@ interface ChatFeedProps {
   emptySlot?: ReactNode;
   /** 贴底状态变化回调（true=在底部，false=用户上滚）。 */
   onAtBottomChange?: (atBottom: boolean) => void;
+  /** ask_clarification 选项被选中并点“加入输入框”时回调（透传给 AssistantTurn）。 */
+  onClarifyPick?: (text: string) => void;
 }
 
 const STICK_THRESHOLD_PX = 80;
 
 export const ChatFeed = forwardRef<ChatFeedHandle, ChatFeedProps>(
-  function ChatFeed({ messages, streamingId, emptySlot, onAtBottomChange }, ref) {
+  function ChatFeed({ messages, streamingId, emptySlot, onAtBottomChange, onClarifyPick }, ref) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const stickToBottom = useRef(true);
     const [atBottom, setAtBottom] = useState(true);
@@ -90,7 +92,12 @@ export const ChatFeed = forwardRef<ChatFeedHandle, ChatFeedProps>(
             m.role === "user" ? (
               <UserBubble key={m.id} msg={m} />
             ) : (
-              <AssistantTurn key={m.id} msg={m} isStreaming={m.id === streamingId} />
+              <AssistantTurn
+                key={m.id}
+                msg={m}
+                isStreaming={m.id === streamingId}
+                onClarifyPick={onClarifyPick}
+              />
             )
           )}
         </div>

@@ -49,7 +49,7 @@ def test_get_runtime_config_returns_defaults_when_empty(tmp_path, monkeypatch):
         "sandbox", "token_usage", "token_budget",
         "guardrails", "authorization", "input_polish",
         "loop_detection", "safety_finish_reason",
-        "tool_search", "max_recursion_limit",
+        "tool_search", "subagents", "max_recursion_limit",
     }
     # title 默认 enabled=True, max_words=6
     assert body["title"]["enabled"] is True
@@ -204,3 +204,72 @@ def test_get_after_put_roundtrip(tmp_path, monkeypatch):
     assert body["summarization"]["enabled"] is True
     assert body["summarization"]["trigger"]["value"] == 30
     assert body["summarization"]["keep"]["value"] == 15
+
+
+# ── subagents 段 round-trip ─────────────────────────────────────────
+
+
+def test_get_subagents_returns_defaults_when_empty(tmp_path, monkeypatch):
+    """runtime.yaml 无 subagents 段时 GET 返回引擎默认值。"""
+    client = _client_under(tmp_path, monkeypatch)
+    body = client.get("/api/v1/kstock/runtime-config").json()
+    sub = body["subagents"]
+    assert sub["timeout_seconds"] == 1800
+    assert sub["max_total_per_run"] == 6
+    assert sub["custom_agents"] == {}
+
+
+def test_put_subagents_global_params_roundtrip(tmp_path, monkeypatch):
+    """PUT subagents 全局参数 → GET 返回更新后的值。"""
+    client = _client_under(tmp_path, monkeypatch)
+    resp = client.put("/api/v1/kstock/runtime-config/subagents", json={
+        "timeout_seconds": 3600,
+        "max_turns": 80,
+        "max_total_per_run": 10,
+    })
+    assert resp.status_code == 200
+    body = client.get("/api/v1/kstock/runtime-config").json()
+    sub = body["subagents"]
+    assert sub["timeout_seconds"] == 3600
+    assert sub["max_turns"] == 80
+    assert sub["max_total_per_run"] == 10
+
+
+def test_put_subagents_with_custom_agents_roundtrip(tmp_path, monkeypatch):
+    """PUT subagents 含 custom_agents 嵌套 dict → GET 返回完整角色。"""
+    client = _client_under(tmp_path, monkeypatch)
+    custom_agent = {
+        "description": "测试角色",
+        "system_prompt": "你是测试子代理",
+        "tools": ["finance_data_search"],
+        "skills": ["kk-stock-analysis"],
+        "model": "inherit",
+        "max_turns": 50,
+        "timeout_seconds": 600,
+    }
+    resp = client.put("/api/v1/kstock/runtime-config/subagents", json={
+        "timeout_seconds": 1800,
+        "max_total_per_run": 6,
+        "custom_agents": {"test-analyst": custom_agent},
+    })
+    assert resp.status_code == 200
+    body = client.get("/api/v1/kstock/runtime-config").json()
+    sub = body["subagents"]
+    assert "test-analyst" in sub["custom_agents"]
+    agent = sub["custom_agents"]["test-analyst"]
+    assert agent["system_prompt"] == "你是测试子代理"
+    assert agent["tools"] == ["finance_data_search"]
+    assert agent["skills"] == ["kk-stock-analysis"]
+    assert agent["model"] == "inherit"
+    assert agent["max_turns"] == 50
+
+
+def test_put_subagents_invalid_returns_400(tmp_path, monkeypatch):
+    """PUT subagents 非法值（max_total_per_run 超范围）返回 400 + fieldErrors。"""
+    client = _client_under(tmp_path, monkeypatch)
+    resp = client.put("/api/v1/kstock/runtime-config/subagents", json={
+        "max_total_per_run": 999,  # 超过上限 50
+    })
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert detail["code"] == "validation_failed"

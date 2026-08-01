@@ -5,7 +5,7 @@ import {
   bindThreadId,
   createAssistantTurn,
   createSession,
-  createSeedSessions,
+  threadToSession,
   updateMessageInSession,
   type ChatMessage
 } from "../src/lib/sessionStore";
@@ -95,13 +95,37 @@ describe("sessionStore turn-based 模型", () => {
     expect(restoredTurn.usage?.total_tokens).toBe(150);
   });
 
-  it("createSeedSessions 生成两个种子会话且无 threadId", () => {
-    const sessions = createSeedSessions();
-    expect(sessions).toHaveLength(2);
-    for (const s of sessions) {
-      expect(s.threadId).toBeUndefined();
-      expect(s.messages).toEqual([]);
-      expect(s.activeSkills.length).toBeGreaterThan(0);
-    }
+  it("threadToSession 从引擎 thread 恢复会话（绑定 threadId + 懒加载 messages）", () => {
+    const session = threadToSession({
+      thread_id: "thread-abc-123",
+      created_at: "2026-07-31T00:00:00.000Z",
+      updated_at: "2026-07-31T12:00:00.000Z",
+      values: { title: "茅台财报分析" }
+    });
+    expect(session.threadId).toBe("thread-abc-123");
+    expect(session.title).toBe("茅台财报分析");
+    // 历史会话消息懒加载（切回后首次发消息或点进会话才拉取），初始为空
+    expect(session.messages).toEqual([]);
+    expect(session.activeSkills.length).toBeGreaterThan(0);
+    expect(session.reportMarkdown).toBe("");
+  });
+
+  it("threadToSession 无 title 时回退占位文案", () => {
+    const session = threadToSession({
+      thread_id: "thread-def-456",
+      values: {}
+    });
+    expect(session.title).toBe("历史任务");
+    expect(session.threadId).toBe("thread-def-456");
+  });
+
+  it("threadToSession 超长 title 截断到 40 字符", () => {
+    const longTitle = "超长标题".repeat(15); // 60 字符，超过 40 上限
+    const session = threadToSession({
+      thread_id: "thread-789",
+      values: { title: longTitle }
+    });
+    expect(longTitle.length).toBe(60);
+    expect(session.title.length).toBe(40);
   });
 });

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  cancelRun,
   ensureThread,
   fetchThreadMessages,
+  listThreads,
   runContextFromModel,
   streamRun,
   type RunContext
@@ -109,6 +111,47 @@ describe("streamRun", () => {
     expect(opts.handlers.onError).not.toHaveBeenCalled();
   });
 
+  it("metadata 帧的 run_id 回调 onRunId（供显式 cancel）", async () => {
+    const opts = {
+      ...makeRunOpts(),
+      handlers: { onFrame: vi.fn(), onError: vi.fn(), onRunId: vi.fn() }
+    };
+    fetchMock.mockResolvedValue(
+      streamResponse([
+        'event: metadata\ndata: {"run_id":"run-xyz-789"}\n\n',
+        "event: end\ndata: null\n\n"
+      ])
+    );
+    await streamRun(opts);
+    expect(opts.handlers.onRunId).toHaveBeenCalledWith("run-xyz-789");
+  });
+
+  it("无 onRunId 回调时不报错（可选 handler）", async () => {
+    const opts = makeRunOpts(); // handlers 无 onRunId
+    fetchMock.mockResolvedValue(
+      streamResponse([
+        'event: metadata\ndata: {"run_id":"r2"}\n\n',
+        "event: end\ndata: null\n\n"
+      ])
+    );
+    await expect(streamRun(opts)).resolves.toBeUndefined();
+  });
+
+  it("metadata 帧 run_id 非字符串时不回调 onRunId", async () => {
+    const opts = {
+      ...makeRunOpts(),
+      handlers: { onFrame: vi.fn(), onError: vi.fn(), onRunId: vi.fn() }
+    };
+    fetchMock.mockResolvedValue(
+      streamResponse([
+        'event: metadata\ndata: {"run_id":123}\n\n',
+        "event: end\ndata: null\n\n"
+      ])
+    );
+    await streamRun(opts);
+    expect(opts.handlers.onRunId).not.toHaveBeenCalled();
+  });
+
   it("注入 context 与 stream_mode 到 body", async () => {
     const opts = makeRunOpts();
     fetchMock.mockResolvedValue(streamResponse(["event: end\ndata: null\n\n"]));
@@ -213,6 +256,95 @@ describe("fetchThreadMessages", () => {
       makeMockResponse({ ok: false, status: 404, json: { detail: "not found" } })
     );
     await expect(fetchThreadMessages("thr-1")).rejects.toThrow(/拉取历史消息失败（404）/);
+  });
+});
+
+// ── listThreads ───────────────────────────────────────────────────────
+
+describe("listThreads", () => {
+  it("POST /api/threads/search 返回 thread 列表", async () => {
+    fetchMock.mockResolvedValue(
+      makeMockResponse({
+        json: [
+          {
+            thread_id: "thr-1",
+            status: "idle",
+            created_at: "2026-07-31T00:00:00.000Z",
+            updated_at: "2026-07-31T12:00:00.000Z",
+            values: { title: "茅台分析" }
+          },
+          {
+            thread_id: "thr-2",
+            status: "idle",
+            created_at: "2026-07-30T00:00:00.000Z",
+            updated_at: "2026-07-30T12:00:00.000Z",
+            values: { title: "半导体跟踪" }
+          }
+        ]
+      })
+    );
+    const threads = await listThreads(50);
+    expect(threads).toHaveLength(2);
+    expect(threads[0].thread_id).toBe("thr-1");
+    expect(threads[0].values.title).toBe("茅台分析");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://localhost:18001/api/threads/search");
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(init.headers["X-CSRF-Token"]).toBe("test-csrf-abc");
+    const body = JSON.parse(init.body as string);
+    expect(body).toEqual({ limit: 50, offset: 0 });
+  });
+
+  it("HTTP 非 2xx 时返回空数组（不抛错，不打断启动流程）", async () => {
+    fetchMock.mockResolvedValue(
+      makeMockResponse({ ok: false, status: 401, json: { detail: "unauthorized" } })
+    );
+    const threads = await listThreads();
+    expect(threads).toEqual([]);
+  });
+
+  it("fetch 网络异常时返回空数组（gateway 未启动不报错）", async () => {
+    fetchMock.mockRejectedValue(new Error("network down"));
+    const threads = await listThreads();
+    expect(threads).toEqual([]);
+  });
+
+  it("响应非数组时返回空数组", async () => {
+    fetchMock.mockResolvedValue(makeMockResponse({ json: { not: "an array" } }));
+    const threads = await listThreads();
+    expect(threads).toEqual([]);
+  });
+});
+
+// ── cancelRun ───────────────────────────────────────────────────────
+
+describe("cancelRun", () => {
+  it("POST .../runs/{run_id}/cancel?action=interrupt 成功", async () => {
+    fetchMock.mockResolvedValue(makeMockResponse({ status: 202, text: "" }));
+    await cancelRun("thr-1", "run-abc");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      "http://localhost:18001/api/threads/thr-1/runs/run-abc/cancel?action=interrupt"
+    );
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    expect(init.headers["X-CSRF-Token"]).toBe("test-csrf-abc");
+  });
+
+  it("HTTP 非 2xx 时抛错", async () => {
+    fetchMock.mockResolvedValue(
+      makeMockResponse({ ok: false, status: 409, json: { detail: "not cancellable" } })
+    );
+    await expect(cancelRun("thr-1", "run-abc")).rejects.toThrow(/取消 run 失败（409）：not cancellable/);
+  });
+
+  it("run_id 与 thread_id 均 URL 编码", async () => {
+    fetchMock.mockResolvedValue(makeMockResponse({ status: 202, text: "" }));
+    await cancelRun("thr/slash", "run space");
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toContain("/threads/thr%2Fslash/runs/run%20space/cancel");
   });
 });
 
