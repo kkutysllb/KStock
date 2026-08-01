@@ -338,6 +338,17 @@ def _load_secrets_env(data_root: Path) -> None:
         print(f"  secrets.env   : 已加载 {loaded} 个密钥", flush=True)
 
 
+def _allow_public_landing_news() -> None:
+    """Expose only the landing-news read endpoint before QiLin builds middleware."""
+    from app.gateway import auth_middleware
+
+    path = "/api/v1/kstock/landing-news"
+    if path not in auth_middleware._PUBLIC_EXACT_PATHS:
+        auth_middleware._PUBLIC_EXACT_PATHS = frozenset(
+            {*auth_middleware._PUBLIC_EXACT_PATHS, path}
+        )
+
+
 def create_app():
     """应用工厂：先打垫片、初始化用户数据空间、配 CORS，再构造 QiLin gateway。"""
     _apply_vendor_extensions_config_compat_shim()
@@ -353,6 +364,7 @@ def create_app():
     paths = _ensure_data_space()
     _load_secrets_env(paths["data_root"])
     _configure_gateway_security()
+    _allow_public_landing_news()
     # 启动日志：明确告知用户数据落点，便于排查
     print("=" * 64, flush=True)
     print("KStock 用户数据空间", flush=True)
