@@ -806,7 +806,7 @@ export function Home() {
   };
 
   // 选附件：上传到当前会话的 thread（无 threadId 时先创建引擎 thread 并绑定）。
-  const handlePickFiles = async (files: FileList) => {
+  const handlePickFiles = async (files: File[]) => {
     // 与 handleSend 保持一致：空白工作台也允许先选择附件，自动创建本地任务，
     // 不再因为 activeSession 为空而让附件按钮永久 disabled。
     let session = activeSession;
@@ -1451,7 +1451,7 @@ function WorkspaceShell({
   onStop: () => void;
   pendingAttachments: UploadedFileRef[];
   attachmentsLoading: boolean;
-  onPickFiles: (files: FileList) => void;
+  onPickFiles: (files: File[]) => void;
   onRemoveAttachment: (filename: string) => void;
   threadUploads: UploadedFileRef[];
   uploadsLoading: boolean;

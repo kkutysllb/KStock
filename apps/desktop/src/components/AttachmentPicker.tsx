@@ -10,14 +10,14 @@ import type { UploadedFileRef } from "../lib/turnsClient";
  * 让按钮和 chips 各自占位、互不干扰。
  *
  * 状态由父组件（Home）管理——本组件只做：onClick → 触发 input.click()，
- * onChange → 回调 onPickFiles(FileList)。
+ * onChange → 先快照为 File[]，再回调 onPickFiles(File[])。
  */
 interface AttachmentPickerProps {
   loading: boolean;
   /** 无可用会话 / 流式生成中时禁用选择按钮。 */
   disabled: boolean;
   disabledReason?: string;
-  onPickFiles: (files: FileList) => void;
+  onPickFiles: (files: File[]) => void;
 }
 
 export function AttachmentPicker({
@@ -36,8 +36,11 @@ export function AttachmentPicker({
         multiple
         className="attachment-file-input"
         onChange={(e) => {
-          if (e.target.files && e.target.files.length > 0) {
-            onPickFiles(e.target.files);
+          // FileList 与 input 绑定，是可变的实时对象；下面清空 input 后它会同步
+          // 变为空。先复制成稳定 File[]，确保创建 thread 等异步步骤结束后文件仍在。
+          const files = Array.from(e.target.files ?? []);
+          if (files.length > 0) {
+            onPickFiles(files);
           }
           // 清空 value 允许重复选择同一文件
           e.target.value = "";
