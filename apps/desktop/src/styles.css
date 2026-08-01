@@ -4375,3 +4375,438 @@ button {
 .report-preview-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-bottom:1px solid #2e353d; color:#edf0f2; }
 .report-preview-dialog iframe { flex:1; width:100%; border:0; background:#eef2f3; }
 @media (max-width:700px) { .report-library-page { padding:18px 12px; } .report-library-toolbar { align-items:stretch; flex-direction:column; } .report-search { max-width:none; } .report-preview-overlay { padding:8px; } }
+
+/* ── 设置页统一视觉基线 ─────────────────────────────────────────── */
+.settings-shell {
+  background: #101214;
+}
+
+.settings-sidebar {
+  padding: 42px 10px 16px;
+  background: #171a1d;
+  border-right-color: rgba(255, 255, 255, 0.08);
+}
+
+.settings-back {
+  min-height: 34px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #b7bec6;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.settings-search {
+  height: 34px;
+  border-color: rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: #121416;
+  color: #8f98a2;
+}
+
+.settings-group {
+  gap: 3px;
+  margin-top: 18px;
+}
+
+.settings-group p {
+  margin: 0 10px 6px;
+  color: #737d88;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.settings-group button {
+  min-height: 34px;
+  border-radius: 7px;
+  padding: 0 10px;
+  color: #adb5be;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.settings-group button.active {
+  background: rgba(68, 198, 160, 0.11);
+  box-shadow: inset 2px 0 0 #44c6a0;
+  color: #e4ebe9;
+}
+
+.settings-group button.active svg {
+  color: #55cba8;
+}
+
+.settings-content {
+  padding: 44px max(30px, calc((100vw - 1120px) / 2)) 64px;
+  background: #111315;
+}
+
+.settings-title {
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.settings-title > svg {
+  width: 22px;
+  height: 22px;
+  color: #56c7a5;
+}
+
+.settings-title h1 {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.settings-title p {
+  margin-top: 5px;
+  color: #8f98a2;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.settings-content .settings-card {
+  border-color: rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(24, 27, 31, 0.86);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+}
+
+.settings-content .settings-card > strong {
+  color: #e4e8eb;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-content .runtime-config-desc,
+.settings-content .database-notice p {
+  color: #8f98a2;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.settings-content .hero-primary {
+  min-height: 34px;
+  border-radius: 7px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-content .link-button {
+  min-height: 28px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.settings-content .pill-control {
+  min-height: 32px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.settings-content .runtime-config-card,
+.settings-content .memory-config-card,
+.settings-content .memory-actions-card,
+.settings-content .memory-context-card,
+.settings-content .memory-facts-card,
+.settings-content .database-current-card,
+.settings-content .subagents-roles-card,
+.settings-content .report-settings .settings-card,
+.settings-content .account-settings .settings-card {
+  padding: 18px;
+}
+
+.settings-content .runtime-config-card,
+.settings-content .memory-settings,
+.settings-content .database-settings,
+.settings-content .report-settings,
+.settings-content .account-settings,
+.settings-content .attachment-settings,
+.settings-content .subagents-settings {
+  gap: 14px;
+}
+
+/* 配置字段统一为紧凑、清晰的标签 + 控件层级 */
+.settings-content .runtime-config-grid {
+  gap: 14px 16px;
+}
+
+.settings-content .rcf-field {
+  gap: 5px;
+}
+
+.settings-content .rcf-label-text {
+  color: #b9c0c8;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.settings-content .rcf-hint {
+  color: #737d88;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.settings-content .rcf-control input,
+.settings-content .rcf-control select,
+.settings-content .rcf-control textarea {
+  min-height: 38px;
+  border-color: #32373d;
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: #121416;
+  color: #e6eaed;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.settings-content .rcf-control textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+
+.settings-content .rcf-control input:focus,
+.settings-content .rcf-control select:focus,
+.settings-content .rcf-control textarea:focus,
+.settings-content .skills-search input:focus {
+  border-color: rgba(68, 198, 160, 0.68);
+  box-shadow: 0 0 0 3px rgba(68, 198, 160, 0.08);
+  outline: none;
+}
+
+.settings-content .rcf-toggle {
+  gap: 7px;
+  color: #9da6af;
+  font-size: 12px;
+}
+
+.settings-content .rcf-toggle input[type="checkbox"] {
+  accent-color: #44c6a0;
+}
+
+/* 插件与技能：两块卡片使用同一套信息密度和操作按钮比例 */
+.settings-content .mcp-extensions-card,
+.settings-content .skills-extensions-card {
+  padding: 18px;
+  gap: 15px;
+}
+
+.settings-content .mcp-extensions-card .runtime-config-header > div:first-child,
+.settings-content .skills-extensions-card > .runtime-config-desc {
+  min-width: 0;
+}
+
+.settings-content .mcp-extensions-card .runtime-config-header strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-content .mcp-add-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.settings-content .mcp-add-actions .hero-primary {
+  min-height: 34px;
+  white-space: nowrap;
+}
+
+.settings-content .mcp-template-btn {
+  min-height: 32px;
+  padding: 0 8px;
+  color: #8eb9d8;
+  font-size: 12px;
+}
+
+.settings-content .mcp-server-list,
+.settings-content .skills-list {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-content .mcp-server-row,
+.settings-content .skill-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.settings-content .mcp-server-row:hover,
+.settings-content .skill-row:hover {
+  border-color: rgba(68, 198, 160, 0.28);
+  background: rgba(68, 198, 160, 0.045);
+}
+
+.settings-content .mcp-server-info,
+.settings-content .skill-row-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.settings-content .mcp-server-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-content .mcp-server-name,
+.settings-content .skill-row-name,
+.settings-content .subagent-role-name {
+  color: #e3e8eb;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-content .mcp-server-type,
+.settings-content .skill-row-group {
+  padding: 2px 7px;
+  border: 1px solid rgba(125, 185, 255, 0.25);
+  border-radius: 999px;
+  color: #8eb9d8;
+  font-size: 10px;
+}
+
+.settings-content .mcp-server-desc,
+.settings-content .skill-row-desc {
+  min-width: 0;
+  overflow: hidden;
+  color: #8f98a2;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-content .mcp-server-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.settings-content .mcp-server-actions .link-button,
+.settings-content .mcp-form-actions .link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+}
+
+.settings-content .mcp-server-form {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.settings-content .mcp-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 3px;
+}
+
+.settings-content .skills-header h2,
+.settings-content .subagents-roles-header h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-content .skills-search {
+  gap: 8px;
+  padding: 0;
+}
+
+.settings-content .skills-search input {
+  min-height: 38px;
+  border-radius: 7px;
+  padding: 0 11px;
+  background: #121416;
+  font-size: 12px;
+}
+
+.settings-content .skill-row {
+  min-height: 56px;
+}
+
+.settings-content .skill-row-title {
+  gap: 7px;
+}
+
+.settings-content .skill-row-group {
+  border-color: rgba(187, 134, 252, 0.3);
+  color: #b997ed;
+  text-transform: none;
+}
+
+.settings-content .skill-toggle-track {
+  width: 34px;
+  height: 19px;
+}
+
+.settings-content .skill-toggle-track::after {
+  width: 15px;
+  height: 15px;
+}
+
+.settings-content .skill-toggle input:checked + .skill-toggle-track::after {
+  transform: translateX(15px);
+}
+
+.settings-content .subagent-role-name {
+  font-size: 12px;
+}
+
+.settings-content .subagent-role-desc {
+  color: #8f98a2;
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .settings-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-sidebar {
+    max-height: 238px;
+    padding: 18px 12px 14px;
+  }
+
+  .settings-content {
+    padding: 28px 16px 48px;
+  }
+
+  .settings-group {
+    margin-top: 12px;
+  }
+
+  .settings-group button {
+    min-height: 32px;
+  }
+
+  .settings-content .runtime-config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-content .runtime-config-header,
+  .settings-content .mcp-server-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-content .runtime-config-actions,
+  .settings-content .mcp-server-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
