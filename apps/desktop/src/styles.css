@@ -1012,14 +1012,19 @@ button {
   grid-template-rows: 54px minmax(0, 1fr) auto;
   min-width: 0;
   height: 100%;
-  margin-right: 0;
   background: #111315;
-  transition: margin-right 180ms ease;
 }
 
 @media (min-width: 981px) {
-  .workspace-shell.context-open .conversation-stage {
+  .workspace-shell.context-open .message-canvas {
     margin-right: 372px;
+    transition: margin-right 180ms ease;
+  }
+
+  .workspace-shell.context-open .composer-dock {
+    left: calc(50% - 186px);
+    width: min(900px, calc(100% - 420px));
+    transition: left 180ms ease, width 180ms ease;
   }
 }
 
@@ -2087,7 +2092,7 @@ button {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 22px 140px;
+  padding: 0 22px 190px;
 }
 
 .chat-feed.empty {
