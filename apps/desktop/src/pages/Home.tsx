@@ -1661,7 +1661,7 @@ ${text}` : text)
                 <div className="welcome-heading">
                   <p className="eyebrow">Research Desk <span>01</span></p>
                   <h1>把一个问题，变成一份<br /><em>可验证的研究结论。</em></h1>
-                  <p>从行情、财报到行业脉络，KStock 会整理证据、过程与风险，最后交付清晰的研究看板。</p>
+                  <h4>从行情、财报到行业脉络，KStock 会整理证据、过程与风险，最后交付清晰的研究看板。</h4>
                 </div>
                 <div className="quick-prompt-grid">
                   {quickPrompts.map((prompt, index) => (
