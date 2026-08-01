@@ -53,9 +53,28 @@ button {
   width: 100%;
   height: 100%;
   min-width: 0;
+}
+
+.settings-shell {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 260px),
     #101214;
+}
+
+/* 落地页、认证页与工作台共享的墨绿色环境底色。网格线保持极低对比度，
+   只在大面积留白中隐约可见，不干扰正文、图表和交互控件。 */
+.landing-shell,
+.auth-shell,
+.workspace-shell {
+  background-color: #071713;
+  background-image:
+    radial-gradient(circle at 72% 16%, rgba(41, 151, 119, 0.105), transparent 34%),
+    radial-gradient(circle at 20% 82%, rgba(27, 92, 74, 0.08), transparent 32%),
+    linear-gradient(rgba(129, 205, 178, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(129, 205, 178, 0.022) 1px, transparent 1px),
+    linear-gradient(180deg, #091b17 0%, #061410 100%);
+  background-position: center, center, 0 0, 0 0, 0 0;
+  background-size: auto, auto, 52px 52px, 52px 52px, auto;
 }
 
 .landing-shell {
@@ -72,7 +91,7 @@ button {
   min-height: 64px;
   padding: 0 28px 0 86px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(16, 18, 20, 0.74);
+  background: rgba(7, 23, 19, 0.78);
   backdrop-filter: blur(20px);
   -webkit-app-region: drag;
 }
@@ -285,9 +304,9 @@ button {
   overflow: hidden;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background:
-    radial-gradient(circle at 72% 24%, rgba(49, 199, 162, 0.14), transparent 31%),
+    radial-gradient(circle at 72% 24%, rgba(49, 199, 162, 0.15), transparent 31%),
     radial-gradient(circle at 30% 68%, rgba(242, 183, 76, 0.06), transparent 28%),
-    #101214;
+    #071713;
 }
 
 .market-scene::before {
@@ -296,8 +315,8 @@ button {
   inset: -18%;
   z-index: 0;
   background:
-    linear-gradient(90deg, rgba(49, 199, 162, 0.045) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(255, 255, 255, 0.026) 1px, transparent 1px);
+    linear-gradient(90deg, rgba(94, 184, 153, 0.034) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(160, 211, 193, 0.025) 1px, transparent 1px);
   background-size: 72px 72px;
   opacity: 0.9;
   animation: ambient-shift 16s ease-in-out infinite alternate;
@@ -309,8 +328,8 @@ button {
   inset: 0;
   z-index: 3;
   background:
-    linear-gradient(90deg, #101214 0%, rgba(16, 18, 20, 0.24) 48%, #101214 100%),
-    linear-gradient(180deg, transparent 0%, rgba(16, 18, 20, 0.16) 62%, #101214 100%);
+    linear-gradient(90deg, #071713 0%, rgba(7, 23, 19, 0.22) 48%, #071713 100%),
+    linear-gradient(180deg, transparent 0%, rgba(7, 23, 19, 0.16) 62%, #071713 100%);
   pointer-events: none;
 }
 
@@ -553,14 +572,14 @@ button {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
-  background: #25282c;
-  border-bottom: 1px solid #25282c;
+  background: rgba(73, 113, 99, 0.24);
+  border-bottom: 1px solid rgba(73, 113, 99, 0.24);
 }
 
 .landing-band article {
   min-height: 144px;
   padding: 22px 28px;
-  background: #141619;
+  background: rgba(8, 27, 22, 0.94);
 }
 
 .landing-band h2 {
@@ -591,8 +610,8 @@ button {
   color: #aeb4bd;
   font-size: 12px;
   font-weight: 600;
-  background: rgba(24, 27, 31, 0.72);
-  border: 1px solid #2a2f35;
+  background: rgba(11, 31, 26, 0.78);
+  border: 1px solid rgba(124, 174, 156, 0.18);
   -webkit-app-region: no-drag;
 }
 
@@ -603,7 +622,7 @@ button {
   padding: 32px 34px 28px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  background: rgba(24, 27, 31, 0.96);
+  background: rgba(10, 29, 24, 0.94);
   box-shadow:
     0 24px 64px rgba(0, 0, 0, 0.28),
     0 1px 0 rgba(255, 255, 255, 0.025) inset;
@@ -683,7 +702,7 @@ button {
   border-color: #32373d;
   border-radius: 7px;
   padding: 0 13px;
-  background: #121416;
+  background: rgba(5, 19, 16, 0.88);
   transition:
     border-color 140ms ease,
     background-color 140ms ease,
@@ -696,7 +715,7 @@ button {
 
 .auth-panel input:focus {
   border-color: rgba(68, 198, 160, 0.72);
-  background: #141719;
+  background: rgba(7, 25, 21, 0.96);
   box-shadow: 0 0 0 3px rgba(68, 198, 160, 0.09);
 }
 
@@ -841,6 +860,10 @@ body.sidebar-resizing {
   height: 100%;
   border-right: 1px solid rgba(255, 255, 255, 0.07);
   background: #1b1e21;
+}
+
+.workspace-shell .codex-sidebar {
+  background: rgba(9, 25, 21, 0.96);
 }
 
 .codex-sidebar {
@@ -1103,7 +1126,7 @@ body.sidebar-resizing {
   grid-template-rows: 54px minmax(0, 1fr) auto;
   min-width: 0;
   height: 100%;
-  background: #111315;
+  background: transparent;
 }
 
 @media (min-width: 981px) {
@@ -1127,6 +1150,8 @@ body.sidebar-resizing {
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   gap: 16px;
   padding: 0 18px;
+  background: rgba(6, 21, 17, 0.72);
+  backdrop-filter: blur(14px);
   -webkit-app-region: drag;
 }
 
