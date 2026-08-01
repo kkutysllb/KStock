@@ -66,13 +66,13 @@ button {
 .landing-shell,
 .auth-shell,
 .workspace-shell {
-  background-color: #071713;
+  background-color: #030d0b;
   background-image:
-    radial-gradient(circle at 72% 16%, rgba(41, 151, 119, 0.105), transparent 34%),
-    radial-gradient(circle at 20% 82%, rgba(27, 92, 74, 0.08), transparent 32%),
+    radial-gradient(circle at 72% 16%, rgba(36, 132, 104, 0.085), transparent 34%),
+    radial-gradient(circle at 20% 82%, rgba(22, 76, 61, 0.065), transparent 32%),
     linear-gradient(rgba(129, 205, 178, 0.026) 1px, transparent 1px),
     linear-gradient(90deg, rgba(129, 205, 178, 0.022) 1px, transparent 1px),
-    linear-gradient(180deg, #091b17 0%, #061410 100%);
+    linear-gradient(180deg, #061511 0%, #020a08 100%);
   background-position: center, center, 0 0, 0 0, 0 0;
   background-size: auto, auto, 52px 52px, 52px 52px, auto;
 }
@@ -91,7 +91,7 @@ button {
   min-height: 64px;
   padding: 0 28px 0 86px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(7, 23, 19, 0.78);
+  background: rgba(3, 13, 11, 0.86);
   backdrop-filter: blur(20px);
   -webkit-app-region: drag;
 }
@@ -306,7 +306,7 @@ button {
   background:
     radial-gradient(circle at 72% 24%, rgba(49, 199, 162, 0.15), transparent 31%),
     radial-gradient(circle at 30% 68%, rgba(242, 183, 76, 0.06), transparent 28%),
-    #071713;
+    #030d0b;
 }
 
 .market-scene::before {
@@ -328,8 +328,8 @@ button {
   inset: 0;
   z-index: 3;
   background:
-    linear-gradient(90deg, #071713 0%, rgba(7, 23, 19, 0.22) 48%, #071713 100%),
-    linear-gradient(180deg, transparent 0%, rgba(7, 23, 19, 0.16) 62%, #071713 100%);
+    linear-gradient(90deg, #030d0b 0%, rgba(3, 13, 11, 0.22) 48%, #030d0b 100%),
+    linear-gradient(180deg, transparent 0%, rgba(3, 13, 11, 0.2) 62%, #030d0b 100%);
   pointer-events: none;
 }
 
@@ -579,7 +579,7 @@ button {
 .landing-band article {
   min-height: 144px;
   padding: 22px 28px;
-  background: rgba(8, 27, 22, 0.94);
+  background: rgba(4, 17, 14, 0.97);
 }
 
 .landing-band h2 {
@@ -610,7 +610,7 @@ button {
   color: #aeb4bd;
   font-size: 12px;
   font-weight: 600;
-  background: rgba(11, 31, 26, 0.78);
+  background: rgba(5, 19, 16, 0.86);
   border: 1px solid rgba(124, 174, 156, 0.18);
   -webkit-app-region: no-drag;
 }
@@ -622,7 +622,7 @@ button {
   padding: 32px 34px 28px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  background: rgba(10, 29, 24, 0.94);
+  background: rgba(5, 20, 16, 0.96);
   box-shadow:
     0 24px 64px rgba(0, 0, 0, 0.28),
     0 1px 0 rgba(255, 255, 255, 0.025) inset;
@@ -702,7 +702,7 @@ button {
   border-color: #32373d;
   border-radius: 7px;
   padding: 0 13px;
-  background: rgba(5, 19, 16, 0.88);
+  background: rgba(2, 12, 10, 0.92);
   transition:
     border-color 140ms ease,
     background-color 140ms ease,
@@ -715,7 +715,7 @@ button {
 
 .auth-panel input:focus {
   border-color: rgba(68, 198, 160, 0.72);
-  background: rgba(7, 25, 21, 0.96);
+  background: rgba(4, 18, 15, 0.98);
   box-shadow: 0 0 0 3px rgba(68, 198, 160, 0.09);
 }
 
@@ -863,7 +863,7 @@ body.sidebar-resizing {
 }
 
 .workspace-shell .codex-sidebar {
-  background: rgba(9, 25, 21, 0.96);
+  background: rgba(4, 16, 13, 0.98);
 }
 
 .codex-sidebar {
@@ -1150,7 +1150,7 @@ body.sidebar-resizing {
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   gap: 16px;
   padding: 0 18px;
-  background: rgba(6, 21, 17, 0.72);
+  background: rgba(3, 14, 12, 0.84);
   backdrop-filter: blur(14px);
   -webkit-app-region: drag;
 }
