@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { Markdown } from "../lib/markdown";
 import { fetchLandingNews, type LandingNewsItem } from "../lib/landingNewsClient";
+import { getDataSourceStatus, type DataSourceConfig } from "../lib/dataSourcesClient";
 import { MODEL_TEMPLATES, SETTING_SECTIONS } from "../lib/qilinSettings";
 import {
   getSetupStatus,
@@ -224,6 +225,7 @@ export function Home() {
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [activeModel, setActiveModel] = useState<string>("");
   const [modelsLoading, setModelsLoading] = useState(true);
+  const [dataSources, setDataSources] = useState<DataSourceConfig[]>([]);
   // 流式 run 状态。
   const [streamingId, setStreamingId] = useState<string | null>(null);
   // 输入区待发附件（本轮要随消息携带的 UploadedFileRef）。发送成功后清空。
@@ -275,6 +277,22 @@ export function Home() {
       setView("workspace");
     }
   }, [authReady, currentUser, view]);
+
+  // 首页与工作台顶部只展示不含密钥的连接状态；切换页面时重新读取，
+  // 让用户从设置页保存凭证后返回即可看到最新状态。
+  useEffect(() => {
+    let cancelled = false;
+    void getDataSourceStatus()
+      .then((response) => {
+        if (!cancelled) setDataSources(response.sources);
+      })
+      .catch(() => {
+        if (!cancelled) setDataSources([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view]);
 
   // 读取当前用户的桌面偏好。Gateway 不可用时使用默认值，设置页仍可打开。
   useEffect(() => {
@@ -738,7 +756,7 @@ export function Home() {
   }
 
   if (view === "landing") {
-    return <LandingPage onEnter={enterWorkspace} onAuth={openAuth} />;
+    return <LandingPage onEnter={enterWorkspace} onAuth={openAuth} dataSources={dataSources} />;
   }
 
   if (view === "auth") {
@@ -821,6 +839,7 @@ export function Home() {
       onToggleSidebar={() => persistGeneralPreferencePatch({ sidebar_collapsed: !sidebarCollapsed })}
       onResizeWorkspaceSidebar={handleWorkspaceSidebarResize}
       onToggleHistory={() => persistGeneralPreferencePatch({ history_collapsed: !generalPreferences.history_collapsed })}
+      dataSources={dataSources}
     />
       <ConfirmDialog
         open={pendingDeleteSessionId !== null}
@@ -839,7 +858,7 @@ export function Home() {
   );
 }
 
-function LandingPage({ onEnter, onAuth }: { onEnter: () => void; onAuth: (mode: AuthMode) => void }) {
+function LandingPage({ onEnter, onAuth, dataSources }: { onEnter: () => void; onAuth: (mode: AuthMode) => void; dataSources: DataSourceConfig[] }) {
   const [newsItems, setNewsItems] = useState<LandingNewsItem[]>([]);
 
   useEffect(() => {
@@ -879,6 +898,7 @@ function LandingPage({ onEnter, onAuth }: { onEnter: () => void; onAuth: (mode: 
           <span className="status-pulse" />
           <span>QiLin 引擎</span>
           <em>已连接</em>
+          <DataSourceIndicators dataSources={dataSources} />
         </div>
       </nav>
 
@@ -981,6 +1001,27 @@ function LandingPage({ onEnter, onAuth }: { onEnter: () => void; onAuth: (mode: 
         </article>
       </section>
     </main>
+  );
+}
+
+function DataSourceIndicators({ dataSources }: { dataSources: DataSourceConfig[] }) {
+  const statusById = new Map(dataSources.map((source) => [source.id, source]));
+
+  return (
+    <span className="data-source-indicators" aria-label="数据源连接状态">
+      {(["tushare", "iwencai"] as const).map((id) => {
+        const source = statusById.get(id);
+        const linked = Boolean(source?.configured);
+        const label = id === "tushare" ? "Tushare" : "iWenCai";
+        return (
+          <span className={`data-source-indicator ${linked ? "linked" : ""}`} key={id}>
+            <span className="data-source-indicator-dot" aria-hidden="true" />
+            <span>{label}</span>
+            <em>{linked ? "已链接" : "未链接"}</em>
+          </span>
+        );
+      })}
+    </span>
   );
 }
 
@@ -1223,7 +1264,8 @@ function WorkspaceShell({
   onToggleRightPanel,
   onToggleSidebar,
   onResizeWorkspaceSidebar,
-  onToggleHistory
+  onToggleHistory,
+  dataSources
 }: {
   activeSession: ChatSession | undefined;
   currentUser: AuthUser | null;
@@ -1258,6 +1300,7 @@ function WorkspaceShell({
   onToggleSidebar: () => void;
   onResizeWorkspaceSidebar: (width: number) => void;
   onToggleHistory: () => void;
+  dataSources: DataSourceConfig[];
 }) {
   const messages = activeSession?.messages ?? [];
   const latestUsage = [...messages]
@@ -1416,6 +1459,7 @@ function WorkspaceShell({
             <span className="status-separator">/</span>
             <span>{streamingId ? "生成中…" : "等待研究任务"}</span>
             <em><span className="status-pulse" />QiLin 已连接</em>
+            <DataSourceIndicators dataSources={dataSources} />
           </div>
           <div className="topbar-actions">
             <span className="task-token-count" aria-label={`当前任务消耗 ${taskTokens.toLocaleString("en-US")} tokens`}>

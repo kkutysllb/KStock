@@ -70,6 +70,12 @@ def list_data_sources() -> DataSourcesResponse:
     return _response()
 
 
+@router.get("/data-source-status", response_model=DataSourcesResponse)
+def list_data_source_status() -> DataSourcesResponse:
+    """Return the public, secret-free connection status used by the shell chrome."""
+    return _response()
+
+
 @router.put("/data-sources", response_model=DataSourcesResponse)
 def update_data_sources(payload: DataSourcesWritePayload) -> DataSourcesResponse:
     """Save any supplied credentials; omitted/blank values preserve existing keys."""

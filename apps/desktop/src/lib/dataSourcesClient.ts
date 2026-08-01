@@ -63,6 +63,10 @@ export function getDataSources(): Promise<DataSourcesResponse> {
   return dataSourcesFetch<DataSourcesResponse>("/api/v1/kstock/data-sources");
 }
 
+export function getDataSourceStatus(): Promise<DataSourcesResponse> {
+  return dataSourcesFetch<DataSourcesResponse>("/api/v1/kstock/data-source-status");
+}
+
 export function updateDataSources(payload: DataSourcesWritePayload): Promise<DataSourcesResponse> {
   return dataSourcesFetch<DataSourcesResponse>("/api/v1/kstock/data-sources", {
     method: "PUT",
