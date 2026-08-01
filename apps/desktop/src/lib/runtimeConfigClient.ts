@@ -158,6 +158,8 @@ export interface UploadsConfig {
   max_files: number;
   max_file_size: number;
   max_total_size: number;
+  /** 上传时自动把 PDF/docx 等文档转成 markdown，让 agent 可用 read_file 直接读取。 */
+  auto_convert_documents: boolean;
 }
 
 export interface RuntimeConfig {

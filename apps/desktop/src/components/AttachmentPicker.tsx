@@ -3,34 +3,30 @@ import { Loader2, Paperclip, X } from "lucide-react";
 import type { UploadedFileRef } from "../lib/turnsClient";
 
 /**
- * 输入区附件选择器：渲染已选附件 chips + 文件选择按钮。
+ * 附件选择按钮（放 composer-toolbar 内）。
  *
- * 状态由父组件（Home）管理——本组件只做展示 + 回调：
- *   onPickFiles(FileList) → 父组件上传并追加 pendingAttachments
- *   onRemove(filename)    → 父组件删除引擎文件并移除 chip
+ * 只渲染隐藏 input + 「附件」按钮；点击触发文件选择。
+ * 已选附件的 chips 列表由 {@link AttachmentChips} 单独渲染（放 textarea 上方），
+ * 让按钮和 chips 各自占位、互不干扰。
  *
- * 无附件时仍渲染「附件」按钮（紧凑模式）；有附件或 loading 时展开 chips 区。
+ * 状态由父组件（Home）管理——本组件只做：onClick → 触发 input.click()，
+ * onChange → 回调 onPickFiles(FileList)。
  */
 interface AttachmentPickerProps {
-  attachments: UploadedFileRef[];
   loading: boolean;
   /** 无可用会话 / 流式生成中时禁用选择按钮。 */
   disabled: boolean;
   disabledReason?: string;
   onPickFiles: (files: FileList) => void;
-  onRemove: (filename: string) => void;
 }
 
 export function AttachmentPicker({
-  attachments,
   loading,
   disabled,
   disabledReason,
   onPickFiles,
-  onRemove,
 }: AttachmentPickerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const hasAttachments = attachments.length > 0;
 
   return (
     <div className="attachment-picker">
@@ -47,42 +43,58 @@ export function AttachmentPicker({
           e.target.value = "";
         }}
       />
-      {(hasAttachments || loading) && (
-        <div className="attachment-chips">
-          {attachments.map((att) => (
-            <span key={att.filename} className="attachment-chip" title={att.filename}>
-              <Paperclip size={12} className="attachment-chip-icon" />
-              <span className="attachment-chip-name">{att.filename}</span>
-              <span className="attachment-chip-size">{formatFileSize(att.size)}</span>
-              <button
-                type="button"
-                className="attachment-chip-remove"
-                onClick={() => onRemove(att.filename)}
-                aria-label={`移除附件 ${att.filename}`}
-                disabled={loading}
-              >
-                <X size={12} />
-              </button>
-            </span>
-          ))}
-          {loading && (
-            <span className="attachment-chip attachment-chip-loading">
-              <Loader2 size={12} className="spin" />
-              <span>上传中…</span>
-            </span>
-          )}
-        </div>
-      )}
       <button
         type="button"
         className="attachment-pick-button"
-        disabled={disabled}
+        disabled={disabled || loading}
         title={disabled ? (disabledReason || "不可用") : "添加附件"}
         onClick={() => fileInputRef.current?.click()}
       >
         <Paperclip size={15} />
         <span>附件</span>
       </button>
+    </div>
+  );
+}
+
+/**
+ * 已选附件 chips 列表（放 composer-dock 的 textarea 上方）。
+ *
+ * 有附件或上传中时渲染，无附件时返回 null（不占位）。
+ * 点 × 移除附件（回调 onRemove → 父组件删除引擎文件并移除 chip）。
+ */
+interface AttachmentChipsProps {
+  attachments: UploadedFileRef[];
+  loading: boolean;
+  onRemove: (filename: string) => void;
+}
+
+export function AttachmentChips({ attachments, loading, onRemove }: AttachmentChipsProps) {
+  if (attachments.length === 0 && !loading) return null;
+  return (
+    <div className="attachment-chips">
+      {attachments.map((att) => (
+        <span key={att.filename} className="attachment-chip" title={att.filename}>
+          <Paperclip size={12} className="attachment-chip-icon" />
+          <span className="attachment-chip-name">{att.filename}</span>
+          <span className="attachment-chip-size">{formatFileSize(att.size)}</span>
+          <button
+            type="button"
+            className="attachment-chip-remove"
+            onClick={() => onRemove(att.filename)}
+            aria-label={`移除附件 ${att.filename}`}
+            disabled={loading}
+          >
+            <X size={12} />
+          </button>
+        </span>
+      ))}
+      {loading && (
+        <span className="attachment-chip attachment-chip-loading">
+          <Loader2 size={12} className="spin" />
+          <span>上传中…</span>
+        </span>
+      )}
     </div>
   );
 }

@@ -1027,20 +1027,12 @@ button {
 }
 
 .composer-toolbar {
+  display: flex;
+  align-items: center;
   justify-content: flex-start;
   gap: 8px;
   color: #a9afb8;
   font-size: 11px;
-}
-
-.composer-toolbar span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.composer-toolbar span:nth-of-type(2) {
-  margin-left: auto;
 }
 
 .send-button {
@@ -3586,6 +3578,9 @@ button {
   align-items: center;
   gap: 6px;
   min-height: 0;
+  /* 作为 composer-toolbar 的直接 flex 子元素，吸收右侧空间，
+     把后续的模型选择 + 发送按钮推到工具栏最右 */
+  margin-right: auto;
 }
 
 .attachment-file-input {

@@ -44,22 +44,24 @@ export function AttachmentSettings() {
     reload();
   }, [reload]);
 
-  // 字节 → MB，供 RuntimeConfigCard 编辑
+  // 字节 → MB，供 RuntimeConfigCard 编辑（auto_convert_documents 是 boolean 直传）
   const initialValue = useMemo<Record<string, unknown>>(() => {
     if (!uploadsConfig) return {};
     return {
       max_files: uploadsConfig.max_files,
       max_file_size: +(uploadsConfig.max_file_size / BYTES_PER_MB).toFixed(2),
       max_total_size: +(uploadsConfig.max_total_size / BYTES_PER_MB).toFixed(2),
+      auto_convert_documents: uploadsConfig.auto_convert_documents,
     };
   }, [uploadsConfig]);
 
   const handleSave = useCallback(async (value: Record<string, unknown>) => {
-    // draft 里 size 是 MB，写回时转字节
+    // draft 里 size 是 MB，写回时转字节；auto_convert_documents 是 boolean 直传
     const payload: Record<string, unknown> = {
       max_files: Number(value.max_files) || 1,
       max_file_size: Math.max(1, Math.round((Number(value.max_file_size) || 1) * BYTES_PER_MB)),
       max_total_size: Math.max(1, Math.round((Number(value.max_total_size) || 1) * BYTES_PER_MB)),
+      auto_convert_documents: Boolean(value.auto_convert_documents),
     };
     await updateRuntimeConfigSection("uploads", payload);
     setUploadsConfig(payload as unknown as UploadsConfig);
@@ -137,5 +139,11 @@ const UPLOADS_FIELDS: FieldDef[] = [
     min: 1,
     step: 1,
     hint: "单个会话所有附件合计的最大体积，单位 MB（内部转字节存入 uploads.max_total_size）",
+  },
+  {
+    key: "auto_convert_documents",
+    label: "自动转换文档",
+    type: "boolean",
+    hint: "上传时自动把 PDF/docx/pptx/xlsx 等转成 markdown。开启后 agent 可用 read_file 直接读取文本；关闭则 agent 只能拿到二进制原文件（本地沙箱下 bash 无法访问挂载点）。默认开启。",
   },
 ];

@@ -241,6 +241,16 @@ export function bindThreadId(session: ChatSession, threadId: string): ChatSessio
   return { ...session, threadId };
 }
 
+/**
+ * 整体替换 session 的 messages（历史消息懒加载后回写）。
+ *
+ * 仅在 messages 为空时使用——把从引擎拉回的历史消息填入空 session。
+ * 不清空已有消息（避免覆盖正在进行的流式 turn）。
+ */
+export function setSessionMessages(session: ChatSession, messages: ChatMessage[]): ChatSession {
+  return { ...session, messages };
+}
+
 /** 用 patch 局部更新指定 message（turnReducer 产出新状态后回写 session）。 */
 export function updateMessageInSession(
   session: ChatSession,

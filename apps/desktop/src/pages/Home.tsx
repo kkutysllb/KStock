@@ -60,6 +60,7 @@ import {
   createAssistantTurn,
   createSession,
   DEFAULT_ACTIVE_SKILLS,
+  setSessionMessages,
   threadToSession,
   updateMessageInSession,
   type ChatSession
@@ -69,12 +70,14 @@ import {
   deleteThread,
   deleteUpload,
   ensureThread,
+  fetchThreadMessages,
   listThreads,
   runContextFromModel,
   streamRun,
   uploadFiles,
   type UploadedFileRef,
 } from "../lib/turnsClient";
+import { engineMessagesToChatMessages } from "../lib/engineHistory";
 import { initialTurn, reduceFrame } from "../lib/turnReducer";
 import { inferStage } from "../lib/stageInferrer";
 import {
@@ -96,7 +99,7 @@ import { AccountSettings } from "../components/AccountSettings";
 import { ReportSettings } from "../components/ReportSettings";
 import { McpExtensionsCard } from "../components/McpExtensionsCard";
 import { SkillsExtensionsCard } from "../components/SkillsExtensionsCard";
-import { AttachmentPicker } from "../components/AttachmentPicker";
+import { AttachmentPicker, AttachmentChips } from "../components/AttachmentPicker";
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings";
 type AuthMode = "login" | "register";
@@ -239,6 +242,34 @@ export function Home() {
       cancelled = true;
     };
   }, [currentUser]);
+
+  // 切换到历史会话时懒加载消息：session 有 threadId 但 messages 为空时
+  // 调 fetchThreadMessages 拉取，转成 ChatMessage[] 写回 session.messages。
+  // threadToSession 创建的 session messages 为空，首次点进该会话才加载。
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const session = sessions.find((s) => s.id === activeSessionId);
+    if (!session || !session.threadId) return;
+    // 已有消息或正在加载则跳过
+    if (session.messages.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await fetchThreadMessages(session.threadId!);
+        if (cancelled) return;
+        const msgs = engineMessagesToChatMessages(raw);
+        if (cancelled || msgs.length === 0) return;
+        setSessions((current) =>
+          current.map((s) => (s.id === session.id ? setSessionMessages(s, msgs) : s))
+        );
+      } catch {
+        // 加载失败静默处理（保留空消息，用户可重试切换）。
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId, sessions]);
 
   // 加载模型列表，确定初始 activeModel：localStorage > default_model > 首个。
   // 依赖 currentUser：未登录时请求会被 401，登录成功后需要重试拉取。
@@ -502,21 +533,35 @@ export function Home() {
     }
   };
 
-  // 停止生成：显式 cancel 后端 run（即时停止 agent + subagent）+ abort SSE 断流兼兜底。
-  // 双保险：cancelRun 直接通知 RunManager 取消（不等断连检测延迟）；abort 确保 fetch 连接断开。
-  // cancelRun 失败不阻断——仍走 abort，后端 on_disconnect=cancel 也会兑底取消。
+  // 停止生成：立即响应 UI + 异步 cancel 后端 run + abort SSE 断流兼兜底。
+  //
+  // 重要：必须先 setStreamingId(null) 让 UI 即时从「生成中」更改为可输入态，
+  // 不能等 cancelRun / streamRun 返回——Tauri webview 中 fetch + ReadableStream
+  // 的 abort 有时不能即时释放 SSE 长连接的 reader.read()，导致 streamRun
+  // promise 迟迟不 resolve、handleSend 的 finally 不执行、UI 卡在「生成中」。
+  // 变更顺序后：UI 立即响应；cancel 后台异步发；abort 兑底断流；streamRun
+  // 后续 resolve 时 finally 里的 setStreamingId((id) => id === turn.id ? null : id)
+  // 因 streamingId 已被这里置为 null（不等于 turn.id）而不会重复修改。
+  //
+  // 双保险：cancelRun 直接通知 RunManager 取消（不等断连检测延迟）；abort 确保
+  // fetch 连接断开；后端 on_disconnect=cancel 会兼底取消。cancelRun 失败不阻断。
   const handleStop = async () => {
     if (stoppingRef.current) return;
     stoppingRef.current = true;
+    // 1. 立即响应 UI：清 streamingId（stop 按钮变回 send 按钮）。
+    const streamingTurnId = streamingId;
+    if (streamingTurnId) {
+      setStreamingId((id) => (id === streamingTurnId ? null : id));
+    }
+    // 2. 立即 abort SSE 连接（不等 cancelRun，避免 fetch 网络延迟阻塞断流）。
+    abortRef.current?.abort();
+    // 3. 后台异步发 cancel（fire-and-forget）：通知后端 RunManager 即时取消 agent + subagent。
     const run = activeRunRef.current;
     if (run) {
-      try {
-        await cancelRun(run.threadId, run.runId);
-      } catch {
-        // cancel 失败不报错：abort 仍会执行，后端断连检测会兼底 cancel。
-      }
+      cancelRun(run.threadId, run.runId).catch(() => {
+        // cancel 失败不报错：abort 已断流，后端断连检测会兼底 cancel。
+      });
     }
-    abortRef.current?.abort();
   };
 
   // 选附件：上传到当前会话的 thread（无 threadId 时先创建引擎 thread 并绑定）。
@@ -1179,12 +1224,9 @@ ${text}` : text)
               <ChevronDown size={18} />
             </button>
           )}
-          <AttachmentPicker
+          <AttachmentChips
             attachments={pendingAttachments}
             loading={attachmentsLoading}
-            disabled={!activeSession || !!streamingId}
-            disabledReason={!activeSession ? "先开始一个会话" : undefined}
-            onPickFiles={onPickFiles}
             onRemove={onRemoveAttachment}
           />
           <textarea
@@ -1194,8 +1236,12 @@ ${text}` : text)
             onChange={(event) => onDraftChange(event.target.value)}
           />
           <div className="composer-toolbar">
-            <span><FileText size={15} /> 研究模式</span>
-            <span><Cpu size={15} /> QiLin 已连接</span>
+            <AttachmentPicker
+              loading={attachmentsLoading}
+              disabled={!activeSession || !!streamingId}
+              disabledReason={!activeSession ? "先开始一个会话" : undefined}
+              onPickFiles={onPickFiles}
+            />
             {modelsLoading ? (
               <span className="model-picker loading">模型加载中…</span>
             ) : models.length === 0 ? (
