@@ -527,13 +527,13 @@ export function Home() {
   useEffect(() => {
     const threadId = activeSession?.threadId;
     const runId = latestAssistantTurn?.runId;
-    const key = threadId && runId ? `${threadId}:${runId}` : null;
-    if (!key || latestAssistantTurn?.status !== "done") {
+    if (!threadId || !runId || latestAssistantTurn?.status !== "done") {
       setWorkspaceChanges([]);
       setWorkspaceChangesLoading(false);
       workspaceChangesKeyRef.current = null;
       return;
     }
+    const key = `${threadId}:${runId}`;
     if (workspaceChangesKeyRef.current === key) return;
     workspaceChangesKeyRef.current = key;
     let cancelled = false;
@@ -584,6 +584,8 @@ export function Home() {
     }
     setCurrentUser(null);
     setView("landing");
+    // 登出离开全部任务：清空待发附件，避免再次登录后残留到任务面板。
+    setPendingAttachments([]);
   };
 
   const handleModelChange = (name: string) => {
@@ -601,10 +603,16 @@ export function Home() {
     setSessions((current) => [nextSession, ...current]);
     setActiveSessionId(nextSession.id);
     setDraft("");
+    // 待发附件是会话级状态：新建任务必须清空，避免上一个任务的文件残留
+    // 到新任务面板或随下一条消息发送。
+    setPendingAttachments([]);
   };
 
   const handleSelectSession = (sessionId: string) => {
     setActiveSessionId(sessionId);
+    // 待发附件是会话级状态：切换任务必须清空（线程已上传文件由上面的
+    // useEffect 按 threadId 重新读取，待发附件不跨任务保留）。
+    setPendingAttachments([]);
     if (currentUser) {
       const selected = sessions.find((session) => session.id === sessionId);
       if (selected?.threadId) {
@@ -651,6 +659,8 @@ export function Home() {
       const next = current.filter((s) => s.id !== sessionId);
       if (sessionId === activeSessionId) {
         setActiveSessionId(next[0]?.id ?? "");
+        // 删除的是当前任务：其待发附件一并清空（线程文件已随 thread 目录删除）。
+        setPendingAttachments([]);
       }
       return next;
     });
