@@ -19,82 +19,82 @@
       "enabled_by_default": true
     },
     {
-      "name": "kk-common",
+      "name": "common",
       "source_repo": "KSkills",
-      "source_path": "stock/kk-common",
-      "target_path": "public/kk-common",
+      "source_path": "stock/common",
+      "target_path": "public/common",
       "kind": "stock",
       "enabled_by_default": true
     },
     {
-      "name": "kk-stock-analysis",
+      "name": "stock-analysis",
       "source_repo": "KSkills",
-      "source_path": "stock/kk-stock-analysis",
-      "target_path": "public/kk-stock-analysis",
+      "source_path": "stock/stock-analysis",
+      "target_path": "public/stock-analysis",
       "kind": "stock",
       "enabled_by_default": true
     },
     {
-      "name": "kk-financial-statement",
+      "name": "financial-statement",
       "source_repo": "KSkills",
-      "source_path": "stock/kk-financial-statement",
-      "target_path": "public/kk-financial-statement",
+      "source_path": "stock/financial-statement",
+      "target_path": "public/financial-statement",
       "kind": "stock",
       "enabled_by_default": true
     },
     {
-      "name": "kk-valuation-model",
+      "name": "valuation-model",
       "source_repo": "KSkills",
-      "source_path": "stock/kk-valuation-model",
-      "target_path": "public/kk-valuation-model",
+      "source_path": "stock/valuation-model",
+      "target_path": "public/valuation-model",
       "kind": "stock",
       "enabled_by_default": true
     },
     {
-      "name": "kk-industry-analysis",
+      "name": "industry-analysis",
       "source_repo": "KSkills",
-      "source_path": "stock/kk-industry-analysis",
-      "target_path": "public/kk-industry-analysis",
+      "source_path": "stock/industry-analysis",
+      "target_path": "public/industry-analysis",
       "kind": "stock",
       "enabled_by_default": true
     },
     {
-      "name": "kk-news-search",
+      "name": "news-search",
       "source_repo": "KSkills",
-      "source_path": "stock/kk-news-search",
-      "target_path": "public/kk-news-search",
+      "source_path": "stock/news-search",
+      "target_path": "public/news-search",
       "kind": "stock",
       "enabled_by_default": true
     },
     {
-      "name": "kk-report-search",
+      "name": "report-search",
       "source_repo": "KSkills",
-      "source_path": "stock/kk-report-search",
-      "target_path": "public/kk-report-search",
+      "source_path": "stock/report-search",
+      "target_path": "public/report-search",
       "kind": "stock",
       "enabled_by_default": true
     },
     {
-      "name": "kk-announcement-search",
+      "name": "announcement-search",
       "source_repo": "KSkills",
-      "source_path": "stock/kk-announcement-search",
-      "target_path": "public/kk-announcement-search",
+      "source_path": "stock/announcement-search",
+      "target_path": "public/announcement-search",
       "kind": "stock",
       "enabled_by_default": true
     },
     {
-      "name": "kk-business-query",
+      "name": "business-query",
       "source_repo": "KSkills",
-      "source_path": "stock/kk-business-query",
-      "target_path": "public/kk-business-query",
+      "source_path": "stock/business-query",
+      "target_path": "public/business-query",
       "kind": "stock",
       "enabled_by_default": true
     },
     {
-      "name": "kk-macro-query",
+      "name": "macro-query",
       "source_repo": "KSkills",
-      "source_path": "stock/kk-macro-query",
-      "target_path": "public/kk-macro-query",
+      "source_path": "stock/macro-query",
+      "target_path": "public/macro-query",
       "kind": "stock",
       "enabled_by_default": true
     }

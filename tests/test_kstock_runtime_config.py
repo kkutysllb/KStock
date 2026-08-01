@@ -242,7 +242,7 @@ def test_put_subagents_with_custom_agents_roundtrip(tmp_path, monkeypatch):
         "description": "测试角色",
         "system_prompt": "你是测试子代理",
         "tools": ["finance_data_search"],
-        "skills": ["kk-stock-analysis"],
+        "skills": ["stock-analysis"],
         "model": "inherit",
         "max_turns": 50,
         "timeout_seconds": 600,
@@ -259,7 +259,7 @@ def test_put_subagents_with_custom_agents_roundtrip(tmp_path, monkeypatch):
     agent = sub["custom_agents"]["test-analyst"]
     assert agent["system_prompt"] == "你是测试子代理"
     assert agent["tools"] == ["finance_data_search"]
-    assert agent["skills"] == ["kk-stock-analysis"]
+    assert agent["skills"] == ["stock-analysis"]
     assert agent["model"] == "inherit"
     assert agent["max_turns"] == 50
 

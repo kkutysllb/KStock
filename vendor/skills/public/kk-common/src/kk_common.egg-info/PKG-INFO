@@ -1,9 +1,0 @@
-Metadata-Version: 2.4
-Name: kk-common
-Version: 1.0.0
-Summary: kk_Skills 公共库——iWencai/Tushare 统一客户端与金融分析格式化工具集
-License: MIT
-Requires-Python: >=3.10
-Requires-Dist: pandas>=1.5
-Requires-Dist: python-dotenv>=1.0
-Requires-Dist: tushare>=1.0

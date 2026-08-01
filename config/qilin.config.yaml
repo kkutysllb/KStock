@@ -116,9 +116,9 @@ subagents:
         </工具限制>
       tools: null  # inherit 所有工具
       skills:
-        - kk-macro-query
-        - kk-news-search
-        - kk-announcement-search
+        - macro-query
+        - news-search
+        - announcement-search
       model: inherit
       max_turns: 80
       timeout_seconds: 900
@@ -149,15 +149,15 @@ subagents:
 
         <工具限制>
         你是子代理，`task` 工具不可用，严禁尝试委派子代理。
-        优先调用 kk-stock-analysis / kk-financial-statement / kk-valuation-model 技能，必要时用 finance_data_search 补充。
+        优先调用 stock-analysis / financial-statement / valuation-model 技能，必要时用 finance_data_search 补充。
         </工具限制>
       tools: null
       skills:
-        - kk-stock-analysis
-        - kk-financial-statement
-        - kk-valuation-model
-        - kk-report-search
-        - kk-announcement-search
+        - stock-analysis
+        - financial-statement
+        - valuation-model
+        - report-search
+        - announcement-search
       model: inherit
       max_turns: 120
       timeout_seconds: 1200
@@ -277,8 +277,8 @@ subagents:
       skills:
         - analysis-report
         - chart-visualization
-        - kk-business-query
-        - kk-industry-analysis
+        - business-query
+        - industry-analysis
       model: inherit
       max_turns: 100
       timeout_seconds: 1200

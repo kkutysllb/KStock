@@ -114,16 +114,16 @@ export interface ChatSession {
 export const DEFAULT_ACTIVE_SKILLS = [
   "analysis-report",
   "chart-visualization",
-  "kk-common",
-  "kk-stock-analysis",
-  "kk-financial-statement",
-  "kk-valuation-model",
-  "kk-industry-analysis",
-  "kk-news-search",
-  "kk-report-search",
-  "kk-announcement-search",
-  "kk-business-query",
-  "kk-macro-query"
+  "common",
+  "stock-analysis",
+  "financial-statement",
+  "valuation-model",
+  "industry-analysis",
+  "news-search",
+  "report-search",
+  "announcement-search",
+  "business-query",
+  "macro-query"
 ];
 
 function nowLabel() {

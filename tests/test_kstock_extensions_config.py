@@ -247,9 +247,9 @@ def test_available_skills_returns_preset_list(tmp_path, monkeypatch):
     # group 标签（stock/common）由 approved-skills.json 的 kind 字段提供
     assert len(body["skills"]) >= 10
     # 检查几个关键技能
-    assert "kk-stock-analysis" in skill_names
-    assert "kk-news-search" in skill_names
-    assert "kk-macro-query" in skill_names
+    assert "stock-analysis" in skill_names
+    assert "news-search" in skill_names
+    assert "macro-query" in skill_names
     # 每个技能都有 enabled 默认 true
     for skill in body["skills"]:
         assert skill["enabled"] is True
@@ -261,27 +261,27 @@ def test_set_skill_disabled_writes_record(tmp_path, monkeypatch):
     """PUT /skills/{name} enabled=false 写入 extensions_config.json。"""
     client = _client_under(tmp_path, monkeypatch, json_text=None)
     resp = client.put(
-        "/api/v1/kstock/extensions/skills/kk-stock-analysis",
+        "/api/v1/kstock/extensions/skills/stock-analysis",
         json={"enabled": False},
     )
     assert resp.status_code == 200
     assert resp.json()["action"] == "disabled"
     assert resp.json()["enabled"] is False
     cfg = _read_json(tmp_path)
-    assert cfg["skills"]["kk-stock-analysis"]["enabled"] is False
+    assert cfg["skills"]["stock-analysis"]["enabled"] is False
 
 
 def test_set_skill_enabled_writes_record(tmp_path, monkeypatch):
     """PUT /skills/{name} enabled=true 写入 extensions_config.json。"""
     client = _client_under(tmp_path, monkeypatch, json_text=None)
     resp = client.put(
-        "/api/v1/kstock/extensions/skills/kk-news-search",
+        "/api/v1/kstock/extensions/skills/news-search",
         json={"enabled": True},
     )
     assert resp.status_code == 200
     assert resp.json()["action"] == "enabled"
     cfg = _read_json(tmp_path)
-    assert cfg["skills"]["kk-news-search"]["enabled"] is True
+    assert cfg["skills"]["news-search"]["enabled"] is True
 
 
 def test_set_skill_invalid_name_returns_404(tmp_path, monkeypatch):
@@ -300,23 +300,23 @@ def test_delete_skill_removes_record(tmp_path, monkeypatch):
         "middlewares": [],
         "mcpServers": {},
         "skills": {
-            "kk-stock-analysis": {"enabled": False},
-            "kk-news-search": {"enabled": True},
+            "stock-analysis": {"enabled": False},
+            "news-search": {"enabled": True},
         },
     })
     client = _client_under(tmp_path, monkeypatch, json_text=json_text)
-    resp = client.delete("/api/v1/kstock/extensions/skills/kk-stock-analysis")
+    resp = client.delete("/api/v1/kstock/extensions/skills/stock-analysis")
     assert resp.status_code == 200
     assert resp.json()["action"] == "deleted"
     cfg = _read_json(tmp_path)
-    assert "kk-stock-analysis" not in cfg["skills"]
-    assert "kk-news-search" in cfg["skills"]
+    assert "stock-analysis" not in cfg["skills"]
+    assert "news-search" in cfg["skills"]
 
 
 def test_delete_skill_nonexistent_returns_404(tmp_path, monkeypatch):
     """删除不存在记录返回 404。"""
     client = _client_under(tmp_path, monkeypatch, json_text=None)
-    resp = client.delete("/api/v1/kstock/extensions/skills/kk-stock-analysis")
+    resp = client.delete("/api/v1/kstock/extensions/skills/stock-analysis")
     assert resp.status_code == 404
 
 
@@ -325,12 +325,12 @@ def test_available_skills_reflects_stored_state(tmp_path, monkeypatch):
     json_text = json.dumps({
         "middlewares": [],
         "mcpServers": {},
-        "skills": {"kk-stock-analysis": {"enabled": False}},
+        "skills": {"stock-analysis": {"enabled": False}},
     })
     client = _client_under(tmp_path, monkeypatch, json_text=json_text)
     resp = client.get("/api/v1/kstock/extensions/available-skills")
     assert resp.status_code == 200
     skills = {s["name"]: s for s in resp.json()["skills"]}
-    assert skills["kk-stock-analysis"]["enabled"] is False
+    assert skills["stock-analysis"]["enabled"] is False
     # 未在 skills 字段里的技能仍默认 true
-    assert skills["kk-news-search"]["enabled"] is True
+    assert skills["news-search"]["enabled"] is True

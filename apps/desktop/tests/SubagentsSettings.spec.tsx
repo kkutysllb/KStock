@@ -23,7 +23,7 @@ const makeAgent = (name: string, overrides: Record<string, unknown> = {}) => ({
   system_prompt: `你是 ${name} 子代理`,
   tools: ["finance_data_search"],
   disallowed_tools: ["task", "ask_clarification", "present_files"],
-  skills: ["kk-stock-analysis"],
+  skills: ["stock-analysis"],
   model: "inherit",
   max_turns: 50,
   timeout_seconds: 600,
@@ -113,7 +113,7 @@ describe("SubagentsSettings 加载与展示", () => {
     // 工具 badge（5 个角色都有相同工具，用 getAllByText）
     expect(screen.getAllByText(/工具：finance_data_search/).length).toBe(5);
     // 技能 badge
-    expect(screen.getAllByText(/技能：kk-stock-analysis/).length).toBe(5);
+    expect(screen.getAllByText(/技能：stock-analysis/).length).toBe(5);
   });
 });
 
