@@ -429,16 +429,18 @@ button {
 
 .auth-shell .back-button {
   position: absolute;
-  left: 24px;
-  top: 24px;
+  left: 88px;
+  top: 8px;
+  z-index: 2;
   gap: 6px;
-  min-height: 30px;
+  min-height: 32px;
   padding: 0 10px;
   color: #aeb4bd;
   font-size: 12px;
   font-weight: 600;
   background: rgba(24, 27, 31, 0.72);
   border: 1px solid #2a2f35;
+  -webkit-app-region: no-drag;
 }
 
 .auth-panel {
