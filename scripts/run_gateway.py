@@ -175,9 +175,12 @@ def _generate_runtime_config(
       LLM 看不到任何工具。
     - ``subagents.custom_agents`` 段：按 name key 合并。模板里定义的预置角色
       （如 market-data-analyst）是产品级定义，覆盖用户改动（保证角色定义权威）；
-      用户自己新增的同名以外的角色保留。其他 subagents 子字段
-      （timeout_seconds / max_turns / max_total_per_run / agents / token_budget）
-      一律保留用户配置。
+      用户自己新增的同名以外的角色保留。
+    - ``subagents.agents`` 段：按 name key 合并。模板里定义的 per-agent
+      overrides（如 general-purpose.skills 技能白名单）是产品级默认，覆盖
+      用户同名；用户自定义的 key 保留。
+    - 其他 subagents 子字段（timeout_seconds / max_turns / max_total_per_run /
+      token_budget）一律保留用户配置。
     """
     import yaml
 
@@ -213,7 +216,23 @@ def _generate_runtime_config(
                 existing_subagents["custom_agents"] = existing_custom_agents
                 existing["subagents"] = existing_subagents
 
-        # 3) skills.root → skills.path 字段迁移（引擎只认 path，旧配置的 root
+        # 3) subagents.agents 段：按 name key 合并（模板 key 权威，用户 key 保留）
+        #    agents 段是内置子代理的 per-agent overrides（timeout/max_turns/
+        #    model/skills）。模板里定义的 key（如 general-purpose.skills 技能
+        #    白名单）是产品级默认，覆盖用户同名；用户自定义的 key 保留。
+        template_agents = template_subagents.get("agents") or {}
+        if template_agents:
+            existing_subagents = dict(existing.get("subagents") or {})
+            existing_agents = dict(existing_subagents.get("agents") or {})
+            for agent_name, agent_def in template_agents.items():
+                if existing_agents.get(agent_name) != agent_def:
+                    existing_agents[agent_name] = agent_def
+                    changed = True
+            if existing_agents != existing_subagents.get("agents"):
+                existing_subagents["agents"] = existing_agents
+                existing["subagents"] = existing_subagents
+
+        # 4) skills.root → skills.path 字段迁移（引擎只认 path，旧配置的 root
         #    被 Pydantic 静默忽略导致技能系统失效；绝对路径保持用户值）
         existing_skills = dict(existing.get("skills") or {})
         if "path" not in existing_skills and "root" in existing_skills:

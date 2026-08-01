@@ -106,6 +106,27 @@ subagents:
   max_turns: null
   # 单次 Lead Agent 运行允许的子代理委派总数（1-50）
   max_total_per_run: 6
+  # 内置子代理 per-agent 覆盖（agents 段）。general-purpose 是 Lead Agent 的
+  # 兜底委派角色：挂载沙箱路径规范技能，避免它在不熟悉任务时执行 ls / 或
+  # ls /mnt 探查命令（本地沙箱白名单会拒绝并返回 Unsafe absolute paths 错误）。
+  # 注意：skills 是白名单语义（非追加），列表必须与 vendor/skills/public 下
+  # 有 SKILL.md 的技能保持同步，模板升级会按 name 合并到老用户 runtime.yaml。
+  agents:
+    general-purpose:
+      skills:
+        - analysis-report
+        - announcement-search
+        - business-query
+        - chart-visualization
+        - common
+        - financial-statement
+        - industry-analysis
+        - macro-query
+        - news-search
+        - report-search
+        - sandbox-path-guide
+        - stock-analysis
+        - valuation-model
   # 预置角色：覆盖量化研究全链路。users 可在 runtime.yaml 自定义添加。
   custom_agents:
 

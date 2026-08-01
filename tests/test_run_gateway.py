@@ -352,3 +352,92 @@ def test_template_roles_override_user_modifications(tmp_path):
     assert "bash" not in (market_agent.get("tools") or []), "用户的工具改动应被模板覆盖"
     # 其他预置角色也到位
     assert _PRESET_AGENT_NAMES.issubset(set(merged["subagents"]["custom_agents"].keys()))
+
+
+# ── 增量合并：subagents.agents 段 ┄───────────────────────────────────
+
+
+# 模板中 general-purpose 的技能白名单（与 config/qilin.config.yaml 一致）
+_TEMPLATE_GP_SKILLS = [
+    "analysis-report",
+    "announcement-search",
+    "business-query",
+    "chart-visualization",
+    "common",
+    "financial-statement",
+    "industry-analysis",
+    "macro-query",
+    "news-search",
+    "report-search",
+    "sandbox-path-guide",
+    "stock-analysis",
+    "valuation-model",
+]
+
+
+def test_merges_subagent_agents_skills_whitelist(tmp_path):
+    """老用户 runtime.yaml 的 subagents.agents 为空/缺省时，应合并模板白名单。
+
+    场景：模板给内置 general-purpose 挂了沙箱路径规范技能白名单
+    （subagents.agents.general-purpose.skills）。老用户 runtime.yaml 的
+    agents 段为空（{}）或缺省，重启 gateway 后必须增量合并，否则子代理
+    看不到规范技能，仍会执行 ls / 或 ls /mnt 探查被沙箱拒绝。
+    """
+    from scripts.run_gateway import REPO_ROOT
+
+    runtime_cfg = tmp_path / "config" / "qilin.runtime.yaml"
+    runtime_cfg.parent.mkdir(parents=True, exist_ok=True)
+    qilin_data_dir = tmp_path / "data"
+
+    # 模拟老版本 yaml：agents 段为空 dict + 用户改过的全局参数
+    legacy_cfg = {
+        "models": [{"name": "my-model"}],
+        "subagents": {
+            "timeout_seconds": 3600,  # 用户改过，必须保留
+            "agents": {},
+        },
+    }
+    runtime_cfg.write_text(yaml.safe_dump(legacy_cfg, allow_unicode=True), encoding="utf-8")
+
+    _generate_runtime_config(runtime_cfg, qilin_data_dir, REPO_ROOT)
+
+    merged = yaml.safe_load(runtime_cfg.read_text(encoding="utf-8"))
+    agents = merged["subagents"]["agents"]
+
+    # 1. 模板的 general-purpose.skills 白名单已合并
+    assert "general-purpose" in agents, "模板 agents.general-purpose 必须合并进来"
+    assert agents["general-purpose"]["skills"] == _TEMPLATE_GP_SKILLS
+    assert "sandbox-path-guide" in agents["general-purpose"]["skills"]
+    # 2. 用户改过的全局参数保留
+    assert merged["subagents"]["timeout_seconds"] == 3600
+
+
+def test_merges_subagent_agents_preserves_user_keys(tmp_path):
+    """用户自定义的 agents key 保留，模板 key 覆盖同名。"""
+    from scripts.run_gateway import REPO_ROOT
+
+    runtime_cfg = tmp_path / "config" / "qilin.runtime.yaml"
+    runtime_cfg.parent.mkdir(parents=True, exist_ok=True)
+    qilin_data_dir = tmp_path / "data"
+
+    # 用户给 general-purpose 配过 model（与模板不同）+ 自定义 bash 代理 key
+    user_cfg = {
+        "models": [{"name": "my-model"}],
+        "subagents": {
+            "agents": {
+                "general-purpose": {"model": "my-model"},
+                "bash": {"max_turns": 30},  # 用户自定义 key
+            },
+        },
+    }
+    runtime_cfg.write_text(yaml.safe_dump(user_cfg, allow_unicode=True), encoding="utf-8")
+
+    _generate_runtime_config(runtime_cfg, qilin_data_dir, REPO_ROOT)
+
+    merged = yaml.safe_load(runtime_cfg.read_text(encoding="utf-8"))
+    agents = merged["subagents"]["agents"]
+
+    # 模板 key 覆盖同名（skills 白名单生效）
+    assert agents["general-purpose"]["skills"] == _TEMPLATE_GP_SKILLS
+    # 用户自定义 key 保留
+    assert agents["bash"]["max_turns"] == 30
