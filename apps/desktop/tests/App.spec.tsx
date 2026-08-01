@@ -51,6 +51,7 @@ vi.mock("../src/lib/modelsClient", () => ({
 
 // turnsClient mock：ensureThread 默认返回固定 thread_id；streamRun 默认空实现（各测试覆盖）。
 // listThreads 默认返回空数组（无历史会话）；deleteThread 默认成功；cancelRun 默认成功。
+// 附件/工作区接口默认空结果（Home 切换任务与发送消息时会调用，缺导出会抛 unhandled）。
 vi.mock("../src/lib/turnsClient", () => ({
   ensureThread: turnsMock.ensureThread,
   streamRun: turnsMock.streamRun,
@@ -62,6 +63,11 @@ vi.mock("../src/lib/turnsClient", () => ({
   listThreads: vi.fn().mockResolvedValue([]),
   deleteThread: vi.fn().mockResolvedValue(undefined),
   cancelRun: vi.fn().mockResolvedValue(undefined),
+  uploadFiles: vi.fn().mockResolvedValue([]),
+  listUploads: vi.fn().mockResolvedValue([]),
+  deleteUpload: vi.fn().mockResolvedValue({ success: true }),
+  artifactUrl: vi.fn(),
+  getWorkspaceChanges: vi.fn().mockResolvedValue({ available: false, files: [] }),
 }));
 
 // gatewayControlClient mock：重启后端的 restart + 健康轮询由各测试覆盖。
@@ -100,10 +106,11 @@ test("已登录启动后直接进入工作台并打开设置模型页", async ()
 
   render(<App />);
 
-  // 已登录用户直接看到工作台的输入区与设置入口。
+  // 已登录用户直接看到工作台的输入区；设置入口在账户菜单内。
   expect(await screen.findByRole("textbox", { name: "消息输入" })).toBeVisible();
-  expect(screen.getByRole("button", { name: "打开设置" })).toBeVisible();
 
+  // 展开账户菜单（底部账户按钮）→ 「打开设置」
+  fireEvent.click(screen.getByRole("button", { name: "tester@kstock.dev" }));
   fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
   fireEvent.click(screen.getByRole("button", { name: "模型" }));
 
@@ -116,8 +123,9 @@ test("已登录启动后直接进入工作台并打开设置模型页", async ()
 test("注册入口展示邮箱密码与确认密码表单", async () => {
   render(<App />);
 
-  await screen.findByRole("button", { name: "进入工作台" });
-  fireEvent.click(screen.getByRole("button", { name: "注册" }));
+  // 落地页 → 登录页，再切换注册模式
+  fireEvent.click(await screen.findByRole("button", { name: "登录 / 注册" }));
+  fireEvent.click(screen.getByRole("button", { name: "没有账户？注册" }));
 
   expect(screen.getByPlaceholderText("research@kstock.dev")).toBeVisible();
   expect(screen.getByPlaceholderText("至少 8 位")).toBeVisible();
@@ -193,7 +201,8 @@ test("设置页添加模型后输入框选择器同步刷新（不重启）", as
   // 初始：未配置模型
   expect(screen.getByText("未配置模型（请到设置页添加）")).toBeVisible();
 
-  // 进设置页 → 模型
+  // 进设置页（先展开账户菜单）→ 模型
+  fireEvent.click(screen.getByRole("button", { name: "t@k.dev" }));
   fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
   fireEvent.click(screen.getByRole("button", { name: "模型" }));
   expect(await screen.findByText(/尚未配置任何模型/)).toBeVisible();
@@ -211,7 +220,7 @@ test("设置页添加模型后输入框选择器同步刷新（不重启）", as
   fireEvent.click(screen.getByRole("button", { name: "返回应用" }));
 
   // 输入框选择器现在显示新模型（不再显示「未配置」）
-  const select = await screen.findByRole("combobox");
+  const select = await screen.findByRole("combobox", { name: "模型选择" });
   expect(select).toBeVisible();
   expect(screen.queryByText("未配置模型（请到设置页添加）")).toBeNull();
   expect((select as HTMLSelectElement).value).toBe("deepseek");
@@ -225,10 +234,14 @@ test("发消息触发流式 run 并逐帧累积 assistant 文本", async () => {
     models: [{
       name: "test-model",
       display_name: "Test",
+      description: null,
       use: "openai",
       model: "gpt-4",
+      api_base: null,
+      api_key_env: null,
       supports_thinking: false,
       supports_vision: false,
+      supports_reasoning_effort: false,
     }],
     default_model: "test-model",
   });
@@ -241,13 +254,16 @@ test("发消息触发流式 run 并逐帧累积 assistant 文本", async () => {
   render(<App />);
 
   const textarea = await screen.findByRole("textbox", { name: "消息输入" });
-  // 等待模型列表加载完成（select 出现 = models 非空，发送按钮 enabled）
-  await screen.findByRole("combobox");
+  // 等待模型列表加载完成（模型 select 出现 = models 非空，发送按钮 enabled）
+  await screen.findByRole("combobox", { name: "模型选择" });
   fireEvent.change(textarea, { target: { value: "分析茅台" } });
   fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
 
-  // user message 渲染（在 UserBubble 的 <p> 中；session title/topbar 也有同文本需 selector 精确定位）
-  expect(await screen.findByText("分析茅台", { selector: "p" })).toBeVisible();
+  // user message 渲染（在 UserBubble 的 <p> 中；session title/topbar 也有同文本需 selector 精确定位）。
+  // 用 waitFor + getByText 轮询最新 DOM，避免 streamRun 帧更新替换节点后断言旧引用。
+  await waitFor(() => {
+    expect(screen.getByText("分析茅台", { selector: "p" })).toBeVisible();
+  });
   // assistant 流式文本累积（"你好" + "，世界"）
   expect(await screen.findByText(/你好.*世界/)).toBeVisible();
   // ensureThread 被调用
@@ -269,6 +285,8 @@ test("设置页重启后端：点按钮弹 ConfirmDialog，确认后触发 resta
   render(<App />);
 
   await screen.findByRole("textbox", { name: "消息输入" });
+  // 设置入口在账户菜单内：先展开账户菜单再点「打开设置」
+  fireEvent.click(screen.getByRole("button", { name: "t@k.dev" }));
   fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
 
   // 点「重启后端」按钮 → 弹出 ConfirmDialog（不是原生 window.confirm）

@@ -1732,7 +1732,7 @@ ${text}` : text)
             ) : (
               <label className="model-picker">
                 <Cpu size={15} />
-                <select value={activeModel} onChange={(e) => onModelChange(e.target.value)}>
+                <select aria-label="模型选择" value={activeModel} onChange={(e) => onModelChange(e.target.value)}>
                   {models.map((m) => (
                     <option key={m.name} value={m.name}>{m.display_name || m.name}</option>
                   ))}
