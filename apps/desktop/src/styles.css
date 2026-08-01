@@ -733,7 +733,7 @@ button {
 .workspace-shell {
   position: relative;
   display: grid;
-  grid-template-columns: 242px minmax(0, 1fr);
+  grid-template-columns: var(--workspace-sidebar-width, 242px) minmax(0, 1fr);
   /* 关键：限制 grid 行高 = shell 高度；否则子元素内容会撑开行高
      （conversation-stage 的 message-canvas 内容变长时会把 shell 顶高） */
   grid-template-rows: minmax(0, 1fr);
@@ -742,6 +742,51 @@ button {
 
 .workspace-shell.sidebar-collapsed {
   grid-template-columns: 60px minmax(0, 1fr);
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 14;
+  width: 10px;
+  transform: translateX(-50%);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.workspace-shell .sidebar-resize-handle {
+  left: var(--workspace-sidebar-width, 242px);
+}
+
+.settings-shell .sidebar-resize-handle {
+  left: var(--settings-sidebar-width, 228px);
+}
+
+.sidebar-resize-handle::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  background: transparent;
+  content: "";
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+
+.sidebar-resize-handle:hover::after,
+.sidebar-resize-handle:focus-visible::after {
+  background: #44c6a0;
+  box-shadow: 0 0 12px rgba(68, 198, 160, 0.38);
+}
+
+.sidebar-resize-handle:focus-visible {
+  outline: none;
+}
+
+body.sidebar-resizing {
+  cursor: col-resize !important;
+  user-select: none;
 }
 
 .codex-sidebar,
@@ -1453,8 +1498,9 @@ button {
 }
 
 .settings-shell {
+  position: relative;
   display: grid;
-  grid-template-columns: 228px minmax(0, 1fr);
+  grid-template-columns: var(--settings-sidebar-width, 228px) minmax(0, 1fr);
 }
 
 .settings-sidebar {
@@ -1828,6 +1874,10 @@ button {
   .settings-shell,
   .workspace-shell {
     grid-template-columns: 1fr;
+  }
+
+  .sidebar-resize-handle {
+    display: none;
   }
 
   .codex-sidebar {

@@ -101,6 +101,7 @@ import { McpExtensionsCard } from "../components/McpExtensionsCard";
 import { SkillsExtensionsCard } from "../components/SkillsExtensionsCard";
 import { AttachmentPicker, AttachmentChips } from "../components/AttachmentPicker";
 import { GeneralSettings } from "../components/GeneralSettings";
+import { SidebarResizeHandle } from "../components/SidebarResizeHandle";
 import {
   DEFAULT_GENERAL_PREFERENCES,
   getGeneralPreferences,
@@ -110,6 +111,26 @@ import {
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings" | "reports";
 type AuthMode = "login" | "register";
+
+const WORKSPACE_SIDEBAR_WIDTH_KEY = "kstock.workspaceSidebarWidth";
+const SETTINGS_SIDEBAR_WIDTH_KEY = "kstock.settingsSidebarWidth";
+
+function readSidebarWidth(key: string, fallback: number, min: number, max: number) {
+  try {
+    const value = Number(localStorage.getItem(key));
+    return Number.isFinite(value) ? Math.min(Math.max(value, min), max) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistSidebarWidth(key: string, value: number) {
+  try {
+    localStorage.setItem(key, String(Math.round(value)));
+  } catch {
+    // 本地存储不可用时保留当前会话内的拖拽结果。
+  }
+}
 
 async function toggleWindowMaximize(event: React.MouseEvent<HTMLElement>) {
   const target = event.target as HTMLElement;
@@ -181,6 +202,12 @@ export function Home() {
   const [view, setView] = useState<ViewMode>("landing");
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [workspaceSidebarWidth, setWorkspaceSidebarWidth] = useState(() =>
+    readSidebarWidth(WORKSPACE_SIDEBAR_WIDTH_KEY, 242, 180, 360)
+  );
+  const [settingsSidebarWidth, setSettingsSidebarWidth] = useState(() =>
+    readSidebarWidth(SETTINGS_SIDEBAR_WIDTH_KEY, 228, 190, 360)
+  );
   const [generalPreferences, setGeneralPreferences] = useState<GeneralPreferences>(DEFAULT_GENERAL_PREFERENCES);
   const [generalPreferencesLoaded, setGeneralPreferencesLoaded] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
@@ -213,6 +240,16 @@ export function Home() {
   const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [deleteDeleting, setDeleteDeleting] = useState(false);
+
+  const handleWorkspaceSidebarResize = useCallback((width: number) => {
+    setWorkspaceSidebarWidth(width);
+    persistSidebarWidth(WORKSPACE_SIDEBAR_WIDTH_KEY, width);
+  }, []);
+
+  const handleSettingsSidebarResize = useCallback((width: number) => {
+    setSettingsSidebarWidth(width);
+    persistSidebarWidth(SETTINGS_SIDEBAR_WIDTH_KEY, width);
+  }, []);
 
   // 启动时探测 gateway 会话与系统初始化状态。
   useEffect(() => {
@@ -724,11 +761,13 @@ export function Home() {
         currentUser={currentUser}
         models={models}
         generalPreferences={generalPreferences}
+        sidebarWidth={settingsSidebarWidth}
         onBack={enterWorkspace}
         onLogout={handleLogout}
         onSelectSection={setSettingsSectionId}
         onModelsChanged={handleModelsChanged}
         onGeneralPreferencesChanged={handleGeneralPreferencesSaved}
+        onSidebarWidthChange={handleSettingsSidebarResize}
       />
     );
   }
@@ -752,6 +791,7 @@ export function Home() {
       rightPanelOpen={rightPanelOpen}
       sessions={sessions}
       sidebarCollapsed={sidebarCollapsed}
+      sidebarWidth={workspaceSidebarWidth}
       historyCollapsed={generalPreferences.history_collapsed}
       generalPreferences={generalPreferences}
       models={models}
@@ -778,6 +818,7 @@ export function Home() {
       onRemoveAttachment={handleRemoveAttachment}
       onToggleRightPanel={() => setRightPanelOpen((current) => !current)}
       onToggleSidebar={() => persistGeneralPreferencePatch({ sidebar_collapsed: !sidebarCollapsed })}
+      onResizeWorkspaceSidebar={handleWorkspaceSidebarResize}
       onToggleHistory={() => persistGeneralPreferencePatch({ history_collapsed: !generalPreferences.history_collapsed })}
     />
       <ConfirmDialog
@@ -1156,6 +1197,7 @@ function WorkspaceShell({
   rightPanelOpen,
   sessions,
   sidebarCollapsed,
+  sidebarWidth,
   historyCollapsed,
   generalPreferences,
   models,
@@ -1179,6 +1221,7 @@ function WorkspaceShell({
   onRemoveAttachment,
   onToggleRightPanel,
   onToggleSidebar,
+  onResizeWorkspaceSidebar,
   onToggleHistory
 }: {
   activeSession: ChatSession | undefined;
@@ -1188,6 +1231,7 @@ function WorkspaceShell({
   rightPanelOpen: boolean;
   sessions: ChatSession[];
   sidebarCollapsed: boolean;
+  sidebarWidth: number;
   historyCollapsed: boolean;
   generalPreferences: GeneralPreferences;
   models: ModelConfig[];
@@ -1211,6 +1255,7 @@ function WorkspaceShell({
   onRemoveAttachment: (filename: string) => void;
   onToggleRightPanel: () => void;
   onToggleSidebar: () => void;
+  onResizeWorkspaceSidebar: (width: number) => void;
   onToggleHistory: () => void;
 }) {
   const messages = activeSession?.messages ?? [];
@@ -1225,7 +1270,10 @@ function WorkspaceShell({
   // 账户操作默认收起，避免长期占用侧栏底部空间。
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   return (
-    <div className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${rightPanelOpen ? "context-open" : ""} density-${generalPreferences.density} ${generalPreferences.reduce_motion ? "reduce-motion" : ""}`}>
+    <div
+      className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${rightPanelOpen ? "context-open" : ""} density-${generalPreferences.density} ${generalPreferences.reduce_motion ? "reduce-motion" : ""}`}
+      style={{ "--workspace-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+    >
       <aside className="codex-sidebar" aria-label="工作区侧边栏">
         <div className="sidebar-title">
           <button className="icon-ghost" type="button" onClick={onToggleSidebar} aria-label="折叠侧边栏">
@@ -1341,6 +1389,15 @@ function WorkspaceShell({
           )}
         </div>
       </aside>
+      {!sidebarCollapsed && (
+        <SidebarResizeHandle
+          width={sidebarWidth}
+          minWidth={180}
+          maxWidth={360}
+          label="调整工作区侧栏宽度"
+          onResize={onResizeWorkspaceSidebar}
+        />
+      )}
 
       <main className="conversation-stage">
         <header
@@ -1520,22 +1577,26 @@ function SettingsPage({
   currentUser,
   models,
   generalPreferences,
+  sidebarWidth,
   onBack,
   onLogout,
   onSelectSection,
   onModelsChanged,
-  onGeneralPreferencesChanged
+  onGeneralPreferencesChanged,
+  onSidebarWidthChange,
 }: {
   activeSection: (typeof SETTING_SECTIONS)[number];
   activeSectionId: string;
   currentUser: AuthUser | null;
   models: ModelConfig[];
   generalPreferences: GeneralPreferences;
+  sidebarWidth: number;
   onBack: () => void;
   onLogout: () => void;
   onSelectSection: (id: string) => void;
   onModelsChanged?: (models: ModelConfig[], defaultModel: string | null) => void;
   onGeneralPreferencesChanged: (preferences: GeneralPreferences) => void;
+  onSidebarWidthChange: (width: number) => void;
 }) {
   const grouped = SETTING_SECTIONS.reduce<Record<string, typeof SETTING_SECTIONS>>((acc, section) => {
     acc[section.group] = [...(acc[section.group] ?? []), section];
@@ -1544,7 +1605,10 @@ function SettingsPage({
   const ActiveIcon = activeSection.icon;
 
   return (
-    <div className={`settings-shell density-${generalPreferences.density} ${generalPreferences.reduce_motion ? "reduce-motion" : ""}`}>
+    <div
+      className={`settings-shell density-${generalPreferences.density} ${generalPreferences.reduce_motion ? "reduce-motion" : ""}`}
+      style={{ "--settings-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+    >
       <aside className="settings-sidebar" aria-label="设置菜单">
         <button className="settings-back" type="button" onClick={onBack}>
           <ArrowLeft size={17} />
@@ -1574,6 +1638,13 @@ function SettingsPage({
           </div>
         ))}
       </aside>
+      <SidebarResizeHandle
+        width={sidebarWidth}
+        minWidth={190}
+        maxWidth={360}
+        label="调整设置侧栏宽度"
+        onResize={onSidebarWidthChange}
+      />
 
       <main className="settings-content">
         <div className="settings-title">
