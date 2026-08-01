@@ -1472,6 +1472,7 @@ function WorkspaceShell({
   const taskTokens = latestUsage?.usage?.total_tokens ?? 0;
   const todos = latestAssistant?.todos ?? [];
   const subagents = latestAssistant?.subagents ?? [];
+  const uploadPanelFiles = mergeUploadPanelFiles(threadUploads, pendingAttachments);
   const deliveryFiles = mergeDeliveryFiles(activeSession?.threadId, latestAssistant?.artifacts, workspaceChanges);
   // ChatFeed 命令式 ref + 贴底状态：驱动「回到底部」浮动按钮。
   const feedRef = useRef<ChatFeedHandle>(null);
@@ -1791,17 +1792,16 @@ ${text}` : text)
           )}
         </ContextSection>
 
-        <ContextSection icon={Upload} title="上传文件" count={threadUploads.length + pendingAttachments.length}>
-          {uploadsLoading ? <ContextEmpty>正在读取上传目录…</ContextEmpty> : threadUploads.length === 0 && pendingAttachments.length === 0 ? (
+        <ContextSection icon={Upload} title="上传文件" count={uploadPanelFiles.length}>
+          {uploadsLoading ? <ContextEmpty>正在读取上传目录…</ContextEmpty> : uploadPanelFiles.length === 0 ? (
             <ContextEmpty>当前任务没有上传文件</ContextEmpty>
           ) : (
             <div className="context-file-list">
-              {pendingAttachments.map((file) => <ContextFileRow key={`pending-${file.filename}`} name={file.filename} meta="待发送" />)}
-              {threadUploads.map((file) => (
+              {uploadPanelFiles.map(({ file, pending }) => (
                 <ContextFileRow
                   key={file.filename}
                   name={file.original_filename || file.filename}
-                  meta={`${formatFileSize(file.size)}${file.markdown_file ? " · 已转换 Markdown" : ""}`}
+                  meta={`${pending ? "待发送 · " : ""}${formatFileSize(file.size)}${file.markdown_file ? " · 已转换 Markdown" : ""}`}
                   href={file.artifact_url ? toAbsoluteUrl(file.artifact_url) : undefined}
                 />
               ))}
@@ -1917,6 +1917,22 @@ type DeliveryFile = {
   size?: number;
   status: string;
 };
+
+function mergeUploadPanelFiles(
+  uploaded: UploadedFileRef[],
+  pending: UploadedFileRef[]
+): Array<{ file: UploadedFileRef; pending: boolean }> {
+  const byName = new Map<string, { file: UploadedFileRef; pending: boolean }>();
+  uploaded.forEach((file) => byName.set(file.filename, { file, pending: false }));
+  pending.forEach((file) => {
+    const existing = byName.get(file.filename)?.file;
+    byName.set(file.filename, {
+      file: existing ? { ...existing, ...file } : file,
+      pending: true
+    });
+  });
+  return [...byName.values()];
+}
 
 function mergeDeliveryFiles(
   threadId: string | undefined,
