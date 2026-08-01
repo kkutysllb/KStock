@@ -1066,9 +1066,13 @@ function WorkspaceShell({
           <button className="icon-ghost" type="button" onClick={onToggleSidebar} aria-label="折叠侧边栏">
             {sidebarCollapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
           </button>
-          {!sidebarCollapsed && <LogoMark compact />}
-          {!sidebarCollapsed && <strong>KStock</strong>}
-          {!sidebarCollapsed && <ChevronDown size={15} />}
+          {!sidebarCollapsed && (
+            <div className="sidebar-brand" aria-label="KStock 工作区">
+              <LogoMark compact />
+              <strong>KStock</strong>
+              <ChevronDown size={15} />
+            </div>
+          )}
         </div>
         <div className="nav-stack">
           <button className="nav-command" type="button" onClick={onNewSession}>
@@ -1171,6 +1175,13 @@ function WorkspaceShell({
             <Folder size={17} />
             <strong>{activeSession?.title ?? "新研究会话"}</strong>
           </div>
+          <div className="research-status-bar" aria-label="研究状态">
+            <span className={`status-light ${streamingId ? "active" : ""}`} />
+            <strong>研究模式</strong>
+            <span className="status-separator">/</span>
+            <span>{streamingId ? "生成中…" : "等待研究任务"}</span>
+            <em><span className="status-pulse" />QiLin 已连接</em>
+          </div>
           <div className="topbar-actions">
             <button className="icon-ghost" type="button" aria-label="搜索">
               <Search size={17} />
@@ -1185,13 +1196,6 @@ function WorkspaceShell({
         </header>
 
         <section className="message-canvas" aria-label="对话工作台">
-          <div className="research-status-bar" aria-label="研究状态">
-            <span className={`status-light ${streamingId ? "active" : ""}`} />
-            <strong>研究模式</strong>
-            <span className="status-separator">/</span>
-            <span>{streamingId ? "生成中…" : "等待研究任务"}</span>
-            <em>QiLin 已连接</em>
-          </div>
           <ChatFeed
             ref={feedRef}
             messages={messages}
@@ -1203,13 +1207,17 @@ ${text}` : text)
             }
             emptySlot={
               <div className="workspace-empty">
-                <p className="eyebrow">Research Mode</p>
-                <h1>把股票、行业或宏观问题直接交给 KStock。</h1>
-                <p>默认使用 QiLin 引擎和精选 KSkills，输出研究路径、来源摘要、图表建议和报告草稿。</p>
+                <div className="welcome-heading">
+                  <p className="eyebrow">Research Desk <span>01</span></p>
+                  <h1>把一个问题，变成一份<br /><em>可验证的研究结论。</em></h1>
+                  <p>从行情、财报到行业脉络，KStock 会整理证据、过程与风险，最后交付清晰的研究看板。</p>
+                </div>
                 <div className="quick-prompt-grid">
-                  {quickPrompts.map((prompt) => (
+                  {quickPrompts.map((prompt, index) => (
                     <button key={prompt} type="button" onClick={() => onDraftChange(prompt)}>
+                      <span className="prompt-index">0{index + 1}</span>
                       {prompt}
+                      <ChevronRight size={15} aria-hidden="true" />
                     </button>
                   ))}
                 </div>
