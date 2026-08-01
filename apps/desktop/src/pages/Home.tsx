@@ -19,6 +19,7 @@ import {
   Lock,
   LogOut,
   PanelRight,
+  Paperclip,
   Plus,
   Search,
   Send,
@@ -63,7 +64,17 @@ import {
   updateMessageInSession,
   type ChatSession
 } from "../lib/sessionStore";
-import { cancelRun, deleteThread, ensureThread, listThreads, runContextFromModel, streamRun } from "../lib/turnsClient";
+import {
+  cancelRun,
+  deleteThread,
+  deleteUpload,
+  ensureThread,
+  listThreads,
+  runContextFromModel,
+  streamRun,
+  uploadFiles,
+  type UploadedFileRef,
+} from "../lib/turnsClient";
 import { initialTurn, reduceFrame } from "../lib/turnReducer";
 import { inferStage } from "../lib/stageInferrer";
 import {
@@ -80,8 +91,12 @@ import { RuntimeSettings } from "../components/RuntimeSettings";
 import { GuardrailsSettings } from "../components/GuardrailsSettings";
 import { SearchSettings } from "../components/SearchSettings";
 import { SubagentsSettings } from "../components/SubagentsSettings";
+import { AttachmentSettings } from "../components/AttachmentSettings";
+import { AccountSettings } from "../components/AccountSettings";
+import { ReportSettings } from "../components/ReportSettings";
 import { McpExtensionsCard } from "../components/McpExtensionsCard";
 import { SkillsExtensionsCard } from "../components/SkillsExtensionsCard";
+import { AttachmentPicker } from "../components/AttachmentPicker";
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings";
 type AuthMode = "login" | "register";
@@ -160,6 +175,10 @@ export function Home() {
   const [modelsLoading, setModelsLoading] = useState(true);
   // 流式 run 状态。
   const [streamingId, setStreamingId] = useState<string | null>(null);
+  // 输入区待发附件（本轮要随消息携带的 UploadedFileRef）。发送成功后清空。
+  const [pendingAttachments, setPendingAttachments] = useState<UploadedFileRef[]>([]);
+  // 附件上传中状态（控制 chip loading + 选择按钮禁用）。
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   // 当前正在执行的 run 标识（threadId + runId），由 streamRun 的 onRunId 回调填入。
   // handleStop 用它显式调 cancel API 即时停止 agent/subagent，而不只靠 abort 断流。
@@ -386,6 +405,8 @@ export function Home() {
     if (!input || !modelName || streamingId) {
       return;
     }
+    // 捕快照：发送前保存待发附件（随后清空 pendingAttachments）
+    const filesToSend = pendingAttachments.length > 0 ? [...pendingAttachments] : undefined;
     // 无 activeSession（首次进入空台）时自动创建一个，再继续发送。
     let session = activeSession;
     if (!session) {
@@ -399,6 +420,7 @@ export function Home() {
     }
 
     setDraft("");
+    setPendingAttachments([]);
 
     // 1. append user message
     setSessions((current) =>
@@ -444,7 +466,15 @@ export function Home() {
     try {
       await streamRun({
         threadId,
-        input: { messages: [{ role: "user", content: input }] },
+        input: {
+          messages: [
+            {
+              role: "user",
+              content: input,
+              ...(filesToSend ? { additional_kwargs: { files: filesToSend } } : {})
+            }
+          ]
+        },
         context: runContextFromModel(model),
         signal: controller.signal,
         handlers: {
@@ -489,6 +519,51 @@ export function Home() {
     abortRef.current?.abort();
   };
 
+  // 选附件：上传到当前会话的 thread（无 threadId 时先创建引擎 thread 并绑定）。
+  const handlePickFiles = async (files: FileList) => {
+    const session = activeSession;
+    if (!session) return;
+
+    // 附件上传依赖 thread_id；无 threadId 时先创建引擎 thread 并绑定到 session。
+    let threadId = session.threadId;
+    if (!threadId) {
+      try {
+        threadId = await ensureThread();
+        setSessions((current) =>
+          current.map((s) => (s.id === session.id ? bindThreadId(s, threadId!) : s))
+        );
+      } catch {
+        // 创建 thread 失败：静默返回（不影响其他操作）。
+        return;
+      }
+    }
+
+    setAttachmentsLoading(true);
+    try {
+      const refs = await uploadFiles(threadId, files);
+      if (refs.length > 0) {
+        setPendingAttachments((prev) => [...prev, ...refs]);
+      }
+    } catch {
+      // 上传失败：静默处理（可后续加 toast）。
+    } finally {
+      setAttachmentsLoading(false);
+    }
+  };
+
+  // 移除附件：乐观移除 chip + best-effort 删除引擎文件。
+  const handleRemoveAttachment = async (filename: string) => {
+    const session = activeSession;
+    // 乐观 UI：先移除 chip
+    setPendingAttachments((prev) => prev.filter((a) => a.filename !== filename));
+    if (!session?.threadId) return;
+    try {
+      await deleteUpload(session.threadId, filename);
+    } catch {
+      // 删除失败：chip 已移除，引擎文件残留不影响发送。
+    }
+  };
+
   if (!authReady) {
     return <main className="app-boot" aria-label="应用启动中" />;
   }
@@ -515,7 +590,10 @@ export function Home() {
       <SettingsPage
         activeSection={activeSetting}
         activeSectionId={settingsSectionId}
+        currentUser={currentUser}
+        models={models}
         onBack={enterWorkspace}
+        onLogout={handleLogout}
         onSelectSection={setSettingsSectionId}
         onModelsChanged={handleModelsChanged}
       />
@@ -550,6 +628,10 @@ export function Home() {
       onDeleteSession={handleRequestDeleteSession}
       onSend={handleSend}
       onStop={handleStop}
+      pendingAttachments={pendingAttachments}
+      attachmentsLoading={attachmentsLoading}
+      onPickFiles={handlePickFiles}
+      onRemoveAttachment={handleRemoveAttachment}
       onToggleRightPanel={() => setRightPanelOpen((current) => !current)}
       onToggleSidebar={() => setSidebarCollapsed((current) => !current)}
     />
@@ -886,6 +968,10 @@ function WorkspaceShell({
   onDeleteSession,
   onSend,
   onStop,
+  pendingAttachments,
+  attachmentsLoading,
+  onPickFiles,
+  onRemoveAttachment,
   onToggleRightPanel,
   onToggleSidebar
 }: {
@@ -909,6 +995,10 @@ function WorkspaceShell({
   onDeleteSession: (sessionId: string) => void;
   onSend: (model: string) => void;
   onStop: () => void;
+  pendingAttachments: UploadedFileRef[];
+  attachmentsLoading: boolean;
+  onPickFiles: (files: FileList) => void;
+  onRemoveAttachment: (filename: string) => void;
   onToggleRightPanel: () => void;
   onToggleSidebar: () => void;
 }) {
@@ -1089,6 +1179,14 @@ ${text}` : text)
               <ChevronDown size={18} />
             </button>
           )}
+          <AttachmentPicker
+            attachments={pendingAttachments}
+            loading={attachmentsLoading}
+            disabled={!activeSession || !!streamingId}
+            disabledReason={!activeSession ? "先开始一个会话" : undefined}
+            onPickFiles={onPickFiles}
+            onRemove={onRemoveAttachment}
+          />
           <textarea
             aria-label="消息输入"
             value={draft}
@@ -1171,13 +1269,19 @@ function ContextLine({
 function SettingsPage({
   activeSection,
   activeSectionId,
+  currentUser,
+  models,
   onBack,
+  onLogout,
   onSelectSection,
   onModelsChanged
 }: {
   activeSection: (typeof SETTING_SECTIONS)[number];
   activeSectionId: string;
+  currentUser: AuthUser | null;
+  models: ModelConfig[];
   onBack: () => void;
+  onLogout: () => void;
   onSelectSection: (id: string) => void;
   onModelsChanged?: (models: ModelConfig[], defaultModel: string | null) => void;
 }) {
@@ -1247,6 +1351,18 @@ function SettingsPage({
           <SearchSettings />
         ) : activeSection.id === "subagents" ? (
           <SubagentsSettings />
+        ) : activeSection.id === "attachments" ? (
+          <AttachmentSettings />
+        ) : activeSection.id === "auth" ? (
+          currentUser ? (
+            <AccountSettings currentUser={currentUser} models={models} onLogout={onLogout} />
+          ) : (
+            <section className="settings-card">
+              <p className="auth-error" role="alert">请先登录后查看账户信息。</p>
+            </section>
+          )
+        ) : activeSection.id === "reports" ? (
+          <ReportSettings onNavigateToExtensions={() => onSelectSection("integrations")} />
         ) : activeSection.id === "integrations" ? (
           <div className="subagents-settings">
             <McpExtensionsCard />

@@ -19,6 +19,28 @@ export interface RunContext {
   reasoning_effort?: string;
 }
 
+/**
+ * 附件描述符（引擎 UploadedFileInfo 的必需字段子集）。
+ *
+ * 发送消息时放入 message.additional_kwargs.files，UploadsMiddleware 读取后
+ * 注入 `<current_uploads>` 块让模型感知本轮上传。middleware 实际只读
+ * filename/size（path/extension 自行重算），这里保留 virtual_path/artifact_url
+ * 供前端展示与下载链接。
+ */
+export interface UploadedFileRef {
+  filename: string;
+  size: number;
+  virtual_path: string;
+  artifact_url: string;
+}
+
+/** 引擎上传限制（max_file_size / max_total_size 以字节为单位）。 */
+export interface UploadLimits {
+  max_files: number;
+  max_file_size: number;
+  max_total_size: number;
+}
+
 export interface StreamRunHandlers {
   /** 每收到一帧 SSE 调用（交给 turnReducer 更新 turn 状态）。 */
   onFrame: (frame: SseFrame) => void;
@@ -36,7 +58,14 @@ export interface StreamRunHandlers {
 
 export interface StreamRunOptions {
   threadId: string;
-  input: { messages: Array<{ role: "user"; content: string }> };
+  input: {
+    messages: Array<{
+      role: "user";
+      content: string;
+      /** 本轮上传的附件描述符；由 UploadsMiddleware 注入 <current_uploads> 块。 */
+      additional_kwargs?: { files?: UploadedFileRef[] };
+    }>;
+  };
   context: RunContext;
   signal?: AbortSignal;
   handlers: StreamRunHandlers;
@@ -253,12 +282,122 @@ export function runContextFromModel(
   return ctx;
 }
 
+// ── 附件上传 ─────────────────────────────────────────────────────────
+//
+// 引擎 uploads router（vendor/qilin/app/gateway/routers/uploads.py）：
+//   POST   /api/threads/{tid}/uploads            — multipart 上传（字段名 files）
+//   GET    /api/threads/{tid}/uploads/limits     — 限制（max_files/max_file_size/max_total_size）
+//   GET    /api/threads/{tid}/uploads/list       — 已上传文件列表
+//   DELETE /api/threads/{tid}/uploads/{filename} — 删除单个附件
+
+/**
+ * 上传附件到 thread，返回成功落盘的文件描述符列表（可直接放入
+ * message.additional_kwargs.files 一并发送）。
+ *
+ * 注意：multipart 请求不能手动设 Content-Type，浏览器会自动附加 boundary；
+ * 这里用 csrfHeaders() 只带 CSRF token。若部分文件被引擎跳过（不安全文件名
+ * 等），返回数组只含成功上传的项；全部失败时抛错。
+ */
+export async function uploadFiles(
+  threadId: string,
+  fileList: FileList | File[]
+): Promise<UploadedFileRef[]> {
+  const files = Array.from(fileList);
+  if (!files.length) return [];
+  const form = new FormData();
+  for (const f of files) {
+    form.append("files", f, f.name);
+  }
+  const resp = await fetch(
+    `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/uploads`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: csrfHeaders(),
+      body: form
+    }
+  );
+  if (!resp.ok) {
+    throw await toError("上传附件失败", resp);
+  }
+  const data = (await resp.json()) as {
+    success: boolean;
+    files: Record<string, unknown>[];
+    message: string;
+    skipped_files?: string[];
+  };
+  if (!data.files || data.files.length === 0) {
+    throw new Error(data.message || "上传失败");
+  }
+  return data.files.map(toFileRef);
+}
+
+/** 读取 thread 的上传限制（字节单位）。 */
+export async function getUploadLimits(threadId: string): Promise<UploadLimits> {
+  const resp = await fetch(
+    `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/uploads/limits`,
+    { method: "GET", credentials: "include", headers: jsonHeaders() }
+  );
+  if (!resp.ok) {
+    throw await toError("读取上传限制失败", resp);
+  }
+  return (await resp.json()) as UploadLimits;
+}
+
+/** 列出 thread 已上传的文件。 */
+export async function listUploads(threadId: string): Promise<UploadedFileRef[]> {
+  const resp = await fetch(
+    `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/uploads/list`,
+    { method: "GET", credentials: "include", headers: jsonHeaders() }
+  );
+  if (!resp.ok) {
+    throw await toError("列出附件失败", resp);
+  }
+  const data = (await resp.json()) as { files?: Record<string, unknown>[]; count?: number };
+  return (data.files ?? []).map(toFileRef);
+}
+
+/** 删除 thread 的某个已上传文件。 */
+export async function deleteUpload(threadId: string, filename: string): Promise<void> {
+  const resp = await fetch(
+    `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/uploads/${encodeURIComponent(filename)}`,
+    { method: "DELETE", credentials: "include", headers: jsonHeaders() }
+  );
+  if (!resp.ok) {
+    throw await toError("删除附件失败", resp);
+  }
+  // best-effort 消费 body（无关键 payload）
+  try {
+    await resp.text();
+  } catch {
+    /* ignore */
+  }
+}
+
 // ── 内部工具 ──
 function jsonHeaders(): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
   const csrf = readCsrfToken();
   if (csrf) h["X-CSRF-Token"] = csrf;
   return h;
+}
+
+/** multipart/form-data 请求专用：只带 CSRF，不加 Content-Type（浏览器自动加 boundary）。 */
+function csrfHeaders(): Record<string, string> {
+  const h: Record<string, string> = {};
+  const csrf = readCsrfToken();
+  if (csrf) h["X-CSRF-Token"] = csrf;
+  return h;
+}
+
+/** 从引擎 UploadedFileInfo dict 提取前端需要的字段子集。 */
+function toFileRef(raw: Record<string, unknown>): UploadedFileRef {
+  return {
+    filename: String(raw.filename ?? ""),
+    size: Number(raw.size ?? 0),
+    virtual_path: String(raw.virtual_path ?? ""),
+    artifact_url: String(raw.artifact_url ?? "")
+  };
 }
 
 async function toError(prefix: string, resp: Response): Promise<Error> {

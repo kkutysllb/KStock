@@ -49,7 +49,7 @@ def test_get_runtime_config_returns_defaults_when_empty(tmp_path, monkeypatch):
         "sandbox", "token_usage", "token_budget",
         "guardrails", "authorization", "input_polish",
         "loop_detection", "safety_finish_reason",
-        "tool_search", "subagents", "max_recursion_limit",
+        "tool_search", "subagents", "uploads", "max_recursion_limit",
     }
     # title 默认 enabled=True, max_words=6
     assert body["title"]["enabled"] is True

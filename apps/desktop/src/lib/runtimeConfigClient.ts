@@ -153,6 +153,13 @@ export interface SubagentsConfig {
   custom_agents: Record<string, CustomSubagentConfig>;
 }
 
+/** 附件上传限制段（对应 scripts/kstock_uploads_config:UploadsUserConfig）。size 字段以字节为单位。 */
+export interface UploadsConfig {
+  max_files: number;
+  max_file_size: number;
+  max_total_size: number;
+}
+
 export interface RuntimeConfig {
   memory: MemoryRuntimeConfig;
   summarization: SummarizationConfig;
@@ -171,6 +178,8 @@ export interface RuntimeConfig {
   tool_search: ToolSearchConfig;
   // 智能体
   subagents: SubagentsConfig;
+  // 附件上传（KStock 自定义段）
+  uploads: UploadsConfig;
   // 顶层标量字段
   max_recursion_limit: number;
 }
@@ -190,7 +199,8 @@ export type RuntimeConfigSection =
   | "loop_detection"
   | "safety_finish_reason"
   | "tool_search"
-  | "subagents";
+  | "subagents"
+  | "uploads";
 
 /** 顶层标量字段名（走 updateTopLevelField）。 */
 export type RuntimeTopLevelField = "max_recursion_limit";

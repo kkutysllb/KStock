@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cancelRun,
+  deleteUpload,
   ensureThread,
   fetchThreadMessages,
+  getUploadLimits,
   listThreads,
+  listUploads,
   runContextFromModel,
   streamRun,
-  type RunContext
+  uploadFiles,
+  type RunContext,
+  type UploadedFileRef
 } from "../src/lib/turnsClient";
 import { makeTextStream } from "../src/lib/sseParser";
 
@@ -375,5 +380,178 @@ describe("runContextFromModel", () => {
       "high"
     );
     expect(ctx.reasoning_effort).toBeUndefined();
+  });
+});
+
+// ── uploadFiles ──────────────────────────────────────────────────────
+
+describe("uploadFiles", () => {
+  it("POST multipart 上传，返回 UploadedFileRef[]，不带 Content-Type（浏览器加 boundary）", async () => {
+    fetchMock.mockResolvedValue(
+      makeMockResponse({
+        json: {
+          success: true,
+          files: [
+            {
+              filename: "a.csv",
+              size: 123,
+              virtual_path: "/uploads/a.csv",
+              artifact_url: "/api/threads/t1/uploads/a.csv"
+            }
+          ],
+          message: "ok"
+        }
+      })
+    );
+    const file = new File(["col1,col2\n1,2\n"], "a.csv", { type: "text/csv" });
+    const refs = await uploadFiles("t1", [file]);
+    expect(refs).toEqual([
+      {
+        filename: "a.csv",
+        size: 123,
+        virtual_path: "/uploads/a.csv",
+        artifact_url: "/api/threads/t1/uploads/a.csv"
+      }
+    ]);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://localhost:18001/api/threads/t1/uploads");
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    // multipart 不能手动设 Content-Type（浏览器自动加 boundary）
+    expect(init.headers["Content-Type"]).toBeUndefined();
+    expect(init.headers["X-CSRF-Token"]).toBe("test-csrf-abc");
+    // body 是 FormData，含 files 字段
+    expect(init.body).toBeInstanceOf(FormData);
+    const form = init.body as FormData;
+    const entries = form.getAll("files");
+    expect(entries).toHaveLength(1);
+    expect((entries[0] as File).name).toBe("a.csv");
+  });
+
+  it("空文件列表返回空数组，不发起请求", async () => {
+    const refs = await uploadFiles("t1", []);
+    expect(refs).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("响应 files 为空时抛错", async () => {
+    fetchMock.mockResolvedValue(
+      makeMockResponse({ json: { success: false, files: [], message: "全部跳过" } })
+    );
+    const file = new File(["x"], "a.txt");
+    await expect(uploadFiles("t1", [file])).rejects.toThrow(/全部跳过/);
+  });
+
+  it("HTTP 非 2xx 时抛错并附状态与 detail", async () => {
+    fetchMock.mockResolvedValue(
+      makeMockResponse({ ok: false, status: 413, json: { detail: "too large" } })
+    );
+    const file = new File(["x"], "big.bin");
+    await expect(uploadFiles("t1", [file])).rejects.toThrow(/上传附件失败（413）：too large/);
+  });
+
+  it("threadId URL 编码", async () => {
+    fetchMock.mockResolvedValue(
+      makeMockResponse({
+        json: {
+          success: true,
+          files: [{ filename: "a.txt", size: 1, virtual_path: "/uploads/a.txt", artifact_url: "u" }],
+          message: "ok"
+        }
+      })
+    );
+    await uploadFiles("t/slash", [new File(["x"], "a.txt")]);
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toContain("/api/threads/t%2Fslash/uploads");
+  });
+});
+
+// ── getUploadLimits ──────────────────────────────────────────────────
+
+describe("getUploadLimits", () => {
+  it("GET .../uploads/limits 返回 UploadLimits", async () => {
+    fetchMock.mockResolvedValue(
+      makeMockResponse({
+        json: { max_files: 5, max_file_size: 1048576, max_total_size: 5242880 }
+      })
+    );
+    const limits = await getUploadLimits("t1");
+    expect(limits).toEqual({ max_files: 5, max_file_size: 1048576, max_total_size: 5242880 });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://localhost:18001/api/threads/t1/uploads/limits");
+    expect(init.method).toBe("GET");
+    expect(init.headers["X-CSRF-Token"]).toBe("test-csrf-abc");
+  });
+
+  it("HTTP 非 2xx 时抛错", async () => {
+    fetchMock.mockResolvedValue(
+      makeMockResponse({ ok: false, status: 403, json: { detail: "forbidden" } })
+    );
+    await expect(getUploadLimits("t1")).rejects.toThrow(/读取上传限制失败（403）：forbidden/);
+  });
+});
+
+// ── listUploads ──────────────────────────────────────────────────────
+
+describe("listUploads", () => {
+  it("GET .../uploads/list 返回 UploadedFileRef[]", async () => {
+    fetchMock.mockResolvedValue(
+      makeMockResponse({
+        json: {
+          files: [
+            { filename: "x.csv", size: 10, virtual_path: "/uploads/x.csv", artifact_url: "u1" },
+            { filename: "y.csv", size: 20, virtual_path: "/uploads/y.csv", artifact_url: "u2" }
+          ],
+          count: 2
+        }
+      })
+    );
+    const refs = await listUploads("t1");
+    expect(refs).toHaveLength(2);
+    expect(refs[0].filename).toBe("x.csv");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://localhost:18001/api/threads/t1/uploads/list");
+    expect(init.method).toBe("GET");
+  });
+
+  it("files 缺失时返回空数组", async () => {
+    fetchMock.mockResolvedValue(makeMockResponse({ json: { count: 0 } }));
+    expect(await listUploads("t1")).toEqual([]);
+  });
+
+  it("HTTP 非 2xx 时抛错", async () => {
+    fetchMock.mockResolvedValue(
+      makeMockResponse({ ok: false, status: 404, json: { detail: "no thread" } })
+    );
+    await expect(listUploads("t1")).rejects.toThrow(/列出附件失败（404）/);
+  });
+});
+
+// ── deleteUpload ─────────────────────────────────────────────────────
+
+describe("deleteUpload", () => {
+  it("DELETE .../uploads/{filename} 成功", async () => {
+    fetchMock.mockResolvedValue(makeMockResponse({ status: 200, json: { success: true } }));
+    await deleteUpload("t1", "a.csv");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://localhost:18001/api/threads/t1/uploads/a.csv");
+    expect(init.method).toBe("DELETE");
+    expect(init.credentials).toBe("include");
+    expect(init.headers["X-CSRF-Token"]).toBe("test-csrf-abc");
+  });
+
+  it("HTTP 非 2xx 时抛错", async () => {
+    fetchMock.mockResolvedValue(
+      makeMockResponse({ ok: false, status: 404, json: { detail: "not found" } })
+    );
+    await expect(deleteUpload("t1", "missing.csv")).rejects.toThrow(/删除附件失败（404）/);
+  });
+
+  it("filename URL 编码", async () => {
+    fetchMock.mockResolvedValue(makeMockResponse({ status: 200, json: {} }));
+    await deleteUpload("t1", "名 称.csv");
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toContain("/uploads/" + encodeURIComponent("名 称.csv"));
   });
 });

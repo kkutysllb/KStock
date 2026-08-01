@@ -1,17 +1,16 @@
 import {
   Brain,
-  Braces,
   Database,
   FileSearch,
   Gauge,
   GitBranch,
   KeyRound,
   MemoryStick,
+  Paperclip,
   Plug,
   Search,
   Shield,
   SlidersHorizontal,
-  Sparkles,
   TerminalSquare
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -189,15 +188,15 @@ export const SETTING_SECTIONS: SettingSection[] = [
     ]
   },
   {
-    id: "skills",
-    title: "技能",
-    group: "引擎",
-    icon: Sparkles,
-    summary: "精选 KSkills、延迟发现、技能扫描和技能演化。",
+    id: "attachments",
+    title: "附件上传",
+    group: "执行",
+    icon: Paperclip,
+    summary: "会话附件的大小、数量与总量限制（写入 runtime.yaml uploads 段，重启生效）。",
     fields: [
-      { name: "技能目录", value: "vendor/skills", hint: "只加载研究/分析/报告相关技能" },
-      { name: "延迟发现", value: "关闭", hint: "对应 skills.deferred_discovery" },
-      { name: "技能扫描", value: "开启", hint: "对应 skill_scan 和技能安全校验" }
+      { name: "单文件上限", value: "50 MB", hint: "对应 uploads.max_file_size" },
+      { name: "文件数量上限", value: "10 个", hint: "对应 uploads.max_files" },
+      { name: "总量上限", value: "100 MB", hint: "对应 uploads.max_total_size" }
     ]
   },
   {
@@ -310,18 +309,6 @@ export const SETTING_SECTIONS: SettingSection[] = [
       { name: "MCP Server", value: "支持模板快捷添加", hint: "Tushare / AKShare / Wind / Choice 模板" },
       { name: "预置技能", value: "12 个", hint: "10 个股票类 + 2 个通用类，可单独启停" },
       { name: "生效方式", value: "重启后加载", hint: "变更写入配置文件，重启 gateway 生效" }
-    ]
-  },
-  {
-    id: "developer",
-    title: "配置源码",
-    group: "高级",
-    icon: Braces,
-    summary: "查看生成的 YAML 片段、provider 字段和环境变量。",
-    fields: [
-      { name: "配置格式", value: "YAML", hint: "写入 config/qilin.config.yaml" },
-      { name: "可见字段", value: "provider / model / endpoint / key", hint: "敏感值只引用环境变量" },
-      { name: "验证", value: "sidecar health", hint: "检查 QiLin 初始化状态" }
     ]
   }
 ];

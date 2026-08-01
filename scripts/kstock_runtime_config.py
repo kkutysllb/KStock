@@ -45,6 +45,8 @@ _SECTION_MODELS: dict[str, str] = {
     "tool_search": "qilin.config.tool_search_config:ToolSearchConfig",
     # 智能体
     "subagents": "qilin.config.subagents_config:SubagentsAppConfig",
+    # 附件上传（KStock 自定义段，字段对齐引擎 uploads.py 读取的 key）
+    "uploads": "scripts.kstock_uploads_config:UploadsUserConfig",
 }
 
 # 段缺失时的兜底默认值（仅对含必填字段的 section 需要，如 sandbox.use）。
@@ -163,6 +165,8 @@ class RuntimeConfigResponse(BaseModel):
     tool_search: dict[str, Any]
     # 智能体
     subagents: dict[str, Any]
+    # 附件上传（KStock 自定义段）
+    uploads: dict[str, Any]
     # 顶层标量字段
     max_recursion_limit: int
 
