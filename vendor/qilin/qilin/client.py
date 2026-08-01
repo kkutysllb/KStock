@@ -802,7 +802,7 @@ class QiLinClient:
 
         Yields:
             StreamEvent with one of:
-            - type="values"          data={"title": str|None, "messages": [...], "artifacts": [...]}
+            - type="values"          data={"title": str|None, "messages": [...], "artifacts": [...], "todos": [...]}
             - type="custom"          data={...}
             - type="messages-tuple"  data={"type": "ai", "content": <delta>, "id": str}
             - type="messages-tuple"  data={"type": "ai", "content": <delta>, "id": str, "usage_metadata": {...}}
@@ -1055,6 +1055,7 @@ class QiLinClient:
                     "title": chunk.get("title"),
                     "messages": [self._serialize_message(m) for m in messages],
                     "artifacts": chunk.get("artifacts", []),
+                    "todos": chunk.get("todos", []),
                 },
             )
 

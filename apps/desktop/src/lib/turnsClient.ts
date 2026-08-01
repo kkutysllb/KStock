@@ -36,6 +36,31 @@ export interface UploadedFileRef {
   size: number;
   virtual_path: string;
   artifact_url: string;
+  original_filename?: string;
+  extension?: string;
+  markdown_file?: string;
+  markdown_artifact_url?: string;
+}
+
+export interface WorkspaceChangeFile {
+  path: string;
+  root?: string;
+  status: "created" | "modified" | "deleted" | "symlink_created" | string;
+  size_before?: number | null;
+  size_after?: number | null;
+  binary?: boolean;
+  sensitive?: boolean;
+}
+
+export interface WorkspaceChangesResponse {
+  available: boolean;
+  files: WorkspaceChangeFile[];
+  summary?: {
+    created?: number;
+    modified?: number;
+    deleted?: number;
+    symlink_created?: number;
+  };
 }
 
 /** 引擎上传限制（max_file_size / max_total_size 以字节为单位）。 */
@@ -383,6 +408,33 @@ export async function deleteUpload(threadId: string, filename: string): Promise<
   }
 }
 
+/** 读取某次 run 记录的 workspace/output 变更，用于展示真实交付文件。 */
+export async function getWorkspaceChanges(
+  threadId: string,
+  runId: string
+): Promise<WorkspaceChangesResponse> {
+  const resp = await fetch(
+    `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/workspace-changes?include_files=true&include_diff=false`,
+    { method: "GET", credentials: "include", headers: jsonHeaders() }
+  );
+  if (!resp.ok) {
+    throw await toError("读取交付文件失败", resp);
+  }
+  const data = (await resp.json()) as Partial<WorkspaceChangesResponse>;
+  return {
+    available: Boolean(data.available),
+    files: Array.isArray(data.files) ? data.files : [],
+    summary: data.summary
+  };
+}
+
+/** 将引擎返回的虚拟产出路径转换为可访问的 artifact URL。 */
+export function artifactUrl(threadId: string, virtualPath: string): string {
+  const normalized = virtualPath.replace(/^\/+/, "");
+  const encodedPath = normalized.split("/").map((part) => encodeURIComponent(part)).join("/");
+  return `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/artifacts/${encodedPath}`;
+}
+
 // ── 内部工具 ──
 function jsonHeaders(): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -405,7 +457,13 @@ function toFileRef(raw: Record<string, unknown>): UploadedFileRef {
     filename: String(raw.filename ?? ""),
     size: Number(raw.size ?? 0),
     virtual_path: String(raw.virtual_path ?? ""),
-    artifact_url: String(raw.artifact_url ?? "")
+    artifact_url: String(raw.artifact_url ?? ""),
+    ...(typeof raw.original_filename === "string" ? { original_filename: raw.original_filename } : {}),
+    ...(typeof raw.extension === "string" ? { extension: raw.extension } : {}),
+    ...(typeof raw.markdown_file === "string" ? { markdown_file: raw.markdown_file } : {}),
+    ...(typeof raw.markdown_artifact_url === "string"
+      ? { markdown_artifact_url: raw.markdown_artifact_url }
+      : {})
   };
 }
 

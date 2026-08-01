@@ -11,11 +11,11 @@
 //     tool message: tool_call_id + content + artifact → 回填 toolCall
 //   event: custom    → data = { type, task_id, ... }（task_tool 产出）
 //     task_started/running/completed/failed/cancelled/timed_out
-//   event: values    → data = { title, messages, artifacts, ... }（快照）
+//   event: values    → data = { title, messages, artifacts, todos, ... }（快照）
 //   event: end       → turn 完成（data 可能含 usage）
 //   event: error/gap → turn 失败
 
-import type { ChatMessage, SubagentStep, ToolCall } from "./sessionStore";
+import type { ChatMessage, SubagentStep, TodoItem, ToolCall } from "./sessionStore";
 import type { SseFrame } from "./sseParser";
 
 /**
@@ -361,6 +361,18 @@ function reduceValues(
 
   if (typeof snap.title === "string" && snap.title) next.threadTitle = snap.title;
   if (Array.isArray(snap.artifacts)) next.artifacts = snap.artifacts;
+  if (Array.isArray(snap.todos)) {
+    next.todos = snap.todos
+      .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+      .map((item): TodoItem => ({
+        content: typeof item.content === "string" ? item.content : "",
+        status:
+          item.status === "in_progress" || item.status === "completed"
+            ? item.status
+            : "pending"
+      }))
+      .filter((item) => item.content.trim().length > 0);
+  }
 
   // compaction 检测：messages 数量收缩（宁漏勿错——不确定时不标注）
   if (Array.isArray(snap.messages)) {

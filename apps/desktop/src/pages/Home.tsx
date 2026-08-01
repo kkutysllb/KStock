@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   Activity,
   ArrowLeft,
   Brain,
   Bot,
+  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -11,11 +12,14 @@ import {
   Clock,
   Command,
   Cpu,
-  Database,
   FileText,
+  FileOutput,
   Folder,
+  ExternalLink,
   Library,
+  ListTodo,
   Lock,
+  Loader2,
   LogOut,
   PanelRight,
   Paperclip,
@@ -26,9 +30,10 @@ import {
   Sparkles,
   Square,
   Trash2,
+  Upload,
+  UsersRound,
   Zap,
 } from "lucide-react";
-import { Markdown } from "../lib/markdown";
 import { fetchLandingNews, type LandingNewsItem } from "../lib/landingNewsClient";
 import { getDataSourceStatus, type DataSourceConfig } from "../lib/dataSourcesClient";
 import { MODEL_TEMPLATES, SETTING_SECTIONS } from "../lib/qilinSettings";
@@ -64,20 +69,26 @@ import {
   setSessionMessages,
   threadToSession,
   updateMessageInSession,
+  type ChatMessage,
   type ChatSession
 } from "../lib/sessionStore";
+import { GATEWAY_URL } from "../lib/gatewayUrl";
 import {
   cancelRun,
+  artifactUrl,
   deleteThread,
   deleteUpload,
   ensureThread,
   fetchThreadMessages,
+  getWorkspaceChanges,
   listThreads,
+  listUploads,
   runContextFromModel,
   streamRun,
   uploadFiles,
   type ReasoningMode,
   type UploadedFileRef,
+  type WorkspaceChangeFile,
 } from "../lib/turnsClient";
 import { engineMessagesToChatMessages } from "../lib/engineHistory";
 import { initialTurn, reduceFrame } from "../lib/turnReducer";
@@ -176,12 +187,6 @@ const quickPrompts = [
   "生成本周 A 股宏观与资金面摘要"
 ];
 
-const researchSourceItems = [
-  "财报与公告",
-  "行情与估值",
-  "行业与宏观"
-];
-
 const landingCandles = [
   { left: 2, top: 56, height: 11, delay: -0.2, direction: "up" },
   { left: 6, top: 47, height: 18, delay: -1.1, direction: "down" },
@@ -243,6 +248,12 @@ export function Home() {
   const [pendingAttachments, setPendingAttachments] = useState<UploadedFileRef[]>([]);
   // 附件上传中状态（控制 chip loading + 选择按钮禁用）。
   const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  // 研究上下文面板使用的真实线程文件状态。
+  const [threadUploads, setThreadUploads] = useState<UploadedFileRef[]>([]);
+  const [uploadsLoading, setUploadsLoading] = useState(false);
+  const [workspaceChanges, setWorkspaceChanges] = useState<WorkspaceChangeFile[]>([]);
+  const [workspaceChangesLoading, setWorkspaceChangesLoading] = useState(false);
+  const workspaceChangesKeyRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // 当前正在执行的 run 标识（threadId + runId），由 streamRun 的 onRunId 回调填入。
   // handleStop 用它显式调 cancel API 即时停止 agent/subagent，而不只靠 abort 断流。
@@ -481,7 +492,67 @@ export function Home() {
     [activeSessionId, sessions]
   );
 
-  const reportMarkdown = activeSession?.reportMarkdown ?? "";
+  // 线程上传目录是后端用户数据空间的事实来源；切换任务时重新读取，避免把
+  // 上一个任务的文件误显示到当前面板。
+  useEffect(() => {
+    const threadId = activeSession?.threadId;
+    setThreadUploads([]);
+    if (!threadId) {
+      setUploadsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setUploadsLoading(true);
+    listUploads(threadId)
+      .then((files) => {
+        if (!cancelled) setThreadUploads(files);
+      })
+      .catch(() => {
+        if (!cancelled) setThreadUploads([]);
+      })
+      .finally(() => {
+        if (!cancelled) setUploadsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession?.id, activeSession?.threadId]);
+
+  // run 完成后读取 workspace/output 变更。接口没有变更记录时返回 available=false，
+  // 这不是错误，面板会继续展示 values.artifacts 中的已交付路径。
+  const latestAssistantTurn = useMemo(
+    () => [...(activeSession?.messages ?? [])].reverse().find((message) => message.role === "assistant"),
+    [activeSession?.messages]
+  );
+  useEffect(() => {
+    const threadId = activeSession?.threadId;
+    const runId = latestAssistantTurn?.runId;
+    const key = threadId && runId ? `${threadId}:${runId}` : null;
+    if (!key || latestAssistantTurn?.status !== "done") {
+      setWorkspaceChanges([]);
+      setWorkspaceChangesLoading(false);
+      workspaceChangesKeyRef.current = null;
+      return;
+    }
+    if (workspaceChangesKeyRef.current === key) return;
+    workspaceChangesKeyRef.current = key;
+    let cancelled = false;
+    setWorkspaceChangesLoading(true);
+    getWorkspaceChanges(threadId, runId)
+      .then((response) => {
+        if (!cancelled) setWorkspaceChanges(response.available ? response.files : []);
+      })
+      .catch(() => {
+        if (!cancelled) setWorkspaceChanges([]);
+      })
+      .finally(() => {
+        if (!cancelled) setWorkspaceChangesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession?.threadId, latestAssistantTurn?.runId, latestAssistantTurn?.status]);
+
   const activeSetting = SETTING_SECTIONS.find((section) => section.id === settingsSectionId) ?? SETTING_SECTIONS[0];
 
   // 未登录点「进入工作台」不应直接进：拦截到登录页。
@@ -680,6 +751,8 @@ export function Home() {
           onRunId: (runId) => {
             // 捕获 run_id 供 handleStop 显式 cancel；幂等赋值（重连场景安全）。
             activeRunRef.current = { threadId, runId };
+            turnState = { ...turnState, runId };
+            patchTurn();
           },
           onFrame: (frame) => {
             const now = Date.now();
@@ -756,6 +829,11 @@ export function Home() {
       const refs = await uploadFiles(threadId, files);
       if (refs.length > 0) {
         setPendingAttachments((prev) => [...prev, ...refs]);
+        setThreadUploads((prev) => {
+          const byName = new Map(prev.map((file) => [file.filename, file]));
+          refs.forEach((file) => byName.set(file.filename, file));
+          return [...byName.values()];
+        });
       }
     } catch {
       // 上传失败：静默处理（可后续加 toast）。
@@ -769,6 +847,7 @@ export function Home() {
     const session = activeSession;
     // 乐观 UI：先移除 chip
     setPendingAttachments((prev) => prev.filter((a) => a.filename !== filename));
+    setThreadUploads((prev) => prev.filter((file) => file.filename !== filename));
     if (!session?.threadId) return;
     try {
       await deleteUpload(session.threadId, filename);
@@ -832,7 +911,6 @@ export function Home() {
       activeSession={activeSession}
       currentUser={currentUser}
       draft={draft}
-      reportMarkdown={reportMarkdown}
       rightPanelOpen={rightPanelOpen}
       sessions={sessions}
       sidebarCollapsed={sidebarCollapsed}
@@ -863,6 +941,10 @@ export function Home() {
       attachmentsLoading={attachmentsLoading}
       onPickFiles={handlePickFiles}
       onRemoveAttachment={handleRemoveAttachment}
+      threadUploads={threadUploads}
+      uploadsLoading={uploadsLoading}
+      workspaceChanges={workspaceChanges}
+      workspaceChangesLoading={workspaceChangesLoading}
       onToggleRightPanel={() => setRightPanelOpen((current) => !current)}
       onToggleSidebar={() => persistGeneralPreferencePatch({ sidebar_collapsed: !sidebarCollapsed })}
       onResizeWorkspaceSidebar={handleWorkspaceSidebarResize}
@@ -1298,7 +1380,6 @@ function WorkspaceShell({
   activeSession,
   currentUser,
   draft,
-  reportMarkdown,
   rightPanelOpen,
   sessions,
   sidebarCollapsed,
@@ -1326,6 +1407,10 @@ function WorkspaceShell({
   attachmentsLoading,
   onPickFiles,
   onRemoveAttachment,
+  threadUploads,
+  uploadsLoading,
+  workspaceChanges,
+  workspaceChangesLoading,
   onToggleRightPanel,
   onToggleSidebar,
   onResizeWorkspaceSidebar,
@@ -1335,7 +1420,6 @@ function WorkspaceShell({
   activeSession: ChatSession | undefined;
   currentUser: AuthUser | null;
   draft: string;
-  reportMarkdown: string;
   rightPanelOpen: boolean;
   sessions: ChatSession[];
   sidebarCollapsed: boolean;
@@ -1363,6 +1447,10 @@ function WorkspaceShell({
   attachmentsLoading: boolean;
   onPickFiles: (files: FileList) => void;
   onRemoveAttachment: (filename: string) => void;
+  threadUploads: UploadedFileRef[];
+  uploadsLoading: boolean;
+  workspaceChanges: WorkspaceChangeFile[];
+  workspaceChangesLoading: boolean;
   onToggleRightPanel: () => void;
   onToggleSidebar: () => void;
   onResizeWorkspaceSidebar: (width: number) => void;
@@ -1374,7 +1462,11 @@ function WorkspaceShell({
   const latestUsage = [...messages]
     .reverse()
     .find((message) => message.role === "assistant" && message.usage);
+  const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
   const taskTokens = latestUsage?.usage?.total_tokens ?? 0;
+  const todos = latestAssistant?.todos ?? [];
+  const subagents = latestAssistant?.subagents ?? [];
+  const deliveryFiles = mergeDeliveryFiles(activeSession?.threadId, latestAssistant?.artifacts, workspaceChanges);
   // ChatFeed 命令式 ref + 贴底状态：驱动「回到底部」浮动按钮。
   const feedRef = useRef<ChatFeedHandle>(null);
   const [feedAtBottom, setFeedAtBottom] = useState(true);
@@ -1649,20 +1741,86 @@ ${text}` : text)
             <PanelRight size={17} />
           </button>
         </div>
-        <ContextLine icon={Activity} label="任务状态" value="等待输入" />
-        <ContextLine icon={Cpu} label="QiLin 引擎" value="已连接" />
-        <ContextLine icon={Sparkles} label="技能" value={`${DEFAULT_ACTIVE_SKILLS.length} 个`} />
-        <ContextLine icon={FileText} label="输出格式" value="研究报告" />
-        <div className="context-divider" />
-        <strong className="mini-heading">数据范围</strong>
-        {researchSourceItems.map((item) => (
-          <ContextLine key={item} icon={Database} label={item} value="待调用" />
-        ))}
-        <div className="context-divider" />
-        <strong className="mini-heading">报告预览</strong>
-        <div className="context-report-preview">
-          {reportMarkdown ? <Markdown>{reportMarkdown}</Markdown> : <em>暂无报告</em>}
-        </div>
+        <ContextSection icon={Activity} title="任务摘要" count={latestAssistant ? 1 : 0}>
+          <ContextLine icon={Activity} label="任务状态" value={taskStatusLabel(latestAssistant?.status)} />
+          <ContextLine icon={Cpu} label="QiLin 引擎" value="已连接" />
+          <ContextLine icon={Sparkles} label="技能" value={`${activeSession?.activeSkills.length ?? DEFAULT_ACTIVE_SKILLS.length} 个`} />
+          {latestAssistant?.stage && <ContextLine icon={FileText} label="当前阶段" value={latestAssistant.stage} />}
+        </ContextSection>
+
+        <ContextSection icon={ListTodo} title="Todo" count={todos.length}>
+          {todos.length === 0 ? (
+            <ContextEmpty>当前任务未创建 Todo</ContextEmpty>
+          ) : (
+            <div className="context-todo-list">
+              {todos.map((todo, index) => (
+                <div className={`context-todo-item ${todo.status}`} key={`${todo.content}-${index}`}>
+                  {todo.status === "completed" ? <CheckCircle2 size={14} /> : todo.status === "in_progress" ? <Loader2 size={14} className="spin" /> : <span className="context-todo-dot" />}
+                  <span>{todo.content}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </ContextSection>
+
+        <ContextSection icon={UsersRound} title="Subagent 调用" count={subagents.length}>
+          {subagents.length === 0 ? (
+            <ContextEmpty>当前任务未调用 Subagent</ContextEmpty>
+          ) : (
+            <div className="context-subagent-list">
+              {subagents.map((agent) => (
+                <details className="context-subagent" key={agent.taskId} open={agent.status === "running"}>
+                  <summary>
+                    <span className="context-subagent-title"><Bot size={14} />{agent.description || agent.taskId}</span>
+                    <em className={`subagent-status ${agent.status}`}>{subagentStatusLabel(agent.status)}</em>
+                  </summary>
+                  <div className="context-subagent-meta">{agent.model || "默认模型"} · {agent.steps.length} 个步骤</div>
+                  {agent.steps.length > 0 && (
+                    <div className="context-subagent-steps">
+                      {agent.steps.slice(-3).map((step) => <p key={step.index}>{step.text || `步骤 ${step.index}`}</p>)}
+                    </div>
+                  )}
+                </details>
+              ))}
+            </div>
+          )}
+        </ContextSection>
+
+        <ContextSection icon={Upload} title="上传文件" count={threadUploads.length + pendingAttachments.length}>
+          {uploadsLoading ? <ContextEmpty>正在读取上传目录…</ContextEmpty> : threadUploads.length === 0 && pendingAttachments.length === 0 ? (
+            <ContextEmpty>当前任务没有上传文件</ContextEmpty>
+          ) : (
+            <div className="context-file-list">
+              {pendingAttachments.map((file) => <ContextFileRow key={`pending-${file.filename}`} name={file.filename} meta="待发送" />)}
+              {threadUploads.map((file) => (
+                <ContextFileRow
+                  key={file.filename}
+                  name={file.original_filename || file.filename}
+                  meta={`${formatFileSize(file.size)}${file.markdown_file ? " · 已转换 Markdown" : ""}`}
+                  href={file.artifact_url ? toAbsoluteUrl(file.artifact_url) : undefined}
+                />
+              ))}
+            </div>
+          )}
+        </ContextSection>
+
+        <ContextSection icon={FileOutput} title="交付文件" count={deliveryFiles.length}>
+          {workspaceChangesLoading ? <ContextEmpty>正在读取本次 run 的交付记录…</ContextEmpty> : deliveryFiles.length === 0 ? (
+            <ContextEmpty>当前任务暂无交付文件</ContextEmpty>
+          ) : (
+            <div className="context-file-list">
+              {deliveryFiles.map((file) => (
+                <ContextFileRow
+                  key={file.key}
+                  name={file.name}
+                  meta={`${file.status === "modified" ? "已更新" : "已生成"}${file.size != null ? ` · ${formatFileSize(file.size)}` : ""}`}
+                  href={file.url}
+                  external
+                />
+              ))}
+            </div>
+          )}
+        </ContextSection>
       </aside>
     </div>
   );
@@ -1683,6 +1841,112 @@ function ContextLine({
       {value && <em>{value}</em>}
     </div>
   );
+}
+
+function ContextSection({
+  icon: Icon,
+  title,
+  count,
+  children
+}: {
+  icon: typeof FileText;
+  title: string;
+  count: number;
+  children: ReactNode;
+}) {
+  return (
+    <section className="context-section">
+      <div className="context-section-heading"><span><Icon size={15} />{title}</span><em>{count}</em></div>
+      {children}
+    </section>
+  );
+}
+
+function ContextEmpty({ children }: { children: ReactNode }) {
+  return <p className="context-empty">{children}</p>;
+}
+
+function ContextFileRow({
+  name,
+  meta,
+  href,
+  external = false
+}: {
+  name: string;
+  meta: string;
+  href?: string;
+  external?: boolean;
+}) {
+  const content = <><span className="context-file-name">{name}</span><em>{meta}</em></>;
+  if (!href) return <div className="context-file-row">{content}</div>;
+  return <button className="context-file-row linked" type="button" onClick={() => void openExternalUrl(href)} title="打开文件">{content}{external ? <ExternalLink size={13} /> : <ArrowLeft size={13} />}</button>;
+}
+
+function taskStatusLabel(status?: ChatMessage["status"]): string {
+  if (status === "streaming") return "执行中";
+  if (status === "done") return "已完成";
+  if (status === "error") return "执行失败";
+  if (status === "compacted") return "已压缩";
+  return "等待输入";
+}
+
+function subagentStatusLabel(status: NonNullable<ChatMessage["subagents"]>[number]["status"]): string {
+  if (status === "running") return "运行中";
+  if (status === "completed") return "已完成";
+  if (status === "failed") return "失败";
+  if (status === "timed_out") return "超时";
+  return "已取消";
+}
+
+function formatFileSize(size: number): string {
+  if (!Number.isFinite(size) || size <= 0) return "0 B";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+type DeliveryFile = {
+  key: string;
+  name: string;
+  url?: string;
+  size?: number;
+  status: string;
+};
+
+function mergeDeliveryFiles(
+  threadId: string | undefined,
+  artifacts: unknown[] | undefined,
+  workspaceFiles: WorkspaceChangeFile[]
+): DeliveryFile[] {
+  const byPath = new Map<string, DeliveryFile>();
+  for (const raw of artifacts ?? []) {
+    const item = typeof raw === "string" ? { path: raw } : raw && typeof raw === "object" ? raw as Record<string, unknown> : null;
+    if (!item) continue;
+    const path = typeof item.path === "string" ? item.path : typeof item.virtual_path === "string" ? item.virtual_path : "";
+    const explicitUrl = typeof item.artifact_url === "string" ? item.artifact_url : undefined;
+    if (!path && !explicitUrl) continue;
+    const key = path || explicitUrl!;
+    const name = path.split("/").pop() || explicitUrl?.split("/").pop() || "交付文件";
+    byPath.set(key, { key, name, url: threadId ? (explicitUrl ? toAbsoluteUrl(explicitUrl) : artifactUrl(threadId, path)) : undefined, status: "created" });
+  }
+  for (const file of workspaceFiles) {
+    if (file.status === "deleted" || (file.root && file.root !== "outputs")) continue;
+    const path = file.path;
+    const name = path.split("/").pop() || path;
+    byPath.set(path, {
+      key: path,
+      name,
+      url: threadId ? artifactUrl(threadId, path) : undefined,
+      size: file.size_after ?? undefined,
+      status: file.status
+    });
+  }
+  return [...byPath.values()];
+}
+
+function toAbsoluteUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  return new URL(url, GATEWAY_URL).toString();
 }
 
 function SettingsPage({

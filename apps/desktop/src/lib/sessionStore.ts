@@ -67,6 +67,12 @@ export interface SubagentTask {
   steps: SubagentStep[];
 }
 
+/** 引擎 lead agent 的 Todo 状态（对应 ThreadState.todos）。 */
+export interface TodoItem {
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+}
+
 export interface TurnUsage {
   input_tokens: number;
   output_tokens: number;
@@ -90,6 +96,10 @@ export interface ChatMessage {
   subagents?: SubagentTask[];
   /** turn 产出（引擎 values 快照的 artifacts）。 */
   artifacts?: unknown[];
+  /** 引擎 values 快照的 Todo 列表。 */
+  todos?: TodoItem[];
+  /** 该 assistant turn 对应的引擎 run id。 */
+  runId?: string;
   /** pipeline_stage（前端推断兜底）。 */
   stage?: string;
   status?: TurnStatus;
@@ -263,5 +273,4 @@ export function updateMessageInSession(
     messages: session.messages.map((m) => (m.id === messageId ? { ...m, ...patch } : m))
   };
 }
-
 

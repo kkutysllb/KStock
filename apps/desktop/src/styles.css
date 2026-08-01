@@ -1513,6 +1513,205 @@ body.sidebar-resizing {
   background: rgba(255, 255, 255, 0.065);
 }
 
+.context-section {
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.065);
+}
+
+.context-section:last-child {
+  border-bottom: 0;
+}
+
+.context-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  color: #a9afb8;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.context-section-heading span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.context-section-heading em {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d9dde3;
+  font-style: normal;
+  text-align: center;
+}
+
+.context-empty {
+  margin: 0;
+  color: #7f8994;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.context-todo-list,
+.context-file-list,
+.context-subagent-list {
+  display: grid;
+  gap: 5px;
+}
+
+.context-todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: #d9dde3;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.context-todo-item.completed {
+  color: #80d9ac;
+}
+
+.context-todo-item.pending {
+  color: #b8c0ca;
+}
+
+.context-todo-item.in_progress {
+  color: #f1d28a;
+}
+
+.context-todo-dot {
+  width: 10px;
+  height: 10px;
+  margin: 2px 2px 0;
+  border: 1px solid #78828d;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.context-subagent {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.context-subagent summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 7px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.context-subagent summary::-webkit-details-marker {
+  display: none;
+}
+
+.context-subagent-title {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  overflow: hidden;
+  color: #d9dde3;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-status {
+  flex: 0 0 auto;
+  color: #9da4ae;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.subagent-status.running { color: #f1d28a; }
+.subagent-status.completed { color: #80d9ac; }
+.subagent-status.failed,
+.subagent-status.timed_out { color: #ff9d9d; }
+
+.context-subagent-meta,
+.context-subagent-steps {
+  margin: 0 7px 7px;
+  color: #7f8994;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.context-subagent-steps {
+  display: grid;
+  gap: 3px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.context-subagent-steps p {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-file-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  width: 100%;
+  padding: 5px 0;
+  color: #cfd5dc;
+  text-align: left;
+}
+
+button.context-file-row {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+button.context-file-row:hover {
+  color: #83dec0;
+}
+
+.context-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.context-file-row em {
+  grid-column: 1 / -1;
+  color: #7f8994;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.context-file-row > svg {
+  grid-column: 2;
+  grid-row: 1;
+  color: #7f8994;
+}
+
+.spin {
+  animation: context-spin 1s linear infinite;
+}
+
+@keyframes context-spin {
+  to { transform: rotate(360deg); }
+}
+
 .mini-heading {
   display: block;
   margin: 10px 0 7px;

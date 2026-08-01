@@ -209,6 +209,7 @@ function buildAssistantTurn(
     role: "assistant",
     createdAt: ensureTimestamp(row, msg),
     status: errorText ? "error" : "done",
+    ...(typeof row.run_id === "string" && row.run_id ? { runId: row.run_id } : {}),
     ...(text ? { text } : {}),
     ...(reasoning ? { reasoning } : {}),
     ...(toolCalls.length > 0 ? { toolCalls } : {}),
