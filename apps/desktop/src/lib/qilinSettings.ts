@@ -25,6 +25,7 @@ export interface ModelTemplate {
   endpoint: string;
   apiKeyEnv: string;
   thinking: boolean;
+  reasoningEffort?: boolean;
   vision: boolean;
   note: string;
 }
@@ -157,6 +158,7 @@ export const MODEL_TEMPLATES: ModelTemplate[] = [
     endpoint: "OpenAI Codex provider",
     apiKeyEnv: "$OPENAI_API_KEY",
     thinking: true,
+    reasoningEffort: true,
     vision: false,
     note: "QiLin 内置 Codex 风格 provider。"
   }

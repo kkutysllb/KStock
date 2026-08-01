@@ -16,8 +16,12 @@ import { parseSseStream, type SseFrame } from "./sseParser";
 export interface RunContext {
   model_name: string;
   thinking_enabled: boolean;
-  reasoning_effort?: string;
+  reasoning_effort?: ReasoningEffort;
 }
+
+/** 输入框推理菜单的运行级覆盖。auto 不覆盖模型默认能力。 */
+export type ReasoningMode = "auto" | "off" | ReasoningEffort;
+export type ReasoningEffort = "low" | "medium" | "high";
 
 /**
  * 附件描述符（引擎 UploadedFileInfo 的必需字段子集）。
@@ -270,14 +274,19 @@ export async function listThreads(limit = 100): Promise<ThreadSummary[]> {
 /** 把模型选择 + 能力位映射为 RunContext。 */
 export function runContextFromModel(
   model: { name: string; supports_thinking: boolean; supports_reasoning_effort?: boolean },
-  reasoningEffort?: string
+  mode: ReasoningMode = "auto"
 ): RunContext {
   const ctx: RunContext = {
     model_name: model.name,
-    thinking_enabled: model.supports_thinking
+    thinking_enabled: mode === "off" ? false : model.supports_thinking
   };
-  if (model.supports_reasoning_effort && reasoningEffort) {
-    ctx.reasoning_effort = reasoningEffort;
+  if (
+    model.supports_thinking &&
+    model.supports_reasoning_effort &&
+    mode !== "auto" &&
+    mode !== "off"
+  ) {
+    ctx.reasoning_effort = mode;
   }
   return ctx;
 }

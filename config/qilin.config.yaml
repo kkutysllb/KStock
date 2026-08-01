@@ -20,6 +20,23 @@ max_recursion_limit: 1000
 
 models: []
 
+# 推理模式能力示例。实际模型由设置页写入用户数据目录的 runtime.yaml；
+# 输入框的“推理”菜单通过每次 run 的 context 覆盖，不会改写模型配置：
+# - 自动：thinking_enabled 跟随 supports_thinking，不传 reasoning_effort
+# - 关闭：thinking_enabled=false
+# - 低/中/高：thinking_enabled=true，reasoning_effort=low/medium/high
+#
+# 支持推理强度的模型示例（使用时把 models: [] 替换为以下内容）：
+# models:
+#   - name: codex
+#     display_name: OpenAI Codex
+#     use: qilin.models.openai_codex_provider:CodexChatModel
+#     model: gpt-5.4
+#     api_key: $OPENAI_API_KEY
+#     supports_thinking: true
+#     supports_reasoning_effort: true
+#     supports_vision: false
+
 skills:
   root: vendor/skills
 

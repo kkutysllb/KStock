@@ -2139,21 +2139,44 @@ body.sidebar-resizing {
 }
 
 /* ── 输入框模型选择器 ────────────────────────────────────────── */
-.model-picker {
+.model-picker,
+.reasoning-mode-picker {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
   color: #a9afb8;
+  white-space: nowrap;
 }
 
-.model-picker select {
+.model-picker select,
+.reasoning-mode-picker select {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
   color: inherit;
   font-size: 12px;
   padding: 2px 6px;
+}
+
+.reasoning-mode-picker {
+  gap: 4px;
+}
+
+.reasoning-mode-picker > span {
+  color: #8f98a2;
+  font-size: 11px;
+}
+
+.reasoning-mode-picker select {
+  width: 58px;
+  min-height: 26px;
+  padding: 2px 5px;
+}
+
+.reasoning-mode-picker select:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 .model-picker.empty {

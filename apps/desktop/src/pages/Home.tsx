@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import {
   Activity,
   ArrowLeft,
+  Brain,
   Bot,
   ChevronDown,
   ChevronLeft,
@@ -75,6 +76,7 @@ import {
   runContextFromModel,
   streamRun,
   uploadFiles,
+  type ReasoningMode,
   type UploadedFileRef,
 } from "../lib/turnsClient";
 import { engineMessagesToChatMessages } from "../lib/engineHistory";
@@ -116,6 +118,14 @@ type AuthMode = "login" | "register";
 
 const WORKSPACE_SIDEBAR_WIDTH_KEY = "kstock.workspaceSidebarWidth";
 const SETTINGS_SIDEBAR_WIDTH_KEY = "kstock.settingsSidebarWidth";
+const REASONING_MODE_KEY = "kstock.reasoningMode";
+
+function readReasoningMode(): ReasoningMode {
+  const stored = localStorage.getItem(REASONING_MODE_KEY);
+  return stored === "off" || stored === "low" || stored === "medium" || stored === "high"
+    ? stored
+    : "auto";
+}
 
 function readSidebarWidth(key: string, fallback: number, min: number, max: number) {
   try {
@@ -224,6 +234,7 @@ export function Home() {
   // 模型配置（提升到 Home，供 handleSend 构造 RunContext）。
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [activeModel, setActiveModel] = useState<string>("");
+  const [reasoningMode, setReasoningMode] = useState<ReasoningMode>(readReasoningMode);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [dataSources, setDataSources] = useState<DataSourceConfig[]>([]);
   // 流式 run 状态。
@@ -316,6 +327,16 @@ export function Home() {
       cancelled = true;
     };
   }, [currentUser]);
+
+  // 模型能力变化后校正推理菜单：避免把 effort 覆盖发送给不支持的模型。
+  useEffect(() => {
+    const model = models.find((item) => item.name === activeModel);
+    if (!model || reasoningMode === "auto" || reasoningMode === "off") return;
+    if (!model.supports_thinking || !model.supports_reasoning_effort) {
+      setReasoningMode("auto");
+      localStorage.setItem(REASONING_MODE_KEY, "auto");
+    }
+  }, [activeModel, models, reasoningMode]);
 
   // 登录后从后端拉取历史会话列表（POST /api/threads/search）。
   // 修复「预置假会话重启后重复出现」的 bug：以前用 createSeedSessions() 硬编码
@@ -499,6 +520,11 @@ export function Home() {
     localStorage.setItem("kstock.activeModel", name);
   };
 
+  const handleReasoningModeChange = (mode: ReasoningMode) => {
+    setReasoningMode(mode);
+    localStorage.setItem(REASONING_MODE_KEY, mode);
+  };
+
   const handleNewSession = () => {
     const nextSession = createSession("新研究会话");
     setSessions((current) => [nextSession, ...current]);
@@ -648,7 +674,7 @@ export function Home() {
             }
           ]
         },
-        context: runContextFromModel(model),
+        context: runContextFromModel(model, reasoningMode),
         signal: controller.signal,
         handlers: {
           onRunId: (runId) => {
@@ -815,9 +841,11 @@ export function Home() {
       generalPreferences={generalPreferences}
       models={models}
       activeModel={activeModel}
+      reasoningMode={reasoningMode}
       modelsLoading={modelsLoading}
       streamingId={streamingId}
       onModelChange={handleModelChange}
+      onReasoningModeChange={handleReasoningModeChange}
       onDraftChange={setDraft}
       onLogout={handleLogout}
       onNewSession={handleNewSession}
@@ -1022,6 +1050,41 @@ function DataSourceIndicators({ dataSources }: { dataSources: DataSourceConfig[]
         );
       })}
     </span>
+  );
+}
+
+function ReasoningModePicker({
+  model,
+  value,
+  onChange,
+}: {
+  model: ModelConfig | undefined;
+  value: ReasoningMode;
+  onChange: (mode: ReasoningMode) => void;
+}) {
+  const supportsEffort = Boolean(model?.supports_thinking && model.supports_reasoning_effort);
+  const effectiveValue = supportsEffort || value === "auto" || value === "off" ? value : "auto";
+
+  return (
+    <label
+      className="reasoning-mode-picker"
+      title={supportsEffort ? "设置本次运行的推理强度" : "当前模型仅支持自动或关闭推理"}
+    >
+      <Brain size={14} aria-hidden="true" />
+      <span>推理</span>
+      <select
+        aria-label="推理模式"
+        value={effectiveValue}
+        disabled={!model}
+        onChange={(event) => onChange(event.target.value as ReasoningMode)}
+      >
+        <option value="auto">自动</option>
+        <option value="off">关闭</option>
+        {supportsEffort && <option value="low">低</option>}
+        {supportsEffort && <option value="medium">中</option>}
+        {supportsEffort && <option value="high">高</option>}
+      </select>
+    </label>
   );
 }
 
@@ -1244,9 +1307,11 @@ function WorkspaceShell({
   generalPreferences,
   models,
   activeModel,
+  reasoningMode,
   modelsLoading,
   streamingId,
   onModelChange,
+  onReasoningModeChange,
   onDraftChange,
   onLogout,
   onNewSession,
@@ -1279,9 +1344,11 @@ function WorkspaceShell({
   generalPreferences: GeneralPreferences;
   models: ModelConfig[];
   activeModel: string;
+  reasoningMode: ReasoningMode;
   modelsLoading: boolean;
   streamingId: string | null;
   onModelChange: (name: string) => void;
+  onReasoningModeChange: (mode: ReasoningMode) => void;
   onDraftChange: (draft: string) => void;
   onLogout: () => void;
   onNewSession: () => void;
@@ -1303,6 +1370,7 @@ function WorkspaceShell({
   dataSources: DataSourceConfig[];
 }) {
   const messages = activeSession?.messages ?? [];
+  const activeModelConfig = models.find((model) => model.name === activeModel);
   const latestUsage = [...messages]
     .reverse()
     .find((message) => message.role === "assistant" && message.usage);
@@ -1556,6 +1624,11 @@ ${text}` : text)
                 </select>
               </label>
             )}
+            <ReasoningModePicker
+              model={activeModelConfig}
+              value={reasoningMode}
+              onChange={onReasoningModeChange}
+            />
             {streamingId ? (
               <button className="send-button stop" type="button" onClick={onStop} aria-label="停止生成">
                 <Square size={16} fill="currentColor" />
@@ -1979,9 +2052,9 @@ function ModelEditor({ model, onSave, onDelete }: {
         <input type="password" placeholder="留空不修改" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
       </label>
       <div className="capability-row">
-        <label className="auth-remember"><input type="checkbox" checked={thinking} onChange={(e) => setThinking(e.target.checked)} /><span>Thinking</span></label>
+        <label className="auth-remember"><input type="checkbox" checked={thinking} onChange={(e) => { setThinking(e.target.checked); if (!e.target.checked) setReasoningEffort(false); }} /><span>Thinking</span></label>
         <label className="auth-remember"><input type="checkbox" checked={vision} onChange={(e) => setVision(e.target.checked)} /><span>Vision</span></label>
-        <label className="auth-remember"><input type="checkbox" checked={reasoningEffort} onChange={(e) => setReasoningEffort(e.target.checked)} /><span>Reasoning Effort</span></label>
+        <label className="auth-remember"><input type="checkbox" checked={reasoningEffort} disabled={!thinking} onChange={(e) => setReasoningEffort(e.target.checked)} /><span>Reasoning Effort</span></label>
       </div>
       <div className="model-editor-actions">
         <button className="hero-primary" type="button" disabled={saving} onClick={async () => {
@@ -1996,7 +2069,7 @@ function ModelEditor({ model, onSave, onDelete }: {
               api_key: apiKey || null,
               supports_thinking: thinking,
               supports_vision: vision,
-              supports_reasoning_effort: reasoningEffort,
+              supports_reasoning_effort: thinking && reasoningEffort,
             });
           } finally { setSaving(false); }
         }}>{saving ? "保存中…" : "保存"}</button>
@@ -2020,6 +2093,7 @@ function ModelAddDialog({ initialTemplate, onPickTemplate, onCancel, onSubmit }:
   const [apiBase, setApiBase] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [reasoningEffort, setReasoningEffort] = useState(false);
   const [vision, setVision] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -2031,6 +2105,7 @@ function ModelAddDialog({ initialTemplate, onPickTemplate, onCancel, onSubmit }:
       setModelName(initialTemplate.model);
       setApiBase(initialTemplate.endpointKey === "native" ? "" : initialTemplate.endpoint);
       setThinking(initialTemplate.thinking);
+      setReasoningEffort(Boolean(initialTemplate.reasoningEffort));
       setVision(initialTemplate.vision);
     }
   }, [initialTemplate]);
@@ -2067,7 +2142,8 @@ function ModelAddDialog({ initialTemplate, onPickTemplate, onCancel, onSubmit }:
             <label><span>api_key（明文，存入 secrets.env）</span><input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} /></label>
           </div>
           <div className="capability-row">
-            <label className="auth-remember"><input type="checkbox" checked={thinking} onChange={(e) => setThinking(e.target.checked)} /><span>Thinking</span></label>
+            <label className="auth-remember"><input type="checkbox" checked={thinking} onChange={(e) => { setThinking(e.target.checked); if (!e.target.checked) setReasoningEffort(false); }} /><span>Thinking</span></label>
+            <label className="auth-remember"><input type="checkbox" checked={reasoningEffort} disabled={!thinking} onChange={(e) => setReasoningEffort(e.target.checked)} /><span>Reasoning Effort</span></label>
             <label className="auth-remember"><input type="checkbox" checked={vision} onChange={(e) => setVision(e.target.checked)} /><span>Vision</span></label>
           </div>
           <button className="hero-primary" type="button" disabled={submitting} onClick={async () => {
@@ -2078,7 +2154,9 @@ function ModelAddDialog({ initialTemplate, onPickTemplate, onCancel, onSubmit }:
                 name, display_name: displayName || null,
                 use: useClass, model: modelName,
                 api_base: apiBase || null, api_key: apiKey || null,
-                supports_thinking: thinking, supports_vision: vision,
+                supports_thinking: thinking,
+                supports_reasoning_effort: thinking && reasoningEffort,
+                supports_vision: vision,
               });
             } finally { setSubmitting(false); }
           }}>{submitting ? "提交中…" : "创建"}</button>
