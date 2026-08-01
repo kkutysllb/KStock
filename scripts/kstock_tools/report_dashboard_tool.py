@@ -8,9 +8,11 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Annotated
 
-from langchain.tools import tool
+from langchain.tools import tool, InjectedToolCallId
+from langchain_core.messages import ToolMessage
+from langgraph.types import Command
 
 from scripts.kstock_reports import ReportLibraryStore
 from qilin.tools.types import Runtime
@@ -65,7 +67,12 @@ def _thread_id(runtime: Any) -> str:
 
 
 @tool("render_html_report", parse_docstring=True)
-def render_html_report_tool(runtime: Runtime, report_json: str, filename: str = "report.html") -> dict[str, Any]:
+def render_html_report_tool(
+    runtime: Runtime,
+    report_json: str,
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    filename: str = "report.html",
+) -> Command:
     """Render one structured report JSON into an offline HTML dashboard.
 
     Args:
@@ -106,15 +113,27 @@ def render_html_report_tool(runtime: Runtime, report_json: str, filename: str = 
             "coverage_status": "complete" if all(s.get("status") == "available" for s in payload.get("sections", [])) else "partial",
         }
         row = store.archive(output_path, payload["report_id"], thread_id, metadata)
-        return {
+        result = {
             "report_id": payload["report_id"],
             "thread_id": thread_id,
             "thread_virtual_path": f"/outputs/{filename}",
             "library_relative_path": row["relative_path"],
             "size_bytes": row["size_bytes"],
         }
+        # 写回 ThreadState.artifacts（与 present_files 同款模式），
+        # 前端 ReportPanel 才能通过 values 快照展示报告产物。
+        return Command(
+            update={
+                "artifacts": [f"/outputs/{filename}"],
+                "messages": [ToolMessage(json.dumps(result, ensure_ascii=False), tool_call_id=tool_call_id)],
+            }
+        )
     except Exception as exc:
-        return {"error": str(exc)}
+        return Command(
+            update={
+                "messages": [ToolMessage(f"{{'error': {str(exc)!r}}}", tool_call_id=tool_call_id, status="error")]
+            }
+        )
     finally:
         if temporary_input:
             temporary_input.unlink(missing_ok=True)

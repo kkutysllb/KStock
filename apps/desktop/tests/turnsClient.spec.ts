@@ -165,6 +165,7 @@ describe("streamRun", () => {
     const body = JSON.parse(init.body as string);
     expect(body.input).toEqual({ messages: [{ role: "user", content: "你好" }] });
     expect(body.context).toEqual({ model_name: "deepseek-chat", thinking_enabled: true });
+    expect(body.config).toEqual({ recursion_limit: 1000 });
     expect(body.stream_mode).toEqual(["values", "messages-tuple", "custom"]);
   });
 
@@ -358,7 +359,11 @@ describe("cancelRun", () => {
 describe("runContextFromModel", () => {
   it("从模型能力位映射 model_name + thinking_enabled", () => {
     const ctx = runContextFromModel({ name: "deepseek-chat", supports_thinking: true });
-    expect(ctx).toEqual({ model_name: "deepseek-chat", thinking_enabled: true });
+    expect(ctx).toEqual({
+      model_name: "deepseek-chat",
+      thinking_enabled: true,
+      subagent_enabled: true
+    });
   });
 
   it("supports_thinking=false 时 thinking_enabled=false", () => {
@@ -380,6 +385,11 @@ describe("runContextFromModel", () => {
       "high"
     );
     expect(ctx.reasoning_effort).toBeUndefined();
+  });
+
+  it("默认开启子代理（subagent_enabled=true）", () => {
+    const ctx = runContextFromModel({ name: "deepseek-chat", supports_thinking: true });
+    expect(ctx.subagent_enabled).toBe(true);
   });
 });
 

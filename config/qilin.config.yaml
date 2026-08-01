@@ -38,7 +38,7 @@ models: []
 #     supports_vision: false
 
 skills:
-  root: vendor/skills
+  path: vendor/skills
 
 sandbox:
   use: qilin.sandbox.local:LocalSandboxProvider

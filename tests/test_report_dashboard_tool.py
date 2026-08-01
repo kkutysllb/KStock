@@ -35,24 +35,26 @@ def runtime(tmp_path: Path):
 
 def test_tool_writes_thread_output_and_library(tmp_path, monkeypatch):
     monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(tmp_path / "data"))
-    result = render_html_report_tool.func(runtime(tmp_path), json.dumps(payload(), ensure_ascii=False))
-    assert result["report_id"] == "report-1"
+    result = render_html_report_tool.func(runtime(tmp_path), json.dumps(payload(), ensure_ascii=False), "call-1")
+    payload_out = json.loads(result.update["messages"][0].content)
+    assert payload_out["report_id"] == "report-1"
+    assert result.update["artifacts"] == ["/outputs/report.html"]
     assert (tmp_path / "outputs/report.html").exists()
     assert (tmp_path / "data/reports/alice/2026/08/01/report-1.html").exists()
 
 
 def test_tool_rejects_non_html_filename_without_files(tmp_path, monkeypatch):
     monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(tmp_path / "data"))
-    result = render_html_report_tool.func(runtime(tmp_path), json.dumps(payload()), filename="report.md")
-    assert "error" in result
+    result = render_html_report_tool.func(runtime(tmp_path), json.dumps(payload()), "call-2", filename="report.md")
+    assert "error" in result.update["messages"][0].content
     assert not (tmp_path / "outputs/report.md").exists()
 
 
 def test_tool_regeneration_keeps_one_library_row(tmp_path, monkeypatch):
     monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(tmp_path / "data"))
     rt = runtime(tmp_path)
-    render_html_report_tool.func(rt, json.dumps(payload()))
-    render_html_report_tool.func(rt, json.dumps(payload(generated_at="2026-08-02T10:00:00+08:00")))
+    render_html_report_tool.func(rt, json.dumps(payload()), "call-1")
+    render_html_report_tool.func(rt, json.dumps(payload(generated_at="2026-08-02T10:00:00+08:00")), "call-2")
     store = ReportLibraryStore(tmp_path / "data")
     assert len(store.list_reports(user_id="alice")) == 1
     assert (tmp_path / "data/reports/alice/2026/08/01/report-1.html").exists() is False

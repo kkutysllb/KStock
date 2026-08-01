@@ -157,7 +157,7 @@ def _generate_runtime_config(
     以发布包模板 ``config/qilin.config.yaml`` 为基础，覆盖路径相关字段：
     - ``database.backend`` = sqlite、``database.sqlite_dir`` = 绝对路径
     - ``run_events.backend`` = db（使运行事件进入 SQLite）
-    - ``skills.root`` = 仓库内 ``vendor/skills`` 的绝对路径
+    - ``skills.path`` = 仓库内 ``vendor/skills`` 的绝对路径
 
     这是修复数据库错误落到项目根 ``.qilin/`` 的核心：vendor 的
     ``DatabaseConfig.sqlite_dir`` 默认值 ``.qilin/data`` 是相对 CWD 的，
@@ -213,6 +213,14 @@ def _generate_runtime_config(
                 existing_subagents["custom_agents"] = existing_custom_agents
                 existing["subagents"] = existing_subagents
 
+        # 3) skills.root → skills.path 字段迁移（引擎只认 path，旧配置的 root
+        #    被 Pydantic 静默忽略导致技能系统失效；绝对路径保持用户值）
+        existing_skills = dict(existing.get("skills") or {})
+        if "path" not in existing_skills and "root" in existing_skills:
+            existing_skills["path"] = existing_skills.pop("root")
+            existing["skills"] = existing_skills
+            changed = True
+
         if changed:
             with runtime_config_path.open("w", encoding="utf-8") as fh:
                 yaml.safe_dump(existing, fh, allow_unicode=True, sort_keys=False)
@@ -232,10 +240,12 @@ def _generate_runtime_config(
     run_events["backend"] = "db"
     cfg["run_events"] = run_events
 
-    # 技能根目录转绝对路径（模板里是相对 ``vendor/skills``）
+    # 技能根目录转绝对路径（模板里是相对 ``vendor/skills``）。
+    # 引擎 SkillsConfig 只认 ``path`` 字段（``root`` 会被 Pydantic 静默忽略，
+    # 导致技能目录回退到不存在的项目根 ``skills/``，技能系统整体失效）。
     skills = dict(cfg.get("skills") or {})
-    skills_root = skills.get("root", "vendor/skills")
-    cfg["skills"] = {**skills, "root": str((repo_root / skills_root).resolve())}
+    skills_path = skills.get("path") or skills.pop("root", None) or "vendor/skills"
+    cfg["skills"] = {**skills, "path": str((repo_root / skills_path).resolve())}
 
     runtime_config_path.parent.mkdir(parents=True, exist_ok=True)
     with runtime_config_path.open("w", encoding="utf-8") as fh:

@@ -17,6 +17,8 @@ export interface RunContext {
   model_name: string;
   thinking_enabled: boolean;
   reasoning_effort?: ReasoningEffort;
+  /** 开启子代理委派（lead agent 可并行分派 custom_agents）。 */
+  subagent_enabled?: boolean;
 }
 
 /** 输入框推理菜单的运行级覆盖。auto 不覆盖模型默认能力。 */
@@ -96,6 +98,12 @@ export interface StreamRunOptions {
     }>;
   };
   context: RunContext;
+  /**
+   * 透传给 RunCreateRequest.config 的图运行参数；未提供时默认
+   * { recursion_limit: 1000 }（引擎默认 100、runtime 上限 1000，
+   * 多子代理/多轮工具迭代的复杂任务实测需 500+）。
+   */
+  config?: Record<string, unknown>;
   signal?: AbortSignal;
   handlers: StreamRunHandlers;
 }
@@ -162,6 +170,7 @@ export async function streamRun(opts: StreamRunOptions): Promise<void> {
       body: JSON.stringify({
         input,
         context,
+        config: { recursion_limit: 1000, ...(opts.config ?? {}) },
         stream_mode: ["values", "messages-tuple", "custom"]
       }),
       signal
@@ -303,7 +312,9 @@ export function runContextFromModel(
 ): RunContext {
   const ctx: RunContext = {
     model_name: model.name,
-    thinking_enabled: mode === "off" ? false : model.supports_thinking
+    thinking_enabled: mode === "off" ? false : model.supports_thinking,
+    // 子代理是既定核心能力（lead agent 可并行委派 custom_agents），默认开启
+    subagent_enabled: true
   };
   if (
     model.supports_thinking &&
