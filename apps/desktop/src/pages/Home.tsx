@@ -118,6 +118,17 @@ async function toggleWindowMaximize(event: React.MouseEvent<HTMLElement>) {
   }
 }
 
+async function openExternalUrl(url: string) {
+  if (!/^https?:\/\//i.test(url)) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("open_external_url", { url });
+  } catch {
+    // 浏览器预览环境没有 Tauri command，回退到系统新标签页行为。
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
 const quickPrompts = [
   "分析贵州茅台最新财报并输出研究报告",
   "跟踪半导体行业景气度和估值分位",
@@ -708,7 +719,6 @@ export function Home() {
 
 function LandingPage({ onEnter, onAuth }: { onEnter: () => void; onAuth: (mode: AuthMode) => void }) {
   const [newsItems, setNewsItems] = useState<LandingNewsItem[]>([]);
-  const [newsUpdatedAt, setNewsUpdatedAt] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -717,7 +727,6 @@ function LandingPage({ onEnter, onAuth }: { onEnter: () => void; onAuth: (mode: 
         const response = await fetchLandingNews();
         if (!active) return;
         setNewsItems(response.items.slice(0, 10));
-        setNewsUpdatedAt(response.updated_at);
       } catch {
         // 落地页新闻是增强信息，接口不可用时保留空态，不阻塞登录入口。
       }
@@ -801,7 +810,6 @@ function LandingPage({ onEnter, onAuth }: { onEnter: () => void; onAuth: (mode: 
               <p className="eyebrow">Market News</p>
               <h2>财经快讯</h2>
             </div>
-            <span>{newsUpdatedAt ? "每分钟更新" : "连接中…"}</span>
           </header>
           <div className="landing-news-window">
             {tickerItems.length > 0 ? (
@@ -813,6 +821,11 @@ function LandingPage({ onEnter, onAuth }: { onEnter: () => void; onAuth: (mode: 
                     href={item.url || undefined}
                     target={item.url ? "_blank" : undefined}
                     rel={item.url ? "noreferrer" : undefined}
+                    onClick={(event) => {
+                      if (!item.url) return;
+                      event.preventDefault();
+                      void openExternalUrl(item.url);
+                    }}
                     aria-hidden={index >= newsItems.length ? "true" : undefined}
                   >
                     <span className="landing-news-index">{String((index % Math.max(newsItems.length, 10)) + 1).padStart(2, "0")}</span>

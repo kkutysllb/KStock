@@ -380,10 +380,10 @@ button {
 .landing-news {
   position: absolute;
   right: max(28px, calc((100vw - 1180px) / 2));
-  bottom: 7%;
+  top: 62%;
   z-index: 4;
   width: min(500px, 37vw);
-  height: min(270px, 32vh);
+  height: min(240px, 28vh);
   overflow: hidden;
   padding: 18px 22px 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -396,7 +396,6 @@ button {
 .landing-news-header {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 16px;
   margin-bottom: 12px;
 }
@@ -411,13 +410,6 @@ button {
   color: #f0f3f4;
   font-size: 18px;
   font-weight: 600;
-}
-
-.landing-news-header > span {
-  padding-top: 3px;
-  color: #7f8994;
-  font-size: 10px;
-  white-space: nowrap;
 }
 
 .landing-news-window {
@@ -1781,7 +1773,7 @@ button {
   .landing-news {
     position: relative;
     right: auto;
-    bottom: auto;
+    top: auto;
     width: 100%;
     height: 250px;
     margin-top: 22px;
