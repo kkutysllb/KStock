@@ -256,6 +256,18 @@ export const SETTING_SECTIONS: SettingSection[] = [
     ]
   },
   {
+    id: "data-sources",
+    title: "数据源",
+    group: "研究",
+    icon: KeyRound,
+    summary: "配置股票与行业分析技能使用的 Tushare Pro、同花顺问财凭证。",
+    fields: [
+      { name: "Tushare Pro", value: "可配置", hint: "行情、财务与指数数据" },
+      { name: "同花顺问财", value: "可配置", hint: "实时行情与行业数据" },
+      { name: "保存方式", value: "本机用户目录", hint: "仅返回是否已配置，不回显明文" }
+    ]
+  },
+  {
     id: "database",
     title: "数据与持久化",
     group: "系统",

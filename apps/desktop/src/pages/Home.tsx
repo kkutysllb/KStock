@@ -102,6 +102,7 @@ import { SkillsExtensionsCard } from "../components/SkillsExtensionsCard";
 import { AttachmentPicker, AttachmentChips } from "../components/AttachmentPicker";
 import { GeneralSettings } from "../components/GeneralSettings";
 import { SidebarResizeHandle } from "../components/SidebarResizeHandle";
+import { DataSourcesSettings } from "../components/DataSourcesSettings";
 import {
   DEFAULT_GENERAL_PREFERENCES,
   getGeneralPreferences,
@@ -1674,6 +1675,8 @@ function SettingsPage({
           <GuardrailsSettings />
         ) : activeSection.id === "search" ? (
           <SearchSettings />
+        ) : activeSection.id === "data-sources" ? (
+          <DataSourcesSettings />
         ) : activeSection.id === "subagents" ? (
           <SubagentsSettings />
         ) : activeSection.id === "attachments" ? (

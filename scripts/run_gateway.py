@@ -399,6 +399,7 @@ def create_app():
     # KStock 自有的路由层（vendor 引擎只读，以下路由提供 KStock CRUD / 控制）
     from scripts.kstock_gateway_control import router as kstock_gateway_control_router
     from scripts.kstock_models import router as kstock_models_router
+    from scripts.kstock_data_sources import router as kstock_data_sources_router
     from scripts.kstock_runtime_config import router as kstock_runtime_config_router
     from scripts.kstock_extensions_config import router as kstock_extensions_config_router
     from scripts.kstock_general_settings import router as kstock_general_settings_router
@@ -406,6 +407,7 @@ def create_app():
     from scripts.kstock_news_router import router as kstock_news_router
 
     app.include_router(kstock_models_router)
+    app.include_router(kstock_data_sources_router)
     app.include_router(kstock_runtime_config_router)
     app.include_router(kstock_extensions_config_router)
     app.include_router(kstock_general_settings_router)
