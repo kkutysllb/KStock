@@ -1453,11 +1453,7 @@ function WorkspaceShell({
             <Folder size={17} />
             <strong>{activeSession?.title ?? "新研究会话"}</strong>
           </div>
-          <div className="research-status-bar" aria-label="研究状态">
-            <span className={`status-light ${streamingId ? "active" : ""}`} />
-            <strong>研究模式</strong>
-            <span className="status-separator">/</span>
-            <span>{streamingId ? "生成中…" : "等待研究任务"}</span>
+          <div className="research-status-bar" aria-label="系统连接状态">
             <em><span className="status-pulse" />QiLin 已连接</em>
             <DataSourceIndicators dataSources={dataSources} />
           </div>

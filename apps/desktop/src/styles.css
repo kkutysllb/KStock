@@ -1196,11 +1196,6 @@ body.sidebar-resizing {
   font-size: 12px;
 }
 
-.research-status-bar strong {
-  color: #d9dde3;
-  font-size: 12px;
-}
-
 .research-status-bar > em {
   margin-left: auto;
   color: #31c7a2;
@@ -1220,18 +1215,6 @@ body.sidebar-resizing {
   border-radius: 50%;
   background: currentColor;
   box-shadow: 0 0 0 3px rgba(49, 199, 162, 0.11);
-}
-
-.status-light {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #31c7a2;
-  box-shadow: 0 0 0 4px rgba(49, 199, 162, 0.12);
-}
-
-.status-separator {
-  color: #4c535c;
 }
 
 .chat-column {
