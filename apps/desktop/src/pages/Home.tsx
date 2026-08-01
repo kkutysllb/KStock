@@ -1825,12 +1825,14 @@ function ModelAddDialog({ initialTemplate, onPickTemplate, onCancel, onSubmit }:
       )}
       {initialTemplate && (
         <>
-          <label><span>name（唯一标识）</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>
-          <label><span>display_name</span><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} /></label>
-          <label><span>use（provider class）</span><input value={useClass} onChange={(e) => setUseClass(e.target.value)} /></label>
-          <label><span>model</span><input value={modelName} onChange={(e) => setModelName(e.target.value)} /></label>
-          <label><span>api_base</span><input value={apiBase} onChange={(e) => setApiBase(e.target.value)} /></label>
-          <label><span>api_key（明文，存入 secrets.env）</span><input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} /></label>
+          <div className="model-add-fields">
+            <label><span>name（唯一标识）</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>
+            <label><span>display_name</span><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} /></label>
+            <label><span>use（provider class）</span><input value={useClass} onChange={(e) => setUseClass(e.target.value)} /></label>
+            <label><span>model</span><input value={modelName} onChange={(e) => setModelName(e.target.value)} /></label>
+            <label><span>api_base</span><input value={apiBase} onChange={(e) => setApiBase(e.target.value)} /></label>
+            <label><span>api_key（明文，存入 secrets.env）</span><input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} /></label>
+          </div>
           <div className="capability-row">
             <label className="auth-remember"><input type="checkbox" checked={thinking} onChange={(e) => setThinking(e.target.checked)} /><span>Thinking</span></label>
             <label className="auth-remember"><input type="checkbox" checked={vision} onChange={(e) => setVision(e.target.checked)} /><span>Vision</span></label>

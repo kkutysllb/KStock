@@ -1936,9 +1936,80 @@ button {
 }
 
 .model-add-dialog {
-  padding: 16px;
+  padding: 24px;
   display: grid;
-  gap: 12px;
+  gap: 18px;
+  background: rgba(25, 28, 32, 0.86);
+}
+
+.model-add-dialog .model-list-header {
+  margin: -2px 0 0;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.model-add-dialog .model-list-header > strong {
+  color: #e6eaed;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.model-add-dialog .model-list-header .link-button {
+  min-height: 26px;
+  color: #8eb9d8;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.model-add-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.model-add-fields label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.model-add-fields label span {
+  color: #aeb6bf;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.model-add-fields input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #32373d;
+  border-radius: 7px;
+  padding: 0 12px;
+  background: #121416;
+  color: #e8eaed;
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+
+.model-add-fields input:focus {
+  border-color: rgba(68, 198, 160, 0.72);
+  background: #141719;
+  box-shadow: 0 0 0 3px rgba(68, 198, 160, 0.09);
+}
+
+.model-add-dialog > .capability-row {
+  gap: 8px;
+  padding-top: 1px;
+}
+
+.model-add-dialog > .hero-primary {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .template-picker .template-grid {
@@ -1953,6 +2024,12 @@ button {
   padding: 10px;
   text-align: left;
   border-radius: 8px;
+}
+
+@media (max-width: 680px) {
+  .model-add-fields {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── 输入框模型选择器 ────────────────────────────────────────── */
