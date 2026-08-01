@@ -927,7 +927,10 @@ function AuthPage({
       </button>
       <section className="auth-panel" aria-label={isLogin ? "登录" : "注册"}>
         <div>
-          <p className="eyebrow">KStock Account</p>
+          <div className="auth-brand" aria-label="KStock 账户">
+            <LogoMark compact />
+            <span>KStock</span>
+          </div>
           <h1>{heading}</h1>
           <p>{subtitle}</p>
         </div>
