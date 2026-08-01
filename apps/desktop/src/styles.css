@@ -806,7 +806,11 @@ button {
 }
 
 .workspace-shell.sidebar-collapsed {
-  grid-template-columns: 60px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workspace-shell.sidebar-collapsed .codex-sidebar {
+  display: none;
 }
 
 .sidebar-resize-handle {
@@ -1164,6 +1168,19 @@ body.sidebar-resizing {
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+.workspace-sidebar-toggle {
+  flex: 0 0 auto;
+  margin-left: -5px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.workspace-sidebar-toggle:hover {
+  border-color: rgba(68, 198, 160, 0.26);
+  background: rgba(68, 198, 160, 0.08);
+  color: #75d9bb;
 }
 
 .workspace-topbar > .research-status-bar {

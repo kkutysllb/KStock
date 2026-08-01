@@ -1487,9 +1487,6 @@ function WorkspaceShell({
     >
       <aside className="codex-sidebar" aria-label="工作区侧边栏">
         <div className="sidebar-title">
-          <button className="icon-ghost" type="button" onClick={onToggleSidebar} aria-label="折叠侧边栏">
-            {sidebarCollapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
-          </button>
           {!sidebarCollapsed && (
             <div className="sidebar-brand" aria-label="KStock 工作区">
               <LogoMark compact />
@@ -1617,6 +1614,16 @@ function WorkspaceShell({
           onDoubleClick={toggleWindowMaximize}
         >
           <div>
+            <button
+              className="icon-ghost workspace-sidebar-toggle"
+              type="button"
+              onClick={onToggleSidebar}
+              aria-label={sidebarCollapsed ? "展开侧边栏" : "折叠侧边栏"}
+              aria-expanded={!sidebarCollapsed}
+              title={sidebarCollapsed ? "展开侧边栏" : "折叠侧边栏"}
+            >
+              {sidebarCollapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
+            </button>
             <Folder size={17} />
             <strong>{activeSession?.title ?? "新研究会话"}</strong>
           </div>
