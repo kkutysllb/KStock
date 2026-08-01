@@ -1,9 +1,9 @@
 // assistant turn 整合：Claude/ChatGPT 风格无气泡布局。
 // 从上到下：头像 + StageBadge → ReasoningBlock → SubagentGroup[] →
-// ToolCard[]（主 agent）→ 正文 text（markdown 源文本）→ 用量/error。
+// ToolCard[]（主 agent）→ 正文 text（markdown 源文本）→ error。
 // 流式时正文末尾闪动光标；空 turn 流式中显示 pending 占位。
 
-import { AlertTriangle, Sparkles, Zap } from "lucide-react";
+import { AlertTriangle, Sparkles } from "lucide-react";
 import type { ChatMessage, HumanInputPayload } from "../lib/sessionStore";
 import { Markdown } from "../lib/markdown";
 import { StageBadge } from "./StageBadge";
@@ -128,8 +128,6 @@ export function AssistantTurn({
           </div>
         )}
 
-        <TurnFooter msg={msg} />
-
         {msg.error && (
           <div className="turn-error">
             <AlertTriangle size={13} />
@@ -138,17 +136,5 @@ export function AssistantTurn({
         )}
       </div>
     </article>
-  );
-}
-
-function TurnFooter({ msg }: { msg: ChatMessage }) {
-  if (!msg.usage) return null;
-  return (
-    <div className="turn-footer">
-      <span className="usage-chip">
-        <Zap size={11} />
-        {msg.usage.total_tokens} tokens
-      </span>
-    </div>
   );
 }

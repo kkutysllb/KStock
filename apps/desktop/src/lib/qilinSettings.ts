@@ -289,12 +289,12 @@ export const SETTING_SECTIONS: SettingSection[] = [
   },
   {
     id: "runtime",
-    title: "运行与预算",
+    title: "Token 统计与预算",
     group: "执行",
     icon: Gauge,
-    summary: "Token 预算、递归限制、熔断、重试和进度事件。",
+    summary: "任务用量看板、Token 预算、递归限制、熔断、重试和进度事件。",
     fields: [
-      { name: "Token Usage", value: "开启", hint: "统计输入/输出/总 token" },
+      { name: "Token 统计", value: "近 30 天看板", hint: "任务、调用、输入/输出与缓存命中" },
       { name: "Token Budget", value: "关闭", hint: "可设置硬停止阈值" },
       { name: "最大递归", value: "1000", hint: "对应 max_recursion_limit" }
     ]

@@ -9,6 +9,7 @@ import {
   isRuntimeConfigApiError,
 } from "../lib/runtimeConfigClient";
 import { RuntimeConfigCard, type FieldDef } from "./RuntimeConfigCard";
+import { TokenStats } from "./TokenStats";
 
 /**
  * 运行与预算设置页。
@@ -85,6 +86,8 @@ export function RuntimeSettings() {
 
   return (
     <div className="runtime-settings">
+      <TokenStats />
+
       <section className="settings-card database-notice-card" aria-label="注意事项">
         <div className="database-notice">
           <AlertTriangle size={16} />
