@@ -674,6 +674,11 @@ export function Home() {
       onLogout={handleLogout}
       onNewSession={handleNewSession}
       onOpenSettings={() => setView("settings")}
+      onOpenIntegrations={() => {
+        setSettingsSectionId("integrations");
+        setView("settings");
+      }}
+      onOpenReports={() => setView("reports")}
       onSelectSession={setActiveSessionId}
       onDeleteSession={handleRequestDeleteSession}
       onSend={handleSend}
@@ -1013,6 +1018,8 @@ function WorkspaceShell({
   onDraftChange,
   onLogout,
   onNewSession,
+  onOpenIntegrations,
+  onOpenReports,
   onOpenSettings,
   onSelectSession,
   onDeleteSession,
@@ -1040,6 +1047,8 @@ function WorkspaceShell({
   onDraftChange: (draft: string) => void;
   onLogout: () => void;
   onNewSession: () => void;
+  onOpenIntegrations: () => void;
+  onOpenReports: () => void;
   onOpenSettings: () => void;
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
@@ -1081,17 +1090,13 @@ function WorkspaceShell({
             <Plus size={17} />
             {!sidebarCollapsed && <span>新研究</span>}
           </button>
-          <button className="nav-command" type="button" onClick={() => setView("reports")}>
+          <button className="nav-command" type="button" onClick={onOpenReports}>
             <Library size={17} />
             {!sidebarCollapsed && <span>报告库</span>}
           </button>
-          <button className="nav-command" type="button">
-            <Activity size={17} />
-            {!sidebarCollapsed && <span>已安排</span>}
-          </button>
-          <button className="nav-command" type="button">
+          <button className="nav-command" type="button" onClick={onOpenIntegrations}>
             <Sparkles size={17} />
-            {!sidebarCollapsed && <span>技能</span>}
+            {!sidebarCollapsed && <span>技能与插件</span>}
           </button>
         </div>
         {!sidebarCollapsed && (
