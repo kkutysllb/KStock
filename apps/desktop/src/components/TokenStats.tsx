@@ -24,18 +24,47 @@ type StatCard = {
 
 const formatNumber = (value: number) => new Intl.NumberFormat("zh-CN").format(value || 0);
 
-function chartPoints(days: TokenStatsDay[], key: "input_tokens" | "output_tokens") {
-  if (days.length === 0) return "";
-  const max = Math.max(...days.map((day) => day[key]), 1);
-  return days.map((day, index) => {
-    const x = days.length === 1 ? 300 : (index / (days.length - 1)) * 600;
-    const y = 148 - (day[key] / max) * 122;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+const CHART_WIDTH = 600;
+const CHART_TOP = 26;
+const CHART_BASELINE = 148;
+const CHART_HEIGHT = CHART_BASELINE - CHART_TOP;
+
+function chartX(index: number, count: number) {
+  return count <= 1 ? CHART_WIDTH / 2 : (index / (count - 1)) * CHART_WIDTH;
 }
 
-function activityHeight(value: number, max: number) {
-  return Math.max(3, (value / Math.max(max, 1)) * 118);
+function areaPath(days: TokenStatsDay[], key: "completed_tasks" | "api_calls", max: number) {
+  if (days.length === 0) return "";
+  const points = days.map((day, index) => {
+    const x = chartX(index, days.length);
+    const y = CHART_BASELINE - (day[key] / Math.max(max, 1)) * CHART_HEIGHT;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const firstX = chartX(0, days.length).toFixed(1);
+  const lastX = chartX(days.length - 1, days.length).toFixed(1);
+  return `M ${firstX},${CHART_BASELINE} L ${points.join(" L ")} L ${lastX},${CHART_BASELINE} Z`;
+}
+
+function stackedBarRects(days: TokenStatsDay[], max: number) {
+  if (days.length === 0) return [];
+  const groupWidth = CHART_WIDTH / days.length;
+  const barWidth = Math.min(16, Math.max(4, groupWidth * 0.62));
+  return days.map((day, index) => {
+    const total = day.input_tokens + day.output_tokens;
+    const totalHeight = (total / Math.max(max, 1)) * CHART_HEIGHT;
+    const inputHeight = (day.input_tokens / Math.max(max, 1)) * CHART_HEIGHT;
+    const x = index * groupWidth + (groupWidth - barWidth) / 2;
+    const baseY = CHART_BASELINE - totalHeight;
+    return {
+      day,
+      x,
+      width: barWidth,
+      inputY: CHART_BASELINE - inputHeight,
+      inputHeight,
+      outputY: baseY,
+      outputHeight: totalHeight - inputHeight,
+    };
+  });
 }
 
 export function TokenStats() {
@@ -91,8 +120,10 @@ export function TokenStats() {
     );
   }
 
-  const tokenMax = Math.max(...stats.days.map((day) => Math.max(day.input_tokens, day.output_tokens)), 1);
-  const activityMax = Math.max(...stats.days.map((day) => Math.max(day.api_calls, day.completed_tasks)), 1);
+  const tokenMax = Math.max(...stats.days.map((day) => day.input_tokens + day.output_tokens), 1);
+  const taskMax = Math.max(...stats.days.map((day) => day.completed_tasks), 1);
+  const apiMax = Math.max(...stats.days.map((day) => day.api_calls), 1);
+  const tokenBars = stackedBarRects(stats.days, tokenMax);
 
   return (
     <section className="token-stats" aria-label="Token 统计">
@@ -118,30 +149,33 @@ export function TokenStats() {
 
       <div className="token-stats-charts">
         <article className="token-chart-card">
-          <div className="token-chart-heading"><div><strong>输入 / 输出趋势</strong><span>按天统计 Token 使用量</span></div><span className="token-chart-total">{formatNumber(stats.total_tokens)} total</span></div>
-          <div className="token-line-legend"><span className="token-line-legend-input">输入</span><span className="token-line-legend-output">输出</span></div>
-          <svg className="token-line-chart" viewBox="0 0 600 170" role="img" aria-label="输入和输出 Token 趋势图">
+          <div className="token-chart-heading"><div><strong>输入 / 输出 Token</strong><span>按天堆叠显示 Token 使用量</span></div><span className="token-chart-total">{formatNumber(stats.total_tokens)} total</span></div>
+          <div className="token-stack-legend"><span className="token-stack-legend-input">输入</span><span className="token-stack-legend-output">输出</span></div>
+          <svg className="token-stack-chart" viewBox="0 0 600 170" role="img" aria-label="输入和输出 Token 堆叠柱状图">
             {[26, 67, 108, 148].map((y) => <line key={y} x1="0" x2="600" y1={y} y2={y} className="token-chart-grid" />)}
-            <polyline points={chartPoints(stats.days, "input_tokens")} className="token-chart-line token-chart-line--input" />
-            <polyline points={chartPoints(stats.days, "output_tokens")} className="token-chart-line token-chart-line--output" />
+            {tokenBars.map(({ day, x, width, inputY, inputHeight, outputY, outputHeight }) => (
+              <g key={day.date}>
+                <title>{`${day.date}: 输入 ${formatNumber(day.input_tokens)}，输出 ${formatNumber(day.output_tokens)}`}</title>
+                <rect x={x} y={inputY} width={width} height={inputHeight} className="token-stack-bar token-stack-bar--input" />
+                <rect x={x} y={outputY} width={width} height={outputHeight} className="token-stack-bar token-stack-bar--output" />
+              </g>
+            ))}
           </svg>
           <div className="token-chart-axis"><span>{stats.days[0]?.date.slice(5) ?? "-"}</span><span>{stats.days[Math.floor(stats.days.length / 2)]?.date.slice(5) ?? "-"}</span><span>{stats.days[stats.days.length - 1]?.date.slice(5) ?? "-"}</span></div>
-          <span className="sr-only">趋势最大值 {formatNumber(tokenMax)} Token</span>
+          <span className="sr-only">每日输入输出堆叠最大值 {formatNumber(tokenMax)} Token</span>
         </article>
 
         <article className="token-chart-card">
-          <div className="token-chart-heading"><div><strong>任务与 API 活跃度</strong><span>每日完成任务和调用次数</span></div><span className="token-chart-total">{formatNumber(stats.total_runs)} runs</span></div>
-          <div className="token-bar-legend"><span className="token-bar-legend-tasks">任务</span><span className="token-bar-legend-api">API</span></div>
-          <div className="token-bar-chart" role="img" aria-label="每日任务完成次数和 API 调用次数柱状图">
-            {stats.days.map((day) => (
-              <div className="token-bar-day" key={day.date} title={`${day.date}: ${day.completed_tasks} 个任务，${day.api_calls} 次 API 调用`}>
-                <span className="token-bar token-bar--tasks" style={{ height: `${activityHeight(day.completed_tasks, activityMax)}px` }} />
-                <span className="token-bar token-bar--api" style={{ height: `${activityHeight(day.api_calls, activityMax)}px` }} />
-              </div>
-            ))}
-          </div>
+          <div className="token-chart-heading"><div><strong>任务 / API 活跃度</strong><span>双轴面积图，按各自数量级显示</span></div><span className="token-chart-total">{formatNumber(stats.api_calls)} calls</span></div>
+          <div className="token-area-legend"><span className="token-area-legend-tasks">任务完成</span><span className="token-area-legend-api">API 调用</span></div>
+          <div className="token-area-axis-labels"><span>任务 {formatNumber(taskMax)}</span><span>API {formatNumber(apiMax)}</span></div>
+          <svg className="token-area-chart" viewBox="0 0 600 170" role="img" aria-label="任务完成次数和 API 调用次数双轴面积图">
+            {[26, 67, 108, 148].map((y) => <line key={y} x1="0" x2="600" y1={y} y2={y} className="token-chart-grid" />)}
+            <path d={areaPath(stats.days, "completed_tasks", taskMax)} className="token-area-fill token-area-fill--tasks" />
+            <path d={areaPath(stats.days, "api_calls", apiMax)} className="token-area-fill token-area-fill--api" />
+          </svg>
           <div className="token-chart-axis"><span>{stats.days[0]?.date.slice(5) ?? "-"}</span><span>{stats.days[Math.floor(stats.days.length / 2)]?.date.slice(5) ?? "-"}</span><span>{stats.days[stats.days.length - 1]?.date.slice(5) ?? "-"}</span></div>
-          <span className="sr-only">活跃度最大值 {formatNumber(activityMax)}</span>
+          <span className="sr-only">任务最大值 {formatNumber(taskMax)}，API 调用最大值 {formatNumber(apiMax)}</span>
         </article>
       </div>
 
