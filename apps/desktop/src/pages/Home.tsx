@@ -807,8 +807,14 @@ export function Home() {
 
   // 选附件：上传到当前会话的 thread（无 threadId 时先创建引擎 thread 并绑定）。
   const handlePickFiles = async (files: FileList) => {
-    const session = activeSession;
-    if (!session) return;
+    // 与 handleSend 保持一致：空白工作台也允许先选择附件，自动创建本地任务，
+    // 不再因为 activeSession 为空而让附件按钮永久 disabled。
+    let session = activeSession;
+    if (!session) {
+      session = createSession("新研究会话");
+      setSessions((current) => [session!, ...current]);
+      setActiveSessionId(session.id);
+    }
 
     // 附件上传依赖 thread_id；无 threadId 时先创建引擎 thread 并绑定到 session。
     let threadId = session.threadId;
@@ -1698,8 +1704,7 @@ ${text}` : text)
           <div className="composer-toolbar">
             <AttachmentPicker
               loading={attachmentsLoading}
-              disabled={!activeSession || !!streamingId}
-              disabledReason={!activeSession ? "先开始一个会话" : undefined}
+              disabled={!!streamingId}
               onPickFiles={onPickFiles}
             />
             {modelsLoading ? (
