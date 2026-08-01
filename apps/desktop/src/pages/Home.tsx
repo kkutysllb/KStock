@@ -1059,6 +1059,8 @@ function WorkspaceShell({
   const scrollToBottom = () => feedRef.current?.scrollToBottom("smooth");
   // 历史任务分组折叠状态（默认展开）。
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
+  // 账户操作默认收起，避免长期占用侧栏底部空间。
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   return (
     <div className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="codex-sidebar" aria-label="工作区侧边栏">
@@ -1147,21 +1149,37 @@ function WorkspaceShell({
         )}
         <div className="sidebar-footer">
           <button
-            className="nav-command"
+            className="nav-command sidebar-account-trigger"
             type="button"
             title={currentUser?.email ?? "未登录"}
+            aria-expanded={accountMenuOpen}
+            aria-controls="sidebar-account-actions"
+            onClick={() => setAccountMenuOpen((open) => !open)}
           >
             <CircleUserRound size={17} />
-            {!sidebarCollapsed && <span>{currentUser?.email ?? "未登录"}</span>}
+            {!sidebarCollapsed && (
+              <>
+                <span>{currentUser?.email ?? "未登录"}</span>
+                <ChevronRight
+                  className={accountMenuOpen ? "chevron-expanded" : ""}
+                  size={14}
+                  aria-hidden="true"
+                />
+              </>
+            )}
           </button>
-          <button className="nav-command" type="button" onClick={onOpenSettings} aria-label="打开设置">
-            <Settings size={17} />
-            {!sidebarCollapsed && <span>设置</span>}
-          </button>
-          <button className="nav-command" type="button" onClick={onLogout} aria-label="退出登录">
-            <LogOut size={17} />
-            {!sidebarCollapsed && <span>退出登录</span>}
-          </button>
+          {accountMenuOpen && !sidebarCollapsed && (
+            <div id="sidebar-account-actions" className="sidebar-account-actions">
+              <button className="nav-command" type="button" onClick={onOpenSettings} aria-label="打开设置">
+                <Settings size={17} />
+                <span>设置</span>
+              </button>
+              <button className="nav-command" type="button" onClick={onLogout} aria-label="退出登录">
+                <LogOut size={17} />
+                <span>退出登录</span>
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
