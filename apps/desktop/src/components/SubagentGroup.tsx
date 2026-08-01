@@ -4,7 +4,7 @@
 
 import { AlertCircle, Check, Clock, Loader2, X } from "lucide-react";
 import type { SubagentStep, SubagentTask } from "../lib/sessionStore";
-import { ToolCard } from "./ToolCard";
+import { groupToolCalls, ToolCallGroup } from "./ToolCallGroup";
 
 interface SubagentGroupProps {
   task: SubagentTask;
@@ -38,7 +38,9 @@ function SubagentStepView({ step, showToolCalls }: { step: SubagentStep; showToo
   return (
     <div className="subagent-step">
       {step.text && <div className="subagent-step-text">{step.text}</div>}
-      {showToolCalls && step.toolCalls?.map((tc) => <ToolCard key={tc.id} call={tc} />)}
+      {showToolCalls && groupToolCalls(step.toolCalls ?? []).map((calls) => (
+        <ToolCallGroup key={calls[0].name} calls={calls} />
+      ))}
     </div>
   );
 }

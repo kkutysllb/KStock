@@ -8,9 +8,9 @@ import type { ChatMessage, HumanInputPayload } from "../lib/sessionStore";
 import { Markdown } from "../lib/markdown";
 import { StageBadge } from "./StageBadge";
 import { ReasoningBlock } from "./ReasoningBlock";
-import { ToolCard } from "./ToolCard";
 import { SubagentGroup } from "./SubagentGroup";
 import { ClarificationCard } from "./ClarificationCard";
+import { groupToolCalls, ToolCallGroup } from "./ToolCallGroup";
 
 interface AssistantTurnProps {
   msg: ChatMessage;
@@ -95,9 +95,11 @@ export function AssistantTurn({
 
         {msg.subagents?.map((t) => <SubagentGroup key={t.taskId} task={t} showToolCalls={showToolCalls} />)}
 
-        {showToolCalls && msg.toolCalls
-          ?.filter((c) => c.name !== "ask_clarification")
-          .map((c) => <ToolCard key={c.id} call={c} />)}
+        {showToolCalls && groupToolCalls(
+          msg.toolCalls?.filter((c) => c.name !== "ask_clarification") ?? []
+        ).map((calls) => (
+          <ToolCallGroup key={calls[0].name} calls={calls} />
+        ))}
 
         {/*
          * 交互式澄清（choice_with_other）：用 ClarificationCard 替换 fallback 正文。

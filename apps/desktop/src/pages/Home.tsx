@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import {
   Activity,
   ArrowLeft,
-  Bell,
   Bot,
   ChevronDown,
   ChevronLeft,
@@ -26,6 +25,7 @@ import {
   Sparkles,
   Square,
   Trash2,
+  Zap,
 } from "lucide-react";
 import { Markdown } from "../lib/markdown";
 import { fetchLandingNews, type LandingNewsItem } from "../lib/landingNewsClient";
@@ -1214,6 +1214,10 @@ function WorkspaceShell({
   onToggleHistory: () => void;
 }) {
   const messages = activeSession?.messages ?? [];
+  const latestUsage = [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant" && message.usage);
+  const taskTokens = latestUsage?.usage?.total_tokens ?? 0;
   // ChatFeed 命令式 ref + 贴底状态：驱动「回到底部」浮动按钮。
   const feedRef = useRef<ChatFeedHandle>(null);
   const [feedAtBottom, setFeedAtBottom] = useState(true);
@@ -1221,7 +1225,7 @@ function WorkspaceShell({
   // 账户操作默认收起，避免长期占用侧栏底部空间。
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   return (
-    <div className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} density-${generalPreferences.density} ${generalPreferences.reduce_motion ? "reduce-motion" : ""}`}>
+    <div className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${rightPanelOpen ? "context-open" : ""} density-${generalPreferences.density} ${generalPreferences.reduce_motion ? "reduce-motion" : ""}`}>
       <aside className="codex-sidebar" aria-label="工作区侧边栏">
         <div className="sidebar-title">
           <button className="icon-ghost" type="button" onClick={onToggleSidebar} aria-label="折叠侧边栏">
@@ -1356,12 +1360,10 @@ function WorkspaceShell({
             <em><span className="status-pulse" />QiLin 已连接</em>
           </div>
           <div className="topbar-actions">
-            <button className="icon-ghost" type="button" aria-label="搜索">
-              <Search size={17} />
-            </button>
-            <button className="icon-ghost" type="button" aria-label="通知">
-              <Bell size={17} />
-            </button>
+            <span className="task-token-count" aria-label={`当前任务消耗 ${taskTokens.toLocaleString("en-US")} tokens`}>
+              <Zap size={13} />
+              {taskTokens.toLocaleString("en-US")} tokens
+            </span>
             <button className="icon-ghost" type="button" onClick={onToggleRightPanel} aria-label="显示环境信息">
               <PanelRight size={17} />
             </button>
