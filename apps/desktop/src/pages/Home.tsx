@@ -1103,12 +1103,12 @@ function LandingPage({ onEnter, onAuth, dataSources }: { onEnter: () => void; on
         <article>
           <Bot size={20} />
           <h2>QiLin 内置引擎</h2>
-          <p>产品发布输入固定到 `vendor/qilin`，不再依赖开发者机器上的外部仓库。</p>
+          <p>内置任务编排与流式 Agent 引擎，支持上下文记忆、工具调用、并行 Subagent 和可追踪的研究过程。</p>
         </article>
         <article>
           <Sparkles size={20} />
           <h2>精选技能体系</h2>
-          <p>只加载研究、分析、报告优先的 KSkills 子集，避免把开发类技能混进产品运行时。</p>
+          <p>KSkills 按研究场景组织财报、行情、估值、行业、新闻、公告与宏观技能，按需激活并协同数据源完成复杂分析。</p>
         </article>
         <article>
           <FileText size={20} />
