@@ -4587,6 +4587,203 @@ button {
   accent-color: #44c6a0;
 }
 
+/* ── 常规设置：分组清晰、控件紧凑，沿用设置页统一视觉 ─────────── */
+.general-settings {
+  display: grid;
+  gap: 14px;
+  width: min(880px, 100%);
+  margin: 0 auto;
+}
+
+.general-settings-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  color: #737d88;
+  font-size: 11px;
+}
+
+.general-settings-toolbar > div {
+  display: flex;
+  gap: 8px;
+}
+
+.general-settings-toolbar .hero-primary,
+.general-settings-toolbar .link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.general-settings-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.general-settings-section {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.general-settings-section-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.general-settings-section-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 1px solid rgba(68, 198, 160, 0.2);
+  border-radius: 7px;
+  background: rgba(68, 198, 160, 0.08);
+  color: #55cba8;
+}
+
+.general-settings-section-header strong {
+  display: block;
+  color: #e4e8eb;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.general-settings-section-header p {
+  margin: 4px 0 0;
+  color: #7f8994;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.general-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+.general-settings-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 54px;
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+  padding-top: 10px;
+}
+
+.general-settings-label {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.general-settings-label strong {
+  overflow: hidden;
+  color: #c8ced5;
+  font-size: 12px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.general-settings-label em {
+  color: #737d88;
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.general-settings-field select {
+  width: 150px;
+  min-height: 32px;
+  flex: 0 0 150px;
+  border: 1px solid #32373d;
+  border-radius: 7px;
+  padding: 0 9px;
+  background: #121416;
+  color: #e6eaed;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.general-settings-field select:focus {
+  outline: none;
+  border-color: rgba(85, 203, 168, 0.7);
+}
+
+.general-settings-toggle {
+  position: relative;
+}
+
+.general-settings-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.general-settings-switch {
+  position: relative;
+  display: inline-flex;
+  width: 36px;
+  height: 21px;
+  flex: 0 0 36px;
+  align-items: center;
+  border: 1px solid #3a4148;
+  border-radius: 999px;
+  background: #20252a;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.general-settings-switch span {
+  width: 15px;
+  height: 15px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: #8b949e;
+  transition: transform 140ms ease, background 140ms ease;
+}
+
+.general-settings-toggle input:checked + .general-settings-switch {
+  border-color: rgba(68, 198, 160, 0.7);
+  background: rgba(68, 198, 160, 0.35);
+}
+
+.general-settings-toggle input:checked + .general-settings-switch span {
+  transform: translateX(15px);
+  background: #55cba8;
+}
+
+.general-settings-toggle input:focus-visible + .general-settings-switch {
+  outline: 2px solid rgba(85, 203, 168, 0.75);
+  outline-offset: 2px;
+}
+
+.workspace-shell.density-compact .session-row,
+.workspace-shell.density-compact .nav-command {
+  min-height: 30px;
+}
+
+.workspace-shell.density-compact .chat-feed-inner {
+  gap: 14px;
+}
+
+.settings-shell.density-compact .settings-content {
+  padding-top: 34px;
+}
+
+.settings-shell.reduce-motion *,
+.workspace-shell.reduce-motion * {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.001ms !important;
+}
+
 /* 插件与技能：两块卡片使用同一套信息密度和操作按钮比例 */
 .settings-content .mcp-extensions-card,
 .settings-content .skills-extensions-card {
@@ -4796,6 +4993,21 @@ button {
 
   .settings-content .runtime-config-grid {
     grid-template-columns: 1fr;
+  }
+
+  .general-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .general-settings-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .general-settings-toolbar > div {
+    width: 100%;
+    justify-content: flex-end;
   }
 
   .settings-content .runtime-config-header,

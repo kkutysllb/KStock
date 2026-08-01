@@ -168,11 +168,11 @@ export const SETTING_SECTIONS: SettingSection[] = [
     title: "常规",
     group: "个人",
     icon: SlidersHorizontal,
-    summary: "语言、默认工作区、菜单栏行为和桌面端运行偏好。",
+    summary: "界面密度、研究过程、会话恢复和消息输入行为。",
     fields: [
-      { name: "语言", value: "简体中文", hint: "应用 UI 和报告默认语言" },
-      { name: "默认研究目录", value: ".kstock/workspaces", hint: "会话文件和报告输出位置" },
-      { name: "运行时防止系统休眠", value: "开启", hint: "长任务执行时保持唤醒" }
+      { name: "界面与侧栏", value: "可配置", hint: "密度、动效和启动时折叠状态" },
+      { name: "研究过程", value: "可配置", hint: "自动滚动、阶段、思考和工具调用展示" },
+      { name: "会话与输入", value: "可配置", hint: "任务恢复、发送快捷键和发送后行为" }
     ]
   },
   {

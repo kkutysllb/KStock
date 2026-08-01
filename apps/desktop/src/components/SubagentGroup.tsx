@@ -8,9 +8,10 @@ import { ToolCard } from "./ToolCard";
 
 interface SubagentGroupProps {
   task: SubagentTask;
+  showToolCalls?: boolean;
 }
 
-export function SubagentGroup({ task }: SubagentGroupProps) {
+export function SubagentGroup({ task, showToolCalls = true }: SubagentGroupProps) {
   return (
     <div
       className={`subagent-group status-${task.status}`}
@@ -25,7 +26,7 @@ export function SubagentGroup({ task }: SubagentGroupProps) {
       {task.steps.length > 0 && (
         <div className="subagent-steps">
           {task.steps.map((step) => (
-            <SubagentStepView key={step.index} step={step} />
+            <SubagentStepView key={step.index} step={step} showToolCalls={showToolCalls} />
           ))}
         </div>
       )}
@@ -33,11 +34,11 @@ export function SubagentGroup({ task }: SubagentGroupProps) {
   );
 }
 
-function SubagentStepView({ step }: { step: SubagentStep }) {
+function SubagentStepView({ step, showToolCalls }: { step: SubagentStep; showToolCalls: boolean }) {
   return (
     <div className="subagent-step">
       {step.text && <div className="subagent-step-text">{step.text}</div>}
-      {step.toolCalls?.map((tc) => <ToolCard key={tc.id} call={tc} />)}
+      {showToolCalls && step.toolCalls?.map((tc) => <ToolCard key={tc.id} call={tc} />)}
     </div>
   );
 }

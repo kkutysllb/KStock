@@ -401,12 +401,14 @@ def create_app():
     from scripts.kstock_models import router as kstock_models_router
     from scripts.kstock_runtime_config import router as kstock_runtime_config_router
     from scripts.kstock_extensions_config import router as kstock_extensions_config_router
+    from scripts.kstock_general_settings import router as kstock_general_settings_router
     from scripts.kstock_reports_router import router as kstock_reports_router
     from scripts.kstock_news_router import router as kstock_news_router
 
     app.include_router(kstock_models_router)
     app.include_router(kstock_runtime_config_router)
     app.include_router(kstock_extensions_config_router)
+    app.include_router(kstock_general_settings_router)
     app.include_router(kstock_reports_router)
     app.include_router(kstock_news_router)
     app.include_router(kstock_gateway_control_router)

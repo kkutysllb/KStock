@@ -27,6 +27,10 @@ interface ChatFeedProps {
   messages: ChatMessage[];
   /** 流式中的 assistant turn id（高亮 + 滚动跟随）。 */
   streamingId?: string;
+  autoScroll?: boolean;
+  showStage?: boolean;
+  showReasoning?: boolean;
+  showToolCalls?: boolean;
   /** 空状态插槽（Home 的 quick-prompt 区）。 */
   emptySlot?: ReactNode;
   /** 贴底状态变化回调（true=在底部，false=用户上滚）。 */
@@ -38,7 +42,17 @@ interface ChatFeedProps {
 const STICK_THRESHOLD_PX = 80;
 
 export const ChatFeed = forwardRef<ChatFeedHandle, ChatFeedProps>(
-  function ChatFeed({ messages, streamingId, emptySlot, onAtBottomChange, onClarifyPick }, ref) {
+  function ChatFeed({
+    messages,
+    streamingId,
+    autoScroll = true,
+    showStage = true,
+    showReasoning = true,
+    showToolCalls = true,
+    emptySlot,
+    onAtBottomChange,
+    onClarifyPick,
+  }, ref) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const stickToBottom = useRef(true);
     const [atBottom, setAtBottom] = useState(true);
@@ -75,11 +89,20 @@ export const ChatFeed = forwardRef<ChatFeedHandle, ChatFeedProps>(
 
     // 消息变化时若贴底则滚动到底（流式跟随）
     useEffect(() => {
-      if (!stickToBottom.current) return;
       const el = scrollRef.current;
       if (!el) return;
+      if (!autoScroll) {
+        const next = computeAtBottom(el);
+        stickToBottom.current = next;
+        if (next !== atBottom) {
+          setAtBottom(next);
+          onAtBottomChange?.(next);
+        }
+        return;
+      }
+      if (!stickToBottom.current) return;
       el.scrollTop = el.scrollHeight;
-    }, [messages]);
+    }, [atBottom, autoScroll, computeAtBottom, messages, onAtBottomChange]);
 
     if (messages.length === 0) {
       return <div className="chat-feed empty">{emptySlot}</div>;
@@ -96,6 +119,9 @@ export const ChatFeed = forwardRef<ChatFeedHandle, ChatFeedProps>(
                 key={m.id}
                 msg={m}
                 isStreaming={m.id === streamingId}
+                showStage={showStage}
+                showReasoning={showReasoning}
+                showToolCalls={showToolCalls}
                 onClarifyPick={onClarifyPick}
               />
             )

@@ -15,6 +15,9 @@ import { ClarificationCard } from "./ClarificationCard";
 interface AssistantTurnProps {
   msg: ChatMessage;
   isStreaming?: boolean;
+  showStage?: boolean;
+  showReasoning?: boolean;
+  showToolCalls?: boolean;
   /** ask_clarification 选项被选中并点“加入输入框”时回调，参数为拼接文本。 */
   onClarifyPick?: (text: string) => void;
 }
@@ -46,7 +49,14 @@ function detectClarification(msg: ChatMessage): {
   };
 }
 
-export function AssistantTurn({ msg, isStreaming, onClarifyPick }: AssistantTurnProps) {
+export function AssistantTurn({
+  msg,
+  isStreaming,
+  showStage = true,
+  showReasoning = true,
+  showToolCalls = true,
+  onClarifyPick,
+}: AssistantTurnProps) {
   const streaming = isStreaming ?? msg.status === "streaming";
 
   // ask_clarification 交互式澄清检测。
@@ -55,8 +65,8 @@ export function AssistantTurn({ msg, isStreaming, onClarifyPick }: AssistantTurn
 
   const hasContent =
     (msg.text && msg.text.length > 0) ||
-    msg.reasoning ||
-    (msg.toolCalls && msg.toolCalls.length > 0) ||
+    (showReasoning && msg.reasoning) ||
+    (showToolCalls && msg.toolCalls && msg.toolCalls.length > 0) ||
     (msg.subagents && msg.subagents.length > 0) ||
     hasInteractiveClarification;
 
@@ -66,16 +76,16 @@ export function AssistantTurn({ msg, isStreaming, onClarifyPick }: AssistantTurn
         <Sparkles size={14} />
       </div>
       <div className="turn-body">
-        <div className="turn-header">
-          <StageBadge stage={msg.stage} streaming={streaming} />
+        {(showStage || msg.status === "compacted") && <div className="turn-header">
+          {showStage && <StageBadge stage={msg.stage} streaming={streaming} />}
           {msg.status === "compacted" && (
             <span className="compacted-notice" title="引擎已压缩历史上下文">
               上下文已压缩
             </span>
           )}
-        </div>
+        </div>}
 
-        {msg.reasoning && (
+        {showReasoning && msg.reasoning && (
           <ReasoningBlock
             reasoning={msg.reasoning}
             streaming={streaming}
@@ -83,9 +93,9 @@ export function AssistantTurn({ msg, isStreaming, onClarifyPick }: AssistantTurn
           />
         )}
 
-        {msg.subagents?.map((t) => <SubagentGroup key={t.taskId} task={t} />)}
+        {msg.subagents?.map((t) => <SubagentGroup key={t.taskId} task={t} showToolCalls={showToolCalls} />)}
 
-        {msg.toolCalls
+        {showToolCalls && msg.toolCalls
           ?.filter((c) => c.name !== "ask_clarification")
           .map((c) => <ToolCard key={c.id} call={c} />)}
 

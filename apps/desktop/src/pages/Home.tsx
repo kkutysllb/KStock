@@ -100,6 +100,13 @@ import { ReportLibrary } from "../components/ReportLibrary";
 import { McpExtensionsCard } from "../components/McpExtensionsCard";
 import { SkillsExtensionsCard } from "../components/SkillsExtensionsCard";
 import { AttachmentPicker, AttachmentChips } from "../components/AttachmentPicker";
+import { GeneralSettings } from "../components/GeneralSettings";
+import {
+  DEFAULT_GENERAL_PREFERENCES,
+  getGeneralPreferences,
+  updateGeneralPreferences,
+  type GeneralPreferences,
+} from "../lib/generalSettingsClient";
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings" | "reports";
 type AuthMode = "login" | "register";
@@ -174,6 +181,8 @@ export function Home() {
   const [view, setView] = useState<ViewMode>("landing");
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [generalPreferences, setGeneralPreferences] = useState<GeneralPreferences>(DEFAULT_GENERAL_PREFERENCES);
+  const [generalPreferencesLoaded, setGeneralPreferencesLoaded] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [settingsSectionId, setSettingsSectionId] = useState("general");
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -229,15 +238,40 @@ export function Home() {
     }
   }, [authReady, currentUser, view]);
 
+  // 读取当前用户的桌面偏好。Gateway 不可用时使用默认值，设置页仍可打开。
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentUser) {
+      setGeneralPreferences(DEFAULT_GENERAL_PREFERENCES);
+      setGeneralPreferencesLoaded(false);
+      setSidebarCollapsed(false);
+      return;
+    }
+    setGeneralPreferencesLoaded(false);
+    getGeneralPreferences()
+      .catch(() => DEFAULT_GENERAL_PREFERENCES)
+      .then((preferences) => {
+        if (cancelled) return;
+        setGeneralPreferences(preferences);
+        setSidebarCollapsed(preferences.sidebar_collapsed);
+        setGeneralPreferencesLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser]);
+
   // 登录后从后端拉取历史会话列表（POST /api/threads/search）。
   // 修复「预置假会话重启后重复出现」的 bug：以前用 createSeedSessions() 硬编码
   // 两个假会话作为初始 state，用户删除后重启又会重新生成；现在改为从后端加载
   // 真实 thread，无 thread 时显示空态。
   useEffect(() => {
-    if (!currentUser) {
-      setSessions([]);
-      setActiveSessionId("");
-      setSessionsLoaded(true);
+    if (!currentUser || !generalPreferencesLoaded) {
+      if (!currentUser) {
+        setSessions([]);
+        setActiveSessionId("");
+        setSessionsLoaded(true);
+      }
       return;
     }
     let cancelled = false;
@@ -245,14 +279,26 @@ export function Home() {
       const threads = await listThreads(100);
       if (cancelled) return;
       const restored = threads.map(threadToSession);
-      setSessions(restored);
-      setActiveSessionId(restored[0]?.id ?? "");
+      const lastSessionId = generalPreferences.restore_last_session
+        ? localStorage.getItem(`kstock.lastSession.${currentUser.id}`)
+        : null;
+      const restoredIndex = lastSessionId
+        ? threads.findIndex((thread) => thread.thread_id === lastSessionId)
+        : -1;
+      if (restored.length === 0 && generalPreferences.create_session_when_empty) {
+        const fresh = createSession("新研究会话");
+        setSessions([fresh]);
+        setActiveSessionId(fresh.id);
+      } else {
+        setSessions(restored);
+        setActiveSessionId(restored[restoredIndex >= 0 ? restoredIndex : 0]?.id ?? "");
+      }
       setSessionsLoaded(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, [currentUser]);
+  }, [currentUser, generalPreferencesLoaded]);
 
   // 切换到历史会话时懒加载消息：session 有 threadId 但 messages 为空时
   // 调 fetchThreadMessages 拉取，转成 ChatMessage[] 写回 session.messages。
@@ -337,6 +383,22 @@ export function Home() {
     []
   );
 
+  const handleGeneralPreferencesSaved = useCallback((next: GeneralPreferences) => {
+    setGeneralPreferences(next);
+    setSidebarCollapsed(next.sidebar_collapsed);
+  }, []);
+
+  const persistGeneralPreferencePatch = useCallback(
+    (patch: Partial<GeneralPreferences>) => {
+      const next = { ...generalPreferences, ...patch };
+      handleGeneralPreferencesSaved(next);
+      updateGeneralPreferences(next).catch(() => {
+        // 设置页仍可继续使用；下次加载会以服务端值为准。
+      });
+    },
+    [generalPreferences, handleGeneralPreferencesSaved]
+  );
+
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) ?? sessions[0],
     [activeSessionId, sessions]
@@ -386,6 +448,16 @@ export function Home() {
     setSessions((current) => [nextSession, ...current]);
     setActiveSessionId(nextSession.id);
     setDraft("");
+  };
+
+  const handleSelectSession = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    if (currentUser) {
+      const selected = sessions.find((session) => session.id === sessionId);
+      if (selected?.threadId) {
+        localStorage.setItem(`kstock.lastSession.${currentUser.id}`, selected.threadId);
+      }
+    }
   };
 
   // 删除历史任务：点击删除按钮只打开确认对话框，不立即执行。
@@ -461,8 +533,8 @@ export function Home() {
       return;
     }
 
-    setDraft("");
-    setPendingAttachments([]);
+    if (!generalPreferences.keep_draft_after_send) setDraft("");
+    if (!generalPreferences.keep_attachments_after_send) setPendingAttachments([]);
 
     // 1. append user message
     setSessions((current) =>
@@ -474,6 +546,9 @@ export function Home() {
     if (!threadId) {
       try {
         threadId = await ensureThread();
+        if (currentUser) {
+          localStorage.setItem(`kstock.lastSession.${currentUser.id}`, threadId);
+        }
         setSessions((current) =>
           current.map((s) => (s.id === session.id ? bindThreadId(s, threadId!) : s))
         );
@@ -648,10 +723,12 @@ export function Home() {
         activeSectionId={settingsSectionId}
         currentUser={currentUser}
         models={models}
+        generalPreferences={generalPreferences}
         onBack={enterWorkspace}
         onLogout={handleLogout}
         onSelectSection={setSettingsSectionId}
         onModelsChanged={handleModelsChanged}
+        onGeneralPreferencesChanged={handleGeneralPreferencesSaved}
       />
     );
   }
@@ -675,6 +752,8 @@ export function Home() {
       rightPanelOpen={rightPanelOpen}
       sessions={sessions}
       sidebarCollapsed={sidebarCollapsed}
+      historyCollapsed={generalPreferences.history_collapsed}
+      generalPreferences={generalPreferences}
       models={models}
       activeModel={activeModel}
       modelsLoading={modelsLoading}
@@ -689,7 +768,7 @@ export function Home() {
         setView("settings");
       }}
       onOpenReports={() => setView("reports")}
-      onSelectSession={setActiveSessionId}
+      onSelectSession={handleSelectSession}
       onDeleteSession={handleRequestDeleteSession}
       onSend={handleSend}
       onStop={handleStop}
@@ -698,7 +777,8 @@ export function Home() {
       onPickFiles={handlePickFiles}
       onRemoveAttachment={handleRemoveAttachment}
       onToggleRightPanel={() => setRightPanelOpen((current) => !current)}
-      onToggleSidebar={() => setSidebarCollapsed((current) => !current)}
+      onToggleSidebar={() => persistGeneralPreferencePatch({ sidebar_collapsed: !sidebarCollapsed })}
+      onToggleHistory={() => persistGeneralPreferencePatch({ history_collapsed: !generalPreferences.history_collapsed })}
     />
       <ConfirmDialog
         open={pendingDeleteSessionId !== null}
@@ -1076,6 +1156,8 @@ function WorkspaceShell({
   rightPanelOpen,
   sessions,
   sidebarCollapsed,
+  historyCollapsed,
+  generalPreferences,
   models,
   activeModel,
   modelsLoading,
@@ -1096,7 +1178,8 @@ function WorkspaceShell({
   onPickFiles,
   onRemoveAttachment,
   onToggleRightPanel,
-  onToggleSidebar
+  onToggleSidebar,
+  onToggleHistory
 }: {
   activeSession: ChatSession | undefined;
   currentUser: AuthUser | null;
@@ -1105,6 +1188,8 @@ function WorkspaceShell({
   rightPanelOpen: boolean;
   sessions: ChatSession[];
   sidebarCollapsed: boolean;
+  historyCollapsed: boolean;
+  generalPreferences: GeneralPreferences;
   models: ModelConfig[];
   activeModel: string;
   modelsLoading: boolean;
@@ -1126,18 +1211,17 @@ function WorkspaceShell({
   onRemoveAttachment: (filename: string) => void;
   onToggleRightPanel: () => void;
   onToggleSidebar: () => void;
+  onToggleHistory: () => void;
 }) {
   const messages = activeSession?.messages ?? [];
   // ChatFeed 命令式 ref + 贴底状态：驱动「回到底部」浮动按钮。
   const feedRef = useRef<ChatFeedHandle>(null);
   const [feedAtBottom, setFeedAtBottom] = useState(true);
   const scrollToBottom = () => feedRef.current?.scrollToBottom("smooth");
-  // 历史任务分组折叠状态（默认展开）。
-  const [historyCollapsed, setHistoryCollapsed] = useState(false);
   // 账户操作默认收起，避免长期占用侧栏底部空间。
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   return (
-    <div className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <div className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} density-${generalPreferences.density} ${generalPreferences.reduce_motion ? "reduce-motion" : ""}`}>
       <aside className="codex-sidebar" aria-label="工作区侧边栏">
         <div className="sidebar-title">
           <button className="icon-ghost" type="button" onClick={onToggleSidebar} aria-label="折叠侧边栏">
@@ -1171,7 +1255,7 @@ function WorkspaceShell({
               type="button"
               className="side-section-header"
               aria-expanded={!historyCollapsed}
-              onClick={() => setHistoryCollapsed((c) => !c)}
+              onClick={onToggleHistory}
             >
               <span className="side-section-label">历史任务</span>
               <span className="side-section-count">{sessions.length}</span>
@@ -1289,6 +1373,10 @@ function WorkspaceShell({
             ref={feedRef}
             messages={messages}
             streamingId={streamingId ?? undefined}
+            autoScroll={generalPreferences.auto_scroll}
+            showStage={generalPreferences.show_stage}
+            showReasoning={generalPreferences.show_reasoning}
+            showToolCalls={generalPreferences.show_tool_calls}
             onAtBottomChange={setFeedAtBottom}
             onClarifyPick={(text) =>
               onDraftChange(draft.trim() ? `${draft.trimEnd()}
@@ -1336,6 +1424,16 @@ ${text}` : text)
             value={draft}
             placeholder="要求 KStock 完成一个投研任务，例如：分析贵州茅台最近一季财报，并生成报告。"
             onChange={(event) => onDraftChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing || !draft.trim()) return;
+              const modifier = event.metaKey || event.ctrlKey;
+              const shouldSend = generalPreferences.send_shortcut === "enter"
+                ? event.key === "Enter" && !event.shiftKey
+                : event.key === "Enter" && modifier && !event.shiftKey;
+              if (!shouldSend || streamingId || !activeModel) return;
+              event.preventDefault();
+              onSend(activeModel);
+            }}
           />
           <div className="composer-toolbar">
             <AttachmentPicker
@@ -1419,19 +1517,23 @@ function SettingsPage({
   activeSectionId,
   currentUser,
   models,
+  generalPreferences,
   onBack,
   onLogout,
   onSelectSection,
-  onModelsChanged
+  onModelsChanged,
+  onGeneralPreferencesChanged
 }: {
   activeSection: (typeof SETTING_SECTIONS)[number];
   activeSectionId: string;
   currentUser: AuthUser | null;
   models: ModelConfig[];
+  generalPreferences: GeneralPreferences;
   onBack: () => void;
   onLogout: () => void;
   onSelectSection: (id: string) => void;
   onModelsChanged?: (models: ModelConfig[], defaultModel: string | null) => void;
+  onGeneralPreferencesChanged: (preferences: GeneralPreferences) => void;
 }) {
   const grouped = SETTING_SECTIONS.reduce<Record<string, typeof SETTING_SECTIONS>>((acc, section) => {
     acc[section.group] = [...(acc[section.group] ?? []), section];
@@ -1440,7 +1542,7 @@ function SettingsPage({
   const ActiveIcon = activeSection.icon;
 
   return (
-    <div className="settings-shell">
+    <div className={`settings-shell density-${generalPreferences.density} ${generalPreferences.reduce_motion ? "reduce-motion" : ""}`}>
       <aside className="settings-sidebar" aria-label="设置菜单">
         <button className="settings-back" type="button" onClick={onBack}>
           <ArrowLeft size={17} />
@@ -1483,7 +1585,9 @@ function SettingsPage({
         {/* 后端维护操作条：跨设置 section 的全局按钮 */}
         <BackendControlBar />
 
-        {activeSection.id === "models" ? (
+        {activeSection.id === "general" ? (
+          <GeneralSettings initialValue={generalPreferences} onSaved={onGeneralPreferencesChanged} />
+        ) : activeSection.id === "models" ? (
           <ModelSettings onModelsChanged={onModelsChanged} />
         ) : activeSection.id === "memory" ? (
           <MemorySettings />
