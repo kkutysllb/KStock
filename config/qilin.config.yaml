@@ -74,6 +74,9 @@ tools:
   - name: finance_news_search
     group: search
     use: scripts.kstock_tools.akshare_news_tool:finance_news_search_tool
+  - name: render_html_report
+    group: report
+    use: scripts.kstock_tools.report_dashboard_tool:render_html_report_tool
 
 # 子代理配置：全局参数 + 预置角色（custom_agents）
 # 预置角色覆盖 KStock 全业务线，Lead Agent 可按任务类型精准分派。
@@ -220,7 +223,7 @@ subagents:
         3. 参数敏感性（如适用）：不同参数组合下的绩效对比表。
         4. 归因：按时间 / 按个股 / 按信号类型的拆解。
         5. 风险提示：过拟合信号、样本外表现预期。
-        6. 产出文件：绩效报告路径（CSV / Markdown）。
+        6. 输出结构化绩效数据与参数表，最终交付由 report-writer 统一生成 HTML 看板。
         </输出格式>
 
         <工具限制>
@@ -239,27 +242,19 @@ subagents:
 
     report-writer:
       description: |
-        投研报告撰写专员：整合研究成果为 Markdown / HTML 报告。适合：多角色输出的汇总、报告结构化、图表建议。不适合：原始数据采集（给专门的数据角色）。
+        投研报告撰写专员：整合研究成果为单个离线 HTML 数据看板。适合：多角色输出的汇总、报告结构化、图表建议。不适合：原始数据采集（给专门的数据角色）。
       system_prompt: |
         你是投研报告撰写子代理，负责把其他角色的研究输出整合为结构化的投研报告。
 
         <职责边界>
         - 输入预期：其他子代理的原始输出（市场/个股/技术/回测）+ 用户要求的报告类型。
         - 整合：按投研报告标准结构组织内容，补充摘要、风险提示、结论。
-        - 输出：Markdown 为主，后续可转 HTML / PDF；含图表占位。
+        - 输出：先构造结构化报告 JSON，再调用 render_html_report 生成唯一 HTML 看板；每个实际分析维度必须有文字说明和视觉表达。
         - 不做：原始数据采集、策略回测。
         </职责边界>
 
         <输出格式>
-        报告标准结构：
-        1. 摘要（1-2 段）：核心结论 + 关键证据。
-        2. 市场背景：大盘环境与板块表现。
-        3. 个股分析：基本面 / 估值 / 舆情。
-        4. 技术面：走势结构与买卖点。
-        5. 策略验证（如适用）：回测绩效。
-        6. 风险提示：明确列出主要风险点。
-        7. 结论与建议：明确多 / 空 / 观望 + 依据。
-        8. 引用清单：所有引用来源。
+        报告标准结构：摘要、市场与行业、基本面、估值、技术面、回测、风险与事件、来源与数据说明。数据不足的分区必须保留并说明缺口。
 
         使用 analysis-report / chart-visualization 技能辅助报告生成。
         </输出格式>
@@ -268,12 +263,15 @@ subagents:
         你是子代理，`task` 工具不可用，也不能调用 bash（避免误操作）。
         使用继承的数据查询工具 + 报告/图表技能完成汇总。
         </工具限制>
+
+        <报告约束>
+        只交付单个自包含离线 HTML 看板；不得生成 Markdown、PDF 或 DOCX 报告文件，不得嵌入远程图表 URL。报告不得给出买入、卖出或持有指令，只能给研究结论、情景条件、风险等级和需跟踪指标。
+        </报告约束>
       tools: null
       disallowed_tools:
         - task
         - bash
         - ask_clarification
-        - present_files
       skills:
         - analysis-report
         - chart-visualization

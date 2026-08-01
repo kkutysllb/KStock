@@ -4,7 +4,7 @@
 
 **Goal:** 将 KStock 的研究交付改造成单文件离线 HTML 数据看板，并提供独立、按日期分组且与线程删除解耦的报告库。
 
-**Architecture:** 分析报告技能先产出结构化报告 JSON，`render_html_report` 运行时工具调用本地校验器和内嵌图表运行时生成一个 HTML 文件，同时把它写入线程 outputs 并归档到用户数据空间的 `reports/YYYY/MM/DD/`。报告库通过 KStock 自有 Gateway 路由读取索引和受控 HTML，桌面端新增独立侧边栏入口；线程删除逻辑不接触报告库。
+**Architecture:** 分析报告技能先产出结构化报告 JSON，`render_html_report` 运行时工具调用本地校验器和内嵌图表运行时生成一个 HTML 文件，同时把它写入线程 outputs 并归档到用户数据空间的 `reports/<user_id>/YYYY/MM/DD/`。报告库通过 KStock 自有 Gateway 路由读取当前用户的索引和受控 HTML，桌面端新增独立侧边栏入口；线程删除逻辑不接触报告库。
 
 **Tech Stack:** Python 3.12/pytest、SQLite、FastAPI、QiLin runtime tool injection、Node.js 18、TypeScript/React/Vitest、内嵌 SVG/Canvas 图表运行时。
 
@@ -35,7 +35,6 @@
 - `vendor/skills/public/chart-visualization/scripts/generate.js`、`SKILL.md`：保留 26 类字段与选型规则，改成离线 descriptor 输出，不执行远程请求。
 - `config/qilin.config.yaml`：注册 `render_html_report`，更新 `report-writer` 输出格式和工具限制。
 - `scripts/run_gateway.py`：创建报告目录，挂载报告库路由，向运行时提供报告目录环境信息。
-- `scripts/kstock_runtime_config.py`：暴露只读报告根目录信息（若当前设置响应需要该字段）。
 - `apps/desktop/src/pages/Home.tsx`：增加报告库导航状态，移除 `reportMarkdown` 报告侧栏路径，运行结束后刷新报告库。
 - `apps/desktop/src/components/ReportSettings.tsx`：只展示 HTML 看板和离线策略，删除 Markdown/PDF/DOCX 选项。
 - `apps/desktop/src/components/ReportPanel.tsx`：改为渲染当前会话关联的 HTML 看板入口或空状态。
@@ -189,6 +188,8 @@ git commit -m "feat(chart-skill): generate offline chart descriptors"
 
 ## Task 3: 提供运行时报告生成工具并更新报告技能
 
+> 执行本任务前必须先完成 Task 4；完整执行顺序为 1 → 2 → 4 → 3 → 5 → 6 → 7。
+
 **Files:**
 - Create: `scripts/kstock_tools/report_dashboard_tool.py`
 - Modify: `vendor/skills/public/analysis-report/SKILL.md`
@@ -276,7 +277,7 @@ class ReportLibraryStore:
     def delete(self, report_id: str) -> None: ...
 ```
 
-使用 `<data_root>/reports/` 存放 HTML，使用用户数据空间持久 SQLite（默认 `<data_root>/runtime/qilin/data/qilin.db`）创建 `report_library` 表。归档流程先写临时文件、校验路径和摘要，再用事务 upsert 索引；旧路径只在新文件和新索引成功后删除。所有路径必须限制在报告根目录内。
+使用 `<data_root>/reports/<user_id>/` 存放 HTML，使用用户数据空间持久 SQLite（默认 `<data_root>/runtime/qilin/data/qilin.db`）创建 `report_library` 表。表必须包含 `user_id`，唯一键和所有 CRUD 查询均以 `(user_id, report_id)` 为作用域。归档流程先写临时文件、校验路径和摘要，再用事务 upsert 索引；旧路径只在新文件和新索引成功后删除。所有路径必须限制在当前用户的报告根目录内。
 
 - [ ] **Step 4: Initialize report storage in `run_gateway.py`**
 
@@ -313,7 +314,7 @@ Expected: route is not registered and tests fail.
 
 - [ ] **Step 3: Implement authenticated report routes**
 
-路由通过当前用户身份解析报告库根目录，只返回该用户数据根下的索引。HTML 响应使用 `FileResponse`，设置 `Content-Type: text/html; charset=utf-8` 和禁止缓存；`DELETE` 复用 `ReportLibraryStore.delete()`，不存在返回 404。路由禁止传入任意文件路径，只接受 `report_id`。
+路由通过当前用户身份解析 `user_id`，所有 store 调用必须显式传入该用户，只返回该账户的索引。HTML 响应使用 `FileResponse`，设置 `Content-Type: text/html; charset=utf-8` 和禁止缓存；`DELETE` 复用 `ReportLibraryStore.delete(user_id, report_id)`，不存在返回 404。路由禁止传入任意文件路径，只接受 `report_id`。
 
 - [ ] **Step 4: Mount routes and verify thread deletion boundary**
 
@@ -444,8 +445,7 @@ git commit -m "docs: describe html dashboard report delivery"
 
 ## Self-review checklist
 
-- **Spec coverage:** Tasks 1-2 cover the single-file contract and offline chart skill; Task 3 covers analysis-report and runtime generation; Tasks 4-5 cover independent storage, date grouping, API and thread deletion isolation; Task 6 covers desktop report library and sandboxed preview; Task 7 covers legacy format removal, documentation and full verification.
+- **Spec coverage:** Tasks 1-2 cover the single-file contract and offline chart skill; Task 4 covers user-scoped independent storage and date grouping; Task 3 covers analysis-report and runtime generation after Task 4; Task 5 covers API and thread deletion isolation; Task 6 covers desktop report library and sandboxed preview; Task 7 covers legacy format removal, documentation and full verification.
 - **No placeholders:** Every task has concrete paths, test names or exact commands; no step depends on an unspecified follow-up.
 - **Type consistency:** `report_id`, `thread_id`, `generated_at`, `sections`, `metrics`, `charts`, `coverage`, `references` are shared between the contract validator, runtime tool, archive metadata and desktop summary types.
 - **Risk boundary:** Chart maps without offline geometry render an explicit fallback card; they are not silently dropped. Chat Markdown remains separate from report artifacts.
-

@@ -280,9 +280,9 @@ export const SETTING_SECTIONS: SettingSection[] = [
     title: "报告输出",
     group: "研究",
     icon: FileSearch,
-    summary: "Markdown、图表、导出格式和报告模板。",
+    summary: "HTML 数据看板、离线资源、报告库和报告技能状态。",
     fields: [
-      { name: "默认格式", value: "Markdown", hint: "后续扩展 PDF / DOCX" },
+      { name: "默认格式", value: "HTML Dashboard", hint: "单个自包含离线看板" },
       { name: "图表技能", value: "chart-visualization", hint: "使用精选通用图表技能" },
       { name: "报告技能", value: "analysis-report", hint: "统一投研报告结构" }
     ]

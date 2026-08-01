@@ -262,9 +262,10 @@ def _ensure_data_space() -> dict[str, Path]:
     qilin_data_dir = runtime_qilin / "data"
     logs_dir = data_root / "logs"
     product_dir = data_root / "product"
+    reports_dir = data_root / "reports"
 
     # 建立目录结构（见设计文档「目录结构」）
-    for directory in (config_dir, qilin_data_dir, logs_dir, product_dir):
+    for directory in (config_dir, qilin_data_dir, logs_dir, product_dir, reports_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
     # 生成运行时配置（显式写入 database.sqlite_dir 绝对路径）
@@ -288,6 +289,7 @@ def _ensure_data_space() -> dict[str, Path]:
         "extensions_config": extensions_config_path,
         "qilin_home": runtime_qilin,
         "qilin_data_dir": qilin_data_dir,
+        "reports_dir": reports_dir,
     }
 
 
@@ -365,6 +367,15 @@ def create_app():
 
     app = _create_app()
 
+    # Reports deliberately live outside thread workspaces. The store is shared
+    # by the runtime tool and report-library router and scopes every operation
+    # by the authenticated user id.
+    from scripts.kstock_reports import ReportLibraryStore
+
+    app.state.kstock_report_store = ReportLibraryStore(
+        paths["data_root"], paths["qilin_data_dir"] / "qilin.db"
+    )
+
     # ── 追加文件日志 handler（vendor app 构造后、lifespan 前）──────────────
     # vendor 的 configure_logging（lifespan）只调整 handler 的 filter/formatter，
     # 不清除已有 handler，所以这里追加的 FileHandler 会安全保留。
@@ -378,10 +389,12 @@ def create_app():
     from scripts.kstock_models import router as kstock_models_router
     from scripts.kstock_runtime_config import router as kstock_runtime_config_router
     from scripts.kstock_extensions_config import router as kstock_extensions_config_router
+    from scripts.kstock_reports_router import router as kstock_reports_router
 
     app.include_router(kstock_models_router)
     app.include_router(kstock_runtime_config_router)
     app.include_router(kstock_extensions_config_router)
+    app.include_router(kstock_reports_router)
     app.include_router(kstock_gateway_control_router)
     return app
 

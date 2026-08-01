@@ -189,15 +189,17 @@ HTML 内嵌 CSS、图表运行时代码、报告 JSON 数据和交互逻辑。�
 
 ```text
 <data-root>/reports/
-  YYYY/
-    MM/
-      DD/
-        <report_id>.html
+  <user_id>/
+    YYYY/
+      MM/
+        DD/
+          <report_id>.html
 ```
 
 报告索引使用现有持久化数据库新增 `report_library` 表，至少包含：
 
 - `id` / `report_id`；
+- `user_id`；
 - `thread_id`（允许指向已删除线程）；
 - `title`、`symbol`、`report_type`；
 - `generated_at`、`period_start`、`period_end`；
@@ -215,6 +217,8 @@ HTML 内嵌 CSS、图表运行时代码、报告 JSON 数据和交互逻辑。�
 6. 保证索引失败时不删除旧的有效文件。
 
 同一任务只保留最新版。最新版的 `generated_at` 决定日期分组，重新生成跨日期时移动文件并更新索引。
+
+所有索引读写以 `(user_id, report_id)` 为作用域。不同本地账户不能枚举、读取、覆盖或删除其他账户的报告。
 
 ### 7.3 线程删除
 

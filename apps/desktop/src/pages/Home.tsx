@@ -97,11 +97,12 @@ import { SubagentsSettings } from "../components/SubagentsSettings";
 import { AttachmentSettings } from "../components/AttachmentSettings";
 import { AccountSettings } from "../components/AccountSettings";
 import { ReportSettings } from "../components/ReportSettings";
+import { ReportLibrary } from "../components/ReportLibrary";
 import { McpExtensionsCard } from "../components/McpExtensionsCard";
 import { SkillsExtensionsCard } from "../components/SkillsExtensionsCard";
 import { AttachmentPicker, AttachmentChips } from "../components/AttachmentPicker";
 
-type ViewMode = "landing" | "auth" | "workspace" | "settings";
+type ViewMode = "landing" | "auth" | "workspace" | "settings" | "reports";
 type AuthMode = "login" | "register";
 
 async function toggleWindowMaximize(event: React.MouseEvent<HTMLElement>) {
@@ -645,6 +646,10 @@ export function Home() {
     );
   }
 
+  if (view === "reports") {
+    return <ReportLibrary onBack={() => setView("workspace")} />;
+  }
+
   // 待删除 session 的标题（对话框展示用）。
   const pendingDeleteTitle = pendingDeleteSessionId
     ? (sessions.find((s) => s.id === pendingDeleteSessionId)?.title ?? "该任务")
@@ -1070,7 +1075,7 @@ function WorkspaceShell({
             <Plus size={17} />
             {!sidebarCollapsed && <span>新研究</span>}
           </button>
-          <button className="nav-command" type="button">
+          <button className="nav-command" type="button" onClick={() => setView("reports")}>
             <Library size={17} />
             {!sidebarCollapsed && <span>报告库</span>}
           </button>

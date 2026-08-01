@@ -1,7 +1,7 @@
 ---
 name: analysis-report
-description: Use when a complete analysis, review, research, backtest, or dashboard deliverable must produce a Markdown structured report plus paired dark and light HTML dashboards
-version: 2.3.0
+description: Use when a complete analysis, review, research, backtest, or dashboard deliverable must produce one self-contained offline HTML dashboard
+version: 3.0.0
 author: kk-quant
 license: MIT
 category: report
@@ -9,12 +9,12 @@ category: report
 package:
   type: knowledge-only
 capabilities:
-  - id: markdown-report-generation
-    description: "生成 Markdown 结构化分析报告"
+  - id: structured-report
+    description: "组织研究分区、证据、风险和数据缺口"
   - id: dashboard-generation
-    description: "生成深色和浅色两份金融 HTML 数据看板"
+    description: "生成单个自包含离线 HTML 数据看板"
   - id: chart-embedding
-    description: "嵌入由 chart-visualization 官方脚本生成的主题匹配图表"
+    description: "嵌入 chart-visualization 生成的本地图表 descriptor"
 
 permissions:
   filesystem: true
@@ -23,178 +23,105 @@ permissions:
 requires:
   bins: ["python3", "node"]
 
-metadata:
-  openclaw:
-    emoji: "📊"
-    version: "2.3.0"
-    author: "kk-quant"
-    category: "report"
-    tags:
-      - report
-      - analysis
-      - markdown
-      - html
-      - dashboard
-      - dark-theme
-      - light-theme
-
 tags:
   - report
   - analysis
-  - markdown
   - html
   - dashboard
-  - dark-theme
-  - light-theme
+  - offline
 ---
 
 # 分析报告技能
 
 ## 交付物
 
-完整分析、复盘、研究、回测和看板类任务必须同时生成三份文件，缺一不可：
+研究、复盘、回测和看板任务只交付一个自包含 HTML 文件。聊天正文仍可使用 Markdown，但本技能不生成 Markdown、PDF 或 DOCX 报告文件，也不嵌入远程图表 URL。
 
-- `{basename}.md`
-- `{basename}-dark.html`
-- `{basename}-light.html`
+报告采用研究分区布局。每个实际纳入分析的数据维度必须同时有：
 
-Markdown 报告和两份 HTML 看板必须来自同一份分析数据。Markdown 侧重结构化文字分析，HTML 侧重数据可视化呈现；深浅两份 HTML 的差异只体现在页面主题和对应主题的图表 URL。
+1. 可读的结论、解释、证据或数据质量说明；
+2. 至少一种视觉表达（图表、指标卡、时间线、矩阵或结构化表格）。
 
-本技能不调用任何 Markdown 转 HTML 工具，也不使用 `md-to-html` 类技能。
+无法获取的数据保留为 `partial` 或 `unavailable` 分区，并列出缺口和补充条件，不得用空值伪装完整分析。
 
 ## 执行链
 
-1. 分析技能获取真实数据并整理结构化 JSON。
-2. 为每个图表读取 `chart-visualization/references/generate_{type}.md`。
-3. 严格按照参考文档构造 `tool` 和 `args`。
-4. 对同一份图表数据生成两次：
-   - 深色：`theme: "dark"`，背景色 `#101418`。
-   - 浅色：`theme: "default"`，背景色 `#ffffff`。
-5. 将两个 URL 和两套完整参数写入输入 JSON。
-6. 执行本技能内置渲染器，同时生成 Markdown 报告和深浅两份 HTML 看板：
+1. 获取真实数据，按摘要、市场与行业、基本面、估值、技术面、回测、风险与事件、来源与数据说明组织分区。
+2. 为每个图表读取 `chart-visualization/references/generate_{type}.md`，调用图表脚本获得离线 descriptor。
+3. 构造符合以下契约的 JSON，并确保每个 metric 的 `id` 被 chart 的 `mapping.dimension` 覆盖。
+4. 调用唯一运行时工具：
 
-```bash
-python3 scripts/render_report.py \
-  --input report.json \
-  --output-dir . \
-  --basename 2026-07-25_market-analysis
+```text
+render_html_report(report_json, filename="report.html")
 ```
 
-渲染器在写文件前会校验图表契约；校验失败必须修正参数，禁止绕过校验或自行改写图表字段。渲染成功后必须在最终答复中列出三份文件路径。
+该工具校验 JSON、生成线程 outputs 中的 HTML，并将同一份 HTML 归档到报告库。成功后使用 `present_files` 呈现线程中的 `/outputs/<filename>`。
+
+不直接调用远程服务，不手工拼接外部资源，不生成其它报告格式。
 
 ## 输入契约
 
 ```json
 {
-  "title": "本周市场联动分析",
-  "generated_at": "2026-07-25 18:00",
-  "summary": "核心结论",
-  "assessment": "中性",
-  "risk_level": "中",
-  "data_overview": [
-    {"metric": "综合评分", "current": "52", "change": "+2", "yoy": "—"}
-  ],
-  "core_analysis": ["分析结论一", "分析结论二"],
-  "risks": ["风险一"],
-  "references": ["数据来源"],
-  "charts": [
+  "report_id": "report_01J...",
+  "thread_id": "thread_01J...",
+  "title": "个股研究看板",
+  "subject": {"symbol": "600000", "name": "示例标的"},
+  "report_type": "stock-research",
+  "generated_at": "2026-08-01T10:00:00+08:00",
+  "period": {"start": "2025-01-01", "end": "2026-07-31"},
+  "assessment": {"label": "中性", "risk_level": "中"},
+  "sections": [
     {
-      "tool": "generate_line_chart",
-      "title": "趋势",
-      "alt": "趋势图",
-      "dark": {
-        "url": "https://.../dark.png",
-        "args": {
-          "data": [
-            {"time": "2026-07-20", "value": 50}
-          ],
-          "theme": "dark",
-          "style": {"backgroundColor": "#101418"},
-          "title": "趋势",
-          "axisXTitle": "日期",
-          "axisYTitle": "数值"
-        }
-      },
-      "light": {
-        "url": "https://.../light.png",
-        "args": {
-          "data": [
-            {"time": "2026-07-20", "value": 50}
-          ],
-          "theme": "default",
-          "style": {"backgroundColor": "#ffffff"},
-          "title": "趋势",
-          "axisXTitle": "日期",
-          "axisYTitle": "数值"
-        }
-      }
+      "id": "fundamentals",
+      "title": "基本面",
+      "status": "available",
+      "summary": "文字结论、证据与适用范围。",
+      "metrics": [{
+        "id": "revenue", "label": "营业收入", "value": 100, "unit": "亿元",
+        "change": 0.12, "source": "数据源", "as_of": "2026-06-30", "visual": "line"
+      }],
+      "charts": [{
+        "id": "revenue-trend", "tool": "generate_line_chart", "title": "营业收入趋势",
+        "data": [{"time": "2025-Q1", "value": 90}],
+        "mapping": {"dimension": "revenue", "role": "trend"}
+      }],
+      "evidence": ["数据来源和计算口径"],
+      "gaps": []
     }
-  ]
+  ],
+  "coverage": [],
+  "references": []
 }
 ```
 
-完整看板至少包含 3 个图表。深浅主题的 `data` 必须完全一致；只能改变主题、背景和必要的配色。
+分区 `status` 只能是 `available`、`partial` 或 `unavailable`；不可用分区必须有 `gaps`。渲染器会拒绝缺少来源、日期、视觉覆盖、官方图表字段或包含 HTML/script/style/iframe 外部资源的输入。
 
 ## 图表字段纪律
 
-图表字段以 `chart-visualization/references/` 中的官方参考文档为唯一依据。
-不要根据业务习惯自行替换字段名。
+图表字段以 `chart-visualization/references/` 为唯一依据。常用字段如下：
 
-常用必填维度：
-
-| 工具 | 必填字段 |
-|------|----------|
+| 工具 | 字段 |
+|------|------|
 | `generate_line_chart` / `generate_area_chart` | `data[].time`, `data[].value` |
 | `generate_bar_chart` / `generate_column_chart` / `generate_funnel_chart` | `data[].category`, `data[].value` |
 | `generate_radar_chart` | `data[].name`, `data[].value` |
 | `generate_scatter_chart` | `data[].x`, `data[].y` |
 | `generate_sankey_chart` | `data[].source`, `data[].target`, `data[].value` |
 | `generate_dual_axes_chart` | `categories`, `series[].type`, `series[].data` |
-| `generate_histogram_chart` | `data[]`，每项为 number |
+| `generate_histogram_chart` | `data[]` 数值 |
 | `generate_liquid_chart` | `percent`，范围 `[0,1]` |
 | `generate_spreadsheet` | `data[]` |
 
-例如，折线图必须使用 `time/value`，不能自行改成 `date/score`；
-柱状图必须使用 `category/value`，不能改成 `name/amount`。
-
-调用图表脚本时必须使用：
-
-```bash
-node chart-visualization/scripts/generate.js \
-  '{"tool":"generate_line_chart","args":{"data":[{"time":"2026-07-20","value":50}],"theme":"dark","style":{"backgroundColor":"#101418"},"title":"趋势"}}'
-```
-
-禁止：
-
-- 自行编写图表绘制代码；
-- 使用未在对应参考文档出现的顶层参数；
-- 把 `date`、`score`、`name`、`amount` 等业务字段直接当成官方字段；
-- 用深色页面嵌入浅色图表，或用浅色页面嵌入深色图表；
-- 伪造图表 URL、数据或图表生成成功结果。
-
-## Markdown 报告结构
-
-Markdown 报告必须包含：
-
-1. 执行摘要
-2. 数据概览
-3. 核心分析
-4. 风险提示
-5. 参考资料
-6. 免责与风险提示
-
-禁止在 Markdown 报告中给出买入、卖出、持有等交易建议；只能给出研究结论、情景条件、风险等级和需跟踪指标。
+`chart-visualization` 会规范化少量常见宽格式字段，但最终 descriptor 必须符合官方字段契约。地图只有在输入内嵌 `geojson` 或 `offlineGeoData` 时才生成地图，否则输出明确 fallback，由 HTML 以表格和文字说明呈现。
 
 ## 输出自检
 
-- [ ] 已生成 `{basename}.md` Markdown 结构化报告；
-- [ ] 已生成 `{basename}-dark.html` 和 `{basename}-light.html` 两份 HTML 数据看板；
-- [ ] 三份文件使用同一份分析数据；
-- [ ] 深色 HTML 只嵌入深色图表 URL，图表参数含 `theme: "dark"`；
-- [ ] 浅色 HTML 只嵌入浅色图表 URL，图表参数含 `theme: "default"`；
-- [ ] 支持背景色的图表分别使用 `#101418` 和 `#ffffff`；
-- [ ] 至少 3 个图表；
-- [ ] 每个图表字段均来自对应 `chart-visualization` 参考文档；
-- [ ] 所有数据来源、日期和数据缺口均在看板正文中标明。
+- [ ] 只生成一个 `.html` 文件，且可离线打开；
+- [ ] HTML 内嵌 CSS、运行时代码和 JSON，不加载外部 CSS、JS、字体、图片或接口；
+- [ ] 每个 metric 均有文字说明和 visual/chart 覆盖；
+- [ ] 所有分区、来源、日期、数据缺口和风险等级可见；
+- [ ] 不给出买入、卖出或持有指令，只给研究结论、情景条件和需跟踪指标；
+- [ ] 线程文件与报告库文件都成功写入后才向用户呈现。
 
 以上分析基于公开数据与逻辑推演，不构成投资建议。
