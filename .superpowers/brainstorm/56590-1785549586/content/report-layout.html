@@ -1,0 +1,73 @@
+<h2>HTML 数据看板报告：选择信息布局</h2>
+<p class="subtitle">报告不再以长文档为主，核心交付是可浏览、可扫描、可继续交互的数据看板。</p>
+
+<div class="cards" data-multiselect>
+  <div class="card" data-choice="overview-first" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A · 总览优先</div>
+        <div class="mockup-body">
+          <div class="mock-nav">标的名称　结论　更新时间</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0">
+            <div class="placeholder">结论</div><div class="placeholder">评分</div><div class="placeholder">估值</div><div class="placeholder">风险</div>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px">
+            <div class="placeholder" style="height:120px">价格 / 趋势图</div>
+            <div class="placeholder" style="height:120px">关键指标</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>总览优先</h3>
+      <p>首屏给出结论、评分、核心指标和风险，适合快速判断和高频复盘。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="research-sections" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B · 研究分区</div>
+        <div class="mockup-body">
+          <div class="mock-nav">摘要　基本面　技术面　估值　风险</div>
+          <div class="placeholder" style="height:50px;margin:12px 0">摘要结论 + 关键证据</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="placeholder" style="height:100px">财务指标表</div>
+            <div class="placeholder" style="height:100px">技术结构图</div>
+          </div>
+          <div class="placeholder" style="height:40px;margin-top:8px">来源与数据说明</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>研究分区</h3>
+      <p>按摘要、基本面、技术面、估值和风险分区，适合完整研究交付。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="hybrid" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C · 混合看板</div>
+        <div class="mockup-body">
+          <div class="mock-nav">结论卡片　指标卡片　交互图表　详情抽屉</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0">
+            <div class="placeholder" style="height:80px">结论与评分</div>
+            <div class="placeholder" style="height:80px">风险与催化</div>
+          </div>
+          <div class="placeholder" style="height:100px">可切换图表区域</div>
+          <div class="placeholder" style="height:35px;margin-top:8px">展开查看证据和来源</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>混合看板</h3>
+      <p>首屏保留总览，同时以交互图表和详情抽屉承载深度内容。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>建议默认组合</h3>
+  <p>报告统一输出单个 HTML 文件，可内嵌样式和图表数据，支持浏览器打开、保存和后续扩展。</p>
+</div>
