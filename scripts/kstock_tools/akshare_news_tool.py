@@ -65,6 +65,62 @@ class FinanceNewsSearchTool(BaseTool):
 finance_news_search_tool = FinanceNewsSearchTool()
 
 
+def fetch_market_news(max_results: int = 10) -> list[dict[str, str]]:
+    """读取落地页需要的市场快讯，返回稳定的展示字段。
+
+    优先读取东方财富全球资讯；接口不可用时回退到最近几天的央视新闻，
+    让匿名落地页也能复用项目内置的财经数据工具而不依赖用户会话。
+    """
+    import akshare as ak
+
+    limit = max(1, min(int(max_results), 10))
+    rows: list[dict[str, str]] = []
+
+    try:
+        frame = ak.stock_info_global_em()
+        if frame is not None and not frame.empty:
+            for _, item in frame.head(limit).iterrows():
+                title = _first_text(item, "标题", "新闻标题", "title")
+                if not title:
+                    continue
+                rows.append({
+                    "title": title,
+                    "source": _first_text(item, "文章来源", "来源", "source") or "东方财富",
+                    "published_at": _first_text(item, "发布日期", "发布时间", "date", "time"),
+                    "url": _first_text(item, "链接", "新闻链接", "url"),
+                    "summary": _first_text(item, "摘要", "新闻内容", "content")[:180],
+                })
+    except Exception:
+        rows = []
+
+    if len(rows) < limit:
+        end = datetime.now()
+        for offset in range(7):
+            if len(rows) >= limit:
+                break
+            try:
+                frame = ak.news_cctv(date=(end - timedelta(days=offset)).strftime("%Y%m%d"))
+            except Exception:
+                continue
+            if frame is None or frame.empty:
+                continue
+            for _, item in frame.iterrows():
+                title = _first_text(item, "title", "标题")
+                if not title or any(existing["title"] == title for existing in rows):
+                    continue
+                rows.append({
+                    "title": title,
+                    "source": "央视新闻",
+                    "published_at": _first_text(item, "date", "日期") or (end - timedelta(days=offset)).strftime("%Y-%m-%d"),
+                    "url": _first_text(item, "url", "链接"),
+                    "summary": _first_text(item, "content", "摘要")[:180],
+                })
+                if len(rows) >= limit:
+                    break
+
+    return rows[:limit]
+
+
 # ── 工具函数 ────────────────────────────────────────────────────────
 
 
@@ -81,6 +137,21 @@ def _parse_query(query: str) -> tuple[str, int]:
         except (json.JSONDecodeError, ValueError, TypeError):
             pass
     return (query, 10)
+
+
+def _first_text(item: Any, *keys: str) -> str:
+    """从 akshare 行对象中按候选列名取第一个非空文本。"""
+    for key in keys:
+        try:
+            value = item.get(key, "")
+        except AttributeError:
+            value = ""
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text and text.lower() not in {"nan", "none"}:
+            return text
+    return ""
 
 
 def _is_stock_code(s: str) -> bool:

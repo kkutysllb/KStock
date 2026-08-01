@@ -14,7 +14,6 @@ import {
   Database,
   FileText,
   Folder,
-  KeyRound,
   Library,
   Lock,
   LogOut,
@@ -27,9 +26,9 @@ import {
   Sparkles,
   Square,
   Trash2,
-  UserPlus,
 } from "lucide-react";
 import { Markdown } from "../lib/markdown";
+import { fetchLandingNews, type LandingNewsItem } from "../lib/landingNewsClient";
 import { MODEL_TEMPLATES, SETTING_SECTIONS } from "../lib/qilinSettings";
 import {
   getSetupStatus,
@@ -708,6 +707,31 @@ export function Home() {
 }
 
 function LandingPage({ onEnter, onAuth }: { onEnter: () => void; onAuth: (mode: AuthMode) => void }) {
+  const [newsItems, setNewsItems] = useState<LandingNewsItem[]>([]);
+  const [newsUpdatedAt, setNewsUpdatedAt] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const loadNews = async () => {
+      try {
+        const response = await fetchLandingNews();
+        if (!active) return;
+        setNewsItems(response.items.slice(0, 10));
+        setNewsUpdatedAt(response.updated_at);
+      } catch {
+        // 落地页新闻是增强信息，接口不可用时保留空态，不阻塞登录入口。
+      }
+    };
+    void loadNews();
+    const timer = window.setInterval(() => void loadNews(), 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const tickerItems = newsItems.length > 1 ? [...newsItems, ...newsItems] : newsItems;
+
   return (
     <main className="landing-shell">
       <nav
@@ -720,15 +744,10 @@ function LandingPage({ onEnter, onAuth }: { onEnter: () => void; onAuth: (mode: 
           <LogoMark />
           <strong>KStock</strong>
         </div>
-        <div className="landing-nav-actions">
-          <button className="ghost-button" type="button" onClick={() => onAuth("login")}>
-            <KeyRound size={16} />
-            <span>登录</span>
-          </button>
-          <button className="solid-button" type="button" onClick={() => onAuth("register")}>
-            <UserPlus size={16} />
-            <span>注册</span>
-          </button>
+        <div className="landing-nav-engine" aria-label="QiLin 引擎状态">
+          <span className="status-pulse" />
+          <span>QiLin 引擎</span>
+          <em>已连接</em>
         </div>
       </nav>
 
@@ -776,6 +795,37 @@ function LandingPage({ onEnter, onAuth }: { onEnter: () => void; onAuth: (mode: 
           <span><b>精选技能</b>加载财报、估值、行业、新闻、公告、宏观等 KSkills 子集。</span>
           <span><b>报告交付</b>生成研究路径、来源摘要、图表建议和 Markdown 草稿。</span>
         </div>
+        <section className="landing-news" aria-label="财经新闻">
+          <header className="landing-news-header">
+            <div>
+              <p className="eyebrow">Market News</p>
+              <h2>财经快讯</h2>
+            </div>
+            <span>{newsUpdatedAt ? "每分钟更新" : "连接中…"}</span>
+          </header>
+          <div className="landing-news-window">
+            {tickerItems.length > 0 ? (
+              <div className="landing-news-list">
+                {tickerItems.map((item, index) => (
+                  <a
+                    key={`${item.title}-${index}`}
+                    className="landing-news-item"
+                    href={item.url || undefined}
+                    target={item.url ? "_blank" : undefined}
+                    rel={item.url ? "noreferrer" : undefined}
+                    aria-hidden={index >= newsItems.length ? "true" : undefined}
+                  >
+                    <span className="landing-news-index">{String((index % Math.max(newsItems.length, 10)) + 1).padStart(2, "0")}</span>
+                    <span className="landing-news-title">{item.title}</span>
+                    <time>{item.published_at || item.source}</time>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="landing-news-empty">正在获取最新财经资讯…</p>
+            )}
+          </div>
+        </section>
       </section>
 
       <section className="landing-band" aria-label="亮点">
