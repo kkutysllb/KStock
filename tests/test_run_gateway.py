@@ -359,19 +359,38 @@ def test_template_roles_override_user_modifications(tmp_path):
 
 # 模板中 general-purpose 的技能白名单（与 config/qilin.config.yaml 一致）
 _TEMPLATE_GP_SKILLS = [
+    "a-stock-screener",
     "analysis-report",
     "announcement-search",
+    "backtrader_strategies",
     "business-query",
+    "cb-analysis",
     "chart-visualization",
     "common",
+    "dcf",
+    "earnings-forecast",
+    "earnings-revision",
+    "etf-analysis",
+    "event-query",
+    "factor-research",
     "financial-statement",
+    "futures-analysis",
+    "hithink-futures",
     "industry-analysis",
     "macro-query",
+    "market-linkage-engine",
     "news-search",
+    "option-futures-linkage",
+    "options-payoff",
+    "options-volatility",
     "report-search",
     "sandbox-path-guide",
+    "selection-strategies",
     "stock-analysis",
+    "strategy-research",
+    "tushare-data",
     "valuation-model",
+    "zhishu-query",
 ]
 
 
