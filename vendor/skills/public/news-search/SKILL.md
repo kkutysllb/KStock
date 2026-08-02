@@ -14,6 +14,8 @@ requires:
   packages: ["requests"]
   env: ["IWENCAI_API_KEY"]
 
+required-secrets:
+  - IWENCAI_API_KEY
 capabilities:
   - id: financial-news
     description: "财经资讯搜索：从官媒、财经媒体、行业网站搜索最新财经新闻"

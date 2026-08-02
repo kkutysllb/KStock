@@ -12,6 +12,8 @@ package:
 requires:
   packages: []
 
+required-secrets:
+  - TUSHARE_TOKEN
 capabilities:
   - id: three-statement-analysis
     description: "三大报表核心框架：利润表关键比率、资产/负债端重点、现金流质量矩阵"
@@ -51,6 +53,19 @@ tags:
 ---
 
 # 财报三表解读
+
+## 执行方式（先读这里）
+
+**禁止自行编写数据分析脚本**：本技能提供现成 CLI，直接调用即可获取全部指标：
+
+```bash
+cd /mnt/skills/public/financial-statement/scripts && python3 financial_cli.py 600519.SH
+# 可选：--periods N 指定报告期数（默认 4）
+```
+
+输出包含：利润表关键指标（营收/归母净利/毛利率/净利率）、资产负债表重点（总资产/负债/货币资金/存货）、现金流量表重点、盈利质量（CFO/净利润）、杜邦拆解（ROE 三级）、财务红旗检测（存贷双高/应收暴增/现金流背离/毛利率异常）。
+
+脚本内部自动安装 common 依赖（`pip install -e /mnt/skills/public/common`），无需手动操作；`TUSHARE_TOKEN` 由系统注入沙箱环境，脚本直接读取。数据缺失时脚本会如实标注「缺失」，**禁止编造数据**；如需进一步解读（勾稽关系、评分卡、红旗深入分析），基于脚本输出做分析即可。
 
 ## 概述
 

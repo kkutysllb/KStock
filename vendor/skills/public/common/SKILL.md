@@ -31,6 +31,9 @@ requires:
   packages: ["pandas", "python-dotenv", "tushare"]
   bins: ["python3"]
   env: ["TUSHARE_TOKEN", "IWENCAI_API_KEY"]
+required-secrets:
+  - TUSHARE_TOKEN
+  - IWENCAI_API_KEY
 
 metadata:
   openclaw:

@@ -38,6 +38,8 @@ requires:
   bins: ["python3"]
   env: ["IWENCAI_API_KEY"]
 
+required-secrets:
+  - IWENCAI_API_KEY
 inputs:
   - name: industry
     type: string
@@ -83,6 +85,17 @@ tags:
 ---
 
 # A股行业六维一体深度分析引擎
+
+## 执行方式（先读这里）
+
+**禁止自行编写数据分析脚本**：本技能提供现成 CLI，直接调用即可完成行业数据查询：
+
+```bash
+cd /mnt/skills/public/industry-analysis/scripts && python3 industry-query-cli.py --query "A股行业估值排名"
+# 示例：--query "银行业盈利数据" / "新能源板块行情"
+```
+
+输出为问财 API 返回的行业数据条目。**先运行上面这行命令，把返回数据当作事实来源**；六维框架解读（产业链拆解、券商研报、资讯）基于此数据展开即可。禁止自行写 Python/curl 探测 API、禁止花多轮调试参数。若脚本报错，把错误信息原样转述给用户即可，不要尝试自行修复环境。数据缺失时如实说明「未查到」，**禁止编造数据**。
 
 ## 技能概述
 

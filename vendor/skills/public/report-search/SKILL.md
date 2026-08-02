@@ -14,6 +14,8 @@ requires:
   packages: ["numpy", "pandas", "requests"]
   env: ["IWENCAI_API_KEY"]
 
+required-secrets:
+  - IWENCAI_API_KEY
 capabilities:
   - id: research-report-search
     description: "研究报告搜索：搜索主流投研机构发布的深度研究报告"

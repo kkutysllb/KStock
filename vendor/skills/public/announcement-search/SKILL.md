@@ -30,6 +30,8 @@ requires:
   bins: ["python3"]
   env: ["IWENCAI_API_KEY"]
 
+required-secrets:
+  - IWENCAI_API_KEY
 inputs:
   - name: query
     type: string

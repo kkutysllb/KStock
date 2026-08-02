@@ -14,6 +14,8 @@ requires:
   packages: []
   env: ["IWENCAI_API_KEY"]
 
+required-secrets:
+  - IWENCAI_API_KEY
 capabilities:
   - id: gdp-query
     description: "GDP数据查询：国内生产总值及其增速"
@@ -55,6 +57,17 @@ tags:
 ---
 
 # 问财宏观数据 使用指南
+
+## 执行方式（先读这里）
+
+**禁止自行编写数据分析脚本**：本技能提供现成 CLI，直接调用即可完成宏观数据查询：
+
+```bash
+cd /mnt/skills/public/macro-query/scripts && python3 cli.py --query "2024年中国GDP"
+# 复杂查询可加 --timeout 60；数据不全时加 --call-type retry
+```
+
+输出为问财 API 返回的原始数据条目（含数据值、时间、来源）。**先运行上面这行命令，把返回数据当作事实来源**；禁止自行写 Python/curl 探测 API、禁止花多轮调试参数。若脚本报错，把错误信息原样转述给用户即可，不要尝试自行修复环境。数据缺失时如实说明「未查到」，**禁止编造数据**。
 
 ## 版本
 

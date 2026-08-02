@@ -12,6 +12,8 @@ package:
 requires:
   packages: []
 
+required-secrets:
+  - TUSHARE_TOKEN
 capabilities:
   - id: absolute-valuation
     description: "绝对估值法：DCF现金流折现、DDM股息折现、SOTP分部估值"
@@ -53,6 +55,19 @@ tags:
 ---
 
 # Valuation Methodology
+
+## 执行方式（先读这里）
+
+**禁止自行编写数据分析脚本**：本技能提供现成 CLI，直接调用即可完成 PE-Band 估值：
+
+```bash
+cd /mnt/skills/public/valuation-model/scripts && python3 pe_band_cli.py 600519.SH
+# 可选：--years N 指定历史年数（默认 5）
+```
+
+输出包含：当前估值快照（收盘价/PE-TTM/静态 PE/PB/总市值）、近 N 年 PE_TTM 月末序列、10/25/50/75/90 分位表（含 min/max/mean）、当前 PE 分位判定结论、估值陷阱提示（Top10 中的关键项）。
+
+脚本内部自动安装 common 依赖（`pip install -e /mnt/skills/public/common`），无需手动操作；`TUSHARE_TOKEN` 由系统注入沙箱环境，脚本直接读取。数据缺失时脚本会如实标注「缺失」，**禁止编造数据**；如需补充 DCF/DDM/SOTP 等绝对估值或 PB-ROE 矩阵，基于脚本输出继续分析。
 
 ## Overview
 

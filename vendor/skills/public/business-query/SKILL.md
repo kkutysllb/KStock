@@ -14,6 +14,8 @@ requires:
   packages: []
   env: ["IWENCAI_API_KEY"]
 
+required-secrets:
+  - IWENCAI_API_KEY
 capabilities:
   - id: business-composition
     description: "主营业务构成查询：产品/地区分布、收入占比等"

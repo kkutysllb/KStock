@@ -71,6 +71,9 @@ requires:
   bins: ["python3"]
   env: ["TUSHARE_TOKEN", "IWENCAI_API_KEY"]
 
+required-secrets:
+  - TUSHARE_TOKEN
+  - IWENCAI_API_KEY
 inputs:
   - name: stock
     type: string
