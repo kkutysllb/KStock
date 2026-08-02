@@ -1,5 +1,5 @@
 import { AlertCircle, Check, ChevronRight, Loader2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type { ToolCall } from "../lib/sessionStore";
 import {
   formatToolActivityDuration,
@@ -23,19 +23,11 @@ function ToolActivitySummaryContent({
   calls,
   summary,
 }: ToolActivitySummaryProps & { summary: ReturnType<typeof summarizeToolActivity> }) {
-  const [expanded, setExpanded] = useState(summary.status === "running");
-  const previousStatus = useRef(summary.status);
+  const [expanded, setExpanded] = useState(false);
   const statusLabel = getStatusLabel(summary.status);
   const durationLabel = summary.durationMs != null
     ? ` ${formatToolActivityDuration(summary.durationMs)}`
     : "";
-
-  useEffect(() => {
-    if (previousStatus.current !== summary.status) {
-      setExpanded(summary.status === "running");
-      previousStatus.current = summary.status;
-    }
-  }, [summary.status]);
 
   return (
     <section className={`tool-activity-summary status-${summary.status}`} aria-label="工具活动">

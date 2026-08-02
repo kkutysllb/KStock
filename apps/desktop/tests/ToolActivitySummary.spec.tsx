@@ -13,7 +13,7 @@ const call = (patch: Partial<ToolCall>): ToolCall => ({
 });
 
 describe("ToolActivitySummary", () => {
-  it("运行中默认展开工具记录，完成后自动收起并显示总耗时", () => {
+  it("默认保持折叠，状态变化不自动切换用户手动展开状态", () => {
     const { rerender } = render(
       <ToolActivitySummary
         calls={[
@@ -25,9 +25,13 @@ describe("ToolActivitySummary", () => {
 
     const summary = screen.getByRole("button", { name: /处理中/ });
     expect(summary).toBeVisible();
+    expect(summary).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("工具调用 read_file")).not.toBeInTheDocument();
+    expect(screen.getByTestId("tool-activity-divider")).toBeVisible();
+
+    fireEvent.click(summary);
     expect(summary).toHaveAttribute("aria-expanded", "true");
     expect(screen.getAllByLabelText(/工具调用/)).toHaveLength(2);
-    expect(screen.getByTestId("tool-activity-divider")).toBeVisible();
 
     rerender(
       <ToolActivitySummary
@@ -37,10 +41,8 @@ describe("ToolActivitySummary", () => {
         ]}
       />
     );
-    expect(summary).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByLabelText("工具调用 read_file")).not.toBeInTheDocument();
+    expect(summary).toHaveAttribute("aria-expanded", "true");
 
-    fireEvent.click(summary);
     expect(screen.getByLabelText("工具调用 read_file")).toBeVisible();
     fireEvent.click(screen.getAllByRole("button", { name: "read_file" })[0]);
     expect(screen.getByText("/tmp/report.md")).toBeVisible();
