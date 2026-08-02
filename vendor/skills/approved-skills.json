@@ -195,6 +195,14 @@
       "enabled_by_default": true
     },
     {
+      "name": "option-futures-linkage",
+      "source_repo": "KSkills",
+      "source_path": "stock/option-futures-linkage",
+      "target_path": "public/option-futures-linkage",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
       "name": "options-payoff",
       "source_repo": "KSkills",
       "source_path": "stock/options-payoff",

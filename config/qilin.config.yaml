@@ -135,6 +135,7 @@ subagents:
         - macro-query
         - market-linkage-engine
         - news-search
+        - option-futures-linkage
         - options-payoff
         - options-volatility
         - report-search
