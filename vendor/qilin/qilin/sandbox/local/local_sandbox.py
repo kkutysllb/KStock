@@ -3,6 +3,7 @@ import logging
 import ntpath
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -405,7 +406,14 @@ class LocalSandbox(Sandbox):
             matched_path = match.group(0)
             # Normalize to forward slashes so bash doesn't interpret Windows
             # backslash sequences (\\U, \\a, \\d, \\s, \\n, \\t) as escapes.
-            return self._resolve_path(matched_path).replace("\\", "/")
+            resolved = self._resolve_path(matched_path).replace("\\", "/")
+            # Host paths can contain spaces (e.g. macOS "Application Support");
+            # re-quote the resolved path so the shell does not split it.
+            # Skip when the match is already wrapped in shell quotes.
+            prev = command[match.start() - 1] if match.start() > 0 else ""
+            if any(ch.isspace() for ch in resolved) and prev not in ("'", '"'):
+                resolved = shlex.quote(resolved)
+            return resolved
 
         return pattern.sub(replace_match, command)
 

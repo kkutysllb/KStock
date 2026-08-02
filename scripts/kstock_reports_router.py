@@ -29,7 +29,7 @@ def list_reports(request: Request, date: str | None = None, symbol: str | None =
     store = _store(request)
     user_id = get_effective_user_id()
     # 交付文件自动进库：扫描该用户全部线程 outputs 中未归档的 HTML 交付物
-    # （agent 走技能 CLI 渲染的 md/dark/light 产物不经过 render_html_report 工具）。
+    # （兼容 render_html_report 工具改造前由技能 CLI 直调生成的历史产物）。
     qilin_home = Path(os.environ.get("QILIN_HOME") or "")
     if qilin_home.is_dir():
         try:

@@ -126,7 +126,6 @@ export interface ChatSession {
 }
 
 export const DEFAULT_ACTIVE_SKILLS = [
-  "analysis-report",
   "chart-visualization",
   "common",
   "stock-analysis",

@@ -13,14 +13,7 @@ def payload(report_id="report-1", generated_at="2026-08-01T10:00:00+08:00"):
             "tool": "generate_line_chart",
             "title": title,
             "alt": f"{title}图",
-            "dark": {
-                "url": f"https://charts.local/dark-{index}.png",
-                "args": {"data": data, "theme": "dark", "style": {"backgroundColor": "#101418"}, "title": title, "axisXTitle": "日期", "axisYTitle": "数值"},
-            },
-            "light": {
-                "url": f"https://charts.local/light-{index}.png",
-                "args": {"data": data, "theme": "default", "style": {"backgroundColor": "#ffffff"}, "title": title, "axisXTitle": "日期", "axisYTitle": "数值"},
-            },
+            "args": {"data": data, "title": title, "axisXTitle": "日期", "axisYTitle": "数值"},
         }
     return {
         "report_id": report_id,

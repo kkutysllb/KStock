@@ -350,22 +350,13 @@ python3 scripts/ml-prediction/run_model_train.py --stocks 000001.SZ,600519.SH --
 | 机器学习预测 | 7% | AI趋势预测 |
 | 社交媒体情绪 | 5% | 舆情与情绪驱动 |
 
-### 报告生成（委托 analysis-report）
+### 报告生成（内置 render_html_report 工具）
 
-十五维综合评分完成后，本技能**不自行编写报告或绘图代码**，而是委托 `common/analysis-report` 统一渲染。流程：
+十五维综合评分完成后，本技能**不自行编写报告或绘图代码**，而是调用内置 `render_html_report` 工具统一渲染。流程：
 
-1. 将综合评分、各维度分项、关键指标、风险与数据来源整理为 `analysis-report` 的输入 JSON（含 `title` / `generated_at` / `summary` / `assessment` / `risk_level` / `data_overview` / `core_analysis` / `risks` / `references` / `charts`）。
-2. 为每个图表读取 `chart-visualization/references/generate_{type}.md`，按官方字段构造 `args`，并对同一份数据分别用 `theme: "dark"`（背景 `#101418`）与 `theme: "default"`（背景 `#ffffff`）生成两个 URL，写入 `charts[].dark` 与 `charts[].light`。至少 3 个图表。
-3. 执行渲染器，一次生成三份文件：
-
-   ```bash
-   python3 common/analysis-report/scripts/render_report.py \
-     --input report.json \
-     --output-dir . \
-     --basename 2026-07-25_{股票代码}_stock-analysis
-   ```
-
-4. 在最终答复中列出 `{basename}.md`、`{basename}-dark.html`、`{basename}-light.html` 三份文件路径。
+1. 将综合评分、各维度分项、关键指标、风险与数据来源整理为报告 JSON，顶层字段：`title` / `generated_at` / `summary` / `assessment` / `risk_level` / `data_overview` / `core_analysis` / `risks` / `references` / `charts`。
+2. 为每个图表按 `charts[].{tool, title, alt, args}` 结构构造，图表以内嵌 SVG 渲染，**禁止使用远程图片 URL**。至少 3 个图表。args 的完整字段规范以工具描述中的契约说明为准。
+3. 调用 `render_html_report(report_json, filename="report.html")`，渲染成功后用 `present_files` 交付。
 
 报告只给研究结论、情景条件、风险等级和需跟踪指标，**不给出买入/卖出/持有等交易建议**。
 

@@ -3,14 +3,6 @@
   "package_name": "kstock-stock-quant-core",
   "skills": [
     {
-      "name": "analysis-report",
-      "source_repo": "KSkills",
-      "source_path": "common/analysis-report",
-      "target_path": "public/analysis-report",
-      "kind": "common",
-      "enabled_by_default": true
-    },
-    {
       "name": "chart-visualization",
       "source_repo": "KSkills",
       "source_path": "common/chart-visualization",

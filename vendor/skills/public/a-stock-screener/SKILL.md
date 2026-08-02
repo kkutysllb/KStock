@@ -25,7 +25,7 @@ capabilities:
   - id: multi-factor-ranking
     description: "多因子打分排序：Z-score 标准化 + 加权求和 + TopN"
   - id: report-generation
-    description: "结构化报告输出：委托 common/analysis-report 生成 Markdown + 暗色/亮色双主题 HTML 看板"
+    description: "结构化报告输出：调用内置 render_html_report 工具生成离线 HTML 看板"
   - id: mock-mode
     description: "无网络 mock 模式：生成伪 A 股数据用于离线测试与冒烟验证"
   - id: cli-entry

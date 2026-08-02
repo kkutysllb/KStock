@@ -360,7 +360,6 @@ def test_template_roles_override_user_modifications(tmp_path):
 # 模板中 general-purpose 的技能白名单（与 config/qilin.config.yaml 一致）
 _TEMPLATE_GP_SKILLS = [
     "a-stock-screener",
-    "analysis-report",
     "announcement-search",
     "backtrader_strategies",
     "business-query",

@@ -145,7 +145,7 @@ def _validate_optional_common_fields(args: dict[str, Any], path: str) -> None:
             _fail(f"{path}.{field}", "必须是 string")
 
 
-def _validate_style(tool: str, style: Any, variant: str, path: str) -> None:
+def _validate_style(tool: str, style: Any, path: str) -> None:
     if not isinstance(style, dict):
         _fail(path, "必须是对象")
     allowed = STYLE_FIELDS_BY_TOOL[STYLE_KIND_BY_TOOL[tool]]
@@ -155,12 +155,6 @@ def _validate_style(tool: str, style: Any, variant: str, path: str) -> None:
     if "backgroundColor" in style:
         if not isinstance(style["backgroundColor"], str) or not style["backgroundColor"].strip():
             _fail(f"{path}.backgroundColor", "必须是非空 string")
-        expected_background = DARK_BACKGROUND if variant == "dark" else LIGHT_BACKGROUND
-        if style["backgroundColor"].lower() != expected_background:
-            _fail(
-                f"{path}.backgroundColor",
-                f"{variant}主题必须使用 {expected_background}",
-            )
     if "palette" in style:
         palette = style["palette"]
         if not isinstance(palette, list) or not palette or not all(
@@ -245,8 +239,7 @@ def _validate_graph_data(value: Any, path: str) -> None:
             _fail(f"{edge_path}.name", "必须是 string")
 
 
-def _validate_args(tool: str, args: Any, variant: str) -> None:
-    path = f"charts[].{variant}.args[{tool}]"
+def _validate_args(tool: str, args: Any, path: str) -> None:
     if not isinstance(args, dict):
         _fail(path, "必须是对象")
     unknown = set(args) - CHART_FIELDS[tool]
@@ -255,13 +248,8 @@ def _validate_args(tool: str, args: Any, variant: str) -> None:
 
     _validate_optional_common_fields(args, path)
 
-    theme = args.get("theme")
-    expected_theme = "dark" if variant == "dark" else "default"
-    if theme != expected_theme:
-        _fail(f"{path}.theme", f"{variant}主题必须使用 {expected_theme!r}")
-
     if "style" in args:
-        _validate_style(tool, args["style"], variant, f"{path}.style")
+        _validate_style(tool, args["style"], f"{path}.style")
 
     if tool in ARRAY_RECORD_RULES:
         _validate_record_array(tool, args.get("data"), f"{path}.data")
@@ -348,31 +336,20 @@ def _validate_chart(chart: Any, index: int) -> None:
     path = f"charts[{index}]"
     if not isinstance(chart, dict):
         _fail(path, "必须是对象")
-    allowed = {"tool", "title", "alt", "dark", "light"}
+    allowed = {"tool", "title", "alt", "args"}
     unknown = set(chart) - allowed
     if unknown:
         _fail(path, f"存在未定义字段: {', '.join(sorted(unknown))}")
     tool = chart.get("tool")
     if tool not in THEMED_TOOLS:
         _fail(f"{path}.tool", "必须使用 chart-visualization 支持的主题图表工具")
-    for variant in ("dark", "light"):
-        spec = chart.get(variant)
-        if not isinstance(spec, dict) or set(spec) != {"url", "args"}:
-            _fail(f"{path}.{variant}", "必须严格包含 url 和 args")
-        if not isinstance(spec["url"], str) or not spec["url"].strip():
-            _fail(f"{path}.{variant}.url", "必须是非空字符串")
-        _validate_args(tool, spec["args"], variant)
-    dark_args = _theme_invariant_args(chart["dark"]["args"])
-    light_args = _theme_invariant_args(chart["light"]["args"])
-    if dark_args != light_args:
-        _fail(path, "深浅主题必须使用同一份 data")
+    if "args" not in chart or not isinstance(chart["args"], dict):
+        _fail(f"{path}.args", "必须提供 args 对象")
+    _validate_args(tool, chart["args"], f"{path}.args")
 
 
 def _theme_invariant_args(args: dict[str, Any]) -> dict[str, Any]:
-    invariant = dict(args)
-    invariant.pop("theme", None)
-    invariant.pop("style", None)
-    return invariant
+    return dict(args)
 
 
 def validate_payload(payload: dict[str, Any]) -> None:
@@ -381,6 +358,251 @@ def validate_payload(payload: dict[str, Any]) -> None:
         _fail("charts", "完整看板必须至少包含 3 个图表")
     for index, chart in enumerate(charts):
         _validate_chart(chart, index)
+
+
+# ── 内嵌 SVG 图表（离线渲染：无外部 URL，数据内嵌）──────────────────
+_SVG_PALETTE = {
+    "dark": ["#e8a33d", "#5ab0ff", "#6fce8f", "#ff7b7b", "#c792ea", "#f5a6c8", "#8ee6c8", "#ffd166"],
+    "light": ["#b47b26", "#2f7fd4", "#3a9d5d", "#d64545", "#7b4fc0", "#c95f8e", "#1f9c8e", "#8a6d00"],
+}
+_SVG_W, _SVG_H = 560, 280
+_SVG_L, _SVG_R, _SVG_T, _SVG_B = 52, 16, 20, 46
+
+
+def _svg_esc(value: Any) -> str:
+    return html.escape(_text(value), quote=True)
+
+
+def _svg_fg(variant: str) -> str:
+    return "#edf2f4" if variant == "dark" else "#18212a"
+
+
+def _svg_grid(variant: str) -> str:
+    return "#34414b" if variant == "dark" else "#d7dee3"
+
+
+def _svg_palette(variant: str) -> list[str]:
+    return _SVG_PALETTE.get(variant, _SVG_PALETTE["light"])
+
+
+def _svg_legend(entries: list[tuple[str, str]], variant: str) -> str:
+    items, x = [], 4
+    y = _SVG_H - 10
+    for label, color in entries:
+        items.append(
+            f'<rect x="{x}" y="{y - 9}" width="10" height="10" fill="{color}"/>'
+            f'<text x="{x + 14}" y="{y}" font-size="11" fill="{_svg_fg(variant)}">{_svg_esc(label)}</text>'
+        )
+        x += 14 + 11 * len(label) + 10
+    return "".join(items)
+
+
+def _svg_y_axis(lo: float, hi: float, variant: str) -> str:
+    ticks = []
+    for i in range(4):
+        v = lo + (hi - lo) * i / 3
+        y = _SVG_T + (hi - v) * (_SVG_H - _SVG_T - _SVG_B) / (hi - lo)
+        ticks.append(
+            f'<line x1="{_SVG_L}" y1="{y:.1f}" x2="{_SVG_W - _SVG_R}" y2="{y:.1f}" stroke="{_svg_grid(variant)}" stroke-dasharray="2,3"/>'
+            f'<text x="{_SVG_L - 6}" y="{y + 4:.1f}" font-size="10" text-anchor="end" fill="{_svg_fg(variant)}">{v:g}</text>'
+        )
+    return "".join(ticks)
+
+
+def _svg_line_chart(args: dict[str, Any], variant: str, alt: str = "") -> str:
+    rows = args.get("data") or []
+    palette = _svg_palette(variant)
+    groups: dict[str, list[tuple[str, float]]] = {}
+    for row in rows:
+        groups.setdefault(str(row.get("group", "主序列")), []).append((str(row["time"]), float(row["value"])))
+    all_y = [v for g in groups.values() for _, v in g]
+    lo, hi = min(all_y), max(all_y)
+    span = (hi - lo) or 1.0
+    lo -= span * 0.1
+    hi += span * 0.1
+    n = max(len(groups.get(next(iter(groups)), [])), 1)
+
+    def x_at(i: int) -> float:
+        return _SVG_L + i * (_SVG_W - _SVG_L - _SVG_R) / max(n - 1, 1)
+
+    def y_at(v: float) -> float:
+        return _SVG_T + (hi - v) * (_SVG_H - _SVG_T - _SVG_B) / (hi - lo)
+
+    parts = [_svg_y_axis(lo, hi, variant)]
+    for index, (label, pts) in enumerate(groups.items()):
+        color = palette[index % len(palette)]
+        coords = " ".join(f"{x_at(i):.1f},{y_at(v):.1f}" for i, (_, v) in enumerate(pts))
+        parts.append(f'<polyline points="{coords}" fill="none" stroke="{color}" stroke-width="2"/>')
+    labels = groups.get(next(iter(groups)), [])
+    step = max(len(labels) // 6, 1)
+    for i, (x_label, _) in enumerate(labels):
+        if i % step == 0:
+            parts.append(
+                f'<text x="{x_at(i):.1f}" y="{_SVG_H - _SVG_B + 14}" font-size="10" text-anchor="middle" fill="{_svg_fg(variant)}">{_svg_esc(x_label)}</text>'
+            )
+    parts.append(_svg_legend([(label, palette[i % len(palette)]) for i, label in enumerate(groups)], variant))
+    return (
+        f'<svg viewBox="0 0 {_SVG_W} {_SVG_H}" role="img" aria-label="{_svg_esc(alt)}" style="max-width:100%;height:auto">'
+        + "".join(parts) + "</svg>"
+    )
+
+
+def _svg_bar_chart(args: dict[str, Any], variant: str, alt: str = "") -> str:
+    rows = args.get("data") or []
+    palette = _svg_palette(variant)
+    values = [float(r["value"]) for r in rows]
+    lo, hi = 0, max(values) or 1.0
+    hi *= 1.1
+    n = len(rows)
+    slot = (_SVG_W - _SVG_L - _SVG_R) / n
+    bar_w = min(slot * 0.6, 48)
+
+    def y_at(v: float) -> float:
+        return _SVG_T + (hi - v) * (_SVG_H - _SVG_T - _SVG_B) / (hi - lo)
+
+    parts = [_svg_y_axis(lo, hi, variant)]
+    for i, row in enumerate(rows):
+        color = palette[i % len(palette)]
+        x = _SVG_L + i * slot + (slot - bar_w) / 2
+        y = y_at(float(row["value"]))
+        parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{_SVG_H - _SVG_B - y:.1f}" fill="{color}"/>')
+        parts.append(
+            f'<text x="{x + bar_w / 2:.1f}" y="{_SVG_H - _SVG_B + 14}" font-size="10" text-anchor="middle" fill="{_svg_fg(variant)}">{_svg_esc(row.get("category", ""))}</text>'
+        )
+    return (
+        f'<svg viewBox="0 0 {_SVG_W} {_SVG_H}" role="img" aria-label="{_svg_esc(alt)}" style="max-width:100%;height:auto">'
+        + "".join(parts) + "</svg>"
+    )
+
+
+def _svg_pie_chart(args: dict[str, Any], variant: str, alt: str = "") -> str:
+    import math as _math
+
+    rows = args.get("data") or []
+    palette = _svg_palette(variant)
+    total = sum(float(r["value"]) for r in rows) or 1.0
+    cx, cy, radius = 190, 140, 96
+    angle = -90.0
+    parts = []
+    legend: list[tuple[str, str]] = []
+    for i, row in enumerate(rows):
+        color = palette[i % len(palette)]
+        sweep = 360.0 * float(row["value"]) / total
+        a1, a2 = angle, angle + sweep
+        rad1, rad2 = _math.radians(a1), _math.radians(a2)
+        x1, y1 = cx + radius * _math.cos(rad1), cy + radius * _math.sin(rad1)
+        x2, y2 = cx + radius * _math.cos(rad2), cy + radius * _math.sin(rad2)
+        large = 1 if sweep > 180 else 0
+        parts.append(
+            f'<path d="M {cx} {cy} L {x1:.1f} {y1:.1f} A {radius} {radius} 0 {large} 1 {x2:.1f} {y2:.1f} Z" fill="{color}"/>'
+        )
+        legend.append((f"{row.get('category', '')} {row['value']:g}", color))
+        angle += sweep
+    parts.append(_svg_legend(legend, variant))
+    return (
+        f'<svg viewBox="0 0 {_SVG_W} {_SVG_H}" role="img" aria-label="{_svg_esc(alt)}" style="max-width:100%;height:auto">'
+        + "".join(parts) + "</svg>"
+    )
+
+
+def _svg_radar_chart(args: dict[str, Any], variant: str, alt: str = "") -> str:
+    rows = args.get("data") or []
+    palette = _svg_palette(variant)
+    n = len(rows)
+    if n < 3:
+        return _svg_table_fallback(args, variant, alt)
+    cx, cy, radius = 280, 140, 100
+
+    def point(i: int, r: float) -> tuple[float, float]:
+        import math as _math
+        a = _math.radians(-90 + 360 * i / n)
+        return cx + r * _math.cos(a), cy + r * _math.sin(a)
+
+    parts = []
+    for ring in (0.25, 0.5, 0.75, 1.0):
+        pts = " ".join(f"{point(i, radius * ring)[0]:.1f},{point(i, radius * ring)[1]:.1f}" for i in range(n))
+        parts.append(f'<polygon points="{pts}" fill="none" stroke="{_svg_grid(variant)}"/>')
+    values = [float(r["value"]) for r in rows]
+    hi = max(values) or 1.0
+    polygon = " ".join(
+        f"{point(i, radius * values[i] / hi)[0]:.1f},{point(i, radius * values[i] / hi)[1]:.1f}" for i in range(n)
+    )
+    color = palette[0]
+    parts.append(f'<polygon points="{polygon}" fill="{color}" fill-opacity="0.35" stroke="{color}" stroke-width="2"/>')
+    for i, row in enumerate(rows):
+        x, y = point(i, radius + 22)
+        parts.append(
+            f'<text x="{x:.1f}" y="{y:.1f}" font-size="11" text-anchor="middle" fill="{_svg_fg(variant)}">{_svg_esc(row.get("name", ""))}</text>'
+        )
+    return (
+        f'<svg viewBox="0 0 {_SVG_W} {_SVG_H}" role="img" aria-label="{_svg_esc(alt)}" style="max-width:100%;height:auto">'
+        + "".join(parts) + "</svg>"
+    )
+
+
+def _svg_scatter_chart(args: dict[str, Any], variant: str, alt: str = "") -> str:
+    rows = args.get("data") or []
+    palette = _svg_palette(variant)
+    xs = [float(r["x"]) for r in rows]
+    ys = [float(r["y"]) for r in rows]
+    x_lo, x_hi = min(xs), max(xs)
+    y_lo, y_hi = min(ys), max(ys)
+    x_span = (x_hi - x_lo) or 1.0
+    y_span = (y_hi - y_lo) or 1.0
+    x_lo -= x_span * 0.1
+    x_hi += x_span * 0.1
+    y_lo -= y_span * 0.1
+    y_hi += y_span * 0.1
+
+    def x_at(v: float) -> float:
+        return _SVG_L + (v - x_lo) * (_SVG_W - _SVG_L - _SVG_R) / (x_hi - x_lo)
+
+    def y_at(v: float) -> float:
+        return _SVG_T + (y_hi - v) * (_SVG_H - _SVG_T - _SVG_B) / (y_hi - y_lo)
+
+    parts = [_svg_y_axis(y_lo, y_hi, variant)]
+    for i, row in enumerate(rows):
+        color = palette[i % len(palette)]
+        parts.append(f'<circle cx="{x_at(float(row["x"])):.1f}" cy="{y_at(float(row["y"])):.1f}" r="4" fill="{color}"/>')
+    return (
+        f'<svg viewBox="0 0 {_SVG_W} {_SVG_H}" role="img" aria-label="{_svg_esc(alt)}" style="max-width:100%;height:auto">'
+        + "".join(parts) + "</svg>"
+    )
+
+
+def _svg_table_fallback(args: dict[str, Any], variant: str, alt: str) -> str:
+    rows = args.get("data") or []
+    headers = sorted({k for row in rows for k in row.keys()}) if rows else []
+    body = "".join(
+        "<tr>" + "".join(f"<td>{_svg_esc(row.get(h, ''))}</td>" for h in headers) + "</tr>" for row in rows
+    )
+    head = "".join(f"<th>{_svg_esc(h)}</th>" for h in headers)
+    border = "1px solid " + _svg_grid(variant)
+    fg = _svg_fg(variant)
+    return (
+        f'<table role="img" aria-label="{_svg_esc(alt)}" style="border-collapse:collapse;font-size:12px;color:{fg};width:100%">'
+        f'<thead><tr style="border-bottom:{border}">{head}</tr></thead><tbody>{body}</tbody></table>'
+    )
+
+
+def _svg_chart(tool: str, args: dict[str, Any], variant: str, alt: str) -> str:
+    """渲染内嵌图表：常用类型生成 SVG，其余降级为结构化表格。"""
+    try:
+        if tool == "generate_line_chart":
+            return _svg_line_chart(args, variant, alt)
+        if tool == "generate_area_chart":
+            return _svg_line_chart(args, variant, alt)
+        if tool in {"generate_bar_chart", "generate_column_chart"}:
+            return _svg_bar_chart(args, variant, alt)
+        if tool == "generate_pie_chart":
+            return _svg_pie_chart(args, variant, alt)
+        if tool == "generate_radar_chart":
+            return _svg_radar_chart(args, variant, alt)
+        if tool == "generate_scatter_chart":
+            return _svg_scatter_chart(args, variant, alt)
+        return _svg_table_fallback(args, variant, alt)
+    except Exception:
+        return _svg_table_fallback(args, variant, alt)
 
 
 def _html(payload: dict[str, Any], variant: str) -> str:
@@ -409,7 +631,7 @@ def _html(payload: dict[str, Any], variant: str) -> str:
     )
     chart_cards = "".join(
         f'<section class="chart"><h2>{esc(chart.get("title", "图表"))}</h2>'
-        f'<img src="{esc(chart[variant]["url"])}" alt="{esc(chart.get("alt", chart.get("title", "图表")))}"></section>'
+        f'{_svg_chart(chart.get("tool", ""), chart.get("args") or {}, variant, chart.get("alt", chart.get("title", "图表")))}</section>'
         for chart in charts
     )
     core_items = "".join(f"<li>{esc(item)}</li>" for item in core)

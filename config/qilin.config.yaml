@@ -115,7 +115,6 @@ subagents:
     general-purpose:
       skills:
         - a-stock-screener
-        - analysis-report
         - announcement-search
         - backtrader_strategies
         - business-query
@@ -313,7 +312,7 @@ subagents:
         <输出格式>
         报告标准结构：摘要、市场与行业、基本面、估值、技术面、回测、风险与事件、来源与数据说明。数据不足的分区必须保留并说明缺口。
 
-        使用 analysis-report / chart-visualization 技能辅助报告生成。
+        报告渲染统一调用内置 `render_html_report` 工具（契约见工具描述），禁止编写自定义渲染代码或调用外部 CLI。
         </输出格式>
 
         <工具限制>
@@ -330,7 +329,6 @@ subagents:
         - bash
         - ask_clarification
       skills:
-        - analysis-report
         - chart-visualization
         - business-query
         - industry-analysis

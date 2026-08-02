@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import importlib.util
 import os
 import re
 import shutil
@@ -17,26 +16,11 @@ from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
 from scripts.kstock_reports import ReportLibraryStore
+from scripts.kstock_reports_renderer import render
 from qilin.tools.types import Runtime
 
 
 _FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,100}\.html$")
-_RENDERER = Path(__file__).resolve().parents[2] / "vendor" / "skills" / "public" / "analysis-report" / "scripts" / "render_report.py"
-
-
-def _renderer_module():
-    spec = importlib.util.spec_from_file_location("kstock_analysis_report_renderer", _RENDERER)
-    if spec is None or spec.loader is None:
-        raise RuntimeError("analysis report renderer is unavailable")
-    module = importlib.util.module_from_spec(spec)
-    # render_report imports report_contract from its own directory.
-    import sys
-    sys.path.insert(0, str(_RENDERER.parent))
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.path.pop(0)
-    return module
 
 
 def _runtime_context(runtime: Any) -> dict[str, Any]:
@@ -77,8 +61,24 @@ def render_html_report_tool(
 ) -> Command:
     """Render one structured report JSON into an offline HTML dashboard.
 
+    Report JSON contract (LLM 生成时必须遵守):
+    - 顶层必填: title(string), generated_at(string, 真实执行时间), summary(string),
+      assessment(string), risk_level(string), data_overview(array<{label,value,unit?}>),
+      core_analysis(array<{title,content}>), risks(array<{title,detail}>),
+      references(array<string>), charts(array, 至少 3 个图表)。
+    - charts[] 每项: {tool, title, alt, args}。tool 取值: generate_line_chart /
+      generate_bar_chart / generate_column_chart / generate_pie_chart /
+      generate_radar_chart / generate_scatter_chart / generate_area_chart /
+      generate_spreadsheet。args.data 为记录数组，行字段按 tool 区分: line/area
+      (time,value[,group])、bar/column (category,value[,group])、pie (category,value)、
+      radar (name,value[,group])、scatter (x,y[,group])、spreadsheet (rows=string[][])。
+      图表以内嵌 SVG 渲染，禁止使用远程图片 URL。
+    - 可选归档字段: report_id / subject{symbol} / period{start,end} /
+      sections[{status}] / report_type，用于报告库元数据。
+    - 全部数值必须与数据源输出一致，禁止改写或编造；表格数据必须完整收录。
+
     Args:
-        report_json: Structured analysis report JSON matching the analysis-report contract.
+        report_json: 符合上述契约的结构化报告 JSON 字符串。
         filename: Safe HTML filename written to the current thread outputs.
     """
     output_path: Path | None = None
@@ -97,21 +97,20 @@ def render_html_report_tool(
             raise ValueError("当前运行上下文缺少 outputs_path")
         outputs_dir = Path(outputs).resolve()
         outputs_dir.mkdir(parents=True, exist_ok=True)
-        renderer = _renderer_module()
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as handle:
             json.dump(payload, handle, ensure_ascii=False)
             temporary_input = Path(handle.name)
         # render 引擎输出 {stem}.md / {stem}-dark.html / {stem}-light.html 三份产物；
         # 交付文件名按调用方指定的 filename（如 report.html）落盘，取 dark 版拷贝。
-        _, dark_path, _ = renderer.render(temporary_input, outputs_dir, Path(filename).stem)
+        _, dark_path, _ = render(temporary_input, outputs_dir, Path(filename).stem)
         output_path = outputs_dir / filename
         if dark_path.resolve() != output_path.resolve():
             shutil.copyfile(dark_path, output_path)
         store = ReportLibraryStore(Path(os.environ["KSTOCK_APP_DATA_DIR"]))
-        # 上游 analysis-report 契约不含 report_id，按标题稳定派生以便重复生成覆盖归档。
+        # 工具契约不含 report_id，按标题稳定派生以便重复生成覆盖归档。
         report_id = str(payload.get("report_id") or "")
         if not report_id:
-            title = str(payload.get("title") or "analysis-report")
+            title = str(payload.get("title") or "report")
             report_id = "report-" + hashlib.sha256(title.encode("utf-8")).hexdigest()[:12]
         subject = payload.get("subject")
         period = payload.get("period")

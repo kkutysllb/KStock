@@ -35,7 +35,7 @@ const skillsResponse = {
     makeSkill("stock-analysis", "stock"),
     makeSkill("news-search", "stock"),
     makeSkill("macro-query", "stock"),
-    makeSkill("analysis-report", "common"),
+    makeSkill("common", "common"),
     makeSkill("chart-visualization", "common"),
   ],
 };
