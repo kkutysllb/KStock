@@ -26,6 +26,18 @@ export function toAbsoluteUrl(url: string): string {
   return new URL(url, GATEWAY_URL).toString();
 }
 
+/** 引擎产出路径 → artifacts 端点可接受的虚拟路径。
+ *
+ * 后端 resolve_virtual_path 要求 mnt/user-data 前缀，而引擎同时上报
+ * 虚拟路径(/outputs/…)与真实路径(/mnt/user-data/outputs/…)；URL 必须保留
+ * 前缀，否则请求 /artifacts/outputs/… 会被后端以 400 拒绝。 */
+export function toArtifactRequestPath(rawPath: string): string {
+  const trimmed = rawPath.replace(/^\/+/, "");
+  if (trimmed.startsWith("mnt/user-data/")) return trimmed;
+  if (trimmed.startsWith("outputs/")) return `mnt/user-data/${trimmed}`;
+  return `mnt/user-data/outputs/${trimmed}`;
+}
+
 /** 合并引擎 artifacts（虚拟/真实路径可能并存）与 workspace 变更文件，
  * 按归一化虚拟路径去重：同一文件只保留一条，URL 优先取 artifacts 显式值。 */
 export function mergeDeliveryFiles(
@@ -47,7 +59,11 @@ export function mergeDeliveryFiles(
     byPath.set(key, {
       key,
       name,
-      url: threadId ? (explicitUrl ? toAbsoluteUrl(explicitUrl) : artifactUrl(threadId, path)) : undefined,
+      url: threadId
+        ? explicitUrl
+          ? toAbsoluteUrl(explicitUrl)
+          : artifactUrl(threadId, toArtifactRequestPath(rawPath))
+        : undefined,
       status: "created",
     });
   }
@@ -59,7 +75,7 @@ export function mergeDeliveryFiles(
     byPath.set(path, {
       key: path,
       name,
-      url: existing?.url ?? (threadId ? artifactUrl(threadId, path) : undefined),
+      url: existing?.url ?? (threadId ? artifactUrl(threadId, toArtifactRequestPath(file.path)) : undefined),
       size: file.size_after ?? undefined,
       status: file.status,
     });

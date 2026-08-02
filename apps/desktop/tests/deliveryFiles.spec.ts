@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { mergeDeliveryFiles, normalizeVirtualPath, type DeliveryFile } from "../src/lib/deliveryFiles";
+import {
+  mergeDeliveryFiles,
+  normalizeVirtualPath,
+  toArtifactRequestPath,
+  type DeliveryFile,
+} from "../src/lib/deliveryFiles";
 import type { WorkspaceChangeFile } from "../src/lib/turnsClient";
 
 describe("normalizeVirtualPath", () => {
@@ -11,6 +16,18 @@ describe("normalizeVirtualPath", () => {
   it("非 outputs 路径保持不变", () => {
     expect(normalizeVirtualPath("/outputs/scripts/run.py")).toBe("/outputs/scripts/run.py");
     expect(normalizeVirtualPath("notes.md")).toBe("notes.md");
+  });
+});
+
+describe("toArtifactRequestPath", () => {
+  it("补齐 mnt/user-data 前缀（后端 resolve_virtual_path 要求）", () => {
+    expect(toArtifactRequestPath("/outputs/report.html")).toBe("mnt/user-data/outputs/report.html");
+    expect(toArtifactRequestPath("outputs/report.html")).toBe("mnt/user-data/outputs/report.html");
+    expect(toArtifactRequestPath("notes.md")).toBe("mnt/user-data/outputs/notes.md");
+  });
+
+  it("已带前缀的路径原样保留", () => {
+    expect(toArtifactRequestPath("/mnt/user-data/outputs/report.html")).toBe("mnt/user-data/outputs/report.html");
   });
 });
 
@@ -32,22 +49,24 @@ describe("mergeDeliveryFiles", () => {
     const keys = files.map((f) => f.key).sort();
     expect(keys).toEqual(["/outputs/extra.md", "/outputs/report.html"]);
     const report = files.find((f) => f.key === "/outputs/report.html");
-    expect(report?.url).toContain("/api/threads/thread-1/artifacts/outputs/report.html");
+    // 回归：URL 必须保留 mnt/user-data 前缀，否则后端 400（futures_weekly 打开失败）
+    expect(report?.url).toContain("/api/threads/thread-1/artifacts/mnt/user-data/outputs/report.html");
   });
 
-  it("workspace 变更补充 size/status，且与 artifacts 同路径时合并为一条", () => {
+  it("workspace 变更补充 size/status，且与 artifacts 同路径时合并为一条（URL 带前缀）", () => {
     const artifacts = ["/mnt/user-data/outputs/report.html"];
     const workspace = [
-      wsFile("/outputs/report.html", { status: "modified", size_after: 999 }),
+      wsFile("/mnt/user-data/outputs/report.html", { status: "modified", size_after: 999 }),
       wsFile("/outputs/report.md"),
     ];
     const files = mergeDeliveryFiles(threadId, artifacts, workspace);
     expect(files).toHaveLength(2);
     const report = files.find((f) => f.key === "/outputs/report.html");
     expect(report).toMatchObject({ status: "modified", size: 999 });
-    expect(report?.url).toBeTruthy();
+    expect(report?.url).toContain("/api/threads/thread-1/artifacts/mnt/user-data/outputs/report.html");
     const md = files.find((f) => f.key === "/outputs/report.md");
     expect(md?.size).toBe(123);
+    expect(md?.url).toContain("/api/threads/thread-1/artifacts/mnt/user-data/outputs/report.md");
   });
 
   it("删除/非 outputs 根的 workspace 变更不进入交付列表", () => {
