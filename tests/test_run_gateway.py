@@ -441,3 +441,109 @@ def test_merges_subagent_agents_preserves_user_keys(tmp_path):
     assert agents["general-purpose"]["skills"] == _TEMPLATE_GP_SKILLS
     # 用户自定义 key 保留
     assert agents["bash"]["max_turns"] == 30
+
+
+# ── 沙箱数据凭据注入 ─────────────────────────────────────────────────
+
+
+def test_inject_data_secrets_injects_whitelist_keys(monkeypatch):
+    """secrets.env 白名单密钥（TUSHARE_TOKEN / IWENCAI_API_KEY）注入
+    config.context.secrets —— 沙箱 bash 子进程经 SkillActivationMiddleware
+    授权的唯一通道（env_policy 会 scrub *TOKEN*/*KEY* 变量）。"""
+    from scripts.run_gateway import _inject_data_secrets
+
+    monkeypatch.setenv("TUSHARE_TOKEN", "tok-abc")
+    monkeypatch.setenv("IWENCAI_API_KEY", "key-xyz")
+
+    config: dict = {}
+    _inject_data_secrets(config)
+
+    assert config["context"]["secrets"] == {
+        "TUSHARE_TOKEN": "tok-abc",
+        "IWENCAI_API_KEY": "key-xyz",
+    }
+
+
+def test_inject_data_secrets_preserves_existing_config_and_client_wins(monkeypatch):
+    """已有 config（configurable / context 其他键）不被破坏；客户端显式提供的
+    同名 secrets 优先于服务端兜底值。"""
+    from scripts.run_gateway import _inject_data_secrets
+
+    monkeypatch.setenv("TUSHARE_TOKEN", "env-token")
+    monkeypatch.setenv("IWENCAI_API_KEY", "env-key")
+
+    config = {
+        "recursion_limit": 1000,
+        "configurable": {"thread_id": "t1"},
+        "context": {"secrets": {"TUSHARE_TOKEN": "client-token"}},
+    }
+    _inject_data_secrets(config)
+
+    assert config["recursion_limit"] == 1000
+    assert config["configurable"] == {"thread_id": "t1"}
+    assert config["context"]["secrets"] == {
+        "TUSHARE_TOKEN": "client-token",  # 客户端显式值优先
+        "IWENCAI_API_KEY": "env-key",  # 服务端兜底补缺
+    }
+
+
+def test_inject_data_secrets_noop_when_env_missing(monkeypatch):
+    """环境无白名单密钥时不注入（也不创建 context 键）。"""
+    from scripts.run_gateway import _inject_data_secrets
+
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    monkeypatch.delenv("IWENCAI_API_KEY", raising=False)
+
+    config: dict = {}
+    _inject_data_secrets(config)
+    assert config == {}
+
+
+def test_install_secrets_injection_patches_build_run_config(monkeypatch):
+    """_install_secrets_injection 后，services.build_run_config 返回的
+    RunnableConfig 携带 context.secrets（引擎注入通道的入口）。"""
+    import app.gateway.services as gateway_services
+    from scripts.run_gateway import _install_secrets_injection
+
+    monkeypatch.setenv("TUSHARE_TOKEN", "tok-abc")
+
+    _install_secrets_injection()
+    config = gateway_services.build_run_config(
+        "thread-1", {"recursion_limit": 500}, None
+    )
+
+    assert config["context"]["secrets"]["TUSHARE_TOKEN"] == "tok-abc"
+    # 原有透传不受影响
+    assert config["recursion_limit"] == 500
+    assert config["configurable"]["thread_id"] == "thread-1"
+
+
+# ── Lead Agent 运行守则（SOUL.md）初始化 ─────────────────────────────
+
+
+def test_ensure_default_soul_creates_from_template(tmp_path):
+    """首次启动把 config/lead_soul.md 模板写入 QILIN_HOME/SOUL.md。"""
+    from scripts.run_gateway import REPO_ROOT, _ensure_default_soul
+
+    qilin_home = tmp_path / "runtime" / "qilin"
+    _ensure_default_soul(qilin_home)
+
+    soul_path = qilin_home / "SOUL.md"
+    assert soul_path.exists()
+    assert soul_path.read_text(encoding="utf-8") == (
+        REPO_ROOT / "config" / "lead_soul.md"
+    ).read_text(encoding="utf-8")
+
+
+def test_ensure_default_soul_preserves_user_content(tmp_path):
+    """已存在的 SOUL.md 视为用户内容，绝不覆盖。"""
+    from scripts.run_gateway import _ensure_default_soul
+
+    qilin_home = tmp_path / "runtime" / "qilin"
+    qilin_home.mkdir(parents=True, exist_ok=True)
+    soul_path = qilin_home / "SOUL.md"
+    soul_path.write_text("# 用户自定义守则\n", encoding="utf-8")
+
+    _ensure_default_soul(qilin_home)
+
+    assert soul_path.read_text(encoding="utf-8") == "# 用户自定义守则\n"

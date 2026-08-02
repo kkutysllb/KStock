@@ -301,6 +301,9 @@ def _ensure_data_space() -> dict[str, Path]:
     runtime_config_path = config_dir / "qilin.runtime.yaml"
     _generate_runtime_config(runtime_config_path, qilin_data_dir, REPO_ROOT)
 
+    # Lead Agent 运行守则（首次启动写入，已存在保留）
+    _ensure_default_soul(runtime_qilin)
+
     # 确保 extensions_config.json 存在（MCP server / skills 管理用）
     extensions_config_path = config_dir / "extensions_config.json"
     if not extensions_config_path.exists():
@@ -389,6 +392,63 @@ def _allow_public_data_source_status() -> None:
         )
 
 
+# ── 沙箱数据凭据注入（修复沙箱 token 被 scrub 的注入缺口）───────────────
+# 引擎 env_policy（issue #3861）会按 *TOKEN*/*KEY* 模式 scrub 沙箱子进程继承
+# 的环境变量；授权通道是 config.context.secrets → SkillActivationMiddleware →
+# bash 工具 per-call env。KStock 在服务端兜底供货：secrets.env 已由
+# _load_secrets_env 加载进 os.environ，这里把白名单数据凭据注入每个 run 的
+# config.context.secrets。客户端显式提供的同名值优先（覆盖兜底值）。
+_SANDBOX_DATA_SECRET_KEYS: tuple[str, ...] = ("TUSHARE_TOKEN", "IWENCAI_API_KEY")
+
+
+def _inject_data_secrets(config: dict[str, Any]) -> None:
+    """把白名单数据凭据注入 RunnableConfig.context.secrets（沙箱授权通道）。"""
+    available = {
+        key: os.environ[key] for key in _SANDBOX_DATA_SECRET_KEYS if os.environ.get(key)
+    }
+    if not available:
+        return
+    context = config.setdefault("context", {})
+    existing = context.get("secrets") if isinstance(context.get("secrets"), dict) else {}
+    context["secrets"] = {**available, **existing}
+
+
+def _install_secrets_injection() -> None:
+    """Monkey-patch build_run_config：为每个 run 的 context.secrets 注入数据凭据。
+
+    vendor 只读（同 _PUBLIC_EXACT_PATHS 先例）：不改引擎，只在 KStock 包装层
+    把沙箱需要的数据凭据接上引擎既有注入通道。
+    """
+    from app.gateway import services as _gateway_services
+
+    _original_build_run_config = _gateway_services.build_run_config
+
+    def _build_run_config_with_secrets(*args, **kwargs):
+        config = _original_build_run_config(*args, **kwargs)
+        _inject_data_secrets(config)
+        return config
+
+    _gateway_services.build_run_config = _build_run_config_with_secrets
+
+
+# ── Lead Agent 运行守则（SOUL.md）模板 ────────────────────────────────
+# 引擎把 QILIN_HOME/SOUL.md 注入 lead agent system prompt（默认 agent）。
+# KStock 用它承载产品级行为约束（如「分析任务必须渲染 HTML 看板交付」），
+# 不修改 vendor 的 lead prompt 与上游同步的 SKILL.md。已存在的 SOUL.md 视为
+# 用户内容，绝不覆盖。
+_SOUL_TEMPLATE = REPO_ROOT / "config" / "lead_soul.md"
+
+
+def _ensure_default_soul(qilin_home: Path) -> None:
+    """首次启动时写入 Lead Agent 运行守则（SOUL.md），已存在则保留用户内容。"""
+    soul_path = qilin_home / "SOUL.md"
+    if soul_path.exists() or not _SOUL_TEMPLATE.exists():
+        return
+    qilin_home.mkdir(parents=True, exist_ok=True)
+    soul_path.write_text(_SOUL_TEMPLATE.read_text(encoding="utf-8"), encoding="utf-8")
+    print(f"  SOUL.md        : 已写入 Lead Agent 运行守则 → {soul_path}", flush=True)
+
+
 def create_app():
     """应用工厂：先打垫片、初始化用户数据空间、配 CORS，再构造 QiLin gateway。"""
     _apply_vendor_extensions_config_compat_shim()
@@ -406,6 +466,7 @@ def create_app():
     _configure_gateway_security()
     _allow_public_landing_news()
     _allow_public_data_source_status()
+    _install_secrets_injection()
     # 启动日志：明确告知用户数据落点，便于排查
     print("=" * 64, flush=True)
     print("KStock 用户数据空间", flush=True)
