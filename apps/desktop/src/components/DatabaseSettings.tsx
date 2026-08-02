@@ -38,7 +38,7 @@ export function DatabaseSettings() {
   }, [reload]);
 
   const handleSave = useCallback(async (value: Record<string, unknown>) => {
-    await updateRuntimeConfigSection("database", value as unknown as DatabaseConfig);
+    await updateRuntimeConfigSection("database", value);
     setDbConfig(value as unknown as DatabaseConfig);
   }, []);
 

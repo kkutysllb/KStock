@@ -20,11 +20,12 @@ pnpm -C apps/desktop dev
 ## 常用命令
 
 ```bash
-python -m pytest sidecar/tests -q
+uv run pytest tests -q
 pnpm -C apps/desktop test
 pnpm -C apps/desktop exec playwright test
 bash scripts/check-ci.sh
 bash scripts/check-release.sh
+./build-release.sh v0.1.0   # 一键发布（校验 → 构建 → 打 tag → 推送触发 CI）
 ```
 
 ## 文档

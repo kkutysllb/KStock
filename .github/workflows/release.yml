@@ -5,9 +5,15 @@ on:
     tags:
       - "v*"
 
+# 创建 GitHub Release 需要 contents: write（GITHUB_TOKEN 默认只读）
+permissions:
+  contents: write
+
 jobs:
-  release:
+  build:
+    name: 构建 ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
@@ -30,17 +36,67 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri -> target
       - run: pnpm install --frozen-lockfile
-      - run: python -m pip install -e ./sidecar
-      - run: bash scripts/check-release.sh
+      # Python 运行时依赖（vendor/qilin + gateway 运行面）由 uv 统一管理
+      - run: uv sync
+      - name: 导入 Apple 签名证书（macOS）
+        if: runner.os == 'macOS'
+        env:
+          MAC_CERTIFICATE: ${{ secrets.MAC_CERTIFICATE }}
+          MAC_CERTIFICATE_PWD: ${{ secrets.MAC_CERTIFICATE_PWD }}
+        run: |
+          echo "$MAC_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/kstock.p12"
+          keychain="$RUNNER_TEMP/kstock.keychain"
+          keychain_password="$(uuidgen)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security default-keychain -s "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/kstock.p12" -k "$keychain" -P "$MAC_CERTIFICATE_PWD" -T /usr/bin/codesign -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
+          # 从钥匙串解析证书身份（如 "Developer ID Application: xxx (TEAMID)"），供 tauri codesign 使用
+          identity="$(security find-identity -v -p codesigning "$keychain" | grep -o '"[^"]*"' | tr -d '"' | head -1)"
+          echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+      - name: 校验并构建（check-release.sh）
+        env:
+          # macOS 公证：tauri bundler 检测到三个变量齐备后自动 notarytool 公证并 staple
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/check-release.sh
+      - name: 收集安装包
+        run: |
+          mkdir -p dist-release
+          find apps/desktop/src-tauri/target/release/bundle -type f \( \
+            -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.msi' -o \
+            -name '*.exe' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \
+          \) -exec cp {} dist-release/ \;
       - uses: actions/upload-artifact@v4
         with:
           name: kstock-${{ matrix.os }}
-          path: |
-            dist/**
-            apps/desktop/dist/**
-            apps/desktop/src-tauri/target/release/bundle/**
+          path: dist-release/**
+          if-no-files-found: error
+
+  publish:
+    name: 发布 GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist-release
+          merge-multiple: true
+      - name: 列出安装包
+        run: ls -lh dist-release
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist-release/**
+          generate_release_notes: true

@@ -284,7 +284,7 @@ export function getRuntimeConfig(): Promise<RuntimeConfig> {
 /** 更新单个配置段（dict 值）。后端 pydantic 校验，失败抛 400 + fieldErrors。 */
 export function updateRuntimeConfigSection<S extends RuntimeConfigSection>(
   section: S,
-  value: Record<string, unknown>
+  value: Record<string, unknown> | RuntimeConfig[S]
 ): Promise<{ section: S; value: Record<string, unknown> }> {
   return runtimeConfigFetch<{ section: S; value: Record<string, unknown> }>(
     `/api/v1/kstock/runtime-config/${encodeURIComponent(section)}`,

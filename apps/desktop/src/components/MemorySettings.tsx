@@ -17,6 +17,7 @@ import {
 } from "../lib/memoryClient";
 import {
   type RuntimeConfig,
+  type RuntimeConfigSection,
   type MemoryRuntimeConfig,
   type SummarizationConfig,
   type TitleConfig,
@@ -109,7 +110,7 @@ export function MemorySettings() {
   }, [refreshEffectedAt]);
 
   const handleSaveSection = useCallback(
-    async <S extends keyof RuntimeConfig>(section: S, value: RuntimeConfig[S]) => {
+    async <S extends RuntimeConfigSection>(section: S, value: RuntimeConfig[S]) => {
       await updateRuntimeConfigSection(section, value);
       setRuntimeConfig((prev) => (prev ? { ...prev, [section]: value } : prev));
       setRefreshEffectedAt(Date.now());

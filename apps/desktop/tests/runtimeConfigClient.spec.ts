@@ -30,7 +30,9 @@ function makeMockResponse(opts: MockRespOpts): Response {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-const sampleConfig: RuntimeConfig = {
+// 仅作为 mock 数据使用：不标注 RuntimeConfig（字段不全，标注会报缺字段），
+// 由 updateRuntimeConfigSection 的联合签名（Record | RuntimeConfig[S]）直接接受。
+const sampleConfig = {
   memory: {
     enabled: false,
     mode: "middleware",

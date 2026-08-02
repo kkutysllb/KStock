@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AppErrorBoundary } from "../src/components/AppErrorBoundary";
 
-function BrokenChild() {
+function BrokenChild(): never {
   throw new Error("历史任务渲染失败");
 }
 
