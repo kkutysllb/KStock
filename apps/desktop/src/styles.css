@@ -3119,6 +3119,79 @@ button.context-file-row:hover {
   cursor: not-allowed;
 }
 
+/* form / free_text 模式表单控件 */
+.clarification-free-text {
+  width: 100%;
+  resize: vertical;
+  min-height: 64px;
+  font-family: inherit;
+  padding: 8px 10px;
+}
+
+.clarification-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.clarification-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.clarification-field-label {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.clarification-required {
+  margin-left: 3px;
+  color: #f87171;
+  font-style: normal;
+}
+
+.clarification-form-input,
+.clarification-form-select,
+.clarification-form-textarea {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.6);
+  color: #e5e7eb;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.12s;
+}
+
+.clarification-form-input:focus,
+.clarification-form-select:focus,
+.clarification-form-textarea:focus {
+  border-color: rgba(49, 199, 162, 0.4);
+}
+
+.clarification-form-textarea {
+  resize: vertical;
+  min-height: 64px;
+}
+
+.clarification-multi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.clarification-checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #e5e7eb;
+  cursor: pointer;
+}
+
 /* clarify 确认对话框：复用 confirm-overlay/dialog，扩展输入区与提示 */
 .clarify-dialog {
   width: min(480px, 92vw);

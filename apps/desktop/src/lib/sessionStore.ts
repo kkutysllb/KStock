@@ -43,13 +43,24 @@ export interface HumanInputPayload {
   request_id?: string;
   clarification_type?: string;
   question: string;
-  /** free_text / choice_with_other / form；本期仅渲染 choice_with_other。 */
+  /** free_text / choice_with_other / form；三种模式均渲染交互卡片。 */
   input_mode: "free_text" | "choice_with_other" | "form";
   context?: string | null;
   /** input_mode=choice_with_other 时的候选项。 */
   options?: ClarificationOption[];
-  /** input_mode=form 时的表单字段（本期不渲染）。 */
-  fields?: unknown[];
+  /** input_mode=form 时的表单字段（对齐引擎 _normalize_fields 产物）。 */
+  fields?: ClarificationFormField[];
+}
+
+/** ask_clarification form 模式的表单字段（引擎 schema 的镜像）。 */
+export interface ClarificationFormField {
+  name: string;
+  label?: string;
+  type: "text" | "textarea" | "number" | "select" | "multi_select" | "checkbox" | "date";
+  required?: boolean;
+  /** select / multi_select 的候选项（字符串数组）。 */
+  options?: string[];
+  placeholder?: string;
 }
 
 /** subagent 单步进展（对应引擎 task_running 的 message）。 */
@@ -83,7 +94,7 @@ export interface TurnUsage {
   total_tokens: number;
 }
 
-export type TurnStatus = "streaming" | "done" | "error" | "compacted";
+export type TurnStatus = "streaming" | "needs_input" | "done" | "error" | "compacted";
 
 export interface ChatMessage {
   id: string;

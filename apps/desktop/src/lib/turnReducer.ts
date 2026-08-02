@@ -196,23 +196,36 @@ function reduceToolMessage(
   now: number
 ): AssistantTurnState {
   const toolCallId = msg.tool_call_id as string | undefined;
-  if (!toolCallId) return state;
+  const isClarification = isClarificationToolMessage(msg);
+  if (!toolCallId && !isClarification) return state;
   const calls = state.toolCalls ?? [];
-  const idx = calls.findIndex((tc) => tc.id === toolCallId);
-  if (idx < 0) return state; // 无匹配的 tool_call（可能来自 hide_from_ui 的调用），忽略
+  const idx = toolCallId ? calls.findIndex((tc) => tc.id === toolCallId) : -1;
+  if (idx < 0 && !isClarification) return state; // 无匹配的 tool_call（可能来自 hide_from_ui 的调用），忽略
 
   const content = msg.content;
   const resultStr =
     typeof content === "string" ? content : JSON.stringify(content ?? "");
   const updated = [...calls];
-  updated[idx] = {
-    ...updated[idx],
-    result: resultStr,
-    artifact: msg.artifact,
-    status: "done",
-    endedAt: now
+  if (idx >= 0) {
+    updated[idx] = {
+      ...updated[idx],
+      result: resultStr,
+      artifact: msg.artifact,
+      status: "done",
+      endedAt: now
+    };
+  } else {
+    updated.push(clarificationToolCallFromMessage(msg, resultStr, now));
+  }
+  const toolName = idx >= 0 ? updated[idx].name : updated[updated.length - 1]?.name;
+  const derivedArtifacts = artifactsFromToolResult(toolName, resultStr, msg.artifact);
+  return {
+    ...state,
+    ...(isClarification ? { status: "needs_input" as const } : {}),
+    ...(!state.text && resultStr && isClarification ? { text: resultStr } : {}),
+    ...(derivedArtifacts.length > 0 ? { artifacts: mergeArtifacts(state.artifacts, derivedArtifacts) } : {}),
+    toolCalls: updated
   };
-  return { ...state, toolCalls: updated };
 }
 
 function mergeToolCalls(
@@ -401,7 +414,9 @@ function reduceEnd(
 ): AssistantTurnState {
   const next: AssistantTurnState = { ...state };
   // compaction 标记不被 end 覆盖
-  if (next.status !== "compacted") next.status = "done";
+  if (next.status !== "compacted") {
+    next.status = hasHumanInputToolCall(next.toolCalls) ? "needs_input" : "done";
+  }
 
   // 收尾 reasoning：若 endedAt 未填则填 now；无论何时结束，补算 thinkingMs
   if (next.reasoning) {
@@ -465,4 +480,90 @@ function safeJsonParse(s: string, dft: unknown): unknown {
   } catch {
     return dft;
   }
+}
+
+function clarificationToolCallFromMessage(
+  msg: Record<string, unknown>,
+  resultStr: string,
+  now: number
+): ToolCall {
+  return {
+    id: String(msg.tool_call_id || msg.id || `ask_clarification:${now}`),
+    name: typeof msg.name === "string" && msg.name ? msg.name : "ask_clarification",
+    args: {},
+    result: resultStr,
+    artifact: msg.artifact,
+    status: "done",
+    endedAt: now
+  };
+}
+
+function hasHumanInputToolCall(calls: ToolCall[] | undefined): boolean {
+  return Boolean(calls?.some((call) => call.name === "ask_clarification" && hasHumanInputArtifact(call.artifact)));
+}
+
+function isClarificationToolMessage(msg: Record<string, unknown>): boolean {
+  return msg.name === "ask_clarification" || hasHumanInputArtifact(msg.artifact);
+}
+
+function hasHumanInputArtifact(artifact: unknown): boolean {
+  if (!artifact || typeof artifact !== "object") return false;
+  const record = artifact as Record<string, unknown>;
+  const payload = record.human_input ?? record;
+  if (!payload || typeof payload !== "object") return false;
+  const p = payload as Record<string, unknown>;
+  return p.kind === "human_input_request" || p.source === "ask_clarification";
+}
+
+function artifactsFromToolResult(
+  toolName: string | undefined,
+  resultStr: string,
+  artifact: unknown
+): unknown[] {
+  const artifacts: unknown[] = [];
+  if (artifact && typeof artifact === "object" && !hasHumanInputArtifact(artifact)) {
+    const record = artifact as Record<string, unknown>;
+    if (
+      typeof record.path === "string" ||
+      typeof record.virtual_path === "string" ||
+      typeof record.artifact_url === "string"
+    ) {
+      artifacts.push(artifact);
+    }
+  }
+
+  const parsed = safeJsonParse(resultStr, null);
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const record = parsed as Record<string, unknown>;
+    for (const field of ["thread_virtual_path", "virtual_path", "path"]) {
+      if (typeof record[field] === "string" && record[field]) artifacts.push(record[field]);
+    }
+    if (Array.isArray(record.artifacts)) artifacts.push(...record.artifacts);
+  }
+
+  if (toolName === "render_html_report" && artifacts.length === 0) {
+    artifacts.push("/outputs/report.html");
+  }
+  return mergeArtifacts([], artifacts);
+}
+
+function mergeArtifacts(existing: unknown[] | undefined, incoming: unknown[]): unknown[] {
+  const merged: unknown[] = [];
+  const seen = new Set<string>();
+  for (const item of [...(existing ?? []), ...incoming]) {
+    const key = artifactKey(item);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+}
+
+function artifactKey(item: unknown): string {
+  if (typeof item === "string") return item;
+  if (item && typeof item === "object") {
+    const record = item as Record<string, unknown>;
+    return String(record.path ?? record.virtual_path ?? record.artifact_url ?? JSON.stringify(record));
+  }
+  return "";
 }

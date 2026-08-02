@@ -74,7 +74,11 @@ export function engineMessagesToChatMessages(messages: unknown[]): ChatMessage[]
     // ── tool message（按 tool_call_id 回填到最近的 assistant turn）──
     // 兼容 type="tool" 或无 type 但有 tool_call_id 的消息。
     if (type.includes("tool") || (typeof msg.tool_call_id === "string" && msg.tool_call_id)) {
-      backfillToolResult(lastAssistant, msg);
+      const standaloneTurn = backfillToolResult(lastAssistant, row, msg);
+      if (standaloneTurn) {
+        result.push(standaloneTurn);
+        lastAssistant = standaloneTurn;
+      }
       continue;
     }
 
@@ -126,6 +130,9 @@ function mergeAssistantTurns(target: ChatMessage, incoming: ChatMessage): void {
       }
     }
     target.toolCalls = toolCalls;
+  }
+  if (incoming.status === "needs_input" || hasHumanInputToolCall(target.toolCalls)) {
+    target.status = "needs_input";
   }
 }
 
@@ -287,21 +294,146 @@ function extractToolCalls(raw: unknown): ToolCall[] {
 /** 回填 tool 执行结果到最近的 assistant turn。 */
 function backfillToolResult(
   lastAssistant: ChatMessage | null,
+  row: Record<string, unknown>,
   msg: Record<string, unknown>
-): void {
-  if (!lastAssistant || !lastAssistant.toolCalls) return;
-  const tcId = String(msg.tool_call_id ?? "");
-  const idx = lastAssistant.toolCalls.findIndex((tc) => tc.id === tcId);
-  if (idx < 0) return;
+): ChatMessage | null {
+  const isClarification = isClarificationToolMessage(msg);
   const content = msg.content;
   const resultStr =
     typeof content === "string" ? content : JSON.stringify(content ?? "");
+
+  if (!lastAssistant || !lastAssistant.toolCalls) {
+    return isClarification ? buildStandaloneClarificationTurn(row, msg, resultStr) : null;
+  }
+  const tcId = String(msg.tool_call_id ?? "");
+  const idx = lastAssistant.toolCalls.findIndex((tc) => tc.id === tcId);
+  if (idx < 0) {
+    if (!isClarification) return null;
+    lastAssistant.toolCalls = [
+      ...lastAssistant.toolCalls,
+      clarificationToolCallFromMessage(msg, resultStr),
+    ];
+    lastAssistant.status = "needs_input";
+    if (!lastAssistant.text && resultStr) lastAssistant.text = resultStr;
+    return null;
+  }
   lastAssistant.toolCalls[idx] = {
     ...lastAssistant.toolCalls[idx],
     result: resultStr,
     artifact: msg.artifact,
     status: "done",
   };
+  const derivedArtifacts = artifactsFromToolResult(
+    lastAssistant.toolCalls[idx].name,
+    resultStr,
+    msg.artifact
+  );
+  if (derivedArtifacts.length > 0) {
+    lastAssistant.artifacts = mergeArtifacts(lastAssistant.artifacts, derivedArtifacts);
+  }
+  if (isClarification) {
+    lastAssistant.status = "needs_input";
+    if (!lastAssistant.text && resultStr) lastAssistant.text = resultStr;
+  }
+  return null;
+}
+
+function buildStandaloneClarificationTurn(
+  row: Record<string, unknown>,
+  msg: Record<string, unknown>,
+  resultStr: string
+): ChatMessage {
+  return {
+    id: ensureId(msg.id),
+    role: "assistant",
+    createdAt: ensureTimestamp(row, msg),
+    status: "needs_input",
+    ...(typeof row.run_id === "string" && row.run_id ? { runId: row.run_id } : {}),
+    ...(resultStr ? { text: resultStr } : {}),
+    toolCalls: [clarificationToolCallFromMessage(msg, resultStr)],
+  };
+}
+
+function clarificationToolCallFromMessage(
+  msg: Record<string, unknown>,
+  resultStr: string
+): ToolCall {
+  return {
+    id: String(msg.tool_call_id || msg.id || ensureId(undefined)),
+    name: typeof msg.name === "string" && msg.name ? msg.name : "ask_clarification",
+    args: {},
+    result: resultStr,
+    artifact: msg.artifact,
+    status: "done",
+  };
+}
+
+function hasHumanInputToolCall(calls: ToolCall[] | undefined): boolean {
+  return Boolean(calls?.some((call) => call.name === "ask_clarification" && hasHumanInputArtifact(call.artifact)));
+}
+
+function isClarificationToolMessage(msg: Record<string, unknown>): boolean {
+  return msg.name === "ask_clarification" || hasHumanInputArtifact(msg.artifact);
+}
+
+function hasHumanInputArtifact(artifact: unknown): boolean {
+  if (!artifact || typeof artifact !== "object") return false;
+  const record = artifact as Record<string, unknown>;
+  const payload = record.human_input ?? record;
+  if (!payload || typeof payload !== "object") return false;
+  const p = payload as Record<string, unknown>;
+  return p.kind === "human_input_request" || p.source === "ask_clarification";
+}
+
+function artifactsFromToolResult(toolName: string, resultStr: string, artifact: unknown): unknown[] {
+  const artifacts: unknown[] = [];
+  if (artifact && typeof artifact === "object" && !hasHumanInputArtifact(artifact)) {
+    const record = artifact as Record<string, unknown>;
+    if (
+      typeof record.path === "string" ||
+      typeof record.virtual_path === "string" ||
+      typeof record.artifact_url === "string"
+    ) {
+      artifacts.push(artifact);
+    }
+  }
+
+  const parsed = safeJsonParse(resultStr, null);
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const record = parsed as Record<string, unknown>;
+    for (const field of ["thread_virtual_path", "virtual_path", "path"]) {
+      if (typeof record[field] === "string" && record[field]) artifacts.push(record[field]);
+    }
+    if (Array.isArray(record.artifacts)) artifacts.push(...record.artifacts);
+  }
+
+  // render_html_report 的主交付文件固定是 report.html；旧工具结果若只返回
+  // report_id 而漏了路径，也保守补齐，保证历史任务右侧有报告入口。
+  if (toolName === "render_html_report" && artifacts.length === 0) {
+    artifacts.push("/outputs/report.html");
+  }
+  return mergeArtifacts([], artifacts);
+}
+
+function mergeArtifacts(existing: unknown[] | undefined, incoming: unknown[]): unknown[] {
+  const merged: unknown[] = [];
+  const seen = new Set<string>();
+  for (const item of [...(existing ?? []), ...incoming]) {
+    const key = artifactKey(item);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+}
+
+function artifactKey(item: unknown): string {
+  if (typeof item === "string") return item;
+  if (item && typeof item === "object") {
+    const record = item as Record<string, unknown>;
+    return String(record.path ?? record.virtual_path ?? record.artifact_url ?? JSON.stringify(record));
+  }
+  return "";
 }
 
 /** 转换 usage_metadata。 */

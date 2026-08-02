@@ -279,7 +279,7 @@ export function Home() {
   // 流式 run 状态。
   const [streamingId, setStreamingId] = useState<string | null>(null);
   // 澄清确认弹窗草稿：非 null 时弹窗可见，确认后作为消息发送（不再回填主输入框）。
-  const [clarifyDraft, setClarifyDraft] = useState<string | null>(null);
+  const [clarifyDraft, setClarifyDraft] = useState<{ text: string; question?: string } | null>(null);
   // 输入区待发附件（本轮要随消息携带的 UploadedFileRef）。发送成功后清空。
   const [pendingAttachments, setPendingAttachments] = useState<UploadedFileRef[]>([]);
   // 附件上传中状态（控制 chip loading + 选择按钮禁用）。
@@ -982,7 +982,7 @@ export function Home() {
       onModelChange={handleModelChange}
       onReasoningModeChange={handleReasoningModeChange}
       onDraftChange={setDraft}
-      onClarifyPick={setClarifyDraft}
+      onClarifyPick={(text, question) => setClarifyDraft({ text, question })}
       onLogout={handleLogout}
       onNewSession={handleNewSession}
       onOpenSettings={() => setView("settings")}
@@ -1024,7 +1024,8 @@ export function Home() {
       />
       <ClarifyInputDialog
         open={clarifyDraft !== null}
-        initialText={clarifyDraft ?? ""}
+        initialText={clarifyDraft?.text ?? ""}
+        question={clarifyDraft?.question}
         onConfirm={(text) => {
           setClarifyDraft(null);
           void sendText(text, activeModel);
@@ -1503,7 +1504,7 @@ function WorkspaceShell({
   onReasoningModeChange: (mode: ReasoningMode) => void;
   onDraftChange: (draft: string) => void;
   /** ask_clarification 选项被选中并点“回复并确认”时回调（弹出确认输入框）。 */
-  onClarifyPick: (text: string) => void;
+  onClarifyPick: (text: string, question?: string) => void;
   onLogout: () => void;
   onNewSession: () => void;
   onOpenIntegrations: () => void;
@@ -2073,6 +2074,7 @@ function ContextFileRow({
 
 function taskStatusLabel(status?: ChatMessage["status"]): string {
   if (status === "streaming") return "执行中";
+  if (status === "needs_input") return "等待回复";
   if (status === "done") return "已完成";
   if (status === "error") return "执行失败";
   if (status === "compacted") return "已压缩";

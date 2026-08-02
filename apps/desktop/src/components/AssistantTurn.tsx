@@ -18,15 +18,16 @@ interface AssistantTurnProps {
   showStage?: boolean;
   showReasoning?: boolean;
   showToolCalls?: boolean;
-  /** ask_clarification 选项被选中并点“回复并确认”时回调，参数为拼接文本（父级弹出确认输入框）。 */
-  onClarifyPick?: (text: string) => void;
+  /** ask_clarification 选项被选中并点“回复并确认”时回调，参数为拼接文本 + 澄清问题（父级弹出确认输入框）。 */
+  onClarifyPick?: (text: string, question?: string) => void;
 }
 
 /**
- * 检测 turn 是否携带交互式澄清（ask_clarification + choice_with_other payload）。
+ * 检测 turn 是否携带交互式澄清（ask_clarification + 结构化 payload）。
  * 返回 { payload, isInteractive }：
  * - payload：窄化后的 HumanInputPayload（未找到时 undefined）
- * - isInteractive：仅 input_mode=choice_with_other 为 true，用于决定是否隐藏 fallback 文本
+ * - isInteractive：三种 input_mode（choice_with_other / form / free_text）均为 true，
+ *   用于决定是否隐藏 fallback 正文并渲染 ClarificationCard 交互卡片
  */
 function detectClarification(msg: ChatMessage): {
   payload?: HumanInputPayload;
@@ -38,14 +39,20 @@ function detectClarification(msg: ChatMessage): {
   if (!call) return { isInteractive: false };
   const artifact = call.artifact as
     | { human_input?: unknown }
+    | HumanInputPayload
     | undefined;
-  const payload = artifact?.human_input as HumanInputPayload | undefined;
+  const payload = (
+    artifact && "human_input" in artifact ? artifact.human_input : artifact
+  ) as HumanInputPayload | undefined;
   if (!payload || payload.kind !== "human_input_request") {
     return { isInteractive: false };
   }
   return {
     payload,
-    isInteractive: payload.input_mode === "choice_with_other",
+    isInteractive:
+      payload.input_mode === "choice_with_other" ||
+      payload.input_mode === "form" ||
+      payload.input_mode === "free_text",
   };
 }
 
@@ -103,12 +110,15 @@ export function AssistantTurn({
         )}
 
         {/*
-         * 交互式澄清（choice_with_other）：用 ClarificationCard 替换 fallback 正文。
-         * 引擎的 msg.text 是编号列表的纯文本 fallback，与选项卡重复，故隐藏。
-         * 非交互模式（form/free_text）保留 msg.text，ClarificationCard 内部退化提示。
+         * 交互式澄清：三种模式（choice_with_other / form / free_text）均用
+         * ClarificationCard 替换 fallback 正文。引擎的 msg.text 是编号列表的
+         * 纯文本 fallback，与交互卡片重复，故隐藏（ai message 正文通常为空）。
          */}
         {hasInteractiveClarification && clarifyPayload && onClarifyPick ? (
-          <ClarificationCard payload={clarifyPayload} onPick={onClarifyPick} />
+          <ClarificationCard
+            payload={clarifyPayload}
+            onPick={(text) => onClarifyPick(text, clarifyPayload.question)}
+          />
         ) : (
           msg.text && (
             <div className="turn-text">

@@ -62,11 +62,16 @@ def render_html_report_tool(
     """Render one structured report JSON into an offline HTML dashboard.
 
     Report JSON contract (LLM 生成时必须遵守):
-    - 顶层必填: title(string), generated_at(string, 真实执行时间), summary(string),
-      assessment(string), risk_level(string), data_overview(array<{label,value,unit?}>),
-      core_analysis(array<{title,content}>), risks(array<{title,detail}>),
-      references(array<string>), charts(array, 至少 3 个图表)。
-    - charts[] 每项: {tool, title, alt, args}。tool 取值: generate_line_chart /
+    - 顶层必填: title(string), generated_at(string, 真实执行时间), summary(string)。
+      assessment 可为 string 或 {label,risk_level}；core_analysis 支持 string[] 或
+      array<{title,content}>；risks 支持 string[] 或 array<{title,detail}>；
+      references 支持 string[] 或 array<{title,source,as_of,url?}>。
+    - 图表可放在顶层 charts[]，也可放在 sections[].charts[]；整份报告合计至少
+      3 个图表。推荐使用 sections[] 组织报告正文：{id,title,status,summary,
+      metrics[],charts[],evidence[],gaps[]}，渲染器会生成分区导航、指标卡和图表区。
+    - charts[] / sections[].charts[] 每项: {tool, title, alt, args}，也兼容把
+      data/rows/columns/style 等 args 字段直接平铺在 chart 对象上。tool 取值:
+      generate_line_chart /
       generate_bar_chart / generate_column_chart / generate_pie_chart /
       generate_radar_chart / generate_scatter_chart / generate_area_chart /
       generate_spreadsheet。args.data 为记录数组，行字段按 tool 区分: line/area

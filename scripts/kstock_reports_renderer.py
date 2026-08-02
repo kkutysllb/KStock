@@ -364,8 +364,106 @@ def _theme_invariant_args(args: dict[str, Any]) -> dict[str, Any]:
     return dict(args)
 
 
+def _list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _normalize_chart(chart: Any) -> dict[str, Any] | None:
+    """Accept both strict {tool,title,alt,args} and section-local shorthand.
+
+    Historical prompts for ``render_html_report`` asked agents to produce
+    ``sections[].charts[]`` with chart args flattened onto the chart object
+    (for example ``{tool,title,alt,data:[...]}``).  The renderer validates the
+    official chart tool args contract, so normalize that product-facing
+    contract before validation/rendering instead of leaking raw objects into
+    HTML.
+    """
+    if not isinstance(chart, dict):
+        return None
+    tool = chart.get("tool")
+    if tool not in THEMED_TOOLS:
+        return dict(chart)
+    args = dict(chart.get("args")) if isinstance(chart.get("args"), dict) else {}
+    for field in CHART_FIELDS[tool]:
+        if field in chart and field not in {"title"}:
+            args.setdefault(field, chart[field])
+    title = _text(chart.get("title") or args.get("title") or "图表")
+    if "title" in CHART_FIELDS[tool] and title:
+        args.setdefault("title", title)
+    return {
+        "tool": tool,
+        "title": title,
+        "alt": _text(chart.get("alt") or title),
+        "args": args,
+    }
+
+
+def _normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    out = dict(payload)
+
+    assessment = payload.get("assessment")
+    if isinstance(assessment, dict):
+        out["assessment"] = _text(
+            assessment.get("label")
+            or assessment.get("summary")
+            or assessment.get("value")
+            or "未提供"
+        )
+        if not out.get("risk_level"):
+            out["risk_level"] = assessment.get("risk_level") or assessment.get("risk")
+
+    top_charts = [
+        normalized
+        for chart in _list(payload.get("charts"))
+        if (normalized := _normalize_chart(chart)) is not None
+    ]
+    all_charts = list(top_charts)
+
+    sections: list[dict[str, Any]] = []
+    for index, raw_section in enumerate(_list(payload.get("sections"))):
+        if not isinstance(raw_section, dict):
+            continue
+        section = dict(raw_section)
+        section.setdefault("id", f"section-{index + 1}")
+        section_charts = [
+            normalized
+            for chart in _list(section.get("charts"))
+            if (normalized := _normalize_chart(chart)) is not None
+        ]
+        section["charts"] = section_charts
+        all_charts.extend(section_charts)
+        sections.append(section)
+    out["sections"] = sections
+    out["charts"] = top_charts
+    out["_all_charts"] = all_charts
+
+    if not _list(out.get("data_overview")):
+        overview: list[dict[str, str]] = []
+        for section in sections:
+            for metric in _list(section.get("metrics")):
+                if not isinstance(metric, dict):
+                    continue
+                unit = _text(metric.get("unit"))
+                overview.append(
+                    {
+                        "metric": _text(metric.get("label") or metric.get("name") or metric.get("id") or "指标"),
+                        "current": f"{_text(metric.get('value', '—'))}{unit}",
+                        "change": _text(metric.get("source") or "—"),
+                        "yoy": _text(metric.get("as_of") or "—"),
+                    }
+                )
+        if overview:
+            out["data_overview"] = overview
+
+    return out
+
+
 def validate_payload(payload: dict[str, Any]) -> None:
-    charts = payload.get("charts")
+    charts = payload.get("_all_charts") or payload.get("charts")
     if not isinstance(charts, list) or len(charts) < 3:
         _fail("charts", "完整看板必须至少包含 3 个图表")
     for index, chart in enumerate(charts):
@@ -463,8 +561,10 @@ def _svg_bar_chart(args: dict[str, Any], variant: str, alt: str = "") -> str:
     rows = args.get("data") or []
     palette = _svg_palette(variant)
     values = [float(r["value"]) for r in rows]
-    lo, hi = 0, max(values) or 1.0
-    hi *= 1.1
+    lo, hi = min(0.0, min(values)), max(0.0, max(values))
+    span = (hi - lo) or 1.0
+    lo -= span * 0.1
+    hi += span * 0.1
     n = len(rows)
     slot = (_SVG_W - _SVG_L - _SVG_R) / n
     bar_w = min(slot * 0.6, 48)
@@ -473,11 +573,14 @@ def _svg_bar_chart(args: dict[str, Any], variant: str, alt: str = "") -> str:
         return _SVG_T + (hi - v) * (_SVG_H - _SVG_T - _SVG_B) / (hi - lo)
 
     parts = [_svg_y_axis(lo, hi, variant)]
+    baseline = y_at(0.0)
     for i, row in enumerate(rows):
         color = palette[i % len(palette)]
         x = _SVG_L + i * slot + (slot - bar_w) / 2
-        y = y_at(float(row["value"]))
-        parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{_SVG_H - _SVG_B - y:.1f}" fill="{color}"/>')
+        value_y = y_at(float(row["value"]))
+        y = min(value_y, baseline)
+        height = abs(baseline - value_y)
+        parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{height:.1f}" fill="{color}"/>')
         parts.append(
             f'<text x="{x + bar_w / 2:.1f}" y="{_SVG_H - _SVG_B + 14}" font-size="10" text-anchor="middle" fill="{_svg_fg(variant)}">{_svg_esc(row.get("category", ""))}</text>'
         )
@@ -615,10 +718,10 @@ def _svg_spreadsheet(args: dict[str, Any], variant: str, alt: str) -> str:
         for row in body_rows
     )
     return (
-        f'<table role="img" aria-label="{_svg_esc(alt)}" '
-        f'style="border-collapse:collapse;font-size:12px;color:{fg};width:100%">'
+        f'<div class="table-scroll" role="img" aria-label="{_svg_esc(alt)}">'
+        f'<table style="border-collapse:collapse;font-size:12px;color:{fg};min-width:100%;width:max-content">'
         f"<thead><tr style='border-bottom:2px solid {_svg_grid(variant)}'>{head}</tr></thead>"
-        f"<tbody>{body}</tbody></table>"
+        f"<tbody>{body}</tbody></table></div>"
     )
 
 
@@ -644,6 +747,78 @@ def _svg_chart(tool: str, args: dict[str, Any], variant: str, alt: str) -> str:
         return _svg_spreadsheet(args, variant, alt)
 
 
+def _render_chart_card(chart: dict[str, Any], variant: str, esc) -> str:
+    return (
+        f'<section class="chart"><h3>{esc(chart.get("title", "图表"))}</h3>'
+        f'{_svg_chart(chart.get("tool", ""), chart.get("args") or {}, variant, chart.get("alt", chart.get("title", "图表")))}</section>'
+    )
+
+
+def _render_text_item(item: Any, esc, body_keys: tuple[str, ...]) -> str:
+    if isinstance(item, dict):
+        title = esc(item.get("title") or item.get("label") or item.get("name") or "")
+        body = ""
+        for key in body_keys:
+            if item.get(key):
+                body = esc(item.get(key))
+                break
+        if title and body:
+            return f"<li><strong>{title}</strong><p>{body}</p></li>"
+        if title:
+            return f"<li><strong>{title}</strong></li>"
+        if body:
+            return f"<li>{body}</li>"
+        return ""
+    text = esc(item)
+    return f"<li>{text}</li>" if text else ""
+
+
+def _render_reference_item(item: Any, esc) -> str:
+    if isinstance(item, dict):
+        title = esc(item.get("title") or item.get("source") or item.get("url") or "参考资料")
+        source = esc(item.get("source") or "")
+        as_of = esc(item.get("as_of") or item.get("date") or "")
+        url = item.get("url")
+        label = f'<a href="{esc(url)}" rel="noreferrer" target="_blank">{title}</a>' if isinstance(url, str) and url else title
+        meta = " · ".join(part for part in (source, as_of) if part)
+        return f"<li>{label}{f'<small>{meta}</small>' if meta else ''}</li>"
+    text = esc(item)
+    return f"<li>{text}</li>" if text else ""
+
+
+def _render_metric(metric: Any, esc) -> str:
+    if not isinstance(metric, dict):
+        return ""
+    label = esc(metric.get("label") or metric.get("name") or metric.get("id") or "指标")
+    value = esc(_text(metric.get("value", "—")) + _text(metric.get("unit") or ""))
+    source = esc(metric.get("source") or metric.get("as_of") or "")
+    return f'<div class="metric"><span>{label}</span><strong>{value}</strong>{f"<small>{source}</small>" if source else ""}</div>'
+
+
+def _render_section(section: dict[str, Any], variant: str, esc) -> str:
+    title = esc(section.get("title") or section.get("id") or "分析分区")
+    status = esc(section.get("status") or "")
+    summary = esc(section.get("summary") or "")
+    metrics = "".join(_render_metric(metric, esc) for metric in _list(section.get("metrics")))
+    charts = "".join(
+        _render_chart_card(chart, variant, esc)
+        for chart in _list(section.get("charts"))
+        if isinstance(chart, dict)
+    )
+    evidence = "".join(_render_text_item(item, esc, ("content", "detail", "summary")) for item in _list(section.get("evidence")))
+    gaps = "".join(_render_text_item(item, esc, ("content", "detail", "summary")) for item in _list(section.get("gaps")))
+    return (
+        f'<section class="section report-section" id="{esc(section.get("id") or title)}">'
+        f"<div class=\"section-head\"><h2>{title}</h2>{f'<span>{status}</span>' if status else ''}</div>"
+        f"{f'<p class=\"section-summary\">{summary}</p>' if summary else ''}"
+        f"{f'<div class=\"metrics\">{metrics}</div>' if metrics else ''}"
+        f"{f'<div class=\"charts\">{charts}</div>' if charts else ''}"
+        f"{f'<details><summary>证据与数据源</summary><ul>{evidence}</ul></details>' if evidence else ''}"
+        f"{f'<details><summary>数据缺口</summary><ul>{gaps}</ul></details>' if gaps else ''}"
+        "</section>"
+    )
+
+
 def _html(payload: dict[str, Any], variant: str) -> str:
     esc = lambda value: html.escape(_text(value), quote=True)
     title = esc(payload.get("title", "分析报告"))
@@ -652,8 +827,10 @@ def _html(payload: dict[str, Any], variant: str) -> str:
     assessment = esc(payload.get("assessment", "未提供"))
     risk_level = esc(payload.get("risk_level", "未提供"))
     overview = payload.get("data_overview") or []
+    sections = payload.get("sections") or []
     core = payload.get("core_analysis") or []
     risks = payload.get("risks") or []
+    references = payload.get("references") or []
     charts = payload.get("charts") or []
     dark = variant == "dark"
     background = DARK_BACKGROUND if dark else LIGHT_BACKGROUND
@@ -668,13 +845,16 @@ def _html(payload: dict[str, Any], variant: str) -> str:
         f'<small>{esc(row.get("change", "—"))}</small></div>'
         for row in overview[:6]
     )
-    chart_cards = "".join(
-        f'<section class="chart"><h2>{esc(chart.get("title", "图表"))}</h2>'
-        f'{_svg_chart(chart.get("tool", ""), chart.get("args") or {}, variant, chart.get("alt", chart.get("title", "图表")))}</section>'
-        for chart in charts
+    chart_cards = "".join(_render_chart_card(chart, variant, esc) for chart in charts if isinstance(chart, dict))
+    section_cards = "".join(_render_section(section, variant, esc) for section in sections if isinstance(section, dict))
+    core_items = "".join(_render_text_item(item, esc, ("content", "detail", "summary")) for item in core) or "<li>暂无。</li>"
+    risk_items = "".join(_render_text_item(item, esc, ("detail", "content", "summary")) for item in risks) or "<li>暂无。</li>"
+    reference_items = "".join(_render_reference_item(item, esc) for item in references) or "<li>未提供。</li>"
+    nav_items = "".join(
+        f'<a href="#{esc(section.get("id") or f"section-{index + 1}")}">{esc(section.get("title") or f"分区 {index + 1}")}</a>'
+        for index, section in enumerate(sections)
+        if isinstance(section, dict)
     )
-    core_items = "".join(f"<li>{esc(item)}</li>" for item in core)
-    risk_items = "".join(f"<li>{esc(item)}</li>" for item in risks)
 
     return f"""<!doctype html>
 <html lang="zh-CN">
@@ -685,32 +865,55 @@ def _html(payload: dict[str, Any], variant: str) -> str:
 <style>
 :root {{ color-scheme: {"dark" if dark else "light"}; --bg:{background}; --panel:{panel}; --line:{line}; --muted:{muted}; --text:{text}; --accent:#b47b26; }}
 * {{ box-sizing:border-box; }}
+html,body {{ max-width:100%; overflow-x:hidden; }}
 body {{ margin:0; background:var(--bg); color:var(--text); font:15px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }}
 main {{ max-width:1180px; margin:0 auto; padding:28px 22px 42px; }}
 header {{ border-bottom:1px solid var(--line); padding:8px 0 22px; margin-bottom:20px; }}
 h1 {{ margin:0 0 6px; font-size:28px; }}
 h2 {{ margin:0 0 12px; font-size:17px; color:var(--accent); }}
+h3 {{ margin:0 0 12px; font-size:15px; color:var(--accent); }}
+a {{ color:var(--accent); }}
 .meta,.muted {{ color:var(--muted); }}
 .summary {{ background:var(--panel); border-left:3px solid var(--accent); padding:16px 18px; margin-bottom:18px; }}
+.nav {{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 18px; }}
+.nav a {{ border:1px solid var(--line); border-radius:999px; padding:5px 10px; text-decoration:none; color:var(--text); background:var(--panel); }}
 .kpis {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:18px; }}
-.kpi,.chart,.section {{ background:var(--panel); border:1px solid var(--line); padding:16px; }}
-.kpi span,.kpi small {{ display:block; color:var(--muted); }}
-.kpi strong {{ display:block; font-size:24px; margin:2px 0; }}
+.kpi,.metric,.chart,.section {{ background:var(--panel); border:1px solid var(--line); padding:16px; }}
+.kpi span,.kpi small,.metric span,.metric small {{ display:block; color:var(--muted); }}
+.kpi strong,.metric strong {{ display:block; font-size:24px; margin:2px 0; }}
+.metrics {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:12px 0 16px; }}
 .charts {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; margin-bottom:18px; }}
 .chart img {{ display:block; width:100%; height:auto; background:{background}; }}
+.chart {{ min-width:0; overflow:hidden; }}
+.table-scroll {{ width:100%; max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }}
 .section {{ margin-top:14px; }}
+.section-head {{ display:flex; justify-content:space-between; gap:12px; align-items:flex-start; border-bottom:1px solid var(--line); margin:-2px 0 12px; }}
+.section-head span {{ color:var(--muted); font-size:12px; border:1px solid var(--line); border-radius:999px; padding:2px 8px; }}
+.section-summary {{ margin-top:0; }}
 li {{ margin:5px 0; }}
+li p {{ margin:4px 0 0; }}
+li small {{ display:block; color:var(--muted); margin-top:2px; }}
+details {{ border-top:1px solid var(--line); margin-top:12px; padding-top:8px; }}
+summary {{ color:var(--muted); cursor:pointer; }}
 footer {{ color:var(--muted); font-size:12px; border-top:1px solid var(--line); margin-top:24px; padding-top:14px; }}
+@media (max-width: 640px) {{
+  main {{ padding:18px 14px 32px; }}
+  h1 {{ font-size:23px; }}
+  .charts {{ grid-template-columns:minmax(0,1fr); }}
+}}
 </style>
 </head>
 <body data-theme="{variant}">
 <main>
 <header><h1>{title}</h1><div class="meta">生成时间：{generated_at}</div></header>
 <div class="summary"><h2>执行摘要</h2><p>{summary}</p><div class="muted">综合评估：{assessment}　风险等级：{risk_level}</div></div>
+{f'<nav class="nav" aria-label="报告分区">{nav_items}</nav>' if nav_items else ''}
 <div class="kpis">{kpis}</div>
-<div class="charts">{chart_cards}</div>
+{f'<div class="charts">{chart_cards}</div>' if chart_cards else ''}
+{section_cards}
 <section class="section"><h2>核心分析</h2><ul>{core_items}</ul></section>
 <section class="section"><h2>风险提示</h2><ul>{risk_items}</ul></section>
+<section class="section"><h2>参考资料</h2><ul>{reference_items}</ul></section>
 <footer>以上分析基于公开数据与逻辑推演，不构成投资建议。</footer>
 </main>
 </body>
@@ -725,6 +928,7 @@ def _markdown(payload: dict[str, Any]) -> str:
     assessment = _text(payload.get("assessment", "未提供"))
     risk_level = _text(payload.get("risk_level", "未提供"))
     overview = payload.get("data_overview") or []
+    sections = payload.get("sections") or []
     core = payload.get("core_analysis") or []
     risks = payload.get("risks") or []
     references = payload.get("references") or []
@@ -759,12 +963,39 @@ def _markdown(payload: dict[str, Any]) -> str:
             ])
             + " |"
         )
+    for section in sections:
+        if not isinstance(section, dict):
+            continue
+        lines.extend(["", f"## {_text(section.get('title') or section.get('id') or '分析分区')}", ""])
+        if section.get("summary"):
+            lines.extend([_text(section.get("summary")), ""])
+        metrics = [m for m in _list(section.get("metrics")) if isinstance(m, dict)]
+        if metrics:
+            lines.extend(["| 指标 | 数值 | 来源 | 截止 |", "|---|---:|---|---|"])
+            for metric in metrics:
+                lines.append(
+                    "| "
+                    + " | ".join([
+                        _text(metric.get("label") or metric.get("name") or metric.get("id") or "指标"),
+                        _text(metric.get("value", "—")) + _text(metric.get("unit") or ""),
+                        _text(metric.get("source") or "—"),
+                        _text(metric.get("as_of") or "—"),
+                    ])
+                    + " |"
+                )
+            lines.append("")
+        for chart in _list(section.get("charts")):
+            if isinstance(chart, dict):
+                lines.append(f"- 图表：{_text(chart.get('title') or chart.get('alt') or chart.get('tool'))}")
     lines.extend(["", "## 核心分析", ""])
-    lines.extend([f"{index}. {_text(item)}" for index, item in enumerate(core, start=1)] or ["暂无。"])
+    core_lines = [_markdown_text_item(item, ("content", "detail", "summary"), index) for index, item in enumerate(core, start=1)]
+    lines.extend([line for line in core_lines if line] or ["暂无。"])
     lines.extend(["", "## 风险提示", ""])
-    lines.extend([f"- {_text(item)}" for item in risks] or ["- 暂无。"])
+    risk_lines = [_markdown_text_item(item, ("detail", "content", "summary")) for item in risks]
+    lines.extend([line for line in risk_lines if line] or ["- 暂无。"])
     lines.extend(["", "## 参考资料", ""])
-    lines.extend([f"- {_text(item)}" for item in references] or ["- 未提供。"])
+    ref_lines = [_markdown_reference_item(item) for item in references]
+    lines.extend([line for line in ref_lines if line] or ["- 未提供。"])
     lines.extend([
         "",
         "## 免责与风险提示",
@@ -775,10 +1006,44 @@ def _markdown(payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _markdown_text_item(item: Any, body_keys: tuple[str, ...], index: int | None = None) -> str:
+    prefix = f"{index}. " if index is not None else "- "
+    if isinstance(item, dict):
+        title = _text(item.get("title") or item.get("label") or item.get("name") or "")
+        body = ""
+        for key in body_keys:
+            if item.get(key):
+                body = _text(item.get(key))
+                break
+        if title and body:
+            return f"{prefix}**{title}**：{body}"
+        if title:
+            return f"{prefix}{title}"
+        if body:
+            return f"{prefix}{body}"
+        return ""
+    text = _text(item)
+    return f"{prefix}{text}" if text else ""
+
+
+def _markdown_reference_item(item: Any) -> str:
+    if isinstance(item, dict):
+        title = _text(item.get("title") or item.get("source") or item.get("url") or "参考资料")
+        source = _text(item.get("source") or "")
+        as_of = _text(item.get("as_of") or item.get("date") or "")
+        url = _text(item.get("url") or "")
+        text = f"[{title}]({url})" if url else title
+        meta = " · ".join(part for part in (source, as_of) if part)
+        return f"- {text}{f'（{meta}）' if meta else ''}"
+    text = _text(item)
+    return f"- {text}" if text else ""
+
+
 def render(input_path: Path, output_dir: Path, basename: str) -> tuple[Path, Path, Path]:
     payload = json.loads(input_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("报告输入必须是 JSON 对象")
+    payload = _normalize_payload(payload)
     validate_payload(payload)
     output_dir.mkdir(parents=True, exist_ok=True)
     markdown_path = output_dir / f"{basename}.md"

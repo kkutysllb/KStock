@@ -123,20 +123,98 @@ describe("ClarificationCard", () => {
     expect(otherInput.value).toBe("");
   });
 
-  it("form 模式退化为提示，不渲染选项", () => {
-    const payload = makeChoicePayload({ input_mode: "form", fields: [{ name: "x" }] });
+  it("form 模式渲染字段表单：select/text/textarea，必填校验", () => {
+    const payload = makeChoicePayload({
+      input_mode: "form",
+      options: undefined,
+      fields: [
+        {
+          name: "period",
+          label: "分析周期",
+          type: "select",
+          required: true,
+          options: ["2026-W31（07-27～07-31）", "自定义日期范围"],
+        },
+        { name: "custom_range", label: "自定义日期范围", type: "text", required: false, placeholder: "例如：2026-07-27 至 2026-08-02" },
+        { name: "note", label: "备注", type: "textarea" },
+      ],
+    });
     render(<ClarificationCard payload={payload} onPick={onPick} />);
+    // 渲染 question 与字段 label（“自定义日期范围”同时是 option 与字段名，允许多处）
     expect(screen.getByText("请选择报告聚焦的分析维度")).toBeTruthy();
-    expect(screen.getByText("请在下方输入框直接回复。")).toBeTruthy();
-    // 不渲染选项 checkbox / "回复并确认" 按钮
-    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
-    expect(screen.queryByRole("button", { name: /回复并确认/ })).toBeNull();
+    expect(screen.getByText("分析周期")).toBeTruthy();
+    expect(screen.getAllByText("自定义日期范围").length).toBeGreaterThan(0);
+    // 必填未选时提交按钮禁用
+    const btn = screen.getByRole("button", { name: /回复并确认/ }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    // 选中 select 后启用
+    fireEvent.change(screen.getByLabelText("period"), { target: { value: "2026-W31（07-27～07-31）" } });
+    expect(btn.disabled).toBe(false);
   });
 
-  it("free_text 模式退化为提示", () => {
+  it("form 模式提交组装 label: value 文本", () => {
+    const payload = makeChoicePayload({
+      input_mode: "form",
+      options: undefined,
+      fields: [
+        {
+          name: "period",
+          label: "分析周期",
+          type: "select",
+          required: true,
+          options: ["2026-W31（07-27～07-31）", "自定义日期范围"],
+        },
+        { name: "custom_range", label: "自定义日期范围", type: "text", required: false, placeholder: "例如：2026-07-27 至 2026-08-02" },
+      ],
+    });
+    render(<ClarificationCard payload={payload} onPick={onPick} />);
+    fireEvent.change(screen.getByLabelText("period"), { target: { value: "自定义日期范围" } });
+    fireEvent.change(screen.getByLabelText("custom_range"), { target: { value: "2026-07-27 至 2026-08-02" } });
+    fireEvent.click(screen.getByRole("button", { name: /回复并确认/ }));
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick).toHaveBeenCalledWith(
+      "分析周期: 自定义日期范围\n自定义日期范围: 2026-07-27 至 2026-08-02"
+    );
+  });
+
+  it("form 模式 multi_select 多选 + checkbox 布尔值组装", () => {
+    const payload = makeChoicePayload({
+      input_mode: "form",
+      options: undefined,
+      fields: [
+        {
+          name: "dims",
+          label: "分析维度",
+          type: "multi_select",
+          required: true,
+          options: ["主力资金", "北向资金", "两融趋势"],
+        },
+        { name: "include_news", label: "纳入新闻面", type: "checkbox", placeholder: "纳入新闻面" },
+      ],
+    });
+    render(<ClarificationCard payload={payload} onPick={onPick} />);
+    // 多选两个维度
+    const boxes = screen.getAllByRole("checkbox");
+    fireEvent.click(boxes[0]);
+    fireEvent.click(boxes[2]);
+    // 勾选 checkbox 字段
+    fireEvent.click(screen.getByLabelText("include_news"));
+    fireEvent.click(screen.getByRole("button", { name: /回复并确认/ }));
+    expect(onPick).toHaveBeenCalledWith("分析维度: 主力资金、两融趋势\n纳入新闻面: 是");
+  });
+
+  it("free_text 模式渲染输入框并直接提交文本", () => {
     const payload = makeChoicePayload({ input_mode: "free_text", options: undefined });
     render(<ClarificationCard payload={payload} onPick={onPick} />);
-    expect(screen.getByText("请在下方输入框直接回复。")).toBeTruthy();
-    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(screen.getByText("请选择报告聚焦的分析维度")).toBeTruthy();
+    // 空文本时按钮禁用
+    const btn = screen.getByRole("button", { name: /回复并确认/ }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    // 输入后提交
+    const input = screen.getByLabelText("回复内容") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "按 2026-W31 完整复核" } });
+    expect(btn.disabled).toBe(false);
+    fireEvent.click(btn);
+    expect(onPick).toHaveBeenCalledWith("按 2026-W31 完整复核");
   });
 });

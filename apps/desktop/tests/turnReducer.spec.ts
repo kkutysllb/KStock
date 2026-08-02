@@ -193,6 +193,25 @@ describe("messages 事件", () => {
     expect(s.toolCalls?.[0].artifact).toEqual(art);
   });
 
+  it("render_html_report 工具结果同步写入 artifacts，报告入口不依赖后续 values 快照", () => {
+    let s = initialTurn();
+    s = reduceFrame(
+      s,
+      frame("messages", aiMsg({ tool_calls: [{ id: "tc1", name: "render_html_report", args: {} }] })),
+      1
+    );
+    s = reduceFrame(
+      s,
+      frame("messages", toolMsg({
+        name: "render_html_report",
+        tool_call_id: "tc1",
+        content: JSON.stringify({ thread_virtual_path: "/outputs/report.html" }),
+      })),
+      2
+    );
+    expect(s.artifacts).toEqual(["/outputs/report.html"]);
+  });
+
   it("tool message 无匹配 tool_call_id 时忽略", () => {
     let s = initialTurn();
     s = reduceFrame(s, frame("messages", aiMsg({ tool_calls: [{ id: "tc1", name: "f", args: {} }] })), 1);

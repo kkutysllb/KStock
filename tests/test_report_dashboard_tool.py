@@ -178,3 +178,84 @@ def test_spreadsheet_rejects_both_data_and_rows(tmp_path, monkeypatch):
     assert "error" in content
     assert "只能提供一个" in content
 
+
+def section_payload():
+    return {
+        "report_id": "section-report",
+        "thread_id": "thread-1",
+        "title": "分区契约报告",
+        "generated_at": "2026-08-02T10:00:00+08:00",
+        "summary": "分区报告摘要",
+        "assessment": {"label": "中性", "risk_level": "中"},
+        "references": [
+            {"title": "数据源 A", "source": "fixture", "as_of": "2026-08-02"},
+        ],
+        "sections": [
+            {
+                "id": "flow",
+                "title": "资金流向",
+                "status": "available",
+                "summary": "净流入与净流出并存。",
+                "metrics": [
+                    {"id": "inflow", "label": "净流入", "value": 32.5, "unit": "亿元", "source": "fixture", "as_of": "2026-08-02"},
+                    {"id": "outflow", "label": "净流出", "value": -12.4, "unit": "亿元", "source": "fixture", "as_of": "2026-08-02"},
+                ],
+                "charts": [
+                    {
+                        "tool": "generate_bar_chart",
+                        "title": "净流入/净流出",
+                        "alt": "正负值柱状图",
+                        "data": [
+                            {"category": "东山精密", "value": 32.5},
+                            {"category": "宁德时代", "value": -12.4},
+                        ],
+                    },
+                    {
+                        "tool": "generate_spreadsheet",
+                        "title": "资金流向明细",
+                        "alt": "资金流向明细表",
+                        "rows": [
+                            ["方向", "标的", "金额"],
+                            ["流入", "东山精密", "32.5"],
+                            ["流出", "宁德时代", "-12.4"],
+                        ],
+                    },
+                    {
+                        "tool": "generate_line_chart",
+                        "title": "北向资金趋势",
+                        "alt": "北向资金趋势",
+                        "data": [
+                            {"time": "D-1", "value": 20},
+                            {"time": "D0", "value": 35},
+                        ],
+                    },
+                ],
+                "evidence": ["fixture"],
+                "gaps": [],
+            }
+        ],
+        "core_analysis": [
+            {"title": "结构判断", "content": "资金端偏多，但期货端对冲较强。"},
+        ],
+        "risks": [
+            {"title": "期现背离风险", "detail": "期指贴水可能放大波动。"},
+        ],
+    }
+
+
+def test_section_contract_renders_without_raw_dicts_or_missing_title(tmp_path, monkeypatch):
+    result, html = _render_report(tmp_path, monkeypatch, section_payload())
+    assert "error" not in result.update["messages"][0].content
+    assert "<h1>分区契约报告</h1>" in html
+    assert "资金流向" in html
+    assert "结构判断" in html
+    assert "资金端偏多" in html
+    assert "{&#x27;title&#x27;" not in html
+    assert "&#x27;content&#x27;" not in html
+
+
+def test_bar_chart_with_negative_values_stays_inside_svg_viewbox(tmp_path, monkeypatch):
+    result, html = _render_report(tmp_path, monkeypatch, section_payload())
+    assert "error" not in result.update["messages"][0].content
+    assert 'y="-"' not in html
+    assert 'height="-"' not in html

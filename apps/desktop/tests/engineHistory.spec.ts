@@ -490,4 +490,97 @@ describe("engineMessagesToChatMessages - 事件行格式", () => {
     expect(out).toHaveLength(1);
     expect(out[0].content).toBe("有效消息");
   });
+
+  it("事件行：孤立 ask_clarification ToolMessage 仍恢复为可渲染的 user-input 工具卡", () => {
+    const rows = [
+      {
+        event_type: "llm.human.input",
+        category: "message",
+        content: { type: "HumanMessage", content: "帮我分析一只股票" },
+        created_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        event_type: "llm.tool.result",
+        category: "message",
+        run_id: "r1",
+        content: {
+          type: "ToolMessage",
+          name: "ask_clarification",
+          tool_call_id: "clarify-1",
+          content: "请选择标的",
+          artifact: {
+            human_input: {
+              kind: "human_input_request",
+              source: "ask_clarification",
+              request_id: "req-1",
+              question: "你想分析哪只股票？",
+              input_mode: "choice_with_other",
+              options: [
+                { id: "a", label: "贵州茅台", value: "分析贵州茅台" },
+              ],
+            },
+          },
+        },
+        created_at: "2026-01-01T00:00:05Z",
+      },
+    ];
+
+    const out = engineMessagesToChatMessages(rows);
+
+    expect(out).toHaveLength(2);
+    expect(out[1]).toMatchObject({
+      role: "assistant",
+      status: "needs_input",
+      text: "请选择标的",
+    });
+    expect(out[1].toolCalls?.[0]).toMatchObject({
+      id: "clarify-1",
+      name: "ask_clarification",
+      status: "done",
+    });
+    expect(out[1].toolCalls?.[0].artifact).toEqual(rows[1].content.artifact);
+  });
+
+  it("事件行：render_html_report ToolMessage 恢复为 assistant artifacts，历史任务可展示报告入口", () => {
+    const rows = [
+      {
+        event_type: "llm.human.input",
+        category: "message",
+        content: { type: "HumanMessage", content: "生成 HTML 报告" },
+        created_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        event_type: "llm.ai.response",
+        category: "message",
+        run_id: "r-report",
+        content: {
+          type: "AIMessage",
+          content: "",
+          tool_calls: [
+            { id: "report-call-1", name: "render_html_report", args: { filename: "report.html" } },
+          ],
+        },
+        created_at: "2026-01-01T00:00:03Z",
+      },
+      {
+        event_type: "llm.tool.result",
+        category: "message",
+        run_id: "r-report",
+        content: {
+          type: "ToolMessage",
+          name: "render_html_report",
+          tool_call_id: "report-call-1",
+          content: JSON.stringify({
+            report_id: "report-1",
+            thread_virtual_path: "/outputs/report.html",
+          }),
+        },
+        created_at: "2026-01-01T00:00:05Z",
+      },
+    ];
+
+    const out = engineMessagesToChatMessages(rows);
+
+    expect(out[1].artifacts).toEqual(["/outputs/report.html"]);
+  });
 });
