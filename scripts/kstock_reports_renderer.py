@@ -289,9 +289,21 @@ def _validate_args(tool: str, args: Any, path: str) -> None:
         _validate_graph_data(args.get("data"), f"{path}.data")
     elif tool == "generate_spreadsheet":
         data = args.get("data")
-        if not isinstance(data, list) or not data or not all(isinstance(row, dict) for row in data):
-            _fail(f"{path}.data", "必须是非空 array<object>")
-        for field in ("rows", "columns", "values"):
+        rows = args.get("rows")
+        has_data = isinstance(data, list) and data and all(isinstance(row, dict) for row in data)
+        has_rows = (
+            isinstance(rows, list)
+            and rows
+            and all(isinstance(row, list) and all(isinstance(cell, str) for cell in row) for row in rows)
+        )
+        if not (has_data or has_rows):
+            _fail(
+                f"{path}.data",
+                "必须是非空 array<object>（官方格式），或提供 rows 二维数组（首行表头）",
+            )
+        if has_data and "rows" in args:
+            _fail(f"{path}.rows", "data 与 rows 只能提供一个")
+        for field in ("columns", "values"):
             if field in args and (
                 not isinstance(args[field], list)
                 or not all(isinstance(item, str) for item in args[field])
@@ -510,7 +522,7 @@ def _svg_radar_chart(args: dict[str, Any], variant: str, alt: str = "") -> str:
     palette = _svg_palette(variant)
     n = len(rows)
     if n < 3:
-        return _svg_table_fallback(args, variant, alt)
+        return _svg_spreadsheet(args, variant, alt)
     cx, cy, radius = 280, 140, 100
 
     def point(i: int, r: float) -> tuple[float, float]:
@@ -570,18 +582,43 @@ def _svg_scatter_chart(args: dict[str, Any], variant: str, alt: str = "") -> str
     )
 
 
-def _svg_table_fallback(args: dict[str, Any], variant: str, alt: str) -> str:
-    rows = args.get("data") or []
-    headers = sorted({k for row in rows for k in row.keys()}) if rows else []
-    body = "".join(
-        "<tr>" + "".join(f"<td>{_svg_esc(row.get(h, ''))}</td>" for h in headers) + "</tr>" for row in rows
-    )
-    head = "".join(f"<th>{_svg_esc(h)}</th>" for h in headers)
+def _svg_spreadsheet(args: dict[str, Any], variant: str, alt: str) -> str:
+    """渲染结构化表格（generate_spreadsheet）。
+
+    支持两种输入格式：
+    - ``data``: array<object>（官方格式），每行一个对象，键为列名，``columns`` 可选指定列序；
+    - ``rows``: string[][]（二维数组），首行即表头。
+    """
+    data = args.get("data")
+    rows_2d = args.get("rows")
+    headers: list[str] = []
+    body_rows: list[list[str]] = []
+    if isinstance(data, list) and data and all(isinstance(row, dict) for row in data):
+        columns = args.get("columns") or []
+        headers = [c for c in columns if any(c in row for row in data)] or sorted(
+            {k for row in data for k in row.keys()}
+        )
+        body_rows = [[_text(row.get(h, "")) for h in headers] for row in data]
+    elif isinstance(rows_2d, list) and rows_2d:
+        headers = [_text(cell) for cell in rows_2d[0]]
+        body_rows = [[_text(cell) for cell in row] for row in rows_2d[1:]]
+    if not headers:
+        return f'<p role="img" aria-label="{_svg_esc(alt)}">{_svg_esc("无数据")}</p>'
     border = "1px solid " + _svg_grid(variant)
     fg = _svg_fg(variant)
+    th_bg = _svg_grid(variant)
+    head = "".join(f"<th style='padding:6px 10px;text-align:left;background:{th_bg};color:{fg};border:{border}'>{_svg_esc(h)}</th>" for h in headers)
+    body = "".join(
+        "<tr>"
+        + "".join(f"<td style='padding:6px 10px;border:{border}'>{_svg_esc(cell)}</td>" for cell in row)
+        + "</tr>"
+        for row in body_rows
+    )
     return (
-        f'<table role="img" aria-label="{_svg_esc(alt)}" style="border-collapse:collapse;font-size:12px;color:{fg};width:100%">'
-        f'<thead><tr style="border-bottom:{border}">{head}</tr></thead><tbody>{body}</tbody></table>'
+        f'<table role="img" aria-label="{_svg_esc(alt)}" '
+        f'style="border-collapse:collapse;font-size:12px;color:{fg};width:100%">'
+        f"<thead><tr style='border-bottom:2px solid {_svg_grid(variant)}'>{head}</tr></thead>"
+        f"<tbody>{body}</tbody></table>"
     )
 
 
@@ -600,9 +637,11 @@ def _svg_chart(tool: str, args: dict[str, Any], variant: str, alt: str) -> str:
             return _svg_radar_chart(args, variant, alt)
         if tool == "generate_scatter_chart":
             return _svg_scatter_chart(args, variant, alt)
-        return _svg_table_fallback(args, variant, alt)
+        if tool == "generate_spreadsheet":
+            return _svg_spreadsheet(args, variant, alt)
+        return _svg_spreadsheet(args, variant, alt)
     except Exception:
-        return _svg_table_fallback(args, variant, alt)
+        return _svg_spreadsheet(args, variant, alt)
 
 
 def _html(payload: dict[str, Any], variant: str) -> str:

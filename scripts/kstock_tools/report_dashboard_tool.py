@@ -71,7 +71,9 @@ def render_html_report_tool(
       generate_radar_chart / generate_scatter_chart / generate_area_chart /
       generate_spreadsheet。args.data 为记录数组，行字段按 tool 区分: line/area
       (time,value[,group])、bar/column (category,value[,group])、pie (category,value)、
-      radar (name,value[,group])、scatter (x,y[,group])、spreadsheet (rows=string[][])。
+      radar (name,value[,group])、scatter (x,y[,group])。spreadsheet 支持两种格式任选其一:
+      (a) rows=string[][] 二维数组，首行即表头；(b) data=array<object> + 可选 columns
+      (string[] 指定列序)。表格以完整 <table> 渲染，禁止用图表替代表格。
       图表以内嵌 SVG 渲染，禁止使用远程图片 URL。
     - 可选归档字段: report_id / subject{symbol} / period{start,end} /
       sections[{status}] / report_type，用于报告库元数据。

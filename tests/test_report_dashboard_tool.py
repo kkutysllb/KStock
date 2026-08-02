@@ -64,3 +64,109 @@ def test_tool_regeneration_keeps_one_library_row(tmp_path, monkeypatch):
     assert len(store.list_reports(user_id="alice")) == 1
     assert (tmp_path / "data/reports/alice/2026/08/01/report-1.html").exists() is False
 
+
+def _with_spreadsheet(rows):
+    p = payload()
+    p["charts"] = [
+        p["charts"][0],
+        p["charts"][1],
+        {
+            "tool": "generate_spreadsheet",
+            "title": "方向矩阵",
+            "alt": "方向矩阵表格",
+            "args": {"rows": rows},
+        },
+    ]
+    return p
+
+
+def _render_report(tmp_path, monkeypatch, p):
+    monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(tmp_path / "data"))
+    result = render_html_report_tool.func(
+        runtime(tmp_path), json.dumps(p, ensure_ascii=False), "call-x"
+    )
+    return result, (tmp_path / "outputs/report.html").read_text()
+
+
+def test_spreadsheet_rows_matrix_renders_table(tmp_path, monkeypatch):
+    """rows=string[][]（首行表头）格式：校验通过且渲染为完整 <table>。"""
+    rows = [
+        ["品种", "期指信号", "期权信号"],
+        ["IF 沪深300", "贴水 -1.09% + 净空头", "PCR 0.933 + 认沽端IV偏贵"],
+        ["IC 中证500", "贴水 -1.32%", "PCR 1.003"],
+    ]
+    result, html = _render_report(tmp_path, monkeypatch, _with_spreadsheet(rows))
+    assert "error" not in result.update["messages"][0].content
+    assert html.count("<table") == 1
+    for key in ("品种", "IF 沪深300", "贴水 -1.09% + 净空头", "PCR 0.933 + 认沽端IV偏贵"):
+        assert key in html
+
+
+def test_spreadsheet_data_objects_format_renders_table(tmp_path, monkeypatch):
+    """官方 data=array<object> 格式：校验通过且渲染为完整 <table>。"""
+    p = payload()
+    p["charts"] = [
+        p["charts"][0],
+        p["charts"][1],
+        {
+            "tool": "generate_spreadsheet",
+            "title": "持仓变化",
+            "alt": "持仓变化表",
+            "args": {
+                "data": [
+                    {"品种": "IF", "中信净变化": -19, "周度判断": "方向分歧"},
+                    {"品种": "IC", "中信净变化": 283, "周度判断": "一致做多"},
+                ],
+                "columns": ["品种", "中信净变化", "周度判断"],
+            },
+        },
+    ]
+    result, html = _render_report(tmp_path, monkeypatch, p)
+    assert "error" not in result.update["messages"][0].content
+    assert html.count("<table") == 1
+    for key in ("中信净变化", "-19", "一致做多"):
+        assert key in html
+
+
+def test_spreadsheet_rejects_missing_data_and_rows(tmp_path, monkeypatch):
+    """data 与 rows 都缺失时报契约错误（回归：agent 曾 4 次失败后误判无表格工具）。"""
+    p = payload()
+    p["charts"] = [
+        p["charts"][0],
+        p["charts"][1],
+        {
+            "tool": "generate_spreadsheet",
+            "title": "空表",
+            "alt": "空表",
+            "args": {"rows": []},
+        },
+    ]
+    monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(tmp_path / "data"))
+    result = render_html_report_tool.func(
+        runtime(tmp_path), json.dumps(p, ensure_ascii=False), "call-x"
+    )
+    content = result.update["messages"][0].content
+    assert "error" in content
+    assert "rows" in content
+
+
+def test_spreadsheet_rejects_both_data_and_rows(tmp_path, monkeypatch):
+    p = payload()
+    p["charts"] = [
+        p["charts"][0],
+        p["charts"][1],
+        {
+            "tool": "generate_spreadsheet",
+            "title": "冲突",
+            "alt": "冲突",
+            "args": {"data": [{"a": 1}], "rows": [["a"], ["1"]]},
+        },
+    ]
+    monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(tmp_path / "data"))
+    result = render_html_report_tool.func(
+        runtime(tmp_path), json.dumps(p, ensure_ascii=False), "call-x"
+    )
+    content = result.update["messages"][0].content
+    assert "error" in content
+    assert "只能提供一个" in content
+
