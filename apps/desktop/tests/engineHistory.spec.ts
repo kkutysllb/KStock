@@ -102,11 +102,11 @@ describe("engineMessagesToChatMessages", () => {
       { type: "ai", content: "最终回答" },
     ];
     const out = engineMessagesToChatMessages(msgs);
-    // human + ai(tc1) + ai(最终) = 3 条；tool 消息不单独产出
-    expect(out).toHaveLength(3);
+    // human + 合并后的 assistant turn；tool 消息不单独产出
+    expect(out).toHaveLength(2);
     expect(out[1].toolCalls?.[0].result).toBe("搜索结果");
     expect(out[1].toolCalls?.[0].status).toBe("done");
-    expect(out[2].text).toBe("最终回答");
+    expect(out[1].text).toBe("最终回答");
   });
 
   it("tool 消息的 tool_call_id 无匹配时静默忽略", () => {
@@ -224,18 +224,42 @@ describe("engineMessagesToChatMessages", () => {
       },
     ];
     const out = engineMessagesToChatMessages(msgs);
-    expect(out).toHaveLength(3);
+    expect(out).toHaveLength(2);
     // 1. user
     expect(out[0].role).toBe("user");
     expect(out[0].content).toBe("分析茅台");
-    // 2. assistant（工具调用 turn）
+    // 2. assistant（工具记录 + 最终正文已合并）
     expect(out[1].role).toBe("assistant");
     expect(out[1].toolCalls?.[0].name).toBe("financial_query");
     expect(out[1].toolCalls?.[0].result).toBe('{"revenue": 100}');
-    // 3. assistant（最终回复 turn）
-    expect(out[2].role).toBe("assistant");
-    expect(out[2].text).toBe("茅台 2024 年营收 100 亿。");
-    expect(out[2].usage?.total_tokens).toBe(80);
+    expect(out[1].text).toBe("茅台 2024 年营收 100 亿。");
+    expect(out[1].usage?.total_tokens).toBe(80);
+  });
+
+  it("同一轮连续 assistant 消息合并为一个 turn，工具记录不再平铺", () => {
+    const msgs = [
+      { type: "human", content: "分析 CATL 和 BYD" },
+      {
+        type: "ai",
+        content: "我先读取财务数据。",
+        tool_calls: [{ id: "tc1", name: "financial_query", args: { stock: "300750" } }],
+      },
+      { type: "tool", tool_call_id: "tc1", content: "CATL 数据" },
+      {
+        type: "ai",
+        content: "CATL 数据已获取，我继续查询 BYD。",
+        tool_calls: [{ id: "tc2", name: "financial_query", args: { stock: "002594" } }],
+      },
+      { type: "tool", tool_call_id: "tc2", content: "BYD 数据" },
+      { type: "ai", content: "两家公司数据已整理完成。" },
+    ];
+
+    const out = engineMessagesToChatMessages(msgs);
+
+    expect(out).toHaveLength(2);
+    expect(out[1].toolCalls).toHaveLength(2);
+    expect(out[1].toolCalls?.map((tool) => tool.id)).toEqual(["tc1", "tc2"]);
+    expect(out[1].text).toBe("两家公司数据已整理完成。");
   });
 });
 
@@ -351,12 +375,12 @@ describe("engineMessagesToChatMessages - 事件行格式", () => {
       },
     ];
     const out = engineMessagesToChatMessages(rows);
-    // human + ai(工具调用) + ai(最终回复) = 3 条；tool.result 不单独产出
-    expect(out).toHaveLength(3);
+    // human + 合并后的 assistant turn；tool.result 不单独产出
+    expect(out).toHaveLength(2);
     expect(out[1].toolCalls?.[0].name).toBe("financial_query");
     expect(out[1].toolCalls?.[0].result).toBe('{"revenue": 100}');
     expect(out[1].toolCalls?.[0].status).toBe("done");
-    expect(out[2].text).toBe("茅台营收 100 亿");
+    expect(out[1].text).toBe("茅台营收 100 亿");
   });
 
   it("事件行：content 是 JSON string 时自动 parse", () => {

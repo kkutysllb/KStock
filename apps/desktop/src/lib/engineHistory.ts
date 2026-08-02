@@ -86,8 +86,12 @@ export function engineMessagesToChatMessages(messages: unknown[]): ChatMessage[]
       const turn = buildAssistantTurn(row, msg, ak);
       // 空 turn（无 text/toolCalls/reasoning）忽略，避免渲染空气泡
       if (turn.text || (turn.toolCalls && turn.toolCalls.length > 0) || turn.reasoning) {
-        result.push(turn);
-        lastAssistant = turn;
+        if (lastAssistant && canMergeAssistantTurns(lastAssistant, turn)) {
+          mergeAssistantTurns(lastAssistant, turn);
+        } else {
+          result.push(turn);
+          lastAssistant = turn;
+        }
       }
       continue;
     }
@@ -96,6 +100,33 @@ export function engineMessagesToChatMessages(messages: unknown[]): ChatMessage[]
   }
 
   return result;
+}
+
+function canMergeAssistantTurns(previous: ChatMessage, next: ChatMessage): boolean {
+  return !previous.runId || !next.runId || previous.runId === next.runId;
+}
+
+/** 把同一轮中的中间 assistant 事件折叠进首个 turn，避免工具调用平铺成多条消息。 */
+function mergeAssistantTurns(target: ChatMessage, incoming: ChatMessage): void {
+  if (incoming.text) target.text = incoming.text;
+  if (incoming.reasoning) target.reasoning = incoming.reasoning;
+  if (incoming.usage) target.usage = incoming.usage;
+  if (incoming.error) {
+    target.error = incoming.error;
+    target.status = incoming.status;
+  }
+  if (incoming.toolCalls?.length) {
+    const toolCalls = target.toolCalls ? [...target.toolCalls] : [];
+    for (const incomingCall of incoming.toolCalls) {
+      const index = toolCalls.findIndex((call) => call.id === incomingCall.id);
+      if (index < 0) {
+        toolCalls.push(incomingCall);
+      } else {
+        toolCalls[index] = { ...toolCalls[index], ...incomingCall };
+      }
+    }
+    target.toolCalls = toolCalls;
+  }
 }
 
 // ── 字段提取辅助 ────────────────────────────────────────────────────
