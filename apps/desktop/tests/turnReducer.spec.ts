@@ -688,6 +688,26 @@ describe("values 快照", () => {
     expect(s.artifacts).toEqual(arts);
   });
 
+  it("skill_context 解析为任务实际技能名列表", () => {
+    const s = reduceFrame(
+      initialTurn(),
+      frame("values", {
+        skill_context: [
+          { name: "news-search", path: "/mnt/skills/public/news-search/SKILL.md" },
+          { name: "market-linkage-engine", path: "/mnt/skills/public/market-linkage-engine/SKILL.md" },
+          { name: "", path: "/mnt/skills/public/common/SKILL.md" } // 空 name 应过滤
+        ]
+      }),
+      1
+    );
+    expect(s.skills).toEqual(["news-search", "market-linkage-engine"]);
+  });
+
+  it("skill_context 非数组时不覆盖", () => {
+    const s = reduceFrame(initialTurn(), frame("values", { skill_context: "nope" }), 1);
+    expect(s.skills).toBeUndefined();
+  });
+
   it("compaction 检测：messages 数量收缩时标 compacted", () => {
     let s = initialTurn();
     s = reduceFrame(s, frame("values", { messages: [1, 2, 3, 4, 5] }), 1);

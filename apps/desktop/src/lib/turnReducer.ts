@@ -442,6 +442,14 @@ function reduceValues(
       .filter((item) => item.content.trim().length > 0);
   }
 
+  // 技能上下文：任务实际读取过的技能（浮动面板技能数与此匹配）
+  if (Array.isArray(snap.skill_context)) {
+    next.skills = snap.skill_context
+      .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+      .map((item) => (typeof item.name === "string" ? item.name : ""))
+      .filter((name) => name.trim().length > 0);
+  }
+
   // compaction 检测：messages 数量收缩（宁漏勿错——不确定时不标注）
   if (Array.isArray(snap.messages)) {
     const prev = next.seenMsgCount ?? 0;
