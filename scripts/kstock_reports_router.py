@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import logging
+import os
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from qilin.runtime.user_context import get_effective_user_id
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/kstock/reports", tags=["kstock-reports"])
 
@@ -20,7 +26,17 @@ def _store(request: Request):
 
 @router.get("")
 def list_reports(request: Request, date: str | None = None, symbol: str | None = None, query: str | None = None):
-    return {"reports": _store(request).list_reports(user_id=get_effective_user_id(), date=date, symbol=symbol, query=query)}
+    store = _store(request)
+    user_id = get_effective_user_id()
+    # 交付文件自动进库：扫描该用户全部线程 outputs 中未归档的 HTML 交付物
+    # （agent 走技能 CLI 渲染的 md/dark/light 产物不经过 render_html_report 工具）。
+    qilin_home = Path(os.environ.get("QILIN_HOME") or "")
+    if qilin_home.is_dir():
+        try:
+            store.scan_threads_and_archive(qilin_home / "users" / user_id / "threads", user_id)
+        except Exception:
+            logger.exception("报告库自动扫描归档失败")
+    return {"reports": store.list_reports(user_id=user_id, date=date, symbol=symbol, query=query)}
 
 
 @router.get("/{report_id}")

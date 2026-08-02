@@ -10,6 +10,16 @@ def _write(path: Path, text: str) -> Path:
     return path
 
 
+def _thread_outputs(root: Path, thread_id: str) -> Path:
+    outputs = root / thread_id / "user-data" / "outputs"
+    outputs.mkdir(parents=True, exist_ok=True)
+    return outputs
+
+
+def _renderer_html(title: str) -> str:
+    return f"<!doctype html><html><head><meta charset=\"utf-8\"><title>{title}</title></head><body>ok</body></html>"
+
+
 def _meta(user_id: str, generated_at: str, **extra):
     return {
         "user_id": user_id,
@@ -57,6 +67,52 @@ def test_filters_and_delete_are_user_scoped(tmp_path: Path):
     assert store.get_report("b", user_id="alice") is not None
 
 
+def test_scan_archives_dark_light_pair_once_and_is_idempotent(tmp_path: Path):
+    store = ReportLibraryStore(tmp_path)
+    outputs = _thread_outputs(tmp_path / "threads", "thread-a")
+    _write(outputs / "2026-08-02_weekly-futures-analysis-dark.html", _renderer_html("周度分析"))
+    _write(outputs / "2026-08-02_weekly-futures-analysis-light.html", _renderer_html("周度分析"))
+
+    first = store.scan_threads_and_archive(tmp_path / "threads", "alice")
+    assert len(first) == 1
+    row = first[0]
+    assert row["title"] == "周度分析"
+    assert row["report_type"] == "weekly-futures-analysis"
+    assert row["thread_id"] == "thread-a"
+    assert row["generated_at"].startswith("2026-08-02")
+    assert (tmp_path / "reports/alice").exists()
+
+    # 幂等：再次扫描不新增
+    assert store.scan_threads_and_archive(tmp_path / "threads", "alice") == []
+    assert len(store.list_reports(user_id="alice")) == 1
+
+    # 工具已归档过的同一文件（sha256 相同）不重复归档（bob 的线程目录独立）
+    store2_source = _write(tmp_path / "dup.html", "<html>dup</html>")
+    store.archive(store2_source, "tool-1", "thread-b", _meta("bob", "2026-08-01T10:00:00+08:00"))
+    outputs_b = _thread_outputs(tmp_path / "threads-bob", "thread-b")
+    _write(outputs_b / "dup.html", "<html>dup</html>")
+    assert store.scan_threads_and_archive(tmp_path / "threads-bob", "bob") == []
+    assert len(store.list_reports(user_id="bob")) == 1
+
+
+def test_scan_covers_all_threads_and_updates_stable_report_id(tmp_path: Path):
+    store = ReportLibraryStore(tmp_path)
+    outputs_a = _thread_outputs(tmp_path / "threads", "thread-a")
+    outputs_b = _thread_outputs(tmp_path / "threads", "thread-b")
+    _write(outputs_a / "2026-08-02_weekly-futures-analysis-dark.html", _renderer_html("周度 v1"))
+    _write(outputs_b / "daily-market.html", _renderer_html("日度"))
+
+    rows = store.scan_threads_and_archive(tmp_path / "threads", "alice")
+    assert {r["thread_id"] for r in rows} == {"thread-a", "thread-b"}
+
+    # 同主题重跑（同 stem 内容更新）→ 稳定 report_id 覆盖更新，不新增条目
+    _write(outputs_a / "2026-08-02_weekly-futures-analysis-dark.html", _renderer_html("周度 v2"))
+    updated = store.scan_threads_and_archive(tmp_path / "threads", "alice")
+    assert len(updated) == 1
+    assert updated[0]["title"] == "周度 v2"
+    assert len(store.list_reports(user_id="alice")) == 2
+
+
 def test_archive_failure_preserves_existing_report(tmp_path: Path):
     store = ReportLibraryStore(tmp_path)
     old = _write(tmp_path / "old.html", "old")
@@ -65,4 +121,5 @@ def test_archive_failure_preserves_existing_report(tmp_path: Path):
         store.archive(tmp_path / "missing.html", "stable", "thread", _meta("alice", "2026-08-02T10:00:00+08:00"))
     assert (tmp_path / "reports/alice/2026/08/01/stable.html").read_text() == "old"
     assert store.get_report("stable", user_id="alice")["generated_at"].startswith("2026-08-01")
+
 

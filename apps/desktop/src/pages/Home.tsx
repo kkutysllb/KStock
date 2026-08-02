@@ -13,6 +13,7 @@ import {
   Clock,
   Command,
   Cpu,
+  Download,
   FileText,
   FileOutput,
   Folder,
@@ -1517,6 +1518,39 @@ function WorkspaceShell({
   const scrollToBottom = () => feedRef.current?.scrollToBottom("smooth");
   // 账户操作默认收起，避免长期占用侧栏底部空间。
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  // 交付/上传文件预览：fetch + blob 应用内预览（导航式打开不带会话 cookie，会触发 401）。
+  const [artifactPreview, setArtifactPreview] = useState<{ name: string; url: string } | null>(null);
+  const [artifactError, setArtifactError] = useState<string | null>(null);
+
+  const openArtifact = useCallback(async (href: string, name: string) => {
+    setArtifactError(null);
+    try {
+      const response = await fetch(href, { credentials: "include" });
+      if (!response.ok) throw new Error(`加载失败（${response.status}）`);
+      const blob = await response.blob();
+      if (/\.(html?|xhtml|svg)$/i.test(name)) {
+        setArtifactPreview({ name, url: URL.createObjectURL(blob) });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = name;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      setArtifactError(err instanceof Error ? err.message : "文件加载失败");
+    }
+  }, []);
+
+  const closeArtifactPreview = useCallback(() => {
+    setArtifactPreview((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
+  }, []);
   return (
     <div
       className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${rightPanelOpen ? "context-open" : ""} density-${generalPreferences.density} ${generalPreferences.reduce_motion ? "reduce-motion" : ""}`}
@@ -1872,6 +1906,7 @@ ${text}` : text)
                   name={file.original_filename || file.filename}
                   meta={`${pending ? "待发送 · " : ""}${formatFileSize(file.size)}${file.markdown_file ? " · 已转换 Markdown" : ""}`}
                   href={file.artifact_url ? toAbsoluteUrl(file.artifact_url) : undefined}
+                  onOpen={openArtifact}
                 />
               ))}
             </div>
@@ -1890,12 +1925,28 @@ ${text}` : text)
                   meta={`${file.status === "modified" ? "已更新" : "已生成"}${file.size != null ? ` · ${formatFileSize(file.size)}` : ""}`}
                   href={file.url}
                   external
+                  onOpen={openArtifact}
                 />
               ))}
             </div>
           )}
         </ContextSection>
       </aside>
+      {artifactError && <p className="artifact-error" role="alert">{artifactError}</p>}
+      {artifactPreview && (
+        <div className="report-preview-overlay" role="dialog" aria-modal="true" aria-label={artifactPreview.name}>
+          <div className="report-preview-dialog">
+            <div className="report-preview-bar">
+              <strong className="report-preview-title">{artifactPreview.name}</strong>
+              <div className="report-preview-actions">
+                <a className="subtle-button" href={artifactPreview.url} download={artifactPreview.name}>下载</a>
+                <button className="subtle-button" type="button" onClick={closeArtifactPreview}>关闭</button>
+              </div>
+            </div>
+            <iframe title={artifactPreview.name} src={artifactPreview.url} sandbox="allow-scripts" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1944,16 +1995,18 @@ function ContextFileRow({
   name,
   meta,
   href,
-  external = false
+  external = false,
+  onOpen
 }: {
   name: string;
   meta: string;
   href?: string;
   external?: boolean;
+  onOpen?: (href: string, name: string) => void;
 }) {
   const content = <><span className="context-file-name">{name}</span><em>{meta}</em></>;
   if (!href) return <div className="context-file-row">{content}</div>;
-  return <button className="context-file-row linked" type="button" onClick={() => void openExternalUrl(href)} title="打开文件">{content}{external ? <ExternalLink size={13} /> : <ArrowLeft size={13} />}</button>;
+  return <button className="context-file-row linked" type="button" onClick={() => onOpen?.(href, name)} title="打开文件">{content}{external ? <ExternalLink size={13} /> : <ArrowLeft size={13} />}</button>;
 }
 
 function taskStatusLabel(status?: ChatMessage["status"]): string {

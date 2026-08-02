@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import importlib.util
 import os
 import re
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Annotated
@@ -99,22 +101,41 @@ def render_html_report_tool(
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as handle:
             json.dump(payload, handle, ensure_ascii=False)
             temporary_input = Path(handle.name)
-        output_path = renderer.render_report(temporary_input, outputs_dir, Path(filename).stem)
+        # render 引擎输出 {stem}.md / {stem}-dark.html / {stem}-light.html 三份产物；
+        # 交付文件名按调用方指定的 filename（如 report.html）落盘，取 dark 版拷贝。
+        _, dark_path, _ = renderer.render(temporary_input, outputs_dir, Path(filename).stem)
+        output_path = outputs_dir / filename
+        if dark_path.resolve() != output_path.resolve():
+            shutil.copyfile(dark_path, output_path)
         store = ReportLibraryStore(Path(os.environ["KSTOCK_APP_DATA_DIR"]))
+        # 上游 analysis-report 契约不含 report_id，按标题稳定派生以便重复生成覆盖归档。
+        report_id = str(payload.get("report_id") or "")
+        if not report_id:
+            title = str(payload.get("title") or "analysis-report")
+            report_id = "report-" + hashlib.sha256(title.encode("utf-8")).hexdigest()[:12]
+        subject = payload.get("subject")
+        period = payload.get("period")
+        assessment = payload.get("assessment")
+        sections = payload.get("sections")
+        risk_level = payload.get("risk_level")
+        if not risk_level and isinstance(assessment, dict):
+            risk_level = assessment.get("risk_level")
         metadata = {
             "user_id": user_id,
             "title": payload.get("title"),
-            "symbol": (payload.get("subject") or {}).get("symbol"),
-            "report_type": payload.get("report_type"),
+            "symbol": (subject or {}).get("symbol") if isinstance(subject, dict) else None,
+            "report_type": payload.get("report_type") or "analysis",
             "generated_at": payload.get("generated_at"),
-            "period_start": (payload.get("period") or {}).get("start"),
-            "period_end": (payload.get("period") or {}).get("end"),
-            "risk_level": (payload.get("assessment") or {}).get("risk_level"),
-            "coverage_status": "complete" if all(s.get("status") == "available" for s in payload.get("sections", [])) else "partial",
+            "period_start": (period or {}).get("start") if isinstance(period, dict) else None,
+            "period_end": (period or {}).get("end") if isinstance(period, dict) else None,
+            "risk_level": risk_level,
+            "coverage_status": (
+                "complete" if all(s.get("status") == "available" for s in sections) else "partial"
+            ) if isinstance(sections, list) and sections else "complete",
         }
-        row = store.archive(output_path, payload["report_id"], thread_id, metadata)
+        row = store.archive(output_path, report_id, thread_id, metadata)
         result = {
-            "report_id": payload["report_id"],
+            "report_id": report_id,
             "thread_id": thread_id,
             "thread_virtual_path": f"/outputs/{filename}",
             "library_relative_path": row["relative_path"],

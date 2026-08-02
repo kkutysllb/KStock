@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html as html_module
 import os
 import re
 import shutil
@@ -162,6 +163,67 @@ class ReportLibraryStore:
         finally:
             if backup:
                 Path(backup).unlink(missing_ok=True)
+
+    def scan_threads_and_archive(self, threads_root: Path, user_id: str) -> list[dict[str, Any]]:
+        """扫描用户全部线程 outputs 中的 HTML 交付物，未归档的自动进报告库。
+
+        - 同一 stem 的 dark/light 两份只归档一份（dark 优先）；
+        - 内容 sha256 与库中已有条目相同则跳过（覆盖工具已归档 / 历史扫描）；
+        - report_id 由文件名 stem 稳定派生，同主题重跑覆盖更新。
+        """
+        self._component(user_id, "user_id")
+        root = Path(threads_root).expanduser().resolve()
+        if not root.is_dir():
+            return []
+        with self._connect() as connection:
+            known_digests = {
+                row["sha256"]
+                for row in connection.execute("SELECT sha256 FROM report_library WHERE user_id = ?", (user_id,))
+            }
+        by_stem: dict[str, Path] = {}
+        for html in sorted(root.glob("*/user-data/outputs/*.html")):
+            stem = html.stem
+            if stem.endswith("-light"):
+                by_stem.setdefault(stem[: -len("-light")], html)
+            elif stem.endswith("-dark"):
+                by_stem[stem[: -len("-dark")]] = html
+            else:
+                by_stem.setdefault(stem, html)
+        archived: list[dict[str, Any]] = []
+        for stem, html_path in by_stem.items():
+            digest = hashlib.sha256(html_path.read_bytes()).hexdigest()
+            if digest in known_digests:
+                continue
+            known_digests.add(digest)
+            report_id = "report-" + hashlib.sha256(stem.encode("utf-8")).hexdigest()[:12]
+            thread_id = html_path.parts[-4]
+            generated_at = datetime.fromtimestamp(html_path.stat().st_mtime).astimezone().isoformat()
+            report_type = re.sub(r"^\d{4}-\d{2}-\d{2}[_-]?", "", stem) or "analysis"
+            row = self.archive(
+                html_path,
+                report_id,
+                thread_id,
+                {
+                    "user_id": user_id,
+                    "title": self._html_title(html_path) or stem,
+                    "report_type": report_type,
+                    "generated_at": generated_at,
+                    "coverage_status": "complete",
+                },
+            )
+            archived.append(row)
+        return archived
+
+    @staticmethod
+    def _html_title(path: Path) -> str | None:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        match = re.search(r"<title[^>]*>(.*?)</title>", text, re.IGNORECASE | re.DOTALL)
+        if not match:
+            return None
+        return html_module.unescape(match.group(1)).strip()[:200] or None
 
     def list_reports(self, *, user_id: str, date: str | None = None, symbol: str | None = None, query: str | None = None) -> list[dict[str, Any]]:
         self._component(user_id, "user_id")

@@ -7,22 +7,34 @@ from scripts.kstock_reports import ReportLibraryStore
 
 
 def payload(report_id="report-1", generated_at="2026-08-01T10:00:00+08:00"):
+    def chart(index, title, value):
+        data = [{"time": "2026-07-31", "value": value}]
+        return {
+            "tool": "generate_line_chart",
+            "title": title,
+            "alt": f"{title}图",
+            "dark": {
+                "url": f"https://charts.local/dark-{index}.png",
+                "args": {"data": data, "theme": "dark", "style": {"backgroundColor": "#101418"}, "title": title, "axisXTitle": "日期", "axisYTitle": "数值"},
+            },
+            "light": {
+                "url": f"https://charts.local/light-{index}.png",
+                "args": {"data": data, "theme": "default", "style": {"backgroundColor": "#ffffff"}, "title": title, "axisXTitle": "日期", "axisYTitle": "数值"},
+            },
+        }
     return {
         "report_id": report_id,
         "thread_id": "thread-1",
         "title": "测试看板",
-        "subject": {"symbol": "600000", "name": "测试"},
-        "report_type": "stock-research",
         "generated_at": generated_at,
-        "period": {"start": "2026-01-01", "end": "2026-07-31"},
-        "assessment": {"label": "中性", "risk_level": "中"},
-        "sections": [{
-            "id": "summary", "title": "摘要", "status": "available", "summary": "稳定",
-            "metrics": [{"id": "score", "label": "评分", "value": 52, "unit": "分", "source": "fixture", "as_of": "2026-07-31", "visual": "line"}],
-            "charts": [{"id": "score", "tool": "generate_line_chart", "title": "趋势", "data": [{"time": "2026-07-31", "value": 52}], "mapping": {"dimension": "score", "role": "trend"}}],
-            "evidence": ["fixture"], "gaps": [],
-        }],
-        "coverage": [], "references": [],
+        "summary": "稳定",
+        "assessment": "中性",
+        "risk_level": "中",
+        "data_overview": [{"metric": "综合评分", "current": "52", "change": "+2", "yoy": "—"}],
+        "core_analysis": ["分析结论一", "分析结论二"],
+        "risks": ["风险一"],
+        "references": ["fixture"],
+        "charts": [chart(1, "趋势", 52), chart(2, "评分", 60), chart(3, "对比", 45)],
     }
 
 

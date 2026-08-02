@@ -27,3 +27,4 @@ sidecar/*.egg-info/
 logs/
 # uv 锁文件提交以保证可复现，但 uv 本地缓存不入库
 # （uv.lock 应提交，此处不忽略它）
+results/
