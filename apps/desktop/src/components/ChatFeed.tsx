@@ -35,7 +35,7 @@ interface ChatFeedProps {
   emptySlot?: ReactNode;
   /** 贴底状态变化回调（true=在底部，false=用户上滚）。 */
   onAtBottomChange?: (atBottom: boolean) => void;
-  /** ask_clarification 选项被选中并点“加入输入框”时回调（透传给 AssistantTurn）。 */
+  /** ask_clarification 选项被选中并点“回复并确认”时回调（透传给 AssistantTurn）。 */
   onClarifyPick?: (text: string) => void;
 }
 

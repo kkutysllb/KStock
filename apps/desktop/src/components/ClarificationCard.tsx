@@ -7,7 +7,8 @@
 //   - 渲染 question（标题）+ 可选 context（副标题）
 //   - options → 复选框列表（toggle 选中态）
 //   - "其他" 单行输入框（用户补充自定义文本）
-//   - "加入输入框" 按钮：选中 value + 其他文本用 \n 拼接，调 onPick
+//   - "回复并确认" 按钮：选中 value + 其他文本用 \n 拼接，调 onPick，
+//     由父级弹出 ClarifyInputDialog 供用户确认后发送
 // form / free_text 模式本期不渲染选项，显示退化提示。
 
 import { useState } from "react";
@@ -16,7 +17,7 @@ import type { HumanInputPayload } from "../lib/sessionStore";
 
 interface ClarificationCardProps {
   payload: HumanInputPayload;
-  /** 用户点击"加入输入框"后回调，参数为拼接好的文本。 */
+  /** 用户点击"回复并确认"后回调，参数为拼接好的文本。 */
   onPick: (text: string) => void;
 }
 
@@ -105,7 +106,7 @@ export function ClarificationCard({ payload, onPick }: ClarificationCardProps) {
         disabled={!hasSelection}
       >
         <MessageSquarePlus size={13} />
-        加入输入框
+        回复并确认
       </button>
     </div>
   );

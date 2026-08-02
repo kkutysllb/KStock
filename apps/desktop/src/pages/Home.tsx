@@ -103,6 +103,7 @@ import {
   waitForGateway,
 } from "../lib/gatewayControlClient";
 import { ChatFeed, type ChatFeedHandle } from "../components/ChatFeed";
+import { ClarifyInputDialog } from "../components/ClarifyInputDialog";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DatabaseSettings } from "../components/DatabaseSettings";
 import { MemorySettings } from "../components/MemorySettings";
@@ -277,6 +278,8 @@ export function Home() {
   const [dataSources, setDataSources] = useState<DataSourceConfig[]>([]);
   // 流式 run 状态。
   const [streamingId, setStreamingId] = useState<string | null>(null);
+  // 澄清确认弹窗草稿：非 null 时弹窗可见，确认后作为消息发送（不再回填主输入框）。
+  const [clarifyDraft, setClarifyDraft] = useState<string | null>(null);
   // 输入区待发附件（本轮要随消息携带的 UploadedFileRef）。发送成功后清空。
   const [pendingAttachments, setPendingAttachments] = useState<UploadedFileRef[]>([]);
   // 附件上传中状态（控制 chip loading + 选择按钮禁用）。
@@ -711,8 +714,13 @@ export function Home() {
   // 发送消息：append user → ensureThread → append streaming turn → streamRun。
   // reducer 状态在闭包外维护（setSessions 异步，不能依赖最新 state 读回 turn）。
   const handleSend = async (modelName: string) => {
-    const input = draft.trim();
-    if (!input || !modelName || streamingId) {
+    await sendText(draft, modelName);
+  };
+
+  // 发送任意文本（主输入框 / 澄清确认对话框共用）：内容来自调用方显式传入。
+  const sendText = async (input: string, modelName: string) => {
+    const text = input.trim();
+    if (!text || !modelName || streamingId) {
       return;
     }
     // 捕快照：发送前保存待发附件（随后清空 pendingAttachments）
@@ -720,7 +728,7 @@ export function Home() {
     // 无 activeSession（首次进入空台）时自动创建一个，再继续发送。
     let session = activeSession;
     if (!session) {
-      session = createSession(input.slice(0, 18));
+      session = createSession(text.slice(0, 18));
       setSessions((current) => [session!, ...current]);
       setActiveSessionId(session.id);
     }
@@ -734,7 +742,7 @@ export function Home() {
 
     // 1. append user message
     setSessions((current) =>
-      current.map((s) => (s.id === session.id ? appendMessageToSession(s, "user", input, modelName) : s))
+      current.map((s) => (s.id === session.id ? appendMessageToSession(s, "user", text, modelName) : s))
     );
 
     // 2. ensure thread（首次发消息时创建引擎 thread 并绑定）
@@ -783,7 +791,7 @@ export function Home() {
           messages: [
             {
               role: "user",
-              content: input,
+              content: text,
               ...(filesToSend ? { additional_kwargs: { files: filesToSend } } : {})
             }
           ]
@@ -974,6 +982,7 @@ export function Home() {
       onModelChange={handleModelChange}
       onReasoningModeChange={handleReasoningModeChange}
       onDraftChange={setDraft}
+      onClarifyPick={setClarifyDraft}
       onLogout={handleLogout}
       onNewSession={handleNewSession}
       onOpenSettings={() => setView("settings")}
@@ -1012,6 +1021,15 @@ export function Home() {
         tone="danger"
         onConfirm={handleConfirmDeleteSession}
         onCancel={handleCancelDeleteSession}
+      />
+      <ClarifyInputDialog
+        open={clarifyDraft !== null}
+        initialText={clarifyDraft ?? ""}
+        onConfirm={(text) => {
+          setClarifyDraft(null);
+          void sendText(text, activeModel);
+        }}
+        onCancel={() => setClarifyDraft(null)}
       />
     </>
   );
@@ -1443,6 +1461,7 @@ function WorkspaceShell({
   onModelChange,
   onReasoningModeChange,
   onDraftChange,
+  onClarifyPick,
   onLogout,
   onNewSession,
   onOpenIntegrations,
@@ -1483,6 +1502,8 @@ function WorkspaceShell({
   onModelChange: (name: string) => void;
   onReasoningModeChange: (mode: ReasoningMode) => void;
   onDraftChange: (draft: string) => void;
+  /** ask_clarification 选项被选中并点“回复并确认”时回调（弹出确认输入框）。 */
+  onClarifyPick: (text: string) => void;
   onLogout: () => void;
   onNewSession: () => void;
   onOpenIntegrations: () => void;
@@ -1758,10 +1779,7 @@ function WorkspaceShell({
             showReasoning={generalPreferences.show_reasoning}
             showToolCalls={generalPreferences.show_tool_calls}
             onAtBottomChange={setFeedAtBottom}
-            onClarifyPick={(text) =>
-              onDraftChange(draft.trim() ? `${draft.trimEnd()}
-${text}` : text)
-            }
+            onClarifyPick={onClarifyPick}
             emptySlot={
               <div className="workspace-empty">
                 <div className="welcome-heading">

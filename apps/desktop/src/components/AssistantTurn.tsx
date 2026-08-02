@@ -18,7 +18,7 @@ interface AssistantTurnProps {
   showStage?: boolean;
   showReasoning?: boolean;
   showToolCalls?: boolean;
-  /** ask_clarification 选项被选中并点“加入输入框”时回调，参数为拼接文本。 */
+  /** ask_clarification 选项被选中并点“回复并确认”时回调，参数为拼接文本（父级弹出确认输入框）。 */
   onClarifyPick?: (text: string) => void;
 }
 

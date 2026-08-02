@@ -40,8 +40,8 @@ describe("ClarificationCard", () => {
     expect(screen.getByText("行业格局与竞争")).toBeTruthy();
     // 选项以 checkbox 角色渲染
     expect(screen.getAllByRole("checkbox")).toHaveLength(3);
-    // "加入输入框" 按钮存在但初始禁用（无选中）
-    expect(screen.getByRole("button", { name: /加入输入框/ })).toBeTruthy();
+    // "回复并确认" 按钮存在但初始禁用（无选中）
+    expect(screen.getByRole("button", { name: /回复并确认/ })).toBeTruthy();
   });
 
   it("渲染可选 context 副标题", () => {
@@ -67,7 +67,7 @@ describe("ClarificationCard", () => {
   it("无选中时按钮禁用，有选中时启用", () => {
     const payload = makeChoicePayload();
     render(<ClarificationCard payload={payload} onPick={onPick} />);
-    const btn = screen.getByRole("button", { name: /加入输入框/ }) as HTMLButtonElement;
+    const btn = screen.getByRole("button", { name: /回复并确认/ }) as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     // 选中一个选项
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
@@ -85,7 +85,7 @@ describe("ClarificationCard", () => {
     const otherInput = screen.getByLabelText("其他补充") as HTMLInputElement;
     fireEvent.change(otherInput, { target: { value: "重点看海外业务风险" } });
     // 点击按钮
-    fireEvent.click(screen.getByRole("button", { name: /加入输入框/ }));
+    fireEvent.click(screen.getByRole("button", { name: /回复并确认/ }));
     expect(onPick).toHaveBeenCalledTimes(1);
     expect(onPick).toHaveBeenCalledWith(
       "财务三表全维度\n行业格局与竞争\n重点看海外业务风险"
@@ -97,7 +97,7 @@ describe("ClarificationCard", () => {
     render(<ClarificationCard payload={payload} onPick={onPick} />);
     const otherInput = screen.getByLabelText("其他补充");
     fireEvent.change(otherInput, { target: { value: "由我综合判断做全景看板" } });
-    fireEvent.click(screen.getByRole("button", { name: /加入输入框/ }));
+    fireEvent.click(screen.getByRole("button", { name: /回复并确认/ }));
     expect(onPick).toHaveBeenCalledWith("由我综合判断做全景看板");
   });
 
@@ -106,7 +106,7 @@ describe("ClarificationCard", () => {
     render(<ClarificationCard payload={payload} onPick={onPick} />);
     const otherInput = screen.getByLabelText("其他补充");
     fireEvent.change(otherInput, { target: { value: "  保留  中间空格  " } });
-    fireEvent.click(screen.getByRole("button", { name: /加入输入框/ }));
+    fireEvent.click(screen.getByRole("button", { name: /回复并确认/ }));
     expect(onPick).toHaveBeenCalledWith("保留  中间空格");
   });
 
@@ -117,7 +117,7 @@ describe("ClarificationCard", () => {
     fireEvent.click(checkboxes[1]);
     const otherInput = screen.getByLabelText("其他补充") as HTMLInputElement;
     fireEvent.change(otherInput, { target: { value: "补充" } });
-    fireEvent.click(screen.getByRole("button", { name: /加入输入框/ }));
+    fireEvent.click(screen.getByRole("button", { name: /回复并确认/ }));
     // 提交后 checkbox 全部恢复未选中
     expect(checkboxes[1].getAttribute("aria-checked")).toBe("false");
     expect(otherInput.value).toBe("");
@@ -128,9 +128,9 @@ describe("ClarificationCard", () => {
     render(<ClarificationCard payload={payload} onPick={onPick} />);
     expect(screen.getByText("请选择报告聚焦的分析维度")).toBeTruthy();
     expect(screen.getByText("请在下方输入框直接回复。")).toBeTruthy();
-    // 不渲染选项 checkbox / "加入输入框" 按钮
+    // 不渲染选项 checkbox / "回复并确认" 按钮
     expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
-    expect(screen.queryByRole("button", { name: /加入输入框/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /回复并确认/ })).toBeNull();
   });
 
   it("free_text 模式退化为提示", () => {
