@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Brain,
   Bot,
+  CalendarRange,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -30,6 +31,7 @@ import {
   Sparkles,
   Square,
   Trash2,
+  TrendingUp,
   Upload,
   UsersRound,
   Zap,
@@ -185,6 +187,46 @@ const quickPrompts = [
   "跟踪半导体行业景气度和估值分位",
   "比较宁德时代和比亚迪的盈利质量",
   "生成本周 A 股宏观与资金面摘要"
+];
+
+// ── 研究场景：前端引导 agent 按编排流程调用技能完成专题分析 ──
+// 点击场景卡片 → 结构化引导词填入输入框 → 发送后由 Lead Agent 委派
+// 子代理执行技能编排（约束沿袭 L1/L2 验证沉淀：读 SKILL.md 激活密钥、
+// 禁止重定向/写文件/路径探查）。
+interface ResearchScene {
+  id: string;
+  title: string;
+  description: string;
+  prompt: string;
+}
+
+const researchScenes: ResearchScene[] = [
+  {
+    id: "index-futures-daily",
+    title: "股指期货专题分析 · 日度",
+    description: "期指 × 期权 × 市场环境三层次联动，四品种方向矩阵与共振/背离标注",
+    prompt: `【股指期货专题分析 · 日度】请按以下编排流程完成四大股指期货（IF/IH/IC/IM）的期指×期权×市场联动专题分析：
+
+1. 期指维度：委派 general-purpose 子代理，用 read_file 阅读 /mnt/skills/public/futures-analysis/SKILL.md 前 80 行（必须读，密钥注入依赖技能激活），然后执行 cd /mnt/skills/public/futures-analysis/scripts/analysis-engine && python3 analyze_futures.py；转述四品种行情/基差/持仓表与「中信 vs 其他机构」分品种对比表。
+2. 期权联动维度：委派 general-purpose 子代理，用 read_file 阅读 /mnt/skills/public/option-futures-linkage/SKILL.md 前 80 行，然后执行 cd /mnt/skills/public/option-futures-linkage/scripts/analysis-engine && python3 analyze_option_futures.py；转述期权维度（认沽认购PCR/ATM IV/IV斜率/Risk Reversal）与 5 维联动信号表。
+3. 市场环境维度：委派 general-purpose 子代理，用 read_file 阅读 /mnt/skills/public/market-linkage-engine/SKILL.md 前 80 行，按其说明完成 8 维市场联动分析并转述联动评分。
+4. 汇总：构建 IF/IH/IC/IM 四品种方向矩阵（期指信号/期权信号/联动信号/综合方向），按规则标注共振与背离（期指贴水+成交量PCR偏空+RR认沽贵=三向共振偏空；期指升水但PCR偏空=背离；北向净流出+两融下降+IV抬升=环境印证偏空；IF/IH偏多 vs IC/IM偏空=风格切换），给出场景综合评分与一句话结论。
+
+约束：所有子代理禁止 shell 重定向（>、>>、tee、2>），禁止写入文件，禁止探查或替换 /mnt 与 workspace 路径；命令报错原样转述，禁止自行修复。`,
+  },
+  {
+    id: "index-futures-weekly",
+    title: "股指期货专题分析 · 周度",
+    description: "ISO 自然周聚合：周涨跌幅/周均基差/周均 PCR 与 IV，周度联动信号",
+    prompt: `【股指期货专题分析 · 周度】请按以下编排流程完成四大股指期货（IF/IH/IC/IM）最近 1 个自然周的期指×期权×市场联动专题分析：
+
+1. 期指维度：委派 general-purpose 子代理，用 read_file 阅读 /mnt/skills/public/futures-analysis/SKILL.md 前 80 行（必须读，密钥注入依赖技能激活），然后执行 cd /mnt/skills/public/futures-analysis/scripts/analysis-engine && python3 analyze_weekly_futures.py；转述四品种周度行情/周均基差/周末持仓表与「中信 vs 其他机构」每周多空操作变化对比表。
+2. 期权联动维度：委派 general-purpose 子代理，用 read_file 阅读 /mnt/skills/public/option-futures-linkage/SKILL.md 前 80 行，然后执行 cd /mnt/skills/public/option-futures-linkage/scripts/analysis-engine && python3 analyze_weekly_option_futures.py；转述周度期权维度（周均认沽认购PCR/周均ATM IV/IV斜率快照/Risk Reversal）与周度联动信号表。
+3. 市场环境维度：委派 general-purpose 子代理，用 read_file 阅读 /mnt/skills/public/market-linkage-engine/SKILL.md 前 80 行，按其说明完成 8 维市场联动分析并转述联动评分。
+4. 汇总：构建 IF/IH/IC/IM 四品种周度方向矩阵（期指信号/期权信号/联动信号/综合方向），按规则标注共振与背离（周度贴水+周均PCR偏空+RR认沽贵=三向共振偏空；周度升水但PCR偏空=背离；北向净流出+两融下降+IV抬升=环境印证偏空；IF/IH偏多 vs IC/IM偏空=风格切换），给出场景综合评分与一句话结论。
+
+约束：所有子代理禁止 shell 重定向（>、>>、tee、2>），禁止写入文件，禁止探查或替换 /mnt 与 workspace 路径；命令报错原样转述，禁止自行修复。`,
+  },
 ];
 
 const landingCandles = [
@@ -1672,6 +1714,31 @@ ${text}` : text)
                   <p className="eyebrow">Research Desk <span>01</span></p>
                   <h1>把一个问题，变成一份<br /><em>可验证的研究结论。</em></h1>
                   <h4>从行情、财报到行业脉络，KStock 会整理证据、过程与风险，最后交付清晰的研究看板。</h4>
+                </div>
+                <div className="research-scenes">
+                  <div className="scene-section-head">
+                    <span className="scene-section-title">研究场景</span>
+                    <span className="scene-section-hint">点击将编排引导词填入输入框</span>
+                  </div>
+                  <div className="scene-grid">
+                    {researchScenes.map((scene) => (
+                      <button
+                        key={scene.id}
+                        type="button"
+                        className="scene-card"
+                        onClick={() => onDraftChange(scene.prompt)}
+                      >
+                        <span className="scene-icon" aria-hidden="true">
+                          {scene.id.endsWith("weekly") ? <CalendarRange size={16} /> : <TrendingUp size={16} />}
+                        </span>
+                        <span className="scene-text">
+                          <strong>{scene.title}</strong>
+                          <em>{scene.description}</em>
+                        </span>
+                        <ChevronRight size={15} aria-hidden="true" />
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="quick-prompt-grid">
                   {quickPrompts.map((prompt, index) => (
