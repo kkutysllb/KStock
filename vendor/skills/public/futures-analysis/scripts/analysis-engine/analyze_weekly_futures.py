@@ -27,6 +27,13 @@ _project_root = os.path.dirname(_script_dir)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+# 复用日度脚本的分品种对比章节（中信 vs 其他机构）
+try:
+    from analyze_futures import print_cross_symbol_holding_comparison
+except Exception:
+    def print_cross_symbol_holding_comparison(result):  # 兜底：不输出
+        pass
+
 
 # ======================================================================
 #  颜色配置
@@ -348,7 +355,7 @@ def print_holding_analysis(sym: str, sym_data: Dict):
     # ── 中信 vs 其余机构每日多空单操作变化对比 ──
     daily_trends = h.get('daily_trends', [])
     if daily_trends and len(daily_trends) > 1:
-        print("\n**中信 vs 其余机构每周操作变化对比：**\n")
+        print("\n**中信 vs 其余机构每日操作变化对比：**\n")
         print("| 日期 | 中信多单变化 | 中信空单变化 | 中信净变化 | 其余多单变化 | 其余空单变化 | 其余净变化 | 对比信号 |")
         print("|------|-------------|-------------|-----------|-------------|-------------|-----------|----------|")
         for dt in daily_trends:
@@ -375,6 +382,28 @@ def print_holding_analysis(sym: str, sym_data: Dict):
                 dt_signal = '中性'
 
             print(f"| {dt_date} | {c_lc:+,} | {c_sc:+,} | **{c_nc:+,}** | {o_lc:+,} | {o_sc:+,} | **{o_nc:+,}** | {dt_signal} |")
+
+    # ── 中信 vs 其余机构每周多空单操作变化对比（近5个交易日累计） ──
+    wk = h.get('weekly_chg_analysis', {})
+    if wk:
+        c_w = wk.get('citic', {})
+        o_w = wk.get('others', {})
+        w_comp = wk.get('comparison', {})
+        print("\n**中信 vs 其余机构每周操作变化对比（近5个交易日累计）：**\n")
+        print("| 类型 | 多单累计 | 空单累计 | 净变化累计 | 结论 |")
+        print("|------|----------|----------|-----------|------|")
+        print(f"| 中信期货 | {c_w.get('long_chg', 0):+,} | {c_w.get('short_chg', 0):+,} | "
+              f"**{c_w.get('net_chg', 0):+,}** | {w_comp.get('net_chg_conclusion', '-')} |")
+        print(f"| 其他19家 | {o_w.get('long_chg', 0):+,} | {o_w.get('short_chg', 0):+,} | "
+              f"**{o_w.get('net_chg', 0):+,}** | — |")
+        overall = w_comp.get('overall_signal', '-')
+        print(f"\n**周度综合判断：{overall}**")
+        if '分歧' in overall:
+            print("⚠️ 本周中信与其他机构操作方向相反，多空分歧加大")
+        elif '一致' in overall:
+            print("✅ 本周中信与其他机构操作方向一致，信号共振")
+        elif '观望' in overall or '未变' in overall or '不明' in overall:
+            print("➖ 中信或其他机构本周无明显操作，需关注后续变化")
 
     # 小s解读
     print("\n**小s解读：**\n")
@@ -622,18 +651,21 @@ def main():
         if sym_data:
             print_symbol_analysis(sym, sym_data, week_days)
 
-    # 三、综合研判
+    # 三、中信 vs 其他机构 分品种对比
+    print_cross_symbol_holding_comparison(result)
+
+    # 四、综合研判
     comp = result.get('composite', {})
     if comp:
-        print("\n## 三、综合研判\n")
+        print("\n## 四、综合研判\n")
         print(f"**综合评分：{comp.get('avg_score', 50):.1f}/100**")
         print(f"**市场环境：{comp.get('market_env', '-')}**")
         print(f"**品种分化：{comp.get('divergence_signal', '-')}**")
 
-    # 四、投资建议
+    # 五、投资建议
     suggestions = comp.get('suggestions', [])
     if suggestions:
-        print("\n## 四、投资建议\n")
+        print("\n## 五、投资建议\n")
         for s in suggestions:
             print(f"- {s}")
 

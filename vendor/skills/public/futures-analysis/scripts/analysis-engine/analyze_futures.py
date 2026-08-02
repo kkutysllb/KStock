@@ -528,6 +528,112 @@ def print_holding_analysis(sym: str, sym_data: Dict):
 
 
 # ======================================================================
+#  分品种对比输出（中信 vs 其他机构，模板格式）
+# ======================================================================
+
+def print_cross_symbol_holding_comparison(result: Dict):
+    """打印中信 vs 其他机构 分品种对比分析
+
+    汇总 IF/IC/IH/IM 四个品种的中信 vs 其他机构（汇总）在多空单持仓、
+    当日/每周多空单操作变化，形成跨品种对比表，作为最终报告的必含章节。
+    """
+    symbols = result.get('symbols', {})
+    rows = []
+    for sym in ['IF', 'IC', 'IH', 'IM']:
+        sym_data = symbols.get(sym, {})
+        h = sym_data.get('holding', {})
+        if not h or 'error' in h:
+            continue
+        rows.append((sym, h))
+    if not rows:
+        return
+
+    print("\n## 三、中信 vs 其他机构 分品种对比\n")
+
+    # ── 1. 分品种多空单持仓对比 ──
+    print("### 1. 分品种多空单持仓对比\n")
+    print("| 品种 | 中信多头 | 中信空头 | 中信净持仓 | 中信信号 | 其他多头 | 其他空头 | 其他净持仓 | 其他信号 | 方向对比 |")
+    print("|------|----------|----------|-----------|----------|----------|----------|-----------|----------|----------|")
+    for sym, h in rows:
+        c_net = h.get('citic_net', 0)
+        o_net = h.get('others_net', 0)
+        c_sig = h.get('citic_signal', '-')
+        o_sig = h.get('others_signal', '-')
+        cvo = h.get('citic_vs_others_signal', '-')
+        print(f"| **{sym}** | {_num(h.get('citic_long', 0))} | {_num(h.get('citic_short', 0))} | "
+              f"**{_num(c_net)}** | {c_sig} | {_num(h.get('others_long', 0))} | "
+              f"{_num(h.get('others_short', 0))} | **{_num(o_net)}** | {o_sig} | {cvo} |")
+
+    # ── 2. 分品种当日多空单操作变化对比 ──
+    print("\n### 2. 分品种当日多空单操作变化对比\n")
+    print("| 品种 | 中信多单 | 中信空单 | 中信净变化 | 其他多单 | 其他空单 | 其他净变化 | 综合判断 |")
+    print("|------|----------|----------|-----------|----------|----------|-----------|----------|")
+    for sym, h in rows:
+        ca = h.get('citic_vs_others_chg_analysis', {})
+        c = ca.get('citic', {})
+        o = ca.get('others', {})
+        overall = ca.get('comparison', {}).get('overall_signal', '-')
+        print(f"| **{sym}** | {c.get('long_chg', 0):+,} ({c.get('long_action', '-')}) | "
+              f"{c.get('short_chg', 0):+,} ({c.get('short_action', '-')}) | "
+              f"**{c.get('net_chg', 0):+,}** ({c.get('net_dir', '-')}) | "
+              f"{o.get('long_chg', 0):+,} ({o.get('long_action', '-')}) | "
+              f"{o.get('short_chg', 0):+,} ({o.get('short_action', '-')}) | "
+              f"**{o.get('net_chg', 0):+,}** ({o.get('net_dir', '-')}) | {overall} |")
+
+    # ── 3. 分品种每周多空单操作变化对比 ──
+    print("\n### 3. 分品种每周多空单操作变化对比（近5个交易日累计）\n")
+    print("| 品种 | 中信多单 | 中信空单 | 中信净变化 | 其他多单 | 其他空单 | 其他净变化 | 周度综合判断 |")
+    print("|------|----------|----------|-----------|----------|----------|-----------|-------------|")
+    for sym, h in rows:
+        wk = h.get('weekly_chg_analysis', {})
+        c = wk.get('citic', {})
+        o = wk.get('others', {})
+        overall = wk.get('comparison', {}).get('overall_signal', '-')
+        print(f"| **{sym}** | {c.get('long_chg', 0):+,} | {c.get('short_chg', 0):+,} | "
+              f"**{c.get('net_chg', 0):+,}** | {o.get('long_chg', 0):+,} | {o.get('short_chg', 0):+,} | "
+              f"**{o.get('net_chg', 0):+,}** | {overall} |")
+
+    # ── 4. 分品种每日净变化对比（中信 vs 其他） ──
+    print("\n### 4. 分品种每日净变化对比（中信/其他）\n")
+    print("| 日期 | IF中信 | IF其他 | IC中信 | IC其他 | IH中信 | IH其他 | IM中信 | IM其他 |")
+    print("|------|--------|--------|--------|--------|--------|--------|--------|--------|")
+    trends = {}
+    for sym, h in rows:
+        dt = h.get('daily_trends', [])
+        for item in dt:
+            d = item.get('trade_date', '')
+            if len(d) == 8:
+                d = f"{d[:4]}-{d[4:6]}-{d[6:]}"
+            trends.setdefault(d, {})[sym] = item
+    for d in sorted(trends.keys()):
+        cells = []
+        for sym in ['IF', 'IC', 'IH', 'IM']:
+            item = trends[d].get(sym)
+            if item is None:
+                cells.append('-')
+                cells.append('-')
+            else:
+                cells.append(f"{item.get('citic_net_chg', 0):+,}")
+                cells.append(f"{item.get('others_net_chg', 0):+,}")
+        print(f"| {d} | " + " | ".join(cells) + " |")
+
+    # ── 5. 分品种对比小结 ──
+    print("\n### 5. 分品种对比小结\n")
+    for sym, h in rows:
+        ca = h.get('citic_vs_others_chg_analysis', {})
+        overall = ca.get('comparison', {}).get('overall_signal', '-')
+        cvo = h.get('citic_vs_others_signal', '-')
+        if '分歧' in overall or '分歧' in cvo:
+            print(f"- **{sym}**：中信与其他机构操作方向分歧，需重点关注分歧背后的原因")
+        elif '一致' in overall or '同向' in cvo:
+            print(f"- **{sym}**：中信与其他机构操作方向一致，信号共振，趋势参考价值较高")
+        elif '观望' in overall or '未变' in overall or '不明' in overall:
+            print(f"- **{sym}**：中信或其他机构无明显操作，需关注后续变化")
+        else:
+            print(f"- **{sym}**：{cvo}（持仓），当日操作{overall}（变化）")
+
+
+# ======================================================================
 #  综合研判输出（模板格式）
 # ======================================================================
 
@@ -539,7 +645,7 @@ def print_composite_analysis(result: Dict):
     
     details = comp.get('details', {})
     
-    print("\n## 三、综合研判\n")
+    print("\n## 四、综合研判\n")
     
     # 积极信号
     print("### 积极信号\n")
@@ -610,7 +716,7 @@ def print_investment_suggestions(result: Dict):
     
     suggestions = comp.get('suggestions', [])
     
-    print("\n## 四、投资建议\n")
+    print("\n## 五、投资建议\n")
     
     if suggestions:
         print("| 序号 | 策略建议 |")
@@ -635,7 +741,7 @@ def print_xiaos_summary(result: Dict):
     market_env = comp.get('market_env', '-')
     details = comp.get('details', {})
     
-    print("\n## 五、小s的总结\n")
+    print("\n## 六、小s的总结\n")
     
     print("### 关键结论：\n")
     
@@ -770,13 +876,16 @@ def main():
 
         print_symbol_analysis(sym, sym_data)
 
-    # 三、综合研判
+    # 三、中信 vs 其他机构 分品种对比
+    print_cross_symbol_holding_comparison(result)
+
+    # 四、综合研判
     print_composite_analysis(result)
 
-    # 四、投资建议
+    # 五、投资建议
     print_investment_suggestions(result)
 
-    # 五、小s的总结
+    # 六、小s的总结
     print_xiaos_summary(result)
 
     # 免责声明

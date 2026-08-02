@@ -108,30 +108,120 @@ class FuturesDataFetcher:
         return pd.DataFrame()
 
     def get_holding_data(self, ts_code: str) -> pd.DataFrame:
-        """获取机构持仓数据
+        """获取最近一个交易日机构持仓数据（兼容旧接口）"""
+        history = self.get_holding_history(ts_code, n_days=1)
+        return history[-1]['df'] if history else pd.DataFrame()
 
-        fut_holding 的 symbol 参数为短格式（如 IF2703），需去除交易所后缀。
+    def get_holding_history(self, ts_code: str, n_days: int = 6) -> List[Dict]:
+        """获取最近 n_days 个交易日的机构持仓数据
+
+        fut_holding 的 symbol 参数为短格式（如 IF2703），需去除交易所后缀；
+        每次调用只返回一个交易日的全部席位持仓，因此需逐日回溯调用，
+        直到凑齐 n_days 个有数据的交易日。
+
+        Returns:
+            [{'trade_date': 'YYYYMMDD', 'df': DataFrame}, ...] 按日期升序
         """
         if not self.pro:
-            return pd.DataFrame()
+            return []
         symbol = ts_code.split('.')[0]
-        try:
-            today = datetime.now().strftime('%Y%m%d')
-            df = self.pro.fut_holding(symbol=symbol, trade_date=today)
-            if df is not None and not df.empty:
-                return df
-        except Exception:
-            pass
-        # Try previous trading day
-        for i in range(1, 7):
-            prev = (datetime.now() - timedelta(days=i)).strftime('%Y%m%d')
+        result = []
+        seen = set()
+        day = datetime.now()
+        for _ in range(40):  # 最多回溯 40 个自然日凑齐 n_days 个交易日
+            if len(result) >= n_days:
+                break
+            d = day.strftime('%Y%m%d')
+            day -= timedelta(days=1)
+            if d in seen:
+                continue
+            seen.add(d)
             try:
-                df = self.pro.fut_holding(symbol=symbol, trade_date=prev)
-                if df is not None and not df.empty:
-                    return df
+                df = self.pro.fut_holding(symbol=symbol, trade_date=d)
             except Exception:
                 continue
-        return pd.DataFrame()
+            if df is not None and not df.empty:
+                result.append({'trade_date': d, 'df': df})
+        result.sort(key=lambda x: x['trade_date'])
+        return result
+
+
+def _citic_others_snapshot(day_df: pd.DataFrame, long_c: str, short_c: str,
+                          long_chg_c: Optional[str], short_chg_c: Optional[str]) -> Dict:
+    """计算单日中信 vs 其他机构多空单持仓与操作变化快照
+
+    中信 = broker 含'中信'的席位；其他 = 前20席位汇总 - 中信。
+    """
+    snap = {'citic_long': 0, 'citic_short': 0, 'citic_long_chg': 0, 'citic_short_chg': 0,
+            'others_long': 0, 'others_short': 0, 'others_long_chg': 0, 'others_short_chg': 0}
+    if day_df is None or day_df.empty:
+        return snap
+    try:
+        valid = day_df.dropna(subset=[long_c, short_c]) if long_c and short_c else day_df
+        total_long = float(valid[long_c].sum()) if long_c else 0
+        total_short = float(valid[short_c].sum()) if short_c else 0
+        total_long_chg = float(valid[long_chg_c].sum()) if long_chg_c else 0
+        total_short_chg = float(valid[short_chg_c].sum()) if short_chg_c else 0
+        snap['others_long'] = int(total_long)
+        snap['others_short'] = int(total_short)
+        snap['others_long_chg'] = int(total_long_chg)
+        snap['others_short_chg'] = int(total_short_chg)
+        if 'broker' in day_df.columns:
+            citic = day_df[day_df['broker'].astype(str).str.contains('中信', na=False)]
+            if not citic.empty:
+                r = citic.iloc[0]
+                c_long = float(r.get(long_c, 0) or 0) if long_c else 0
+                c_short = float(r.get(short_c, 0) or 0) if short_c else 0
+                c_lchg = float(r.get(long_chg_c, 0) or 0) if long_chg_c else 0
+                c_schg = float(r.get(short_chg_c, 0) or 0) if short_chg_c else 0
+                snap['citic_long'] = int(c_long)
+                snap['citic_short'] = int(c_short)
+                snap['citic_long_chg'] = int(c_lchg)
+                snap['citic_short_chg'] = int(c_schg)
+                snap['others_long'] = int(total_long - c_long)
+                snap['others_short'] = int(total_short - c_short)
+                snap['others_long_chg'] = int(total_long_chg - c_lchg)
+                snap['others_short_chg'] = int(total_short_chg - c_schg)
+    except Exception:
+        pass
+    return snap
+
+
+def _chg_action(v: float, long_side: bool = True) -> str:
+    """操作方向描述：加多/减多（多单），加空/减空（空单）"""
+    if v > 0:
+        return '加多' if long_side else '加空'
+    if v < 0:
+        return '减多' if long_side else '减空'
+    return '未变'
+
+
+def _pair_conclusion(c: float, o: float, pos_label: str, neg_label: str) -> str:
+    """双方操作对比结论：同向/分歧/观望"""
+    if c > 0 and o > 0:
+        return f'同向{pos_label}'
+    if c < 0 and o < 0:
+        return f'同向{neg_label}'
+    if (c > 0 and o < 0) or (c < 0 and o > 0):
+        return '方向分歧'
+    if c == 0 and o == 0:
+        return '均未变'
+    return '一方观望'
+
+
+def _overall_signal(c_lc: float, c_sc: float, o_lc: float, o_sc: float) -> str:
+    """综合信号：一致做多/一致做空/操作方向分歧/一方观望"""
+    c_nc = c_lc - c_sc
+    o_nc = o_lc - o_sc
+    if c_nc > 0 and o_nc > 0:
+        return '一致做多'
+    if c_nc < 0 and o_nc < 0:
+        return '一致做空'
+    if (c_nc > 0 and o_nc < 0) or (c_nc < 0 and o_nc > 0):
+        return '操作方向分歧'
+    if c_nc == 0 and o_nc == 0:
+        return '均未变（观望）'
+    return '一方观望'
 
 
 class FuturesAnalyzer:
@@ -205,11 +295,11 @@ class FuturesAnalyzer:
             if index_df is not None and not index_df.empty:
                 result['contango'] = self._analyze_contango(bars, index_df)
 
-        # 持仓数据
+        # 持仓数据（多日历史，支撑当日/每日/每周操作变化对比）
         if main_contract:
-            holding = self.fetcher.get_holding_data(main_contract)
-            if holding is not None and not holding.empty:
-                result['holding'] = self._analyze_holding(holding)
+            holding_history = self.fetcher.get_holding_history(main_contract)
+            if holding_history:
+                result['holding'] = self._analyze_holding(holding_history)
 
         return result
 
@@ -312,15 +402,34 @@ class FuturesAnalyzer:
             'sentiment': sentiment,
         }
 
-    def _analyze_holding(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """分析机构持仓
+    def _analyze_holding(self, history: Any) -> Dict[str, Any]:
+        """分析机构持仓（支持多日历史）
 
+        history: 单日 DataFrame，或 [{'trade_date': 'YYYYMMDD', 'df': DataFrame}, ...]（升序）。
         Tushare fut_holding 字段：broker / long_hld / short_hld / long_chg / short_chg。
         输出结构对齐 analyze_futures.py 的打印格式（top10_long/top10_short 席位明细、
-        中信 vs 其他机构汇总与信号）。
+        中信 vs 其他机构汇总与信号、当日/每日/每周多空单操作变化对比）。
         """
+        # 兼容单日 DataFrame 输入
+        if isinstance(history, pd.DataFrame):
+            history = [{'trade_date': datetime.now().strftime('%Y%m%d'), 'df': history}]
+        if not history:
+            return {}
+        df = history[-1]['df']  # 最新交易日
         if df.empty:
             return {}
+
+        # 字段兼容解析（供单日分析与多日趋势共用）
+        def pick(*names):
+            for n in names:
+                if n in df.columns:
+                    return n
+            return None
+
+        long_c = pick('long_vol', 'long_hld')
+        short_c = pick('short_vol', 'short_hld')
+        long_chg_c = pick('long_chg')
+        short_chg_c = pick('short_chg')
 
         result = {
             'top10_long': [],
@@ -336,18 +445,6 @@ class FuturesAnalyzer:
         }
 
         try:
-            # 字段兼容：旧列名 long_vol/short_vol 与新列名 long_hld/short_hld
-            def pick(*names):
-                for n in names:
-                    if n in df.columns:
-                        return n
-                return None
-
-            long_c = pick('long_vol', 'long_hld')
-            short_c = pick('short_vol', 'short_hld')
-            long_chg_c = pick('long_chg')
-            short_chg_c = pick('short_chg')
-
             if long_c and short_c:
                 valid = df.dropna(subset=[long_c, short_c])
                 total_long = float(valid[long_c].sum())
@@ -426,6 +523,93 @@ class FuturesAnalyzer:
                             result['citic_vs_others_signal'] = '均中性'
                         else:
                             result['citic_vs_others_signal'] = '方向分歧'
+        except Exception:
+            pass
+
+        # ── 中信 vs 其他机构 当日多空单操作变化对比 ──
+        try:
+            snap = _citic_others_snapshot(df, long_c, short_c, long_chg_c, short_chg_c)
+            c_lc = snap['citic_long_chg']
+            c_sc = snap['citic_short_chg']
+            o_lc = snap['others_long_chg']
+            o_sc = snap['others_short_chg']
+            c_nc = c_lc - c_sc
+            o_nc = o_lc - o_sc
+            result['citic_long_chg'] = c_lc
+            result['citic_short_chg'] = c_sc
+            result['others_long_chg'] = o_lc
+            result['others_short_chg'] = o_sc
+            result['citic_vs_others_chg_analysis'] = {
+                'citic': {
+                    'long_chg': c_lc, 'short_chg': c_sc, 'net_chg': c_nc,
+                    'long_action': _chg_action(c_lc, True),
+                    'short_action': _chg_action(c_sc, False),
+                    'net_dir': '净加多' if c_nc > 0 else '净减空' if c_nc < 0 else '未变',
+                },
+                'others': {
+                    'long_chg': o_lc, 'short_chg': o_sc, 'net_chg': o_nc,
+                    'long_action': _chg_action(o_lc, True),
+                    'short_action': _chg_action(o_sc, False),
+                    'net_dir': '净加多' if o_nc > 0 else '净减空' if o_nc < 0 else '未变',
+                },
+                'comparison': {
+                    'long_chg_conclusion': _pair_conclusion(c_lc, o_lc, '加多', '减多'),
+                    'short_chg_conclusion': _pair_conclusion(c_sc, o_sc, '加空', '减空'),
+                    'net_chg_conclusion': _pair_conclusion(c_nc, o_nc, '做多', '做空'),
+                    'overall_signal': _overall_signal(c_lc, c_sc, o_lc, o_sc),
+                },
+            }
+        except Exception:
+            pass
+
+        # ── 每日多空单操作变化趋势（中信 vs 其他） ──
+        try:
+            daily_trends = []
+            for item in history:
+                s = _citic_others_snapshot(item['df'], long_c, short_c, long_chg_c, short_chg_c)
+                daily_trends.append({
+                    'trade_date': item['trade_date'],
+                    'citic_long_chg': s['citic_long_chg'],
+                    'citic_short_chg': s['citic_short_chg'],
+                    'citic_net_chg': s['citic_long_chg'] - s['citic_short_chg'],
+                    'others_long_chg': s['others_long_chg'],
+                    'others_short_chg': s['others_short_chg'],
+                    'others_net_chg': s['others_long_chg'] - s['others_short_chg'],
+                })
+            result['daily_trends'] = daily_trends
+        except Exception:
+            pass
+
+        # ── 每周多空单操作变化对比（最近 5 个交易日累计） ──
+        try:
+            recent = history[-5:]
+            if len(recent) >= 2:
+                wk = {'citic_long_chg': 0, 'citic_short_chg': 0,
+                      'others_long_chg': 0, 'others_short_chg': 0}
+                for item in recent:
+                    s = _citic_others_snapshot(item['df'], long_c, short_c, long_chg_c, short_chg_c)
+                    wk['citic_long_chg'] += s['citic_long_chg']
+                    wk['citic_short_chg'] += s['citic_short_chg']
+                    wk['others_long_chg'] += s['others_long_chg']
+                    wk['others_short_chg'] += s['others_short_chg']
+                c_nc = wk['citic_long_chg'] - wk['citic_short_chg']
+                o_nc = wk['others_long_chg'] - wk['others_short_chg']
+                result['weekly_chg_analysis'] = {
+                    'citic': {
+                        'long_chg': wk['citic_long_chg'], 'short_chg': wk['citic_short_chg'],
+                        'net_chg': c_nc,
+                    },
+                    'others': {
+                        'long_chg': wk['others_long_chg'], 'short_chg': wk['others_short_chg'],
+                        'net_chg': o_nc,
+                    },
+                    'comparison': {
+                        'net_chg_conclusion': _pair_conclusion(c_nc, o_nc, '做多', '做空'),
+                        'overall_signal': _overall_signal(wk['citic_long_chg'], wk['citic_short_chg'],
+                                                          wk['others_long_chg'], wk['others_short_chg']),
+                    },
+                    'days': len(recent),
+                }
         except Exception:
             pass
 
