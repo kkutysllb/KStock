@@ -59,6 +59,18 @@ class ReportLibraryStore:
                 """
             )
             connection.execute("CREATE INDEX IF NOT EXISTS idx_report_library_date ON report_library (user_id, generated_at)")
+            # 用户删除过的报告（按内容 sha256 记录）：源文件仍在线程 outputs，
+            # 扫描归档时必须跳过，否则删除后刷新列表会立即重新归档“复活”。
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS report_deletions (
+                    user_id TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    deleted_at TEXT NOT NULL,
+                    PRIMARY KEY (user_id, sha256)
+                )
+                """
+            )
 
     @staticmethod
     def _component(value: Any, name: str) -> str:
@@ -180,6 +192,10 @@ class ReportLibraryStore:
                 row["sha256"]
                 for row in connection.execute("SELECT sha256 FROM report_library WHERE user_id = ?", (user_id,))
             }
+            deleted_digests = {
+                row["sha256"]
+                for row in connection.execute("SELECT sha256 FROM report_deletions WHERE user_id = ?", (user_id,))
+            }
         by_stem: dict[str, Path] = {}
         for html in sorted(root.glob("*/user-data/outputs/*.html")):
             stem = html.stem
@@ -192,7 +208,7 @@ class ReportLibraryStore:
         archived: list[dict[str, Any]] = []
         for stem, html_path in by_stem.items():
             digest = hashlib.sha256(html_path.read_bytes()).hexdigest()
-            if digest in known_digests:
+            if digest in known_digests or digest in deleted_digests:
                 continue
             known_digests.add(digest)
             report_id = "report-" + hashlib.sha256(stem.encode("utf-8")).hexdigest()[:12]
@@ -267,6 +283,11 @@ class ReportLibraryStore:
         if self.reports_root not in path.parents:
             raise ValueError("report path escapes reports root")
         with self._connect() as connection:
+            # 记录删除标记：源文件仍在线程 outputs，扫描归档时需跳过同内容文件。
+            connection.execute(
+                "INSERT OR REPLACE INTO report_deletions (user_id, sha256, deleted_at) VALUES (?, ?, ?)",
+                (user_id, row["sha256"], datetime.now().astimezone().isoformat()),
+            )
             connection.execute("DELETE FROM report_library WHERE user_id = ? AND report_id = ?", (user_id, report_id))
         path.unlink(missing_ok=True)
 

@@ -123,3 +123,49 @@ def test_archive_failure_preserves_existing_report(tmp_path: Path):
     assert store.get_report("stable", user_id="alice")["generated_at"].startswith("2026-08-01")
 
 
+def test_delete_then_scan_does_not_resurrect_report(tmp_path: Path):
+    """回归：删除后源文件仍在线程 outputs，再次扫描/列表不得让报告复活。"""
+    store = ReportLibraryStore(tmp_path)
+    outputs = _thread_outputs(tmp_path / "threads", "thread-a")
+    _write(outputs / "2026-08-02_weekly-futures-analysis-dark.html", _renderer_html("周度分析"))
+    rows = store.scan_threads_and_archive(tmp_path / "threads", "alice")
+    assert len(rows) == 1
+    report_id = rows[0]["report_id"]
+
+    store.delete(report_id, user_id="alice")
+    assert store.get_report(report_id, user_id="alice") is None
+    # 源 HTML 保留在线程 outputs（历史任务交付物不受影响）
+    assert list(outputs.glob("*.html"))
+    # 回归：删除后再次扫描与列表均不重新归档
+    assert store.scan_threads_and_archive(tmp_path / "threads", "alice") == []
+    assert store.list_reports(user_id="alice") == []
+
+
+def test_deleted_report_with_new_content_reenters_library(tmp_path: Path):
+    """同主题重跑且内容更新（新 sha256）时，已删除报告可重新进库。"""
+    store = ReportLibraryStore(tmp_path)
+    outputs = _thread_outputs(tmp_path / "threads", "thread-a")
+    _write(outputs / "2026-08-02_weekly-futures-analysis-dark.html", _renderer_html("周度 v1"))
+    rows = store.scan_threads_and_archive(tmp_path / "threads", "alice")
+    store.delete(rows[0]["report_id"], user_id="alice")
+
+    _write(outputs / "2026-08-02_weekly-futures-analysis-dark.html", _renderer_html("周度 v2"))
+    updated = store.scan_threads_and_archive(tmp_path / "threads", "alice")
+    assert len(updated) == 1
+    assert updated[0]["title"] == "周度 v2"
+
+
+def test_delete_marker_is_user_scoped(tmp_path: Path):
+    """删除标记按用户隔离：alice 删除不影响 bob 同内容报告的扫描归档。"""
+    store = ReportLibraryStore(tmp_path)
+    source = _write(tmp_path / "same.html", "<html>dup</html>")
+    store.archive(source, "tool-1", "thread-b", _meta("bob", "2026-08-01T10:00:00+08:00"))
+    store.delete("tool-1", user_id="bob")
+    outputs = _thread_outputs(tmp_path / "threads", "thread-a")
+    _write(outputs / "daily.html", "<html>dup</html>")
+    # alice 无删除标记，同内容文件仍可归档
+    rows = store.scan_threads_and_archive(tmp_path / "threads", "alice")
+    assert len(rows) == 1
+    assert len(store.list_reports(user_id="alice")) == 1
+
+
