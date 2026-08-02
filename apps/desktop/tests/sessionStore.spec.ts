@@ -104,6 +104,8 @@ describe("sessionStore turn-based 模型", () => {
     });
     expect(session.threadId).toBe("thread-abc-123");
     expect(session.title).toBe("茅台财报分析");
+    // 侧边栏需区分同一天内的会话：updatedAt 为 MM-DD HH:mm（含具体时间）
+    expect(session.updatedAt).toMatch(/^\d{2}\/\d{2} \d{2}:\d{2}$/);
     // 历史会话消息懒加载（切回后首次发消息或点进会话才拉取），初始为空
     expect(session.messages).toEqual([]);
     expect(session.activeSkills.length).toBeGreaterThan(0);

@@ -151,9 +151,13 @@ export const DEFAULT_ACTIVE_SKILLS = [
 ];
 
 function nowLabel() {
-  return new Date().toLocaleDateString("zh-CN", {
+  // 侧边栏历史任务需要区分同一天内的会话，展示到分钟（MM-DD HH:mm）
+  return new Date().toLocaleString("zh-CN", {
     month: "2-digit",
-    day: "2-digit"
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
   });
 }
 
@@ -203,7 +207,7 @@ export function createSession(title = "新研究会话"): ChatSession {
  * 或用户点进该会话时才调 fetchThreadMessages）。
  *
  * 与 createSession 的区别：threadId 已绑定，title 优先从 values.title 取，
- * updated_at 用后端返回的时间戳（本地化为 MM-DD 展示）。
+ * updated_at 用后端返回的时间戳（本地化为 MM-DD HH:mm 展示）。
  */
 export function threadToSession(thread: {
   thread_id: string;
@@ -227,12 +231,18 @@ export function threadToSession(thread: {
   };
 }
 
-/** 把后端 ISO 时间戳转成本地 MM-DD 展示（与 nowLabel 一致）。失败回退 nowLabel()。 */
+/** 把后端 ISO 时间戳转成本地 MM-DD HH:mm 展示（与 nowLabel 一致）。失败回退 nowLabel()。 */
 function formatUpdatedAt(iso?: string): string {
   if (!iso) return nowLabel();
   const d = new Date(iso);
   if (isNaN(d.getTime())) return nowLabel();
-  return d.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
+  return d.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  });
 }
 
 export function appendMessageToSession(

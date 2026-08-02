@@ -123,7 +123,7 @@ export function AssistantTurn({
           msg.text && (
             <div className="turn-text">
               <Markdown>{msg.text}</Markdown>
-              {streaming && <span className="streaming-cursor" aria-hidden="true" />}
+              {streaming && <span className="streaming-flywheel" aria-hidden="true" />}
             </div>
           )
         )}

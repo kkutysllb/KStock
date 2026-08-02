@@ -3,10 +3,14 @@
 验证 `_generate_runtime_config` 的核心持久化语义：runtime.yaml 已存在时
 绝不覆盖，确保用户通过设置页写入的 models / memory / database 等配置
 跨 gateway 重启保留。
+
+同时验证用户数据根目录（~/.kstock）与历史 v1 数据目录（Application
+Support）的自动迁移语义。
 """
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import yaml
 
@@ -238,7 +242,7 @@ def test_updates_tools_section_when_template_changes(tmp_path):
 # ── 端到端时序：改配置 → 重启后端 ─────────────────────────────────
 
 
-def test_user_writes_config_then_restart_backend_preserves_it(tmp_path):
+def test_user_writes_config_then_restart_backend_preserves_it(tmp_path, monkeypatch):
     """模拟「用户改配置 → 点重启后端」的完整时序，验证配置不丢。
 
     场景对应：用户在设置页改了 memory 段，然后点「重启后端」让变更生效。
@@ -247,6 +251,10 @@ def test_user_writes_config_then_restart_backend_preserves_it(tmp_path):
     """
     from scripts.kstock_models import _atomic_write_yaml
     from scripts.run_gateway import REPO_ROOT
+
+    # _atomic_write_yaml 的备份目录依赖 KSTOCK_APP_DATA_DIR（生产由
+    # create_app 注入；惰性化后 import 不再设置，测试需显式提供）
+    monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(tmp_path))
 
     runtime_cfg = tmp_path / "config" / "qilin.runtime.yaml"
     runtime_cfg.parent.mkdir(parents=True, exist_ok=True)
@@ -623,3 +631,128 @@ def test_ensure_default_soul_preserves_user_content(tmp_path):
     _ensure_default_soul(qilin_home)
 
     assert soul_path.read_text(encoding="utf-8") == "# 用户自定义守则\n"
+
+
+# ── 用户数据根目录：~/.kstock 默认与历史 v1 目录迁移 ────────────────
+
+
+def test_resolve_app_data_root_defaults_to_kstock_home(monkeypatch):
+    """无 KSTOCK_APP_DATA_DIR 时默认 ~/.kstock（不再用 Application Support）。"""
+    monkeypatch.delenv("KSTOCK_APP_DATA_DIR", raising=False)
+
+    from scripts.run_gateway import _resolve_app_data_root
+
+    assert _resolve_app_data_root() == Path.home() / ".kstock"
+
+
+def test_resolve_app_data_root_respects_env(monkeypatch, tmp_path):
+    """KSTOCK_APP_DATA_DIR 显式指定时优先（Tauri 宿主 / 调试）。"""
+    target = tmp_path / "custom-root"
+    monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(target))
+
+    from scripts.run_gateway import _resolve_app_data_root
+
+    assert _resolve_app_data_root() == target.expanduser()
+
+
+def test_migrate_legacy_data_root_moves_content(monkeypatch, tmp_path):
+    """旧 Application Support 目录存在且新根不存在 → 整体迁移 + sqlite_dir 重写。"""
+    import yaml
+
+    from scripts.run_gateway import _migrate_legacy_data_root
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    legacy = home / "Library" / "Application Support" / "KStock"
+    (legacy / "config").mkdir(parents=True)
+    (legacy / "runtime" / "qilin" / "data").mkdir(parents=True)
+    # 模拟旧 runtime.yaml：sqlite_dir 指向旧根（含空格路径）
+    (legacy / "config" / "qilin.runtime.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "models": [{"name": "keep-me"}],
+                "database": {
+                    "backend": "sqlite",
+                    "sqlite_dir": str(legacy / "runtime" / "qilin" / "data"),
+                },
+            },
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+    (legacy / "runtime" / "qilin" / "data" / "qilin.db").write_bytes(b"db-content")
+
+    target = home / ".kstock"
+    result = _migrate_legacy_data_root(target)
+
+    assert result == target
+    assert not legacy.exists(), "旧目录应被整体移走"
+    assert (target / "runtime" / "qilin" / "data" / "qilin.db").exists()
+    # sqlite_dir 重写为新根，其余内容保留
+    cfg = yaml.safe_load(
+        (target / "config" / "qilin.runtime.yaml").read_text(encoding="utf-8")
+    )
+    assert cfg["database"]["sqlite_dir"] == str(target / "runtime" / "qilin" / "data")
+    assert cfg["models"][0]["name"] == "keep-me"
+
+
+def test_migrate_legacy_skips_when_target_exists(monkeypatch, tmp_path):
+    """目标 ~/.kstock 已存在 → 不迁移旧目录（避免覆盖新数据）。"""
+    from scripts.run_gateway import _migrate_legacy_data_root
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    legacy = home / "Library" / "Application Support" / "KStock"
+    (legacy / "config").mkdir(parents=True)
+    (legacy / "runtime").mkdir(parents=True)
+
+    target = home / ".kstock"
+    target.mkdir(parents=True)
+    (target / "marker.txt").write_text("new-data", encoding="utf-8")
+
+    result = _migrate_legacy_data_root(target)
+
+    assert result == target
+    assert legacy.exists(), "目标已存在时不得迁移旧目录"
+    assert (target / "marker.txt").read_text(encoding="utf-8") == "new-data"
+
+
+def test_migrate_legacy_skips_empty_legacy_dir(monkeypatch, tmp_path):
+    """旧目录无 config/runtime（调试残留）→ 不迁移。"""
+    from scripts.run_gateway import _migrate_legacy_data_root
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    legacy = home / "Library" / "Application Support" / "KStock"
+    legacy.mkdir(parents=True)
+
+    target = home / ".kstock"
+    result = _migrate_legacy_data_root(target)
+
+    assert result == target
+    assert not target.exists(), "无有效内容时不应创建新根"
+    assert legacy.exists()
+
+
+def test_rewrite_runtime_sqlite_dir_only_touches_legacy_path(monkeypatch, tmp_path):
+    """sqlite_dir 未指向旧根时（如用户自定义目录）不重写。"""
+    import yaml
+
+    from scripts.run_gateway import _rewrite_runtime_sqlite_dir
+
+    data_root = tmp_path / ".kstock"
+    config_dir = data_root / "config"
+    config_dir.mkdir(parents=True)
+    custom_dir = tmp_path / "custom-db"
+    (config_dir / "qilin.runtime.yaml").write_text(
+        yaml.safe_dump(
+            {"database": {"backend": "sqlite", "sqlite_dir": str(custom_dir)}},
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+
+    _rewrite_runtime_sqlite_dir(data_root, tmp_path / "Library" / "Application Support" / "KStock")
+
+    cfg = yaml.safe_load((config_dir / "qilin.runtime.yaml").read_text(encoding="utf-8"))
+    assert cfg["database"]["sqlite_dir"] == str(custom_dir)

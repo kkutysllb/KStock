@@ -28,14 +28,15 @@ gateway 之前为上述三个符号注入兼容实现（带 ``hasattr`` 防御�
 
 环境约定（用户数据空间）
 ------------------------
-严格遵循《用户数据空间组织设计》：正式桌面端必须把用户数据放到跨平台
-系统应用数据目录，而不是仓库内。本入口负责解析数据根目录、生成运行时
-配置、建立完整目录结构：
+严格遵循《用户数据空间组织设计》：正式桌面端必须把用户数据放到用户主
+目录 ``~/.kstock``，而不是仓库内或系统 Application Support 目录。本入口
+负责解析数据根目录、生成运行时配置、建立完整目录结构：
 
 - 数据根目录 ``KSTOCK_APP_DATA_DIR``（优先级见 ``_resolve_app_data_root``）：
-    - macOS：``~/Library/Application Support/KStock``
-    - Windows：``%APPDATA%\KStock``
-    - Linux：``~/.local/share/KStock``
+    - 默认：``~/.kstock``（macOS / Windows / Linux 统一）
+    - 显式覆盖：``KSTOCK_APP_DATA_DIR`` 环境变量（Tauri 宿主 / 命令行调试）
+- 历史版本（v1，位于系统应用数据目录）首次启动时自动迁移到 ``~/.kstock``，
+  见 ``_migrate_legacy_data_root``
 - 运行时环境变量（由本入口注入）：
     - ``QILIN_CONFIG_PATH`` → ``<数据根>/config/qilin.runtime.yaml``
     - ``QILIN_HOME``        → ``<数据根>/runtime/qilin``
@@ -53,6 +54,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import sys
 import tempfile
 import threading
@@ -125,26 +127,23 @@ def _resolve_app_data_root() -> Path:
     """解析 KStock 用户数据根目录（跨平台）。
 
     优先级：
-    1. ``KSTOCK_APP_DATA_DIR`` 环境变量 —— Tauri 正式运行时由宿主注入
-       （``app_data_dir`` 命令解析系统目录后设此变量），命令行调试时也可
-       显式指定。
-    2. 系统标准 app data 目录（跨平台），与设计文档约定一致。
+    1. ``KSTOCK_APP_DATA_DIR`` 环境变量 —— Tauri 宿主 / 命令行调试显式指定。
+    2. 用户主目录 ``~/.kstock`` —— 产品默认（macOS / Windows / Linux 统一）。
 
-    遵循《用户数据空间组织设计》第 1 节：正式桌面端必须把用户数据放到跨
-    平台系统应用数据目录，而不是仓库内的 ``.kstock``。
+    选择 ``~/.kstock`` 而不是系统 Application Support 目录：
+    - 避免 macOS ``Application Support`` 含空格导致沙箱 bash 路径替换被
+      shell 拆词（历史故障：``ls /mnt/user-data/workspace/`` 实际列出
+      ``/Users/.../Library/Application`` 空目录）
+    - 数据可见、可备份、跨机器拷贝简单
+    - 与仓库内 ``.kstock/cache``（调试缓存）区分：产品数据一律在主目录
+
+    历史版本（v1，位于系统应用数据目录）由 ``_migrate_legacy_data_root``
+    在启动时一次性迁移到 ``~/.kstock``。
     """
     env_root = os.environ.get("KSTOCK_APP_DATA_DIR")
     if env_root:
         return Path(env_root).expanduser()
-
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "KStock"
-    if sys.platform == "win32":
-        appdata = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
-        return Path(appdata) / "KStock"
-    # Linux / 其他 POSIX：邗守 XDG_DATA_HOME
-    xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-    return Path(xdg) / "KStock"
+    return Path.home() / ".kstock"
 
 
 def _generate_runtime_config(
@@ -280,12 +279,93 @@ def _write_default_extensions_config(path: Path) -> None:
         fh.write("\n")
 
 
+def _legacy_app_data_roots() -> tuple[Path, ...]:
+    """历史版本（v1）用户数据根目录（系统应用数据目录，跨平台）。
+
+    macOS：``~/Library/Application Support/KStock``
+    Windows：``%APPDATA%\\KStock``
+    Linux：``~/.local/share/KStock``
+    """
+    if sys.platform == "darwin":
+        return (Path.home() / "Library" / "Application Support" / "KStock",)
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+        return (Path(appdata) / "KStock",)
+    xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return (Path(xdg) / "KStock",)
+
+
+def _rewrite_runtime_sqlite_dir(data_root: Path, legacy_root: Path) -> None:
+    """迁移后把 runtime.yaml 里指向旧根的 sqlite_dir 重写为新根。
+
+    旧 runtime.yaml 的 ``database.sqlite_dir`` 是旧根下的绝对路径（如
+    ``~/Library/Application Support/KStock/runtime/qilin/data``）；不重写的话
+    引擎会把 SQLite 数据库继续写到旧位置，迁移等于没做。
+    仅当 sqlite_dir 确实以旧根开头时重写，其余内容原样保留。
+    """
+    import yaml
+
+    runtime_config = data_root / "config" / "qilin.runtime.yaml"
+    if not runtime_config.exists():
+        return
+    with runtime_config.open("r", encoding="utf-8") as fh:
+        cfg: dict[str, Any] = yaml.safe_load(fh) or {}
+    database = dict(cfg.get("database") or {})
+    sqlite_dir = database.get("sqlite_dir")
+    if not isinstance(sqlite_dir, str) or not sqlite_dir.startswith(str(legacy_root)):
+        return
+    new_dir = str(data_root / "runtime" / "qilin" / "data")
+    database["sqlite_dir"] = new_dir
+    cfg["database"] = database
+    with runtime_config.open("w", encoding="utf-8") as fh:
+        yaml.safe_dump(cfg, fh, allow_unicode=True, sort_keys=False)
+    print(f"  sqlite_dir     : {sqlite_dir} → {new_dir}", flush=True)
+
+
+def _migrate_legacy_data_root(data_root: Path) -> Path:
+    """把历史版本（v1）系统应用数据目录整体迁移到 ``~/.kstock``（一次性）。
+
+    迁移条件：目标根不存在，且存在唯一的旧根（含 config/ 或 runtime/，
+    排除空目录与调试残留）。迁移成功后同步修正 runtime.yaml 的
+    ``database.sqlite_dir``（旧配置指向旧根，必须重写为新根）。
+
+    返回实际使用的数据根。幂等：目标已存在 / 无旧目录时直接返回。
+    """
+    if data_root.exists():
+        return data_root
+
+    candidates = [
+        p
+        for p in _legacy_app_data_roots()
+        if p.is_dir() and ((p / "config").is_dir() or (p / "runtime").is_dir())
+    ]
+    if not candidates:
+        return data_root
+    if len(candidates) > 1:
+        logging.getLogger(__name__).warning(
+            "存在多个历史数据目录 %s，跳过自动迁移", [str(c) for c in candidates]
+        )
+        return data_root
+
+    legacy = candidates[0]
+    try:
+        # 同卷 rename（原子且快）；跨卷失败时回退拷贝 + 删除
+        shutil.move(str(legacy), str(data_root))
+    except OSError:
+        shutil.copytree(legacy, data_root, dirs_exist_ok=True)
+        shutil.rmtree(legacy, ignore_errors=True)
+    print(f"  数据迁移       : {legacy} → {data_root}", flush=True)
+    _rewrite_runtime_sqlite_dir(data_root, legacy)
+    return data_root
+
+
 def _ensure_data_space() -> dict[str, Path]:
     """初始化 KStock 用户数据空间并注入运行时环境变量。
 
-    建立设计文档定义的目录结构，生成运行时配置，返回关键路径供日志输出。
+    先执行历史数据目录迁移（v1 Application Support → ~/.kstock），再建立
+    设计文档定义的目录结构，生成运行时配置，返回关键路径供日志输出。
     """
-    data_root = _resolve_app_data_root()
+    data_root = _migrate_legacy_data_root(_resolve_app_data_root())
     config_dir = data_root / "config"
     runtime_qilin = data_root / "runtime" / "qilin"
     qilin_data_dir = runtime_qilin / "data"
@@ -562,8 +642,23 @@ def create_app():
     return app
 
 
-# uvicorn 通过模块路径加载时需要模块级 ``app``
-app = create_app()
+# ── 惰性应用工厂（uvicorn 模块路径加载兼容）─────────────────────
+# 不在 import 时执行 ``app = create_app()``：create_app 有真实副作用（数据
+# 空间迁移 / 清空开发日志 / 连接数据库），import 即执行会让 pytest 等场景
+# 对真实用户数据空间产生意外操作（历史上确实发生：跑测试时把 Application
+# Support 数据整体迁移到 ~/.kstock）。改为模块级 __getattr__（PEP 562）
+# 惰性创建：仅当 uvicorn 以 ``scripts.run_gateway:app`` 字符串加载（属性访问）
+# 或 _run_server 显式请求时才初始化。
+_APP: Any = None
+
+
+def __getattr__(name: str) -> Any:
+    global _APP
+    if name == "app":
+        if _APP is None:
+            _APP = create_app()
+        return _APP
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _run_server() -> None:
@@ -578,6 +673,8 @@ def _run_server() -> None:
 
     host = os.environ.get("GATEWAY_HOST", "localhost")
     port = int(os.environ.get("GATEWAY_PORT", "18001"))
+    # 经模块属性访问触发 __getattr__ 惰性创建（__main__ 与包导入均适用）
+    app = sys.modules[__name__].app
     uvicorn.run(app, host=host, port=port)
 
 

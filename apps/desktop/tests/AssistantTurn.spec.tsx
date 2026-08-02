@@ -101,6 +101,20 @@ describe("AssistantTurn 澄清渲染", () => {
     expect(screen.getByText("正常回复")).toBeTruthy();
   });
 
+  it("流式正文末尾展示飞轮动画而不是闪烁光标", () => {
+    const msg: ChatMessage = {
+      id: "turn-streaming",
+      role: "assistant",
+      createdAt: "2026-08-02T07:00:00Z",
+      text: "正在查询新闻",
+      status: "streaming",
+    };
+    const { container } = render(<AssistantTurn msg={msg} />);
+
+    expect(container.querySelector(".streaming-flywheel")).toBeTruthy();
+    expect(container.querySelector(".streaming-cursor")).toBeNull();
+  });
+
   it("完成后在总状态的分割线下展示正文，而不默认展示工具卡片", () => {
     const message: ChatMessage = {
       id: "assistant-1",

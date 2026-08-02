@@ -92,6 +92,12 @@ python3 -m market_linkage_engine weekly -f summary      # 一句话总结
 python3 -m market_linkage_engine daily -f json -o report.json
 ```
 
+> **输出规范（必须遵守）**：写入 JSON 文件必须用 `-o/--output` 参数（如
+> `python3 -m market_linkage_engine weekly 20260731 -f json -o /mnt/user-data/workspace/linkage.json`）。
+> **禁止**用 shell 重定向 `> file` 或 `2>&1` 生成文件：引擎日志输出到 stderr，
+> 重定向会把日志混入 JSON（`json.load` 报 `Extra data`，历史已因此多次失败）。
+> 重定向输出到 `--output` 的 Markdown 报告也建议同样避免。
+
 Python API：`LinkageEngine().run_daily()` / `run_weekly()`，`to_markdown()` / `to_summary()`。
 
 ## 八大维度

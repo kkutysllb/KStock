@@ -19,6 +19,8 @@ export interface RunContext {
   reasoning_effort?: ReasoningEffort;
   /** 开启子代理委派（lead agent 可并行分派 custom_agents）。 */
   subagent_enabled?: boolean;
+  /** 开启 todo 计划模式（注册 write_todos 工具，浮动面板展示任务进度）。 */
+  is_plan_mode?: boolean;
 }
 
 /** 输入框推理菜单的运行级覆盖。auto 不覆盖模型默认能力。 */
@@ -314,7 +316,11 @@ export function runContextFromModel(
     model_name: model.name,
     thinking_enabled: mode === "off" ? false : model.supports_thinking,
     // 子代理是既定核心能力（lead agent 可并行委派 custom_agents），默认开启
-    subagent_enabled: true
+    subagent_enabled: true,
+    // todo 计划模式：注册 write_todos 工具，多步复杂任务时模型创建任务清单
+    // （引擎 agent.py 仅在 is_plan_mode=true 时挂载 TodoMiddleware，缺省则
+    //  模型无 write_todos 工具，浮动面板 Todo 永远为空）
+    is_plan_mode: true
   };
   if (
     model.supports_thinking &&

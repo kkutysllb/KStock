@@ -362,7 +362,8 @@ describe("runContextFromModel", () => {
     expect(ctx).toEqual({
       model_name: "deepseek-chat",
       thinking_enabled: true,
-      subagent_enabled: true
+      subagent_enabled: true,
+      is_plan_mode: true
     });
   });
 
@@ -390,6 +391,11 @@ describe("runContextFromModel", () => {
   it("默认开启子代理（subagent_enabled=true）", () => {
     const ctx = runContextFromModel({ name: "deepseek-chat", supports_thinking: true });
     expect(ctx.subagent_enabled).toBe(true);
+  });
+
+  it("默认开启 todo 计划模式（is_plan_mode=true）", () => {
+    const ctx = runContextFromModel({ name: "deepseek-chat", supports_thinking: true });
+    expect(ctx.is_plan_mode).toBe(true);
   });
 });
 
