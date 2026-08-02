@@ -120,6 +120,7 @@ import { AttachmentPicker, AttachmentChips } from "../components/AttachmentPicke
 import { GeneralSettings } from "../components/GeneralSettings";
 import { SidebarResizeHandle } from "../components/SidebarResizeHandle";
 import { DataSourcesSettings } from "../components/DataSourcesSettings";
+import { Markdown } from "../lib/markdown";
 import {
   DEFAULT_GENERAL_PREFERENCES,
   getGeneralPreferences,
@@ -128,6 +129,9 @@ import {
 } from "../lib/generalSettingsClient";
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings" | "reports";
+type ArtifactPreview =
+  | { kind: "html"; name: string; url: string }
+  | { kind: "markdown" | "text"; name: string; url: string; text: string };
 type AuthMode = "login" | "register";
 
 const WORKSPACE_SIDEBAR_WIDTH_KEY = "kstock.workspaceSidebarWidth";
@@ -1519,7 +1523,7 @@ function WorkspaceShell({
   // 账户操作默认收起，避免长期占用侧栏底部空间。
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   // 交付/上传文件预览：fetch + blob 应用内预览（导航式打开不带会话 cookie，会触发 401）。
-  const [artifactPreview, setArtifactPreview] = useState<{ name: string; url: string } | null>(null);
+  const [artifactPreview, setArtifactPreview] = useState<ArtifactPreview | null>(null);
   const [artifactError, setArtifactError] = useState<string | null>(null);
 
   const openArtifact = useCallback(async (href: string, name: string) => {
@@ -1528,10 +1532,20 @@ function WorkspaceShell({
       const response = await fetch(href, { credentials: "include" });
       if (!response.ok) throw new Error(`加载失败（${response.status}）`);
       const blob = await response.blob();
-      if (/\.(html?|xhtml|svg)$/i.test(name)) {
-        setArtifactPreview({ name, url: URL.createObjectURL(blob) });
+      const url = URL.createObjectURL(blob);
+      const previewKind = getArtifactPreviewKind(name, blob.type);
+      if (previewKind === "html") {
+        setArtifactPreview((current) => {
+          if (current) URL.revokeObjectURL(current.url);
+          return { kind: "html", name, url };
+        });
+      } else if (previewKind === "markdown" || previewKind === "text") {
+        const text = await readBlobText(blob);
+        setArtifactPreview((current) => {
+          if (current) URL.revokeObjectURL(current.url);
+          return { kind: previewKind, name, url, text };
+        });
       } else {
-        const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
         anchor.download = name;
@@ -1943,7 +1957,17 @@ ${text}` : text)
                 <button className="subtle-button" type="button" onClick={closeArtifactPreview}>关闭</button>
               </div>
             </div>
-            <iframe title={artifactPreview.name} src={artifactPreview.url} sandbox="allow-scripts" />
+            {artifactPreview.kind === "html" ? (
+              <iframe title={artifactPreview.name} src={artifactPreview.url} sandbox="allow-scripts" />
+            ) : (
+              <div className="artifact-preview-content">
+                {artifactPreview.kind === "markdown" ? (
+                  <Markdown>{artifactPreview.text}</Markdown>
+                ) : (
+                  <pre>{artifactPreview.text}</pre>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2090,6 +2114,27 @@ function mergeDeliveryFiles(
 function toAbsoluteUrl(url: string): string {
   if (/^https?:\/\//i.test(url)) return url;
   return new URL(url, GATEWAY_URL).toString();
+}
+
+function getArtifactPreviewKind(name: string, contentType = ""): "html" | "markdown" | "text" | "download" {
+  if (/\.(html?|xhtml|svg)$/i.test(name)) return "html";
+  if (/\.(md|markdown)$/i.test(name)) return "markdown";
+  if (/\.(log|txt|json|csv|tsv|ya?ml)$/i.test(name)) return "text";
+  if (/^text\//i.test(contentType)) return "text";
+  return "download";
+}
+
+function readBlobText(blob: Blob): Promise<string> {
+  if (typeof blob.text === "function") return blob.text();
+  if (typeof FileReader !== "undefined") {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener("load", () => resolve(String(reader.result ?? "")));
+      reader.addEventListener("error", () => reject(reader.error ?? new Error("文件读取失败")));
+      reader.readAsText(blob);
+    });
+  }
+  return new Response(blob).text();
 }
 
 function SettingsPage({

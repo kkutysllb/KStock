@@ -12,6 +12,8 @@ const authMock = vi.hoisted(() => ({
 const turnsMock = vi.hoisted(() => ({
   ensureThread: vi.fn(),
   streamRun: vi.fn(),
+  getWorkspaceChanges: vi.fn(),
+  artifactUrl: vi.fn(),
 }));
 
 // gatewayControl mock：restartGateway / waitForGateway 由各测试覆盖返回值。
@@ -66,8 +68,8 @@ vi.mock("../src/lib/turnsClient", () => ({
   uploadFiles: vi.fn().mockResolvedValue([]),
   listUploads: vi.fn().mockResolvedValue([]),
   deleteUpload: vi.fn().mockResolvedValue({ success: true }),
-  artifactUrl: vi.fn(),
-  getWorkspaceChanges: vi.fn().mockResolvedValue({ available: false, files: [] }),
+  artifactUrl: turnsMock.artifactUrl,
+  getWorkspaceChanges: turnsMock.getWorkspaceChanges,
 }));
 
 // gatewayControlClient mock：重启后端的 restart + 健康轮询由各测试覆盖。
@@ -83,6 +85,13 @@ beforeEach(() => {
   authMock.tryGetCurrentUser.mockResolvedValue(null);
   turnsMock.ensureThread.mockResolvedValue("thread-test");
   turnsMock.streamRun.mockReset();
+  turnsMock.getWorkspaceChanges.mockReset();
+  turnsMock.getWorkspaceChanges.mockResolvedValue({ available: false, files: [] });
+  turnsMock.artifactUrl.mockReset();
+  turnsMock.artifactUrl.mockImplementation(
+    (threadId: string, virtualPath: string) =>
+      `http://localhost:18001/api/threads/${encodeURIComponent(threadId)}/artifacts/${virtualPath.replace(/^\/+/, "")}`
+  );
   controlMock.restartGateway.mockReset();
   controlMock.waitForGateway.mockReset();
 });
@@ -273,6 +282,80 @@ test("发消息触发流式 run 并逐帧累积 assistant 文本", async () => {
   const runOpts = turnsMock.streamRun.mock.calls[0][0];
   expect(runOpts.threadId).toBe("thread-test");
   expect(runOpts.input.messages[0].content).toBe("分析茅台");
+});
+
+test("交付文件中的 Markdown 和日志在产品内预览并提供下载", async () => {
+  authMock.tryGetCurrentUser.mockResolvedValueOnce({
+    id: "u1", email: "t@k.dev", system_role: "user",
+  });
+  vi.mocked(listModels).mockResolvedValueOnce({
+    models: [{
+      name: "test-model",
+      display_name: "Test",
+      description: null,
+      use: "openai",
+      model: "gpt-4",
+      api_base: null,
+      api_key_env: null,
+      supports_thinking: false,
+      supports_vision: false,
+      supports_reasoning_effort: false,
+    }],
+    default_model: "test-model",
+  });
+  turnsMock.getWorkspaceChanges.mockResolvedValueOnce({
+    available: true,
+    files: [
+      { path: "outputs/report.md", root: "outputs", status: "created", size_after: 18 },
+      { path: "outputs/bash-1.log", root: "outputs", status: "created", size_after: 12 },
+    ],
+  });
+  turnsMock.streamRun.mockImplementation(async (opts) => {
+    opts.handlers.onRunId?.("run-delivery");
+    opts.handlers.onFrame({ event: "messages", data: [{ type: "ai", content: "已完成", id: "m1" }, {}] });
+    opts.handlers.onFrame({ event: "end", data: null });
+  });
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("report.md")) {
+      return new Response("# 周报\n\n正文", { status: 200, headers: { "Content-Type": "text/markdown" } });
+    }
+    if (url.endsWith("bash-1.log")) {
+      return new Response("line one\nline two", { status: 200, headers: { "Content-Type": "text/plain" } });
+    }
+    return new Response("missing", { status: 404 });
+  });
+  const createObjectUrl = vi.fn().mockReturnValue("blob:artifact-preview");
+  const revokeObjectUrl = vi.fn();
+  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectUrl });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revokeObjectUrl });
+
+  render(<App />);
+
+  const textarea = await screen.findByRole("textbox", { name: "消息输入" });
+  await screen.findByRole("combobox", { name: "模型选择" });
+  fireEvent.change(textarea, { target: { value: "生成报告" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+
+  fireEvent.click(await screen.findByRole("button", { name: "显示环境信息" }));
+  fireEvent.click(await screen.findByRole("button", { name: /report\.md/ }));
+
+  await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
+    expect.stringMatching(/report\.md$/),
+    expect.objectContaining({ credentials: "include" })
+  ));
+  expect(await screen.findByRole("dialog", { name: "report.md" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "周报" })).toBeVisible();
+  expect(screen.getByRole("link", { name: "下载" })).toHaveAttribute("download", "report.md");
+
+  fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+  fireEvent.click(await screen.findByRole("button", { name: /bash-1\.log/ }));
+
+  expect(await screen.findByRole("dialog", { name: "bash-1.log" })).toBeVisible();
+  expect(screen.getByText(/line one/)).toBeVisible();
+  expect(screen.getByRole("link", { name: "下载" })).toHaveAttribute("download", "bash-1.log");
+
+  fetchSpy.mockRestore();
 });
 
 test("设置页重启后端：点按钮弹 ConfirmDialog，确认后触发 restart", async () => {

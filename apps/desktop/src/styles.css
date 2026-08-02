@@ -5026,6 +5026,8 @@ button.context-file-row:hover {
 .report-preview-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .report-preview-actions a { text-decoration:none; }
 .report-preview-dialog iframe { flex:1; width:100%; border:0; background:#eef2f3; }
+.artifact-preview-content { flex:1; min-height:0; overflow:auto; padding:24px; background:#101318; color:#e8eaed; }
+.artifact-preview-content pre { margin:0; font:12.5px/1.7 "SF Mono","Fira Code",ui-monospace,monospace; white-space:pre-wrap; word-break:break-word; color:#d9dde3; }
 .artifact-error { position:fixed; left:50%; bottom:18px; z-index:30; transform:translateX(-50%); max-width:min(480px,90vw); padding:9px 12px; border:1px solid rgba(255,112,112,.36); border-radius:8px; color:#ffb8b8; background:rgba(120,32,32,.92); box-shadow:0 8px 24px rgba(0,0,0,.35); }
 @media (max-width:700px) { .report-library-page { padding:18px 12px; } .report-library-toolbar { align-items:stretch; flex-direction:column; } .report-search { max-width:none; } .report-preview-overlay { padding:8px; } }
 
