@@ -1368,6 +1368,107 @@ body.sidebar-resizing {
   transform: translateX(2px);
 }
 
+/* ── 研究场景卡片（前端引导 agent 编排技能）── */
+.research-scenes {
+  margin-top: 42px;
+}
+
+.scene-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.scene-section-title {
+  color: #f1f3f5;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.scene-section-hint {
+  color: #737d88;
+  font-size: 11px;
+}
+
+.scene-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.scene-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  border-radius: 12px;
+  padding: 14px 15px;
+  background: linear-gradient(135deg, rgba(86, 199, 165, 0.07), rgba(255, 255, 255, 0.02));
+  color: #d9dde3;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.scene-card .scene-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 9px;
+  background: rgba(86, 199, 165, 0.12);
+  color: #56c7a5;
+}
+
+.scene-card .scene-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.scene-card .scene-text strong {
+  color: #f1f3f5;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.scene-card .scene-text em {
+  color: #8f98a3;
+  font-size: 11.5px;
+  font-style: normal;
+  line-height: 1.5;
+}
+
+.scene-card > svg {
+  margin-left: auto;
+  flex: none;
+  color: #68737f;
+  transition: transform 140ms ease, color 140ms ease;
+}
+
+.scene-card:hover {
+  border-color: rgba(86, 199, 165, 0.5);
+  background: rgba(86, 199, 165, 0.1);
+}
+
+.scene-card:hover > svg {
+  color: #56c7a5;
+  transform: translateX(2px);
+}
+
+.scene-card:hover .scene-icon {
+  background: rgba(86, 199, 165, 0.2);
+}
+
 .chat-message {
   width: min(760px, 100%);
   border: 1px solid #30343a;
@@ -3101,14 +3202,9 @@ button.context-file-row:hover {
   word-break: break-word;
 }
 
-.turn-text .markdown-body p {
-  max-width: 78ch;
-}
-
 .turn-text .markdown-body h1,
 .turn-text .markdown-body h2,
 .turn-text .markdown-body h3 {
-  max-width: 78ch;
   letter-spacing: 0;
 }
 
