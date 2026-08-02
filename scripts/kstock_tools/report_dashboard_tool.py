@@ -75,6 +75,9 @@ def render_html_report_tool(
       (a) rows=string[][] 二维数组，首行即表头；(b) data=array<object> + 可选 columns
       (string[] 指定列序)。表格以完整 <table> 渲染，禁止用图表替代表格。
       图表以内嵌 SVG 渲染，禁止使用远程图片 URL。
+      ★ 一次调用即产出 dark/light 双主题 HTML，filename 指定主交付文件名（dark 主题）；
+      ★ 禁止为 dark/light 双主题重复调用本工具（内容相同，只会造成重复交付文件）；
+      ★ 渲染后仅保留 filename 一份文件，中间产物自动清理。
     - 可选归档字段: report_id / subject{symbol} / period{start,end} /
       sections[{status}] / report_type，用于报告库元数据。
     - 全部数值必须与数据源输出一致，禁止改写或编造；表格数据必须完整收录。
@@ -103,11 +106,21 @@ def render_html_report_tool(
             json.dump(payload, handle, ensure_ascii=False)
             temporary_input = Path(handle.name)
         # render 引擎输出 {stem}.md / {stem}-dark.html / {stem}-light.html 三份产物；
-        # 交付文件名按调用方指定的 filename（如 report.html）落盘，取 dark 版拷贝。
+        # 交付文件名按调用方指定的 filename（如 report.html）落盘，取 dark 版拷贝；
+        # 中间产物仅用于本次渲染，立即清理，outputs 目录只保留 filename 一份。
         _, dark_path, _ = render(temporary_input, outputs_dir, Path(filename).stem)
         output_path = outputs_dir / filename
         if dark_path.resolve() != output_path.resolve():
             shutil.copyfile(dark_path, output_path)
+        import itertools
+
+        for extra in itertools.chain(
+            outputs_dir.glob(f"{Path(filename).stem}*.md"),
+            outputs_dir.glob(f"{Path(filename).stem}-dark.html"),
+            outputs_dir.glob(f"{Path(filename).stem}-light.html"),
+        ):
+            if extra.resolve() != output_path.resolve():
+                extra.unlink(missing_ok=True)
         store = ReportLibraryStore(Path(os.environ["KSTOCK_APP_DATA_DIR"]))
         # 工具契约不含 report_id，按标题稳定派生以便重复生成覆盖归档。
         report_id = str(payload.get("report_id") or "")

@@ -96,6 +96,7 @@ import {
 import { engineMessagesToChatMessages } from "../lib/engineHistory";
 import { initialTurn, reduceFrame } from "../lib/turnReducer";
 import { inferStage } from "../lib/stageInferrer";
+import { mergeDeliveryFiles, toAbsoluteUrl, type DeliveryFile } from "../lib/deliveryFiles";
 import {
   isGatewayControlApiError,
   restartGateway,
@@ -2075,14 +2076,6 @@ function formatFileSize(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-type DeliveryFile = {
-  key: string;
-  name: string;
-  url?: string;
-  size?: number;
-  status: string;
-};
-
 function mergeUploadPanelFiles(
   uploaded: UploadedFileRef[],
   pending: UploadedFileRef[]
@@ -2097,42 +2090,6 @@ function mergeUploadPanelFiles(
     });
   });
   return [...byName.values()];
-}
-
-function mergeDeliveryFiles(
-  threadId: string | undefined,
-  artifacts: unknown[] | undefined,
-  workspaceFiles: WorkspaceChangeFile[]
-): DeliveryFile[] {
-  const byPath = new Map<string, DeliveryFile>();
-  for (const raw of artifacts ?? []) {
-    const item = typeof raw === "string" ? { path: raw } : raw && typeof raw === "object" ? raw as Record<string, unknown> : null;
-    if (!item) continue;
-    const path = typeof item.path === "string" ? item.path : typeof item.virtual_path === "string" ? item.virtual_path : "";
-    const explicitUrl = typeof item.artifact_url === "string" ? item.artifact_url : undefined;
-    if (!path && !explicitUrl) continue;
-    const key = path || explicitUrl!;
-    const name = path.split("/").pop() || explicitUrl?.split("/").pop() || "交付文件";
-    byPath.set(key, { key, name, url: threadId ? (explicitUrl ? toAbsoluteUrl(explicitUrl) : artifactUrl(threadId, path)) : undefined, status: "created" });
-  }
-  for (const file of workspaceFiles) {
-    if (file.status === "deleted" || (file.root && file.root !== "outputs")) continue;
-    const path = file.path;
-    const name = path.split("/").pop() || path;
-    byPath.set(path, {
-      key: path,
-      name,
-      url: threadId ? artifactUrl(threadId, path) : undefined,
-      size: file.size_after ?? undefined,
-      status: file.status
-    });
-  }
-  return [...byPath.values()];
-}
-
-function toAbsoluteUrl(url: string): string {
-  if (/^https?:\/\//i.test(url)) return url;
-  return new URL(url, GATEWAY_URL).toString();
 }
 
 function getArtifactPreviewKind(name: string, contentType = ""): "html" | "markdown" | "text" | "download" {

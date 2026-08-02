@@ -48,6 +48,14 @@ def test_tool_writes_thread_output_and_library(tmp_path, monkeypatch):
     assert (tmp_path / "data/reports/alice/2026/08/01/report-1.html").exists()
 
 
+def test_tool_cleans_intermediate_render_outputs(tmp_path, monkeypatch):
+    """渲染中间产物（{stem}.md / -dark.html / -light.html）不得残留在 outputs 目录。"""
+    monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(tmp_path / "data"))
+    render_html_report_tool.func(runtime(tmp_path), json.dumps(payload(), ensure_ascii=False), "call-1")
+    leftovers = [p.name for p in (tmp_path / "outputs").iterdir()]
+    assert leftovers == ["report.html"]
+
+
 def test_tool_rejects_non_html_filename_without_files(tmp_path, monkeypatch):
     monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(tmp_path / "data"))
     result = render_html_report_tool.func(runtime(tmp_path), json.dumps(payload()), "call-2", filename="report.md")
