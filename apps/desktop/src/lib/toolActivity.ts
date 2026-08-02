@@ -10,7 +10,7 @@ export interface ToolActivitySummary {
   durationMs?: number;
 }
 
-export function summarizeToolActivity(calls: ToolCall[]): ToolActivitySummary {
+export function summarizeToolActivity(calls: ToolCall[], now = Date.now()): ToolActivitySummary {
   const status: ToolActivityStatus = calls.some((call) => call.status === "running")
     ? "running"
     : calls.some((call) => call.status === "error")
@@ -35,14 +35,20 @@ export function summarizeToolActivity(calls: ToolCall[]): ToolActivitySummary {
     undefined
   );
 
+  const durationMs = startedAt != null
+    ? status === "running"
+      ? Math.max(0, now - startedAt)
+      : endedAt != null
+        ? Math.max(0, endedAt - startedAt)
+        : undefined
+    : undefined;
+
   return {
     status,
     callCount: calls.length,
     toolCount: new Set(calls.map((call) => call.name)).size,
     latestResult: latestResult.length > 95 ? `${latestResult.slice(0, 95)}…` : latestResult,
-    ...(status !== "running" && startedAt != null && endedAt != null
-      ? { durationMs: Math.max(0, endedAt - startedAt) }
-      : {}),
+    ...(durationMs != null ? { durationMs } : {}),
   };
 }
 

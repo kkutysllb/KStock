@@ -1,5 +1,5 @@
 // 紧凑工具调用卡片（默认折叠）：
-// - 折叠态：状态点 + name + 状态标签（调用中/已完成/失败），整行可点击展开
+// - 折叠态：状态点 + name，整行可点击展开
 // - 展开态：args 详情（key=value 列表）+ result（截断显示）
 // - running 状态保持折叠，仅 spinner 提示进度
 
@@ -28,7 +28,6 @@ export function ToolCard({ call }: ToolCardProps) {
       >
         <ToolStatusIcon status={call.status} />
         <code className="tool-name">{call.name}</code>
-        <span className="tool-status-label">{statusLabel(call.status)}</span>
         {expandable && <ChevronRight size={12} className={expanded ? "chevron-expanded" : ""} />}
       </button>
       {expanded && (
@@ -54,17 +53,6 @@ function ToolStatusIcon({ status }: { status: ToolCall["status"] }) {
   if (status === "running") return <Loader2 size={12} className="spin" />;
   if (status === "done") return <Check size={12} />;
   return <AlertCircle size={12} />;
-}
-
-function statusLabel(status: ToolCall["status"]): string {
-  switch (status) {
-    case "running":
-      return "调用中";
-    case "done":
-      return "已完成";
-    case "error":
-      return "失败";
-  }
 }
 
 function formatValue(v: unknown): string {

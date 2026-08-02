@@ -2602,9 +2602,6 @@ button.context-file-row:hover {
 .tool-activity-summary {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.075);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.018);
 }
 
 .tool-activity-summary-header {
@@ -2625,6 +2622,12 @@ button.context-file-row:hover {
 
 .tool-activity-summary-header:hover {
   background: rgba(255, 255, 255, 0.035);
+}
+
+.tool-activity-divider {
+  height: 1px;
+  margin: 1px 0 0;
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .tool-activity-status,
@@ -2673,9 +2676,7 @@ button.context-file-row:hover {
 .tool-activity-details {
   display: grid;
   gap: 6px;
-  padding: 0 7px 7px;
-  border-top: 1px solid rgba(255, 255, 255, 0.055);
-  background: rgba(0, 0, 0, 0.08);
+  padding: 8px 0 0;
 }
 
 /* tool card */
@@ -2713,13 +2714,6 @@ button.context-file-row:hover {
   font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
   font-size: 12px;
   color: #31c7a2;
-}
-
-.tool-status-label {
-  color: #6b7280;
-  font-size: 11px;
-  flex: 1;
-  min-width: 0;
 }
 
 .tool-card-detail {

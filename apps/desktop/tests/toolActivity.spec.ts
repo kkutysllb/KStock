@@ -30,8 +30,15 @@ describe("summarizeToolActivity", () => {
     expect(summarizeToolActivity([call({ status: "error" }), call({ status: "done" })]).status).toBe("error");
   });
 
-  it("调用尚未全部完成时处于准备中状态", () => {
+  it("调用尚未全部完成时处于运行状态", () => {
     expect(summarizeToolActivity([call({ status: "running" })]).status).toBe("running");
+  });
+
+  it("运行中从最早开始时间持续累计耗时", () => {
+    expect(summarizeToolActivity([
+      call({ status: "running", startedAt: 1_000 }),
+      call({ status: "running", startedAt: 2_000 }),
+    ], 4_500).durationMs).toBe(3_500);
   });
 
   it("没有结果时返回空摘要，超长结果截断为单行", () => {

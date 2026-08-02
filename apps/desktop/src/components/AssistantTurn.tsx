@@ -1,6 +1,6 @@
 // assistant turn 整合：Claude/ChatGPT 风格无气泡布局。
-// 从上到下：头像 + StageBadge → ReasoningBlock → SubagentGroup[] →
-// ToolCard[]（主 agent）→ 正文 text（markdown 源文本）→ error。
+// 从上到下：阶段徽章（无工具调用时）→ ReasoningBlock → SubagentGroup[] →
+// 工具活动摘要 → 正文 text（markdown 源文本）→ error。
 // 流式时正文末尾闪动光标；空 turn 流式中显示 pending 占位。
 
 import { AlertTriangle } from "lucide-react";
@@ -62,6 +62,10 @@ export function AssistantTurn({
   // ask_clarification 交互式澄清检测。
   const { payload: clarifyPayload, isInteractive: hasInteractiveClarification } =
     detectClarification(msg);
+  const visibleToolCalls =
+    msg.toolCalls?.filter((call) => call.name !== "ask_clarification") ?? [];
+  const hasToolActivity = showToolCalls && visibleToolCalls.length > 0;
+  const showTurnHeader = (showStage && !hasToolActivity) || msg.status === "compacted";
 
   const hasContent =
     (msg.text && msg.text.length > 0) ||
@@ -73,8 +77,8 @@ export function AssistantTurn({
   return (
     <article className="assistant-turn" aria-label="助手消息">
       <div className="turn-body">
-        {(showStage || msg.status === "compacted") && <div className="turn-header">
-          {showStage && <StageBadge stage={msg.stage} streaming={streaming} />}
+        {showTurnHeader && <div className="turn-header">
+          {showStage && !hasToolActivity && <StageBadge stage={msg.stage} streaming={streaming} />}
           {msg.status === "compacted" && (
             <span className="compacted-notice" title="引擎已压缩历史上下文">
               上下文已压缩
@@ -94,7 +98,7 @@ export function AssistantTurn({
 
         {showToolCalls && (
           <ToolActivitySummary
-            calls={msg.toolCalls?.filter((c) => c.name !== "ask_clarification") ?? []}
+            calls={visibleToolCalls}
           />
         )}
 

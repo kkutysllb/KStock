@@ -13,7 +13,48 @@ const call = (patch: Partial<ToolCall>): ToolCall => ({
 });
 
 describe("ToolActivitySummary", () => {
-  it("默认只显示一行摘要，展开后直接显示单次调用卡片", () => {
+  it("运行中默认展开工具记录，完成后自动收起并显示总耗时", () => {
+    const { rerender } = render(
+      <ToolActivitySummary
+        calls={[
+          call({ id: "1", name: "read_file", status: "running", startedAt: 1_000 }),
+          call({ id: "2", name: "bash", status: "running", startedAt: 2_000 }),
+        ]}
+      />
+    );
+
+    const summary = screen.getByRole("button", { name: /处理中/ });
+    expect(summary).toBeVisible();
+    expect(summary).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByLabelText(/工具调用/)).toHaveLength(2);
+    expect(screen.getByTestId("tool-activity-divider")).toBeVisible();
+
+    rerender(
+      <ToolActivitySummary
+        calls={[
+          call({ id: "1", name: "read_file", result: "读取完成", startedAt: 1_000, endedAt: 6_000 }),
+          call({ id: "2", name: "bash", result: "脚本完成", startedAt: 2_000, endedAt: 8_000 }),
+        ]}
+      />
+    );
+    expect(summary).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("工具调用 read_file")).not.toBeInTheDocument();
+
+    fireEvent.click(summary);
+    expect(screen.getByLabelText("工具调用 read_file")).toBeVisible();
+    fireEvent.click(screen.getAllByRole("button", { name: "read_file" })[0]);
+    expect(screen.getByText("/tmp/report.md")).toBeVisible();
+  });
+
+  it("单条工具调用不再显示文字状态标签", () => {
+    render(<ToolActivitySummary calls={[call({ status: "running" })]} />);
+
+    expect(screen.queryByText("调用中")).not.toBeInTheDocument();
+    expect(screen.queryByText("准备中")).not.toBeInTheDocument();
+    expect(screen.queryByText("已完成")).not.toBeInTheDocument();
+  });
+
+  it("完成状态默认收起，用户仍可按需查看工具记录", () => {
     render(
       <ToolActivitySummary
         calls={[
@@ -25,26 +66,14 @@ describe("ToolActivitySummary", () => {
     );
 
     const summary = screen.getByRole("button", { name: /已完成 9s/ });
-    expect(summary).toBeVisible();
     expect(summary).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("读取完成")).not.toBeInTheDocument();
 
     fireEvent.click(summary);
 
-    expect(summary).toHaveAttribute("aria-expanded", "true");
     expect(screen.getAllByLabelText("工具调用 read_file")).toHaveLength(2);
-    expect(screen.queryByText("2 次调用")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getAllByRole("button", { name: /read_file 已完成/ })[0]);
-
-    expect(screen.getByText("/tmp/report.md")).toBeVisible();
+    fireEvent.click(screen.getAllByRole("button", { name: "read_file" })[0]);
     expect(screen.getByText("读取完成")).toBeVisible();
-  });
-
-  it("工具尚未全部完成时显示准备中", () => {
-    render(<ToolActivitySummary calls={[call({ status: "running" })]} />);
-
-    expect(screen.getByRole("button", { name: "准备中" })).toBeVisible();
   });
 
   it("空调用不渲染摘要", () => {

@@ -1,5 +1,5 @@
 import { AlertCircle, Check, ChevronRight, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ToolCall } from "../lib/sessionStore";
 import {
   formatToolActivityDuration,
@@ -13,15 +13,29 @@ interface ToolActivitySummaryProps {
 }
 
 export function ToolActivitySummary({ calls }: ToolActivitySummaryProps) {
-  const [expanded, setExpanded] = useState(false);
-
   if (calls.length === 0) return null;
 
   const summary = summarizeToolActivity(calls);
+  return <ToolActivitySummaryContent calls={calls} summary={summary} />;
+}
+
+function ToolActivitySummaryContent({
+  calls,
+  summary,
+}: ToolActivitySummaryProps & { summary: ReturnType<typeof summarizeToolActivity> }) {
+  const [expanded, setExpanded] = useState(summary.status === "running");
+  const previousStatus = useRef(summary.status);
   const statusLabel = getStatusLabel(summary.status);
   const durationLabel = summary.durationMs != null
     ? ` ${formatToolActivityDuration(summary.durationMs)}`
     : "";
+
+  useEffect(() => {
+    if (previousStatus.current !== summary.status) {
+      setExpanded(summary.status === "running");
+      previousStatus.current = summary.status;
+    }
+  }, [summary.status]);
 
   return (
     <section className={`tool-activity-summary status-${summary.status}`} aria-label="工具活动">
@@ -36,6 +50,7 @@ export function ToolActivitySummary({ calls }: ToolActivitySummaryProps) {
         <span className="tool-activity-status">{statusLabel}{durationLabel}</span>
         <ChevronRight size={13} className={expanded ? "chevron-expanded" : ""} aria-hidden="true" />
       </button>
+      <div className="tool-activity-divider" data-testid="tool-activity-divider" />
       {expanded && (
         <div className="tool-activity-details">
           {calls.map((call) => (
@@ -54,7 +69,7 @@ function ToolActivityStatusIcon({ status }: { status: ToolActivityStatus }) {
 }
 
 function getStatusLabel(status: ToolActivityStatus): string {
-  if (status === "running") return "准备中";
+  if (status === "running") return "处理中";
   if (status === "error") return "有失败";
   return "已完成";
 }
