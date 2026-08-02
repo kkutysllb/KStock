@@ -44,9 +44,9 @@ class FuturesDataFetcher:
     def get_dominant_contract(self, symbol: str) -> Optional[str]:
         """获取主力合约代码
 
-        fut_mapping 返回全市场合约映射（ts_code 为连续合约代码，如 IFL2.CFX；
-        mapping_ts_code 为该品种主力映射合约，如 IF2609.CFX），且不按 symbol
-        过滤，因此需按品种前缀过滤后取最新交易日映射。
+        fut_mapping 返回全市场合约映射（ts_code 为连续合约代码，如 IF.CFX、
+        IFL.CFX；mapping_ts_code 为该连续合约映射的实际合约），同一交易日有多行
+        映射，取最新交易日中出现最多的 mapping_ts_code 作为主力（众数）。
         """
         if not self.pro:
             return None
@@ -55,9 +55,12 @@ class FuturesDataFetcher:
             if df is not None and not df.empty and 'mapping_ts_code' in df.columns:
                 filtered = df[df['ts_code'].astype(str).str.startswith(symbol)]
                 if not filtered.empty:
-                    latest = filtered.sort_values('trade_date').iloc[-1]
-                    code = latest.get('mapping_ts_code')
-                    if code:
+                    latest_date = filtered['trade_date'].max()
+                    latest_rows = filtered[filtered['trade_date'] == latest_date]
+                    codes = latest_rows['mapping_ts_code'].dropna().tolist()
+                    if codes:
+                        from collections import Counter
+                        code = Counter(codes).most_common(1)[0][0]
                         return str(code)
         except Exception:
             pass
@@ -144,6 +147,22 @@ class FuturesDataFetcher:
                 result.append({'trade_date': d, 'df': df})
         result.sort(key=lambda x: x['trade_date'])
         return result
+
+
+def _safe_float(v):
+    """NaN 安全浮点转换（fut_daily 部分字段存在 NaN）"""
+    if v is None:
+        return 0.0
+    try:
+        f = float(v)
+        return 0.0 if pd.isna(f) else f
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _safe_int(v):
+    """NaN 安全整数转换"""
+    return int(_safe_float(v))
 
 
 def _citic_others_snapshot(day_df: pd.DataFrame, long_c: str, short_c: str,
@@ -312,7 +331,9 @@ class FuturesAnalyzer:
         close = float(latest.get('close', 0))
         settle = float(latest.get('settle', close))
         pre_settle = float(latest.get('pre_settle', close))
-        pct_chg = float(latest.get('pct_chg', 0))
+        # fut_daily 无 pct_chg 字段：用收盘价与昨收价计算当日涨跌幅
+        pre_close = float(latest.get('pre_close', 0))
+        pct_chg = round((close - pre_close) / pre_close * 100, 2) if pre_close else 0.0
         vol = int(float(latest.get('vol', 0)))
         oi = int(float(latest.get('oi', 0)))
 
@@ -351,11 +372,33 @@ class FuturesAnalyzer:
                 'oi': int(float(row.get('oi', 0))),
             })
 
+        # 逐日明细（周度逐日走势表用；df 已按 trade_date 升序）
+        daily = []
+        prev_close = None
+        for _, row in df.iterrows():
+            td = str(row.get('trade_date', ''))
+            if len(td) == 8:
+                td = f"{td[:4]}-{td[4:6]}-{td[6:]}"
+            c = _safe_float(row.get('close'))
+            pc = _safe_float(row.get('pre_close')) or prev_close or 0
+            pct = round((c - pc) / pc * 100, 2) if pc else 0.0
+            daily.append({
+                'date': td,
+                'close': c,
+                'settle': _safe_float(row.get('settle')) or c,
+                'pct_chg': pct,
+                'vol': _safe_int(row.get('vol')),
+                'oi': _safe_int(row.get('oi')),
+                'oi_chg': _safe_int(row.get('oi_chg')),
+            })
+            prev_close = c
+
         return {
             'latest_date': str(latest.get('trade_date', '-')),
             'close': close,
             'settle': settle,
             'pct_chg': pct_chg,
+            'daily': daily,
             'ma5': round(ma5, 1),
             'ma10': round(ma10, 1),
             'ma20': round(ma20, 1),
@@ -393,12 +436,34 @@ class FuturesAnalyzer:
         else:
             sentiment = '基差正常'
 
+        # 逐日基差率（按 trade_date 对齐期货与现货），周均 = 最近 5 个交易日均值
+        daily = []
+        try:
+            fut_merge = fut_df[['trade_date', 'close']].dropna()
+            spot_merge = index_df[['trade_date', 'close']].dropna()
+            merged = fut_merge.merge(spot_merge, on='trade_date', suffixes=('_fut', '_spot'))
+            for _, row in merged.tail(5).iterrows():
+                td = str(row.get('trade_date', ''))
+                if len(td) == 8:
+                    td = f"{td[:4]}-{td[4:6]}-{td[6:]}"
+                s = float(row.get('close_spot', 0))
+                f = float(row.get('close_fut', 0))
+                if s == 0:
+                    continue
+                b = f - s
+                daily.append({'date': td, 'basis': round(b, 2), 'basis_pct': round(b / s * 100, 4)})
+        except Exception:
+            daily = []
+        week_avg_basis_pct = round(sum(d['basis_pct'] for d in daily) / len(daily), 3) if daily else None
+
         return {
             'spot_price': round(spot_close, 1),
             'futures_price': round(fut_close, 1),
             'near_basis': round(basis, 1),
             'near_basis_rate': round(basis_rate, 2),
             'avg_basis_rate': round(basis_rate, 2),
+            'week_avg_basis_pct': week_avg_basis_pct,
+            'daily': daily,
             'sentiment': sentiment,
         }
 

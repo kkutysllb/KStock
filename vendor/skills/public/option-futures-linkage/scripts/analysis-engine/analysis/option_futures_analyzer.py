@@ -246,7 +246,12 @@ class OptionFuturesFetcher:
         return pd.DataFrame()
 
     def get_dominant_contract(self, symbol: str) -> Optional[str]:
-        """获取期指主力合约（fut_mapping 按品种前缀过滤取最新映射）"""
+        """获取期指主力合约
+
+        fut_mapping 同一交易日有多行映射（不同连续合约 ts_code 各自指向实际
+        合约），取最新交易日中出现最多的 mapping_ts_code 作为主力（众数）。
+        与 futures-analysis 技能口径一致。
+        """
         if not self.pro:
             return None
         try:
@@ -254,9 +259,12 @@ class OptionFuturesFetcher:
             if df is not None and not df.empty and 'mapping_ts_code' in df.columns:
                 filtered = df[df['ts_code'].astype(str).str.startswith(symbol)]
                 if not filtered.empty:
-                    latest = filtered.sort_values('trade_date').iloc[-1]
-                    code = latest.get('mapping_ts_code')
-                    if code:
+                    latest_date = filtered['trade_date'].max()
+                    latest_rows = filtered[filtered['trade_date'] == latest_date]
+                    codes = latest_rows['mapping_ts_code'].dropna().tolist()
+                    if codes:
+                        from collections import Counter
+                        code = Counter(codes).most_common(1)[0][0]
                         return str(code)
         except Exception:
             pass

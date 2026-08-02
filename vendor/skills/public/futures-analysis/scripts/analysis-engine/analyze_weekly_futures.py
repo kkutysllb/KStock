@@ -82,6 +82,47 @@ def _score_bar(score, width=20):
     return '█' * n + '░' * (width - n)
 
 
+def _detect_contract_switch(fetcher, sym: str, week_days: list):
+    """检测周窗口内主力合约是否切换
+
+    fut_mapping 返回全市场合约映射（ts_code 为连续合约代码，mapping_ts_code
+    为该连续合约映射的实际合约），同一交易日有多行映射，按日取众数作为当日
+    主力，窗口内主力序列多于 1 个即视为周内切换。
+    """
+    pro = getattr(fetcher, 'pro', None)
+    if pro is None or not week_days:
+        return None
+    try:
+        df = pro.fut_mapping(symbol=sym)
+        if df is None or df.empty or 'mapping_ts_code' not in df.columns:
+            return None
+        filtered = df[df['ts_code'].astype(str).str.startswith(sym)].copy()
+        if filtered.empty:
+            return None
+
+        def _fmt(td):
+            td = str(td)
+            return f"{td[:4]}-{td[4:6]}-{td[6:]}" if len(td) == 8 else td
+
+        filtered['_date'] = filtered['trade_date'].map(_fmt)
+        in_window = filtered[(filtered['_date'] >= week_days[0]) &
+                             (filtered['_date'] <= week_days[-1])]
+        if in_window.empty:
+            return None
+        from collections import Counter
+        daily_codes = in_window.groupby('_date')['mapping_ts_code'].apply(
+            lambda s: Counter(s.dropna().tolist()).most_common(1)[0][0]
+            if s.notna().any() else None)
+        codes = [c for c in daily_codes.tolist() if c]
+        if not codes:
+            return None
+        if len(set(codes)) > 1:
+            return f"周内主力切换：{' → '.join(dict.fromkeys(codes))}"
+        return f"主力合约 {codes[0]}，周内未切换"
+    except Exception:
+        return None
+
+
 # ======================================================================
 #  模板格式打印 — 市场概览
 # ======================================================================
@@ -120,7 +161,7 @@ def print_market_overview(result: Dict, week_start: str, week_end: str, week_day
             senti = d.get('sentiment', '-')
             pos = d.get('position_signal', '-')
             citic = d.get('citic_signal', '-')
-            week_chg = d.get('week_chg', 0)
+            week_chg = d.get('week_chg')  # 缺失时输出 —（不再包装为 0）
 
             score_icon = '▼' if sc <= 42 else '▲' if sc >= 58 else '─'
             score_bar = _bar(sc, 100, 8)
@@ -162,11 +203,16 @@ def print_price_analysis(sym: str, sym_data: Dict, week_days: list):
     print(f"| 全周涨跌幅 | {_chg(week_chg)} | 周度涨跌 |")
     print(f"| 趋势判断 | {trend} | 技术形态 |")
     print(f"| OI变化 | {week_oi_chg:+,} 手 | {oi_trend} |")
+    main_contract = p.get('main_contract', '-')
+    contract_switch = p.get('contract_switch')
+    switch_str = contract_switch if contract_switch else '主力合约信息缺失'
+    print(f"| 主力合约 | {main_contract} | {switch_str} |")
 
     # 逐日走势
     daily = p.get('daily', [])
     if daily:
-        print("\n**逐日走势：**\n")
+        daily = daily[-5:]  # 周度：仅最近 5 个交易日
+        print("\n**逐日走势（最近5个交易日）：**\n")
         print("| 日期 | 收盘价 | 结算价 | 涨跌幅 | 成交量 | 持仓量 | OI变化 |")
         print("|------|--------|--------|--------|--------|--------|--------|")
         for d in daily:
@@ -205,7 +251,7 @@ def print_contango_analysis(sym: str, sym_data: Dict):
     near_basis = ct.get('near_basis', 0)
     near_rate = ct.get('near_basis_rate', 0)
     avg_rate = ct.get('avg_basis_rate', 0)
-    week_avg = ct.get('week_avg_basis_pct', 0)
+    week_avg = ct.get('week_avg_basis_pct')
     sentiment = ct.get('sentiment', '-')
     term_str = ct.get('term_structure', '-')
     basis_sig = ct.get('basis_signal', '-')
@@ -213,7 +259,10 @@ def print_contango_analysis(sym: str, sym_data: Dict):
     print(f"| 现货指数 | {spot:.2f} | 标的指数 |")
     print(f"| 近月基差 | **{near_basis:+.2f}** | 期货-现货 |")
     print(f"| 近月基差率 | **{near_rate:+.4f}%** | 基差/现货 |")
-    print(f"| 周均基差率 | **{week_avg:+.3f}%** | 全周均值 |")
+    if week_avg is not None:
+        print(f"| 周均基差率 | **{week_avg:+.3f}%** | 全周均值（5个交易日） |")
+    else:
+        print("| 周均基差率 | — | 数据缺失 |")
     print(f"| 市场情绪 | {sentiment} | 基于基差 |")
     print(f"| 期限结构 | {term_str} | 远月关系 |")
     print(f"| 基差信号 | {basis_sig} | — |")
@@ -606,29 +655,58 @@ def main():
     # supports a `days` parameter and produces the same result structure.
     from analysis.futures_analyzer import FuturesDataFetcher, FuturesAnalyzer
 
-    days = (args.weeks + 1) * 7
+    days = (args.weeks + 1) * 14  # 取数窗口放大，保证覆盖完整 5 交易日窗口
     fetcher = FuturesDataFetcher()
     analyzer = FuturesAnalyzer(fetcher)
 
     print(f"正在采集周度期货数据（回溯 {days} 天）...")
     result = analyzer.analyze_all(symbols=['IF', 'IC', 'IH', 'IM'], days=days)
 
-    # Add week-level metadata expected by the print functions.
-    from datetime import timedelta
-    week_end = datetime.now().strftime('%Y-%m-%d')
-    week_start = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+    # ── 周窗口：以实际交易日为准（最近 5 个交易日），而非自然日 ──
     week_days = []
-    for i in range(7):
-        d = (datetime.now() - timedelta(days=6 - i)).strftime('%Y-%m-%d')
-        week_days.append(d)
+    for sym in ['IF', 'IC', 'IH', 'IM']:
+        daily = result.get('symbols', {}).get(sym, {}).get('price', {}).get('daily', [])
+        if daily:
+            week_days = [d['date'] for d in daily][-5:]
+            break
+    if not week_days:
+        # 兜底：行情缺失时退化为自然日（如实展示，数据本身缺失）
+        from datetime import timedelta
+        week_days = [(datetime.now() - timedelta(days=6 - i)).strftime('%Y-%m-%d')
+                     for i in range(7)]
+    week_start, week_end = week_days[0], week_days[-1]
 
-    # Enrich symbol data with week_chg for the print functions.
+    # ── 逐品种周度指标：周涨跌幅 / 周OI变化 / 主力合约切换 / 持仓表窗口过滤 ──
     for sym, sym_data in result.get('symbols', {}).items():
         price = sym_data.get('price', {})
-        if 'pct_chg' in price:
-            price['week_chg'] = price.get('pct_chg', 0)
-        if 'oi_chg' in price:
-            price['week_oi_chg'] = price.get('oi_chg', 0)
+        daily = price.get('daily', [])
+        week_daily = [d for d in daily if d['date'] in week_days]
+        if len(week_daily) >= 2:
+            first_close = float(week_daily[0]['close'])
+            last_close = float(week_daily[-1]['close'])
+            if first_close:
+                # 周涨跌幅 = 周内末收盘 / 周内首收盘 - 1（与期权联动脚本口径一致）
+                price['week_chg'] = round((last_close / first_close - 1) * 100, 2)
+            # 周 OI 变化 = 周内末持仓量 - 周内首持仓量
+            price['week_oi_chg'] = (int(week_daily[-1].get('oi', 0))
+                                    - int(week_daily[0].get('oi', 0)))
+            price['oi_trend'] = ('增仓' if price['week_oi_chg'] > 0 else
+                                 '减仓' if price['week_oi_chg'] < 0 else '持平')
+        # 主力合约与周内切换信息
+        contracts = sym_data.get('contracts', {})
+        price['main_contract'] = contracts.get('main_contract', '-')
+        price['contract_switch'] = _detect_contract_switch(fetcher, sym, week_days)
+        # 同步到综合研判 details（评分表周涨跌列）
+        details = result.get('composite', {}).get('details', {})
+        if sym in details and 'week_chg' in price:
+            details[sym]['week_chg'] = price['week_chg']
+        # 持仓每日变化表只保留窗口内交易日（剔除回溯混入的上周数据）
+        holding = sym_data.get('holding', {})
+        dt = holding.get('daily_trends', [])
+        if dt:
+            wd_raw = set(d.replace('-', '') for d in week_days)
+            holding['daily_trends'] = [x for x in dt
+                                       if str(x.get('trade_date', '')) in wd_raw]
 
     # JSON 输出模式
     if args.json:
