@@ -59,10 +59,12 @@ class MainCapitalAnalyzer(BaseAnalyzer):
             if net_col:
                 in_count = int((stocks[net_col] > 0).sum())
                 out_count = int((stocks[net_col] < 0).sum())
-                top_in = stocks.nlargest(top_n, net_col)[["ts_code", "name", net_col]] \
-                    if "name" in stocks.columns else stocks.nlargest(top_n, net_col)[["ts_code", net_col]]
-                top_out = stocks.nsmallest(top_n, net_col)[["ts_code", "name", net_col]] \
-                    if "name" in stocks.columns else stocks.nsmallest(top_n, net_col)[["ts_code", net_col]]
+                # 净流入 / 净流出分别取榜（moneyflow 全量含正负值）
+                cols = ["ts_code", "name", net_col] if "name" in stocks.columns else ["ts_code", net_col]
+                pos = stocks[stocks[net_col] > 0]
+                neg = stocks[stocks[net_col] < 0]
+                top_in = pos.nlargest(top_n, net_col)[cols] if len(pos) else pos[cols]
+                top_out = neg.nsmallest(top_n, net_col)[cols] if len(neg) else neg[cols]
                 detail.update({
                     "in_count": in_count,
                     "out_count": out_count,

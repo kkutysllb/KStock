@@ -108,13 +108,17 @@ class LinkageFetcher:
     #  1. 主力资金（个股 + 板块）
     # ==================================================================
     def fetch_main_capital_stocks(self, trade_date: str, top_n: int = 200) -> pd.DataFrame:
-        """个股主力资金流向 moneyflow（按 trade_date）。"""
+        """个股主力资金流向 moneyflow（按 trade_date，返回全市场）。
+
+        注意：不能只取流入 topN——否则"净流出榜"会变成流入较少者。
+        全量返回（约 5000+ 行），由分析器自行取流入/流出两端。
+        """
         df = self.ts.moneyflow(trade_date=trade_date)
         if len(df) == 0:
             return pd.DataFrame()
-        sort_col = "net_amount" if "net_amount" in df.columns else df.columns[-1]
-        df = df.sort_values(sort_col, ascending=False).head(top_n)
-        return df.reset_index(drop=True)
+        sort_col = "net_amount" if "net_amount" in df.columns else \
+            ("net_mf_amount" if "net_mf_amount" in df.columns else df.columns[-1])
+        return df.sort_values(sort_col, ascending=False).reset_index(drop=True)
 
     def fetch_main_capital_sector(self, trade_date: str) -> pd.DataFrame:
         """板块主力资金流向 moneyflow_dc（行业板块）。"""
@@ -198,6 +202,14 @@ class LinkageFetcher:
     # ==================================================================
     #  5. 期权波动率
     # ==================================================================
+    def fetch_option_basic(self, exchange: str) -> pd.DataFrame:
+        """期权合约基础信息 opt_basic（含 call_put / exercise_price / maturity_date）。"""
+        try:
+            df = self.ts.opt_basic(exchange=exchange)
+        except Exception:
+            return pd.DataFrame()
+        return df.reset_index(drop=True) if len(df) else df
+
     def fetch_option_daily(
         self, ts_code: Optional[str] = None, trade_date: Optional[str] = None,
         days: int = 30, end: Optional[str] = None, exchange: Optional[str] = None

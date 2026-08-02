@@ -12,6 +12,15 @@
 4. 禁止只在主消息区输出文本总结就算交付；
 5. 若渲染工具调用失败，阅读 analysis-report 技能文档定位原因并重试，不得放弃渲染或以文本替代。
 
+### 报告数据完整性（强制）
+
+报告 JSON 与最终 HTML 必须遵守以下数据纪律：
+
+1. **表格必须完整收录**：脚本输出中的全部表格（期指：四品种行情/基差/机构持仓/前 10 席位/每日每周操作变化；期权：PCR/ATM IV/IV 斜率/RR/联动对比；市场环境：8 维联动表）必须原样搬入报告 JSON 并渲染，禁止只摘录结论、丢弃表格；
+2. **数值禁止改写**：评分、涨跌幅、基差率、持仓变化等所有数值必须与脚本输出完全一致，禁止估算、取整美化或“修复”脚本输出；
+3. **时间戳真实**：`generated_at` / 生成时间必须取真实执行时间（脚本输出或系统时间），禁止虚构生成时刻；
+4. **口径标注保留**：脚本输出的口径说明（数据快照日期、周度窗口起止、数据来源、权限缺失提示）必须原样保留在报告中，不得抹去或改写。
+
 ## 数据访问
 
 数据获取必须遵循以下优先级，**禁止颠倒顺序**：
@@ -32,7 +41,7 @@
 
 3. **期权联动维度**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/option-futures-linkage/SKILL.md` 前 80 行，再执行 `cd /mnt/skills/public/option-futures-linkage/scripts/analysis-engine && python3 analyze_option_futures.py`（周度：`analyze_weekly_option_futures.py`）；转述期权维度（认沽认购 PCR / ATM IV / IV 斜率 / Risk Reversal）与 5 维联动信号表（周度：周均口径）。
 
-4. **市场环境维度**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/market-linkage-engine/SKILL.md` 前 80 行，按其说明完成 8 维市场联动分析并转述联动评分。
+4. **市场环境维度**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/market-linkage-engine/SKILL.md` 前 80 行（含日/周粒度用法），再执行 `cd /mnt/skills/public/market-linkage-engine && python3 -m market_linkage_engine daily`（周度：`python3 -m market_linkage_engine weekly`）；转述 8 维市场联动分析（主力资金/北向/两融/期指基差/期权 PCR 与 IV/宽基 ETF 份额/Shibor/龙虎榜）与综合联动评分。
 
 5. **汇总输出**：构建 IF/IH/IC/IM 四品种方向矩阵（期指信号 / 期权信号 / 联动信号 / 综合方向），按规则标注共振与背离：
    - 期指贴水 + 成交量 PCR 偏空 + RR 认沽贵 = 三向共振偏空；

@@ -78,20 +78,20 @@ class NorthboundAnalyzer(BaseAnalyzer):
         streak_sign = "净流入" if latest_net > 0 else "净流出"
 
         # ----------------------------------------------------------------
-        # Unit contract (Tushare official doc doc_id=47 moneyflow_hsgt):
-        #   north_money / south_money / hgt / sgt  → 百万元 (1M yuan)
-        #   ggt_ss / ggt_sz                        → 百万元 (1M yuan)
-        # Convert to 亿元 (100M yuan) by dividing by 100.
-        # Example: north_money=281077.72 百万元 ≈ 2810.78 亿元 (2026-07-28)
+        # Unit contract (Tushare hsgt / moneyflow_hsgt 实测):
+        #   north_money / south_money / hgt / sgt  → 万元 (10k yuan)
+        # Convert to 亿元 (100M yuan) by dividing by 10000.
+        # 实测 2026-07-29: north_money=341408.12 万元 ≈ 34.14 亿元,
+        # 且 north_money ≈ hgt(159631.57万≈15.96亿) + sgt(181776.55万≈18.18亿)
         # ----------------------------------------------------------------
-        latest_net_yi = latest_net / 100.0
-        cum_net_yi = cum_net / 100.0
+        latest_net_yi = latest_net / 10000.0
+        cum_net_yi = cum_net / 10000.0
         detail = {
             "trade_date": latest["trade_date"].strftime("%Y%m%d"),
             "latest_net": latest_net,
             "latest_net_yi": latest_net_yi,
-            "latest_sh": float(latest[sh_col]) / 100.0 if sh_col else None,
-            "latest_sz": float(latest[sz_col]) / 100.0 if sz_col else None,
+            "latest_sh": float(latest[sh_col]) / 10000.0 if sh_col else None,
+            "latest_sz": float(latest[sz_col]) / 10000.0 if sz_col else None,
             "cum_net": cum_net,
             "cum_net_yi": cum_net_yi,
             "net_positive_days": net_positive_days,
@@ -141,14 +141,13 @@ class NorthboundAnalyzer(BaseAnalyzer):
         score = max(0, min(100, score))
         res["score"] = score
         res["bias"] = "bullish" if score > 55 else ("bearish" if score < 45 else "neutral")
-        # latest_net / cum_net are in 百万元 (moneyflow_hsgt),
-        # use yi_from_wan() which divides by 1e4 (万→亿) is WRONG here.
-        # Instead, divide by 100 to convert 百万 → 亿.
-        def _yi_from_million(v):
+        # latest_net / cum_net are in 万元 (hsgt),
+        # use _yi_from_wan() which divides by 10000 (万→亿).
+        def _yi_from_wan(v):
             if v is None or pd.isna(v): return "-"
-            return f"{float(v) / 100.0:.1f}亿"
+            return f"{float(v) / 10000.0:.1f}亿"
         res["summary"] = (
-            f"北向资金{streak_sign} {_yi_from_million(latest_net)}（{len(df)}日累计 {_yi_from_million(cum_net)}），"
+            f"北向资金{streak_sign} {_yi_from_wan(latest_net)}（{len(df)}日累计 {_yi_from_wan(cum_net)}），"
             f"连续 {streak} 日，信号 {signal_cn(cum_net)}"
         )
         res["detail"] = detail
@@ -161,10 +160,10 @@ class NorthboundAnalyzer(BaseAnalyzer):
         lines.append(f"**综合评分：** {result['score']}/100  | **偏向：** {result['bias']}")
         lines.append(f"**结论：** {result['summary']}")
         lines.append("")
-        # All north/south money fields are in 百万元, render as 亿 (÷100).
+        # All north/south money fields are in 万元, render as 亿 (÷10000).
         def _yi_m(v):
             if v is None or pd.isna(v): return "-"
-            return f"{float(v) / 100.0:.1f}亿"
+            return f"{float(v) / 10000.0:.1f}亿"
         lines.append(f"- 当日北向净额：**{_yi_m(d.get('latest_net', 0))}**")
         if d.get("latest_sh") is not None:
             lines.append(f"- 沪股通：{_yi_m(d['latest_sh'])} / 深股通：{_yi_m(d['latest_sz'])}")
