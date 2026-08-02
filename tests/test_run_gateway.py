@@ -6,9 +6,52 @@
 """
 from __future__ import annotations
 
+import asyncio
+
 import yaml
 
 from scripts.run_gateway import _generate_runtime_config
+
+
+# ── aiosqlite busy_timeout 修复 ────────────────────────────────────────
+
+def test_patch_aiosqlite_sets_busy_timeout(tmp_path):
+    """包装后建立的 aiosqlite 连接必须应用 30s busy_timeout 与 WAL。"""
+    import aiosqlite
+
+    from scripts.run_gateway import _patch_aiosqlite_busy_timeout
+
+    _patch_aiosqlite_busy_timeout()
+
+    async def _check():
+        db_path = tmp_path / "patch_check.db"
+        conn = await aiosqlite.connect(str(db_path))
+        try:
+            cursor = await conn.execute("PRAGMA busy_timeout")
+            row = await cursor.fetchone()
+            await cursor.close()
+            cursor = await conn.execute("PRAGMA journal_mode")
+            mode = await cursor.fetchone()
+            await cursor.close()
+            return row, mode
+        finally:
+            await conn.close()
+
+    (busy, mode) = asyncio.run(_check())
+    assert busy == (30000,), f"busy_timeout 应为 30000，实际 {busy}"
+    assert mode == ("wal",), f"journal_mode 应为 wal，实际 {mode}"
+
+
+def test_patch_aiosqlite_is_idempotent():
+    """重复调用不产生多层包装（保留原始 connect 引用）。"""
+    import aiosqlite
+
+    from scripts.run_gateway import _patch_aiosqlite_busy_timeout
+
+    _patch_aiosqlite_busy_timeout()
+    first = aiosqlite.connect
+    _patch_aiosqlite_busy_timeout()
+    assert aiosqlite.connect is first
 
 
 # ── 首次生成 ─────────────────────────────────────────────────────────

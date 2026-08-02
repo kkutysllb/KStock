@@ -439,6 +439,42 @@ def _install_secrets_injection() -> None:
 _SOUL_TEMPLATE = REPO_ROOT / "config" / "lead_soul.md"
 
 
+def _patch_aiosqlite_busy_timeout() -> None:
+    """统一 aiosqlite 连接的 SQLite 写锁等待超时为 30 秒。
+
+    引擎的 LangGraph checkpointer / store / runs 状态写入均通过 aiosqlite
+    直连（``AsyncSqliteSaver.from_conn_string`` 等不接受 busy_timeout 参数），
+    默认只有 5 秒。多子代理并发执行时，事件批量落库（SQLAlchemy 连接，30s）
+    与 checkpoint 保存（aiosqlite 连接，5s）互相竞争写锁，等待超过 5 秒即抛
+    ``OperationalError: database is locked`` 导致 run 以 error 结束
+    （run_events 表可复现：2026-08-02 c2fb3160 委派 3 个并行子代理后失败，
+    历史 656c57cf 同错）。这里包装 aiosqlite.connect：连接建立后立即执行
+    ``PRAGMA busy_timeout`` 与 ``journal_mode=WAL``，覆盖引擎内部所有
+    aiosqlite 连接（PRAGMA 为连接级设置）。
+    """
+    import aiosqlite
+
+    if getattr(aiosqlite, "_kstock_busy_timeout_patched", False):
+        return
+    original_connect = aiosqlite.connect
+
+    async def _connect_with_timeout(*args, **kwargs):
+        conn = await original_connect(*args, **kwargs)
+        try:
+            cursor = await conn.execute("PRAGMA busy_timeout=30000")
+            await cursor.fetchone()
+            await cursor.close()
+            cursor = await conn.execute("PRAGMA journal_mode=WAL")
+            await cursor.fetchone()
+            await cursor.close()
+        except Exception:
+            pass
+        return conn
+
+    aiosqlite.connect = _connect_with_timeout
+    aiosqlite._kstock_busy_timeout_patched = True
+
+
 def _ensure_default_soul(qilin_home: Path) -> None:
     """首次启动时写入 Lead Agent 运行守则（SOUL.md），已存在则保留用户内容。"""
     soul_path = qilin_home / "SOUL.md"
@@ -451,6 +487,7 @@ def _ensure_default_soul(qilin_home: Path) -> None:
 
 def create_app():
     """应用工厂：先打垫片、初始化用户数据空间、配 CORS，再构造 QiLin gateway。"""
+    _patch_aiosqlite_busy_timeout()
     _apply_vendor_extensions_config_compat_shim()
     # ── 开发日志：先清空网关负责的两个文件（覆写模式，不残留上次运行）──
     from scripts.kstock_dev_logs import (
