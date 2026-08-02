@@ -407,12 +407,16 @@ function artifactsFromToolResult(toolName: string, resultStr: string, artifact: 
     if (Array.isArray(record.artifacts)) artifacts.push(...record.artifacts);
   }
 
-  // render_html_report 的主交付文件固定是 report.html；旧工具结果若只返回
+  // 报告渲染工具的主交付文件固定是 report.html；旧工具结果若只返回
   // report_id 而漏了路径，也保守补齐，保证历史任务右侧有报告入口。
-  if (toolName === "render_html_report" && artifacts.length === 0) {
+  if (isReportRenderTool(toolName) && artifacts.length === 0) {
     artifacts.push("/outputs/report.html");
   }
   return mergeArtifacts([], artifacts);
+}
+
+function isReportRenderTool(toolName: string | undefined): boolean {
+  return toolName === "render_html_report" || toolName === "render_html_report_from_file";
 }
 
 function mergeArtifacts(existing: unknown[] | undefined, incoming: unknown[]): unknown[] {

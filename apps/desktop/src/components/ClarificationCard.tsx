@@ -24,6 +24,33 @@ interface ClarificationCardProps {
 /** form 模式字段值：select/text 为 string，checkbox 为 boolean，multi_select 为数组。 */
 type FormValue = string | boolean | string[];
 
+type NormalizedOption = {
+  key: string;
+  label: string;
+  value: string;
+};
+
+function normalizeOption(option: unknown, index: number): NormalizedOption {
+  if (typeof option === "string" || typeof option === "number" || typeof option === "boolean") {
+    const value = String(option);
+    return { key: `${index}:${value}`, label: value, value };
+  }
+  if (option && typeof option === "object") {
+    const record = option as Record<string, unknown>;
+    const rawValue = record.value ?? record.id ?? record.label ?? index;
+    const rawLabel = record.label ?? record.value ?? record.id ?? rawValue;
+    const value = String(rawValue);
+    const label = String(rawLabel);
+    return { key: `${index}:${value}`, label, value };
+  }
+  const value = String(option ?? "");
+  return { key: `${index}:${value}`, label: value, value };
+}
+
+function normalizeOptions(options: unknown[] | undefined): NormalizedOption[] {
+  return (options ?? []).map(normalizeOption).filter((option) => option.value || option.label);
+}
+
 export function ClarificationCard({ payload, onPick }: ClarificationCardProps) {
   // hooks 一律前置（三种模式共用），避免模式切换时 hooks 顺序变化。
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -213,7 +240,7 @@ function renderFormField(
   value: FormValue | undefined,
   onChange: (name: string, value: FormValue) => void
 ) {
-  const options = field.options ?? [];
+  const options = normalizeOptions(field.options as unknown[] | undefined);
 
   switch (field.type) {
     case "select":
@@ -226,7 +253,7 @@ function renderFormField(
         >
           <option value="">请选择…</option>
           {options.map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
+            <option key={opt.key} value={opt.value}>{opt.label}</option>
           ))}
         </select>
       );
@@ -236,23 +263,23 @@ function renderFormField(
       return (
         <div className="clarification-multi" role="group" aria-label={field.name}>
           {options.map((opt) => {
-            const checked = picked.includes(opt);
+            const checked = picked.includes(opt.value);
             return (
               <button
-                key={opt}
+                key={opt.key}
                 type="button"
                 role="checkbox"
                 aria-checked={checked}
                 className={`clarification-option ${checked ? "checked" : ""}`}
                 onClick={() => {
-                  const next = checked ? picked.filter((v) => v !== opt) : [...picked, opt];
+                  const next = checked ? picked.filter((v) => v !== opt.value) : [...picked, opt.value];
                   onChange(field.name, next);
                 }}
               >
                 <span className="clarification-option-box" aria-hidden="true">
                   {checked && <Check size={12} />}
                 </span>
-                <span className="clarification-option-label">{opt}</span>
+                <span className="clarification-option-label">{opt.label}</span>
               </button>
             );
           })}

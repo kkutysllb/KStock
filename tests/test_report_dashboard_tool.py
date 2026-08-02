@@ -2,7 +2,10 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from scripts.kstock_tools.report_dashboard_tool import render_html_report_tool
+from scripts.kstock_tools.report_dashboard_tool import (
+    render_html_report_from_file_tool,
+    render_html_report_tool,
+)
 from scripts.kstock_reports import ReportLibraryStore
 
 
@@ -34,7 +37,13 @@ def payload(report_id="report-1", generated_at="2026-08-01T10:00:00+08:00"):
 def runtime(tmp_path: Path):
     return SimpleNamespace(
         context={"user_id": "alice", "thread_id": "thread-1"},
-        state={"thread_data": {"outputs_path": str(tmp_path / "outputs")}},
+        state={
+            "thread_data": {
+                "workspace_path": str(tmp_path / "workspace"),
+                "uploads_path": str(tmp_path / "uploads"),
+                "outputs_path": str(tmp_path / "outputs"),
+            }
+        },
     )
 
 
@@ -46,6 +55,43 @@ def test_tool_writes_thread_output_and_library(tmp_path, monkeypatch):
     assert result.update["artifacts"] == ["/outputs/report.html"]
     assert (tmp_path / "outputs/report.html").exists()
     assert (tmp_path / "data/reports/alice/2026/08/01/report-1.html").exists()
+
+
+def test_from_file_tool_reads_workspace_json_and_writes_artifact(tmp_path, monkeypatch):
+    monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(tmp_path / "data"))
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "report.json").write_text(json.dumps(payload(), ensure_ascii=False), encoding="utf-8")
+
+    result = render_html_report_from_file_tool.func(
+        runtime(tmp_path),
+        "/mnt/user-data/workspace/report.json",
+        "call-file",
+        filename="weekly.html",
+    )
+
+    payload_out = json.loads(result.update["messages"][0].content)
+    assert payload_out["thread_virtual_path"] == "/outputs/weekly.html"
+    assert result.update["artifacts"] == ["/outputs/weekly.html"]
+    assert (tmp_path / "outputs/weekly.html").exists()
+    assert (tmp_path / "data/reports/alice/2026/08/01/report-1.html").exists()
+
+
+def test_from_file_tool_rejects_non_workspace_input_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(tmp_path / "data"))
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+    (outputs / "report.json").write_text(json.dumps(payload()), encoding="utf-8")
+
+    result = render_html_report_from_file_tool.func(
+        runtime(tmp_path),
+        "/mnt/user-data/outputs/report.json",
+        "call-file",
+    )
+
+    assert "error" in result.update["messages"][0].content
+    assert "workspace" in result.update["messages"][0].content
+    assert not (tmp_path / "outputs/report.html").exists()
 
 
 def test_tool_cleans_intermediate_render_outputs(tmp_path, monkeypatch):

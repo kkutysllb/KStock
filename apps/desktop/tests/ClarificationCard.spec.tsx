@@ -177,6 +177,32 @@ describe("ClarificationCard", () => {
     );
   });
 
+  it("form 模式 select 兼容对象选项，避免历史澄清恢复时 React 崩溃", () => {
+    const payload = makeChoicePayload({
+      input_mode: "form",
+      options: undefined,
+      fields: [
+        {
+          name: "period",
+          label: "分析周期",
+          type: "select",
+          required: true,
+          options: [
+            { id: "weekly", label: "2026-W31（07-27～07-31）", value: "2026-W31" },
+            { id: "custom", label: "自定义日期范围", value: "custom" },
+          ] as unknown as string[],
+        },
+      ],
+    });
+
+    render(<ClarificationCard payload={payload} onPick={onPick} />);
+
+    expect(screen.getByRole("option", { name: "2026-W31（07-27～07-31）" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("period"), { target: { value: "custom" } });
+    fireEvent.click(screen.getByRole("button", { name: /回复并确认/ }));
+    expect(onPick).toHaveBeenCalledWith("分析周期: custom");
+  });
+
   it("form 模式 multi_select 多选 + checkbox 布尔值组装", () => {
     const payload = makeChoicePayload({
       input_mode: "form",
@@ -201,6 +227,33 @@ describe("ClarificationCard", () => {
     fireEvent.click(screen.getByLabelText("include_news"));
     fireEvent.click(screen.getByRole("button", { name: /回复并确认/ }));
     expect(onPick).toHaveBeenCalledWith("分析维度: 主力资金、两融趋势\n纳入新闻面: 是");
+  });
+
+  it("form 模式 multi_select 兼容对象选项并按 value 提交", () => {
+    const payload = makeChoicePayload({
+      input_mode: "form",
+      options: undefined,
+      fields: [
+        {
+          name: "dims",
+          label: "分析维度",
+          type: "multi_select",
+          required: true,
+          options: [
+            { id: "capital", label: "主力资金", value: "main_capital" },
+            { id: "margin", label: "两融趋势", value: "margin_trend" },
+          ] as unknown as string[],
+        },
+      ],
+    });
+
+    render(<ClarificationCard payload={payload} onPick={onPick} />);
+
+    const boxes = screen.getAllByRole("checkbox");
+    fireEvent.click(boxes[0]);
+    fireEvent.click(boxes[1]);
+    fireEvent.click(screen.getByRole("button", { name: /回复并确认/ }));
+    expect(onPick).toHaveBeenCalledWith("分析维度: main_capital、margin_trend");
   });
 
   it("free_text 模式渲染输入框并直接提交文本", () => {

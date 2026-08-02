@@ -139,6 +139,7 @@ type AuthMode = "login" | "register";
 const WORKSPACE_SIDEBAR_WIDTH_KEY = "kstock.workspaceSidebarWidth";
 const SETTINGS_SIDEBAR_WIDTH_KEY = "kstock.settingsSidebarWidth";
 const REASONING_MODE_KEY = "kstock.reasoningMode";
+const AUTH_BOOT_TIMEOUT_MS = 3_000;
 
 function readReasoningMode(): ReasoningMode {
   const stored = localStorage.getItem(REASONING_MODE_KEY);
@@ -266,6 +267,10 @@ export function Home() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>("");
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  // 启动恢复历史任务是异步的。若用户在恢复完成前已经新建/发送会话，
+  // 恢复请求返回时不能再用空历史覆盖本地会话，否则会出现“消息发出后消失”。
+  const localSessionBeforeHistoryLoadedRef = useRef(false);
+  const localSessionBeforeHistoryLoadedIdRef = useRef<string | null>(null);
   const [draft, setDraft] = useState("");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -315,17 +320,25 @@ export function Home() {
   // 启动时探测 gateway 会话与系统初始化状态。
   useEffect(() => {
     let cancelled = false;
+    let settled = false;
+    const timeoutId = window.setTimeout(() => {
+      if (cancelled || settled) return;
+      setAuthReady(true);
+    }, AUTH_BOOT_TIMEOUT_MS);
     Promise.all([
       tryGetCurrentUser().catch(() => null),
       getSetupStatus().catch(() => null),
     ]).then(([user, setup]) => {
       if (cancelled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
       if (user) setCurrentUser(user);
       if (setup) setSetupStatus(setup);
       setAuthReady(true);
     });
     return () => {
       cancelled = true;
+      window.clearTimeout(timeoutId);
     };
   }, []);
 
@@ -409,6 +422,28 @@ export function Home() {
       const restoredIndex = lastSessionId
         ? threads.findIndex((thread) => thread.thread_id === lastSessionId)
         : -1;
+      if (localSessionBeforeHistoryLoadedRef.current) {
+        const localSessionId = localSessionBeforeHistoryLoadedIdRef.current;
+        setSessions((current) => {
+          if (current.length > 0) return current;
+          if (restored.length === 0 && generalPreferences.create_session_when_empty) {
+            const fresh = createSession("新研究会话");
+            localSessionBeforeHistoryLoadedIdRef.current = fresh.id;
+            return [fresh];
+          }
+          return restored;
+        });
+        setActiveSessionId((current) =>
+          current ||
+          localSessionId ||
+          restored[restoredIndex >= 0 ? restoredIndex : 0]?.id ||
+          localSessionBeforeHistoryLoadedIdRef.current ||
+          ""
+        );
+        localSessionBeforeHistoryLoadedRef.current = false;
+        setSessionsLoaded(true);
+        return;
+      }
       if (restored.length === 0 && generalPreferences.create_session_when_empty) {
         const fresh = createSession("新研究会话");
         setSessions([fresh]);
@@ -636,6 +671,10 @@ export function Home() {
 
   const handleNewSession = () => {
     const nextSession = createSession("新研究会话");
+    if (!sessionsLoaded) {
+      localSessionBeforeHistoryLoadedRef.current = true;
+      localSessionBeforeHistoryLoadedIdRef.current = nextSession.id;
+    }
     setSessions((current) => [nextSession, ...current]);
     setActiveSessionId(nextSession.id);
     setDraft("");
@@ -723,12 +762,19 @@ export function Home() {
     if (!text || !modelName || streamingId) {
       return;
     }
+    if (!sessionsLoaded) {
+      localSessionBeforeHistoryLoadedRef.current = true;
+      localSessionBeforeHistoryLoadedIdRef.current = activeSession?.id ?? null;
+    }
     // 捕快照：发送前保存待发附件（随后清空 pendingAttachments）
     const filesToSend = pendingAttachments.length > 0 ? [...pendingAttachments] : undefined;
     // 无 activeSession（首次进入空台）时自动创建一个，再继续发送。
     let session = activeSession;
     if (!session) {
       session = createSession(text.slice(0, 18));
+      if (!sessionsLoaded) {
+        localSessionBeforeHistoryLoadedIdRef.current = session.id;
+      }
       setSessions((current) => [session!, ...current]);
       setActiveSessionId(session.id);
     }
@@ -914,7 +960,12 @@ export function Home() {
   };
 
   if (!authReady) {
-    return <main className="app-boot" aria-label="应用启动中" />;
+    return (
+      <main className="app-boot" aria-label="应用启动中">
+        <LogoMark compact />
+        <p>正在连接本地引擎…</p>
+      </main>
+    );
   }
 
   if (view === "landing") {
@@ -978,6 +1029,7 @@ export function Home() {
       activeModel={activeModel}
       reasoningMode={reasoningMode}
       modelsLoading={modelsLoading}
+      sessionsLoaded={sessionsLoaded}
       streamingId={streamingId}
       onModelChange={handleModelChange}
       onReasoningModeChange={handleReasoningModeChange}
@@ -1458,6 +1510,7 @@ function WorkspaceShell({
   activeModel,
   reasoningMode,
   modelsLoading,
+  sessionsLoaded,
   streamingId,
   onModelChange,
   onReasoningModeChange,
@@ -1499,6 +1552,7 @@ function WorkspaceShell({
   activeModel: string;
   reasoningMode: ReasoningMode;
   modelsLoading: boolean;
+  sessionsLoaded: boolean;
   streamingId: string | null;
   onModelChange: (name: string) => void;
   onReasoningModeChange: (mode: ReasoningMode) => void;
@@ -1854,7 +1908,7 @@ function WorkspaceShell({
               const shouldSend = generalPreferences.send_shortcut === "enter"
                 ? event.key === "Enter" && !event.shiftKey
                 : event.key === "Enter" && modifier && !event.shiftKey;
-              if (!shouldSend || streamingId || !activeModel) return;
+              if (!shouldSend || streamingId || !activeModel || !sessionsLoaded) return;
               event.preventDefault();
               onSend(activeModel);
             }}
@@ -1889,7 +1943,7 @@ function WorkspaceShell({
                 <Square size={16} fill="currentColor" />
               </button>
             ) : (
-              <button className="send-button" type="button" onClick={() => onSend(activeModel)} disabled={!activeModel} aria-label="发送消息">
+              <button className="send-button" type="button" onClick={() => onSend(activeModel)} disabled={!activeModel || !sessionsLoaded} aria-label="发送消息">
                 <Send size={18} />
               </button>
             )}

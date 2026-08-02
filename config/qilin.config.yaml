@@ -94,6 +94,9 @@ tools:
   - name: render_html_report
     group: report
     use: scripts.kstock_tools.report_dashboard_tool:render_html_report_tool
+  - name: render_html_report_from_file
+    group: report
+    use: scripts.kstock_tools.report_dashboard_tool:render_html_report_from_file_tool
 
 # 子代理配置：全局参数 + 预置角色（custom_agents）
 # 预置角色覆盖 KStock 全业务线，Lead Agent 可按任务类型精准分派。
@@ -305,14 +308,14 @@ subagents:
         <职责边界>
         - 输入预期：其他子代理的原始输出（市场/个股/技术/回测）+ 用户要求的报告类型。
         - 整合：按投研报告标准结构组织内容，补充摘要、风险提示、结论。
-        - 输出：先构造结构化报告 JSON，再调用 render_html_report 生成唯一 HTML 看板；每个实际分析维度必须有文字说明和视觉表达。
+        - 输出：先构造结构化报告 JSON，再调用 render_html_report 生成唯一 HTML 看板；若 JSON 已保存到 `/mnt/user-data/workspace/*.json`，必须直接调用 render_html_report_from_file，禁止把大 JSON 读入上下文；每个实际分析维度必须有文字说明和视觉表达。
         - 不做：原始数据采集、策略回测。
         </职责边界>
 
         <输出格式>
         报告标准结构：摘要、市场与行业、基本面、估值、技术面、回测、风险与事件、来源与数据说明。数据不足的分区必须保留并说明缺口。
 
-        报告渲染统一调用内置 `render_html_report` 工具（契约见工具描述），禁止编写自定义渲染代码或调用外部 CLI。
+        报告渲染统一调用内置 `render_html_report` / `render_html_report_from_file` 工具（契约见工具描述）；当已有 report.json 文件时优先 `render_html_report_from_file(report_json_path="/mnt/user-data/workspace/report.json", filename="report.html")`，禁止编写自定义渲染代码或调用外部 CLI。
         </输出格式>
 
         <工具限制>

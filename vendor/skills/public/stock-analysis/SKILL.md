@@ -356,7 +356,7 @@ python3 scripts/ml-prediction/run_model_train.py --stocks 000001.SZ,600519.SH --
 
 1. 将综合评分、各维度分项、关键指标、风险与数据来源整理为报告 JSON，顶层字段：`title` / `generated_at` / `summary` / `assessment` / `risk_level` / `data_overview` / `core_analysis` / `risks` / `references` / `charts`。
 2. 为每个图表按 `charts[].{tool, title, alt, args}` 结构构造，图表以内嵌 SVG 渲染，**禁止使用远程图片 URL**。至少 3 个图表。args 的完整字段规范以工具描述中的契约说明为准。
-3. 调用 `render_html_report(report_json, filename="report.html")`，渲染成功后用 `present_files` 交付。
+3. 调用 `render_html_report(report_json, filename="report.html")`；若完整 JSON 已保存为 `/mnt/user-data/workspace/*.json`，改用 `render_html_report_from_file(report_json_path="/mnt/user-data/workspace/report.json", filename="report.html")`，禁止先把大 JSON 读入上下文；渲染成功后用 `present_files` 交付。
 
 报告只给研究结论、情景条件、风险等级和需跟踪指标，**不给出买入/卖出/持有等交易建议**。
 

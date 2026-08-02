@@ -26,6 +26,10 @@ from scripts.kstock_tools.akshare_news_tool import (
     _is_stock_code,
     _parse_query as _parse_news_query,
 )
+from scripts.kstock_tools.report_dashboard_tool import (
+    render_html_report_from_file_tool,
+    render_html_report_tool,
+)
 
 
 # ── 是否启用真实调用测试 ────────────────────────────────────────────
@@ -136,8 +140,12 @@ def test_tool_names_match_config():
     names = {t["name"] for t in cfg.get("tools", [])}
     assert "finance_data_search" in names
     assert "finance_news_search" in names
+    assert "render_html_report" in names
+    assert "render_html_report_from_file" in names
     assert finance_data_search_tool.name == "finance_data_search"
     assert finance_news_search_tool.name == "finance_news_search"
+    assert render_html_report_tool.name == "render_html_report"
+    assert render_html_report_from_file_tool.name == "render_html_report_from_file"
 
 
 def test_config_references_akshare_modules():

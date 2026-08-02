@@ -298,7 +298,7 @@ export const SETTING_SECTIONS: SettingSection[] = [
     fields: [
       { name: "默认格式", value: "HTML Dashboard", hint: "单个自包含离线看板" },
       { name: "图表技能", value: "chart-visualization", hint: "使用精选通用图表技能" },
-      { name: "报告渲染", value: "render_html_report 工具", hint: "内置工具：契约校验 + SVG 内嵌图表" }
+      { name: "报告渲染", value: "render_html_report / from_file", hint: "内置工具：契约校验 + SVG 内嵌图表；已落盘 JSON 优先按文件路径渲染" }
     ]
   },
   {

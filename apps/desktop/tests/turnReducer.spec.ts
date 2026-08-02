@@ -212,6 +212,25 @@ describe("messages 事件", () => {
     expect(s.artifacts).toEqual(["/outputs/report.html"]);
   });
 
+  it("render_html_report_from_file 工具结果缺少路径时仍回填默认报告入口", () => {
+    let s = initialTurn();
+    s = reduceFrame(
+      s,
+      frame("messages", aiMsg({ tool_calls: [{ id: "tc1", name: "render_html_report_from_file", args: {} }] })),
+      1
+    );
+    s = reduceFrame(
+      s,
+      frame("messages", toolMsg({
+        name: "render_html_report_from_file",
+        tool_call_id: "tc1",
+        content: JSON.stringify({ report_id: "report-1" }),
+      })),
+      2
+    );
+    expect(s.artifacts).toEqual(["/outputs/report.html"]);
+  });
+
   it("tool message 无匹配 tool_call_id 时忽略", () => {
     let s = initialTurn();
     s = reduceFrame(s, frame("messages", aiMsg({ tool_calls: [{ id: "tc1", name: "f", args: {} }] })), 1);
@@ -556,6 +575,97 @@ describe("custom 事件：task 分组", () => {
     );
     expect(s.subagents).toBeUndefined();
     expect(s.status).toBe("streaming");
+  });
+
+  it("task_running 携带 ToolMessage → 回填 step 工具调用为 done", () => {
+    // 回归：引擎对 subagent 工具结果发 ToolMessage（带 tool_call_id），
+    // 之前被忽略导致残留 running；现在按 tool_call_id 回填结果。
+    let s = initialTurn();
+    s = reduceFrame(s, frame("custom", { type: "task_started", task_id: "t1" }), 1);
+    s = reduceFrame(
+      s,
+      frame("custom", {
+        type: "task_running", task_id: "t1",
+        message: { type: "ai", content: "调用工具", tool_calls: [{ id: "sc1", name: "sub_tool", args: {} }] },
+        message_index: 1
+      }),
+      2
+    );
+    expect(s.subagents?.[0].steps[0].toolCalls?.[0].status).toBe("running");
+
+    s = reduceFrame(
+      s,
+      frame("custom", {
+        type: "task_running", task_id: "t1",
+        message: { type: "tool", tool_call_id: "sc1", content: '{"ok":true}' },
+        message_index: 1
+      }),
+      3
+    );
+    expect(s.subagents?.[0].steps[0].toolCalls?.[0]).toMatchObject({
+      id: "sc1", status: "done", result: '{"ok":true}', endedAt: 3
+    });
+  });
+
+  it("end 收尾 subagents 步骤残留的 running 工具调用", () => {
+    // 回归：turn 收到 end 后顶层 toolCalls 被收尾，但 subagent 步骤内的
+    // 工具调用仍残留 running；现在一并收尾为 done。
+    let s = initialTurn();
+    s = reduceFrame(s, frame("custom", { type: "task_started", task_id: "t1" }), 1);
+    s = reduceFrame(
+      s,
+      frame("custom", {
+        type: "task_running", task_id: "t1",
+        message: { type: "ai", content: "调用工具", tool_calls: [{ id: "sc1", name: "sub_tool", args: {} }] },
+        message_index: 1
+      }),
+      2
+    );
+    s = reduceFrame(s, frame("end", {}), 100);
+    expect(s.status).toBe("done");
+    expect(s.subagents?.[0].steps[0].toolCalls?.[0]).toMatchObject({ status: "done", endedAt: 100 });
+  });
+
+  it("tool 结果回填后，同 id tool_call 帧重发不重置为 running", () => {
+    // 顶层：tool message 回填 done 后，ai 帧重发同 id 不得重置状态
+    let s = initialTurn();
+    s = reduceFrame(s, frame("messages", aiMsg({ id: "m1", tool_calls: [{ id: "tc1", name: "search", args: { q: "a" } }] })), 1);
+    s = reduceFrame(s, frame("messages", toolMsg({ tool_call_id: "tc1", content: "ok" })), 2);
+    expect(s.toolCalls?.[0].status).toBe("done");
+    s = reduceFrame(s, frame("messages", aiMsg({ id: "m1", tool_calls: [{ id: "tc1", name: "search", args: { q: "b" } }] })), 3);
+    expect(s.toolCalls?.[0].status).toBe("done");
+
+    // subagent 步骤同理：同 step 重放 ai 帧不得覆盖已回填的 done
+    let s2 = initialTurn();
+    s2 = reduceFrame(s2, frame("custom", { type: "task_started", task_id: "t1" }), 1);
+    s2 = reduceFrame(
+      s2,
+      frame("custom", {
+        type: "task_running", task_id: "t1",
+        message: { type: "ai", content: "调用工具", tool_calls: [{ id: "sc1", name: "sub_tool", args: {} }] },
+        message_index: 1
+      }),
+      2
+    );
+    s2 = reduceFrame(
+      s2,
+      frame("custom", {
+        type: "task_running", task_id: "t1",
+        message: { type: "tool", tool_call_id: "sc1", content: "ok" },
+        message_index: 1
+      }),
+      3
+    );
+    s2 = reduceFrame(
+      s2,
+      frame("custom", {
+        type: "task_running", task_id: "t1",
+        message: { type: "ai", content: "调用工具", tool_calls: [{ id: "sc1", name: "sub_tool", args: {} }] },
+        message_index: 1
+      }),
+      4
+    );
+    expect(s2.subagents?.[0].steps[0].toolCalls?.[0].status).toBe("done");
   });
 });
 

@@ -15,7 +15,7 @@
 //   event: end       → turn 完成（data 可能含 usage）
 //   event: error/gap → turn 失败
 
-import type { ChatMessage, SubagentStep, TodoItem, ToolCall } from "./sessionStore";
+import type { ChatMessage, SubagentStep, SubagentTask, TodoItem, ToolCall } from "./sessionStore";
 import type { SseFrame } from "./sseParser";
 
 /**
@@ -49,7 +49,7 @@ export function reduceFrame(
     case "messages":
       return reduceMessages(state, frame.data, now);
     case "custom":
-      return reduceCustom(state, frame.data);
+      return reduceCustom(state, frame.data, now);
     case "values":
       return reduceValues(state, frame.data);
     case "end":
@@ -249,7 +249,8 @@ function mergeToolCalls(
       id,
       name,
       args: prev ? { ...prev.args, ...args } : args,
-      status: "running",
+      // 已存在调用保留原状态（tool message 回填 done 后，ai 帧重发不得重置为 running）
+      status: prev?.status ?? "running",
       ...(now != null ? { startedAt: prev?.startedAt ?? now } : {})
     });
   }
@@ -269,7 +270,8 @@ type SubagentTaskStatus = "completed" | "failed" | "cancelled" | "timed_out";
 
 function reduceCustom(
   state: AssistantTurnState,
-  data: unknown
+  data: unknown,
+  now: number
 ): AssistantTurnState {
   if (!data || typeof data !== "object") return state;
   const ev = data as Record<string, unknown>;
@@ -279,7 +281,7 @@ function reduceCustom(
     case "task_started":
       return reduceTaskStarted(state, ev);
     case "task_running":
-      return reduceTaskRunning(state, ev);
+      return reduceTaskRunning(state, ev, now);
     case "task_completed":
     case "task_failed":
     case "task_cancelled":
@@ -315,7 +317,8 @@ function reduceTaskStarted(
 
 function reduceTaskRunning(
   state: AssistantTurnState,
-  ev: Record<string, unknown>
+  ev: Record<string, unknown>,
+  now: number
 ): AssistantTurnState {
   const taskId = ev.task_id as string | undefined;
   if (!taskId) return state;
@@ -326,13 +329,23 @@ function reduceTaskRunning(
   const message = ev.message as Record<string, unknown> | undefined;
   const index = numOr(ev.message_index, subs[idx].steps.length + 1);
 
+  // subagent 工具结果（ToolMessage）：按 tool_call_id 回填对应 step 的调用，
+  // 否则残留的调用永远保持 running（回归：任务完成后工具调用仍显示处理中）。
+  const toolCallId =
+    message && typeof message.tool_call_id === "string" ? message.tool_call_id : "";
+  if (toolCallId && message) {
+    return backfillSubagentToolResult(state, subs, idx, toolCallId, message, now);
+  }
+
   const step: SubagentStep = { index };
   if (message && typeof message.content === "string") {
     step.text = message.content;
   }
   if (message && Array.isArray(message.tool_calls)) {
+    // 同 step 重放时保留已有 toolCalls（避免已回填的调用被重置为 running）
+    const prevStep = subs[idx].steps.find((s) => s.index === index);
     step.toolCalls = mergeToolCalls(
-      [],
+      prevStep?.toolCalls ?? [],
       message.tool_calls as Array<Record<string, unknown>>
     );
   }
@@ -347,6 +360,43 @@ function reduceTaskRunning(
 
   const updated = [...subs];
   updated[idx] = { ...updated[idx], steps: nextSteps };
+  return { ...state, subagents: updated };
+}
+
+/** 回填 subagent 某次工具调用结果（task_running 携带的 ToolMessage）。 */
+function backfillSubagentToolResult(
+  state: AssistantTurnState,
+  subs: SubagentTask[],
+  taskIdx: number,
+  toolCallId: string,
+  message: Record<string, unknown>,
+  now: number
+): AssistantTurnState {
+  const content = message.content;
+  const resultStr =
+    typeof content === "string" ? content : JSON.stringify(content ?? "");
+  const updated = [...subs];
+  updated[taskIdx] = {
+    ...updated[taskIdx],
+    steps: updated[taskIdx].steps.map((step) => {
+      const calls = step.toolCalls;
+      if (!calls || !calls.some((tc) => tc.id === toolCallId)) return step;
+      return {
+        ...step,
+        toolCalls: calls.map((tc) =>
+          tc.id === toolCallId
+            ? {
+                ...tc,
+                result: resultStr,
+                artifact: message.artifact,
+                status: "done",
+                endedAt: now
+              }
+            : tc
+        )
+      };
+    })
+  };
   return { ...state, subagents: updated };
 }
 
@@ -434,6 +484,23 @@ function reduceEnd(
     next.toolCalls = next.toolCalls.map((call) =>
       call.status === "running" ? { ...call, status: "done", endedAt: now } : call
     );
+  }
+
+  // subagent 步骤内的工具调用同样收尾（turn 结束时不得残留 running）
+  if (
+    next.subagents?.some((task) =>
+      task.steps.some((step) => step.toolCalls?.some((call) => call.status === "running"))
+    )
+  ) {
+    next.subagents = next.subagents.map((task) => ({
+      ...task,
+      steps: task.steps.map((step) => ({
+        ...step,
+        toolCalls: step.toolCalls?.map((call) =>
+          call.status === "running" ? { ...call, status: "done", endedAt: now } : call
+        )
+      }))
+    }));
   }
 
   // 补 usage（end 帧可能带 usage：{ input, output, total }）
@@ -541,10 +608,14 @@ function artifactsFromToolResult(
     if (Array.isArray(record.artifacts)) artifacts.push(...record.artifacts);
   }
 
-  if (toolName === "render_html_report" && artifacts.length === 0) {
+  if (isReportRenderTool(toolName) && artifacts.length === 0) {
     artifacts.push("/outputs/report.html");
   }
   return mergeArtifacts([], artifacts);
+}
+
+function isReportRenderTool(toolName: string | undefined): boolean {
+  return toolName === "render_html_report" || toolName === "render_html_report_from_file";
 }
 
 function mergeArtifacts(existing: unknown[] | undefined, incoming: unknown[]): unknown[] {

@@ -199,7 +199,7 @@ python3 scripts/industry-query-cli.py --query "新能源板块行情"
 
 1. 将行业画像、估值排名、研报观点、实时资讯、产业链解读、宏观周期评估、风险与跟踪指标整理为报告 JSON，顶层字段：`title` / `generated_at` / `summary` / `assessment` / `risk_level` / `data_overview` / `core_analysis` / `risks` / `references` / `charts`。
 2. 为每个图表按 `charts[].{tool, title, alt, args}` 结构构造，图表以内嵌 SVG 渲染，**禁止使用远程图片 URL**。至少 3 个图表。args 的完整字段规范以工具描述中的契约说明为准。
-3. 调用 `render_html_report(report_json, filename="report.html")`，渲染成功后用 `present_files` 交付。
+3. 调用 `render_html_report(report_json, filename="report.html")`；若完整 JSON 已保存为 `/mnt/user-data/workspace/*.json`，改用 `render_html_report_from_file(report_json_path="/mnt/user-data/workspace/report.json", filename="report.html")`，禁止先把大 JSON 读入上下文；渲染成功后用 `present_files` 交付。
 
 报告覆盖：行业画像（五维雷达图 + 最新动态）、行业估值排名（柱状图）、投研观点摘要、行业实时资讯、产业链深度解读（桑基图/饼图）、宏观周期评估、风险与需跟踪指标。报告只给研究结论、情景条件、风险等级和需跟踪指标，**不给出买入/卖出/持有等交易建议**。
 

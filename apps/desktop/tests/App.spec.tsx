@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import { App } from "../src/App";
 import { createModel, listModels } from "../src/lib/modelsClient";
@@ -6,6 +6,7 @@ import { createModel, listModels } from "../src/lib/modelsClient";
 // 用 hoisted 持有 mock 函数，便于在单个测试内覆盖返回值（如模拟已登录）。
 const authMock = vi.hoisted(() => ({
   tryGetCurrentUser: vi.fn(),
+  getSetupStatus: vi.fn(),
 }));
 
 // turnsClient mock：streamRun 的实现由各测试用 mockImplementation 覆盖。
@@ -30,7 +31,7 @@ const controlMock = vi.hoisted(() => ({
 vi.mock("../src/lib/authClient", () => ({
   GATEWAY_URL: "http://localhost:18001",
   tryGetCurrentUser: authMock.tryGetCurrentUser,
-  getSetupStatus: vi.fn().mockResolvedValue({ needs_setup: false, registration_enabled: true }),
+  getSetupStatus: authMock.getSetupStatus,
   login: vi.fn().mockResolvedValue({ expires_in: 604800, needs_setup: false }),
   register: vi.fn(),
   initializeAdmin: vi.fn(),
@@ -91,6 +92,7 @@ vi.mock("../src/lib/gatewayControlClient", () => ({
 // 默认未登录；已登录场景在测试内用 mockResolvedValueOnce 覆盖。
 beforeEach(() => {
   authMock.tryGetCurrentUser.mockResolvedValue(null);
+  authMock.getSetupStatus.mockResolvedValue({ needs_setup: false, registration_enabled: true });
   turnsMock.ensureThread.mockResolvedValue("thread-test");
   turnsMock.streamRun.mockReset();
   turnsMock.getWorkspaceChanges.mockReset();
@@ -106,12 +108,32 @@ beforeEach(() => {
   controlMock.waitForGateway.mockReset();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 test("首屏展示产品入口页", async () => {
   render(<App />);
 
   // 会话探测异步完成后落地页才出现“进入工作台”按钮。
   const enterButton = await screen.findByRole("button", { name: "进入工作台" });
   expect(enterButton).toBeVisible();
+  expect(screen.getByText("QiLin 内置引擎")).toBeInTheDocument();
+});
+
+test("启动认证探测长时间无响应时降级显示入口页，避免桌面端无限黑屏", async () => {
+  vi.useFakeTimers();
+  authMock.tryGetCurrentUser.mockReturnValueOnce(new Promise(() => undefined));
+  authMock.getSetupStatus.mockReturnValueOnce(new Promise(() => undefined));
+
+  render(<App />);
+
+  await act(async () => {
+    vi.advanceTimersByTime(5_000);
+    await Promise.resolve();
+  });
+
+  expect(screen.getByRole("button", { name: "进入工作台" })).toBeVisible();
   expect(screen.getByText("QiLin 内置引擎")).toBeInTheDocument();
 });
 
@@ -275,8 +297,12 @@ test("发消息触发流式 run 并逐帧累积 assistant 文本", async () => {
   const textarea = await screen.findByRole("textbox", { name: "消息输入" });
   // 等待模型列表加载完成（模型 select 出现 = models 非空，发送按钮 enabled）
   await screen.findByRole("combobox", { name: "模型选择" });
+  const sendButton = screen.getByRole("button", { name: "发送消息" });
+  await waitFor(() => {
+    expect(sendButton).toBeEnabled();
+  });
   fireEvent.change(textarea, { target: { value: "分析茅台" } });
-  fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+  fireEvent.click(sendButton);
 
   // user message 渲染（在 UserBubble 的 <p> 中；session title/topbar 也有同文本需 selector 精确定位）。
   // 用 waitFor + getByText 轮询最新 DOM，避免 streamRun 帧更新替换节点后断言旧引用。
