@@ -607,6 +607,24 @@ describe("end 事件", () => {
     expect(s.usage).toEqual({ input_tokens: 10, output_tokens: 20, total_tokens: 30 });
   });
 
+  it("end 收尾仍在 running 的工具调用，避免完成后摘要继续显示处理中", () => {
+    let s = reduceFrame(
+      initialTurn(),
+      frame("messages", aiMsg({ tool_calls: [{ id: "tc1", name: "bash", args: { cmd: "run" } }] })),
+      1000
+    );
+
+    s = reduceFrame(s, frame("end", null), 2500);
+
+    expect(s.status).toBe("done");
+    expect(s.toolCalls?.[0]).toMatchObject({
+      id: "tc1",
+      status: "done",
+      startedAt: 1000,
+      endedAt: 2500,
+    });
+  });
+
   it("已有 usage 时不覆盖", () => {
     let s: AssistantTurnState = { text: "", status: "streaming", usage: { input_tokens: 100, output_tokens: 0, total_tokens: 100 } };
     s = reduceFrame(s, frame("end", { usage: { input: 1, output: 1, total: 2 } }), 1);

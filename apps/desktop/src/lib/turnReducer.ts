@@ -415,6 +415,12 @@ function reduceEnd(
     }
   }
 
+  if (next.toolCalls?.some((call) => call.status === "running")) {
+    next.toolCalls = next.toolCalls.map((call) =>
+      call.status === "running" ? { ...call, status: "done", endedAt: now } : call
+    );
+  }
+
   // 补 usage（end 帧可能带 usage：{ input, output, total }）
   const endData = data as { usage?: Record<string, unknown> } | null | undefined;
   if (endData?.usage && !next.usage) {
