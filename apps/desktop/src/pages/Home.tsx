@@ -1880,9 +1880,6 @@ ${text}` : text)
       <aside className={`floating-context-panel ${rightPanelOpen ? "open" : ""}`} aria-label="研究上下文">
         <div className="floating-header">
           <strong>研究上下文</strong>
-          <button className="icon-ghost" type="button" onClick={onToggleRightPanel} aria-label="隐藏研究上下文">
-            <PanelRight size={17} />
-          </button>
         </div>
         <ContextSection icon={Activity} title="任务摘要" count={latestAssistant ? 1 : 0}>
           <ContextLine icon={Activity} label="任务状态" value={taskStatusLabel(latestAssistant?.status)} />

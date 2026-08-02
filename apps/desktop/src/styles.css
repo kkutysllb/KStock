@@ -5844,6 +5844,93 @@ button.context-file-row:hover {
   overflow: visible;
 }
 
+.token-chart-plot {
+  position: relative;
+  min-width: 0;
+}
+
+.token-chart-hit-area {
+  fill: transparent;
+  cursor: crosshair;
+  pointer-events: all;
+}
+
+.token-chart-crosshair {
+  stroke: rgba(203, 222, 216, 0.28);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.token-chart-point {
+  stroke: #06110e;
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.token-chart-point--input { fill: #55cba8; }
+.token-chart-point--output { fill: #d3af65; }
+.token-chart-point--tasks { fill: #76b7db; }
+.token-chart-point--api { fill: #ad9adb; }
+
+.token-chart-tooltip {
+  position: absolute;
+  top: 8px;
+  z-index: 3;
+  display: grid;
+  min-width: 150px;
+  gap: 5px;
+  border: 1px solid rgba(129, 205, 178, 0.18);
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: rgba(3, 16, 13, 0.97);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+  pointer-events: none;
+  transform: translateX(8px);
+}
+
+.token-chart-tooltip.align-end {
+  transform: translateX(calc(-100% - 8px));
+}
+
+.token-chart-tooltip > strong {
+  margin-bottom: 2px;
+  color: #dfe8e5;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.token-chart-tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  color: #84918f;
+  font-size: 10px;
+}
+
+.token-chart-tooltip-row span::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  content: "";
+}
+
+.token-chart-tooltip-row b {
+  color: #cbd5d2;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.token-tooltip-input span::before { background: #55cba8; }
+.token-tooltip-output span::before { background: #d3af65; }
+.token-tooltip-tasks span::before { background: #76b7db; }
+.token-tooltip-api span::before { background: #ad9adb; }
+.token-tooltip-total { border-top: 1px solid rgba(129, 205, 178, 0.09); padding-top: 5px; }
+.token-tooltip-total span::before { background: #65726f; }
+
 .token-chart-grid {
   stroke: rgba(255, 255, 255, 0.07);
   stroke-width: 1;
