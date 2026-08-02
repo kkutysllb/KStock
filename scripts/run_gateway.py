@@ -448,30 +448,36 @@ def _patch_aiosqlite_busy_timeout() -> None:
     与 checkpoint 保存（aiosqlite 连接，5s）互相竞争写锁，等待超过 5 秒即抛
     ``OperationalError: database is locked`` 导致 run 以 error 结束
     （run_events 表可复现：2026-08-02 c2fb3160 委派 3 个并行子代理后失败，
-    历史 656c57cf 同错）。这里包装 aiosqlite.connect：连接建立后立即执行
-    ``PRAGMA busy_timeout`` 与 ``journal_mode=WAL``，覆盖引擎内部所有
-    aiosqlite 连接（PRAGMA 为连接级设置）。
+    历史 656c57cf 同错）。
+
+    注意：不能包装 ``aiosqlite.connect`` —— 它是同步工厂函数，返回
+    Connection 代理对象（底层连接在 ``__aenter__``/``_connect()`` 时才建立），
+    SQLAlchemy 的 sqlite+aiosqlite 方言会同步调用它并直接访问返回值
+    （``connection._thread.daemon = True``），包装成协程会让方言拿到
+    coroutine 而崩溃（AttributeError: 'coroutine' object has no attribute
+    '_thread'）。正确位置是类级包装 ``Connection._connect``（所有路径的
+    连接建立点），对 langgraph 与 SQLAlchemy 两条路径同时生效。
     """
     import aiosqlite
 
     if getattr(aiosqlite, "_kstock_busy_timeout_patched", False):
         return
-    original_connect = aiosqlite.connect
+    original_connect = aiosqlite.Connection._connect
 
-    async def _connect_with_timeout(*args, **kwargs):
-        conn = await original_connect(*args, **kwargs)
+    async def _connect_with_timeout(self):
+        await original_connect(self)
         try:
-            cursor = await conn.execute("PRAGMA busy_timeout=30000")
+            cursor = await self.execute("PRAGMA busy_timeout=30000")
             await cursor.fetchone()
             await cursor.close()
-            cursor = await conn.execute("PRAGMA journal_mode=WAL")
+            cursor = await self.execute("PRAGMA journal_mode=WAL")
             await cursor.fetchone()
             await cursor.close()
         except Exception:
             pass
-        return conn
+        return self
 
-    aiosqlite.connect = _connect_with_timeout
+    aiosqlite.Connection._connect = _connect_with_timeout
     aiosqlite._kstock_busy_timeout_patched = True
 
 

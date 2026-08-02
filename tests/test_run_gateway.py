@@ -16,7 +16,7 @@ from scripts.run_gateway import _generate_runtime_config
 # ── aiosqlite busy_timeout 修复 ────────────────────────────────────────
 
 def test_patch_aiosqlite_sets_busy_timeout(tmp_path):
-    """包装后建立的 aiosqlite 连接必须应用 30s busy_timeout 与 WAL。"""
+    """连接建立后必须应用 30s busy_timeout 与 WAL。"""
     import aiosqlite
 
     from scripts.run_gateway import _patch_aiosqlite_busy_timeout
@@ -25,8 +25,8 @@ def test_patch_aiosqlite_sets_busy_timeout(tmp_path):
 
     async def _check():
         db_path = tmp_path / "patch_check.db"
-        conn = await aiosqlite.connect(str(db_path))
-        try:
+        conn = aiosqlite.connect(str(db_path))
+        async with conn:
             cursor = await conn.execute("PRAGMA busy_timeout")
             row = await cursor.fetchone()
             await cursor.close()
@@ -34,24 +34,39 @@ def test_patch_aiosqlite_sets_busy_timeout(tmp_path):
             mode = await cursor.fetchone()
             await cursor.close()
             return row, mode
-        finally:
-            await conn.close()
 
     (busy, mode) = asyncio.run(_check())
     assert busy == (30000,), f"busy_timeout 应为 30000，实际 {busy}"
     assert mode == ("wal",), f"journal_mode 应为 wal，实际 {mode}"
 
 
-def test_patch_aiosqlite_is_idempotent():
-    """重复调用不产生多层包装（保留原始 connect 引用）。"""
+def test_patch_keeps_connect_sync_signature(tmp_path):
+    """aiosqlite.connect 必须保持同步工厂语义，兼容 SQLAlchemy 方言。
+
+    SQLAlchemy 的 sqlite+aiosqlite 方言同步调用 ``aiosqlite.connect`` 并直接
+    访问返回值（``connection._thread.daemon = True``）；若把 connect 包装成
+    协程，方言会拿到 coroutine 而崩溃。这里模拟方言的同步调用方式。
+    """
     import aiosqlite
 
     from scripts.run_gateway import _patch_aiosqlite_busy_timeout
 
     _patch_aiosqlite_busy_timeout()
-    first = aiosqlite.connect
+    conn = aiosqlite.connect(str(tmp_path / "dialect_check.db"))
+    assert isinstance(conn, aiosqlite.Connection)
+    assert hasattr(conn, "_thread"), "方言需要访问 connection._thread"
+
+
+def test_patch_aiosqlite_is_idempotent():
+    """重复调用不产生多层包装（保留原始 _connect 引用）。"""
+    import aiosqlite
+
+    from scripts.run_gateway import _patch_aiosqlite_busy_timeout
+
     _patch_aiosqlite_busy_timeout()
-    assert aiosqlite.connect is first
+    first = aiosqlite.Connection._connect
+    _patch_aiosqlite_busy_timeout()
+    assert aiosqlite.Connection._connect is first
 
 
 # ── 首次生成 ─────────────────────────────────────────────────────────
