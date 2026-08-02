@@ -3,6 +3,7 @@ import { summarizeToolActivity } from "../src/lib/toolActivity";
 import type { ToolCall } from "../src/lib/sessionStore";
 
 const call = (patch: Partial<ToolCall>): ToolCall => ({
+  ...patch,
   id: patch.id ?? crypto.randomUUID(),
   name: patch.name ?? "read_file",
   args: patch.args ?? {},
@@ -29,9 +30,20 @@ describe("summarizeToolActivity", () => {
     expect(summarizeToolActivity([call({ status: "error" }), call({ status: "done" })]).status).toBe("error");
   });
 
+  it("调用尚未全部完成时处于准备中状态", () => {
+    expect(summarizeToolActivity([call({ status: "running" })]).status).toBe("running");
+  });
+
   it("没有结果时返回空摘要，超长结果截断为单行", () => {
     expect(summarizeToolActivity([call({ result: "" })]).latestResult).toBe("");
     expect(summarizeToolActivity([call({ result: "x".repeat(120) })]).latestResult).toHaveLength(96);
     expect(summarizeToolActivity([call({ result: "x".repeat(120) })]).latestResult.endsWith("…")).toBe(true);
+  });
+
+  it("使用最早开始和最晚完成时间统计工具执行耗时", () => {
+    expect(summarizeToolActivity([
+      call({ startedAt: 1_000, endedAt: 4_000 }),
+      call({ startedAt: 2_000, endedAt: 8_500 }),
+    ]).durationMs).toBe(7_500);
   });
 });

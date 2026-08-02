@@ -92,14 +92,14 @@ function reduceMessages(
   // 2. 按语义特征路由（跨 provider 通用）
   //    tool message 回填：有 tool_call_id（唯一可靠特征，只有工具结果带）
   if (typeof m.tool_call_id === "string" && m.tool_call_id)
-    return reduceToolMessage(state, m);
+    return reduceToolMessage(state, m, now);
   //    ai 信号：reasoning 流 / 正文增量 / 工具调用请求 / 用量 / provider error 兖底
   if (hasAiSignal(m, ak)) return reduceAiMessage(state, m, now);
 
   // 3. type 兖底：语义信号缺失时，按已知 type 变体识别
   //    （空 content 的纯状态帧、未来 provider 的非标准字段等）
   if (lowered === "tool" || lowered === "toolmessage" || lowered === "toolmessagechunk")
-    return reduceToolMessage(state, m);
+    return reduceToolMessage(state, m, now);
   if (lowered === "ai" || lowered === "aimessage" || lowered === "aimessagechunk")
     return reduceAiMessage(state, m, now);
 
@@ -172,7 +172,8 @@ function reduceAiMessage(
     }
     next.toolCalls = mergeToolCalls(
       next.toolCalls ?? [],
-      toolCalls as Array<Record<string, unknown>>
+      toolCalls as Array<Record<string, unknown>>,
+      now
     );
   }
 
@@ -191,7 +192,8 @@ function reduceAiMessage(
 
 function reduceToolMessage(
   state: AssistantTurnState,
-  msg: Record<string, unknown>
+  msg: Record<string, unknown>,
+  now: number
 ): AssistantTurnState {
   const toolCallId = msg.tool_call_id as string | undefined;
   if (!toolCallId) return state;
@@ -207,14 +209,16 @@ function reduceToolMessage(
     ...updated[idx],
     result: resultStr,
     artifact: msg.artifact,
-    status: "done"
+    status: "done",
+    endedAt: now
   };
   return { ...state, toolCalls: updated };
 }
 
 function mergeToolCalls(
   existing: ToolCall[],
-  incoming: Array<Record<string, unknown>>
+  incoming: Array<Record<string, unknown>>,
+  now?: number
 ): ToolCall[] {
   const map = new Map<string, ToolCall>(existing.map((tc) => [tc.id, tc]));
   for (const raw of incoming) {
@@ -232,7 +236,8 @@ function mergeToolCalls(
       id,
       name,
       args: prev ? { ...prev.args, ...args } : args,
-      status: "running"
+      status: "running",
+      ...(now != null ? { startedAt: prev?.startedAt ?? now } : {})
     });
   }
   return [...map.values()];

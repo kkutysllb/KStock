@@ -1,7 +1,11 @@
 import { AlertCircle, Check, ChevronRight, Loader2 } from "lucide-react";
 import { useState } from "react";
 import type { ToolCall } from "../lib/sessionStore";
-import { summarizeToolActivity, type ToolActivityStatus } from "../lib/toolActivity";
+import {
+  formatToolActivityDuration,
+  summarizeToolActivity,
+  type ToolActivityStatus,
+} from "../lib/toolActivity";
 import { ToolCard } from "./ToolCard";
 
 interface ToolActivitySummaryProps {
@@ -15,6 +19,9 @@ export function ToolActivitySummary({ calls }: ToolActivitySummaryProps) {
 
   const summary = summarizeToolActivity(calls);
   const statusLabel = getStatusLabel(summary.status);
+  const durationLabel = summary.durationMs != null
+    ? ` ${formatToolActivityDuration(summary.durationMs)}`
+    : "";
 
   return (
     <section className={`tool-activity-summary status-${summary.status}`} aria-label="工具活动">
@@ -22,16 +29,11 @@ export function ToolActivitySummary({ calls }: ToolActivitySummaryProps) {
         type="button"
         className="tool-activity-summary-header"
         aria-expanded={expanded}
-        aria-label={`${statusLabel}，${summary.callCount} 次工具调用`}
+        aria-label={`${statusLabel}${durationLabel}`}
         onClick={() => setExpanded((value) => !value)}
       >
         <ToolActivityStatusIcon status={summary.status} />
-        <span className="tool-activity-status">{statusLabel}</span>
-        <span className="tool-activity-meta">
-          {summary.callCount} 次工具调用
-          <span className="tool-activity-tool-count"> · {summary.toolCount} 类工具</span>
-        </span>
-        {summary.latestResult && <span className="tool-activity-result">{summary.latestResult}</span>}
+        <span className="tool-activity-status">{statusLabel}{durationLabel}</span>
         <ChevronRight size={13} className={expanded ? "chevron-expanded" : ""} aria-hidden="true" />
       </button>
       {expanded && (
@@ -52,7 +54,7 @@ function ToolActivityStatusIcon({ status }: { status: ToolActivityStatus }) {
 }
 
 function getStatusLabel(status: ToolActivityStatus): string {
-  if (status === "running") return "执行中";
+  if (status === "running") return "准备中";
   if (status === "error") return "有失败";
   return "已完成";
 }

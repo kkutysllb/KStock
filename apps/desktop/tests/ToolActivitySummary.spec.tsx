@@ -4,6 +4,7 @@ import { ToolActivitySummary } from "../src/components/ToolActivitySummary";
 import type { ToolCall } from "../src/lib/sessionStore";
 
 const call = (patch: Partial<ToolCall>): ToolCall => ({
+  ...patch,
   id: patch.id ?? crypto.randomUUID(),
   name: patch.name ?? "read_file",
   args: patch.args ?? { path: "/tmp/report.md" },
@@ -16,14 +17,14 @@ describe("ToolActivitySummary", () => {
     render(
       <ToolActivitySummary
         calls={[
-          call({ id: "1", name: "read_file", result: "读取完成" }),
-          call({ id: "2", name: "bash", result: "脚本完成" }),
-          call({ id: "3", name: "read_file", result: "最终结果" }),
+          call({ id: "1", name: "read_file", result: "读取完成", startedAt: 1_000, endedAt: 6_000 }),
+          call({ id: "2", name: "bash", result: "脚本完成", startedAt: 2_000, endedAt: 8_000 }),
+          call({ id: "3", name: "read_file", result: "最终结果", startedAt: 7_000, endedAt: 9_500 }),
         ]}
       />
     );
 
-    const summary = screen.getByRole("button", { name: /3 次工具调用/ });
+    const summary = screen.getByRole("button", { name: /已完成 9s/ });
     expect(summary).toBeVisible();
     expect(summary).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("读取完成")).not.toBeInTheDocument();
@@ -38,6 +39,12 @@ describe("ToolActivitySummary", () => {
 
     expect(screen.getByText("/tmp/report.md")).toBeVisible();
     expect(screen.getByText("读取完成")).toBeVisible();
+  });
+
+  it("工具尚未全部完成时显示准备中", () => {
+    render(<ToolActivitySummary calls={[call({ status: "running" })]} />);
+
+    expect(screen.getByRole("button", { name: "准备中" })).toBeVisible();
   });
 
   it("空调用不渲染摘要", () => {

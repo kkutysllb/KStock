@@ -56,11 +56,13 @@ describe("完整流式序列集成：reasoning → tool_call → result → 正�
     expect(s.reasoning?.endedAt).toBe(t0 + 500);
     expect(s.toolCalls?.[0]).toMatchObject({ id: "tc1", name: "get_financials", status: "running" });
     expect(s.toolCalls?.[0].args).toEqual({ code: "600519" });
+    expect(s.toolCalls?.[0].startedAt).toBe(t0 + 500);
 
     // tool 结果回填
     s = reduceFrame(s, frame("messages", toolMsg({ tool_call_id: "tc1", content: '{"revenue":100}' })), t0 + 800);
     expect(s.toolCalls?.[0].status).toBe("done");
     expect(s.toolCalls?.[0].result).toBe('{"revenue":100}');
+    expect(s.toolCalls?.[0].endedAt).toBe(t0 + 800);
 
     // 正文增量
     s = reduceFrame(s, frame("messages", aiMsg({ id: "m1", content: "茅台" })), t0 + 900);

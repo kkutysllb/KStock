@@ -17,6 +17,10 @@ export interface ToolCall {
   name: string;
   args: Record<string, unknown>;
   status: "running" | "done" | "error";
+  /** 前端收到工具调用请求的时间戳（流式运行时填充）。 */
+  startedAt?: number;
+  /** 前端收到工具结果的时间戳（流式运行时填充）。 */
+  endedAt?: number;
   result?: string;
   artifact?: unknown;
 }
@@ -273,4 +277,3 @@ export function updateMessageInSession(
     messages: session.messages.map((m) => (m.id === messageId ? { ...m, ...patch } : m))
   };
 }
-
