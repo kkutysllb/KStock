@@ -7,8 +7,8 @@ kk_Skills 公共库 — 消除各技能包间的重复代码。
 | 模块 | 说明 | 提取来源 |
 |------|------|----------|
 | `kk_common.finance_data_gateway` | 金融数据网关（**分析技能访问 Tushare 的首选入口**） | 对齐参考包 `finance_data_gateway` |
-| `kk_common.iwencai_client` | 同花顺问财 OpenAPI 统一客户端 | `kk-market-analysis/cli.py`、`kk-hithink-futures/cli.py` |
-| `kk_common.tushare_client` | Tushare Pro API 统一客户端 | `kk-market-analysis/analysis/tushare_client.py`、`kk-futures-analysis/analysis/tushare_client.py` |
+| `kk_common.iwencai_client` | 同花顺问财 OpenAPI 统一客户端 | `market-analysis/cli.py`、`hithink-futures/cli.py` |
+| `kk_common.tushare_client` | Tushare Pro API 统一客户端 | `market-analysis/analysis/tushare_client.py`、`futures-analysis/analysis/tushare_client.py` |
 | `kk_common.formatters` | 金融分析格式化工具集 | 各项目 `analyze_*.py` 中的格式化辅助函数 |
 
 ## 数据访问边界（强制）

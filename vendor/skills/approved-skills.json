@@ -97,6 +97,150 @@
       "target_path": "public/macro-query",
       "kind": "stock",
       "enabled_by_default": true
+    },
+    {
+      "name": "a-stock-screener",
+      "source_repo": "KSkills",
+      "source_path": "stock/a-stock-screener",
+      "target_path": "public/a-stock-screener",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "backtrader_strategies",
+      "source_repo": "KSkills",
+      "source_path": "stock/backtrader_strategies",
+      "target_path": "public/backtrader_strategies",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "cb-analysis",
+      "source_repo": "KSkills",
+      "source_path": "stock/cb-analysis",
+      "target_path": "public/cb-analysis",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "dcf",
+      "source_repo": "KSkills",
+      "source_path": "stock/dcf",
+      "target_path": "public/dcf",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "earnings-forecast",
+      "source_repo": "KSkills",
+      "source_path": "stock/earnings-forecast",
+      "target_path": "public/earnings-forecast",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "earnings-revision",
+      "source_repo": "KSkills",
+      "source_path": "stock/earnings-revision",
+      "target_path": "public/earnings-revision",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "etf-analysis",
+      "source_repo": "KSkills",
+      "source_path": "stock/etf-analysis",
+      "target_path": "public/etf-analysis",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "event-query",
+      "source_repo": "KSkills",
+      "source_path": "stock/event-query",
+      "target_path": "public/event-query",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "factor-research",
+      "source_repo": "KSkills",
+      "source_path": "stock/factor-research",
+      "target_path": "public/factor-research",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "futures-analysis",
+      "source_repo": "KSkills",
+      "source_path": "stock/futures-analysis",
+      "target_path": "public/futures-analysis",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "hithink-futures",
+      "source_repo": "KSkills",
+      "source_path": "stock/hithink-futures",
+      "target_path": "public/hithink-futures",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "market-linkage-engine",
+      "source_repo": "KSkills",
+      "source_path": "stock/market-linkage-engine",
+      "target_path": "public/market-linkage-engine",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "options-payoff",
+      "source_repo": "KSkills",
+      "source_path": "stock/options-payoff",
+      "target_path": "public/options-payoff",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "options-volatility",
+      "source_repo": "KSkills",
+      "source_path": "stock/options-volatility",
+      "target_path": "public/options-volatility",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "selection-strategies",
+      "source_repo": "KSkills",
+      "source_path": "stock/selection-strategies",
+      "target_path": "public/selection-strategies",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "strategy-research",
+      "source_repo": "KSkills",
+      "source_path": "stock/strategy-research",
+      "target_path": "public/strategy-research",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "tushare-data",
+      "source_repo": "KSkills",
+      "source_path": "stock/tushare-data",
+      "target_path": "public/tushare-data",
+      "kind": "stock",
+      "enabled_by_default": true
+    },
+    {
+      "name": "zhishu-query",
+      "source_repo": "KSkills",
+      "source_path": "stock/zhishu-query",
+      "target_path": "public/zhishu-query",
+      "kind": "stock",
+      "enabled_by_default": true
     }
   ]
 }

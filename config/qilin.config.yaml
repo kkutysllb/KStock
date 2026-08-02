@@ -114,19 +114,37 @@ subagents:
   agents:
     general-purpose:
       skills:
+        - a-stock-screener
         - analysis-report
         - announcement-search
+        - backtrader_strategies
         - business-query
+        - cb-analysis
         - chart-visualization
         - common
+        - dcf
+        - earnings-forecast
+        - earnings-revision
+        - etf-analysis
+        - event-query
+        - factor-research
         - financial-statement
+        - futures-analysis
+        - hithink-futures
         - industry-analysis
         - macro-query
+        - market-linkage-engine
         - news-search
+        - options-payoff
+        - options-volatility
         - report-search
         - sandbox-path-guide
+        - selection-strategies
         - stock-analysis
+        - strategy-research
+        - tushare-data
         - valuation-model
+        - zhishu-query
   # 预置角色：覆盖量化研究全链路。users 可在 runtime.yaml 自定义添加。
   custom_agents:
 
