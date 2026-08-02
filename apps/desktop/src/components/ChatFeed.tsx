@@ -2,7 +2,7 @@
 // 自动滚动：流式时跟随到底，用户上滚（距底 > 80px）时暂停跟随，
 // 并通过 onAtBottomChange 通知父级（用于显示「回到底部」浮动按钮）。
 // 父级可通过 ref 调用 scrollToBottom() 强制滚回底部。
-// 空状态：优先渲染 emptySlot（Home 传入 quick-prompt 区），否则简单文案。
+// 空状态：优先渲染 emptySlot（Home 传入空态工作台），否则简单文案。
 
 import {
   forwardRef,
@@ -31,7 +31,7 @@ interface ChatFeedProps {
   showStage?: boolean;
   showReasoning?: boolean;
   showToolCalls?: boolean;
-  /** 空状态插槽（Home 的 quick-prompt 区）。 */
+  /** 空状态插槽（Home 的空态工作台）。 */
   emptySlot?: ReactNode;
   /** 贴底状态变化回调（true=在底部，false=用户上滚）。 */
   onAtBottomChange?: (atBottom: boolean) => void;

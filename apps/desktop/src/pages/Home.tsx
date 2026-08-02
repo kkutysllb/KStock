@@ -190,12 +190,7 @@ async function openExternalUrl(url: string) {
   }
 }
 
-const quickPrompts = [
-  "分析贵州茅台最新财报并输出研究报告",
-  "跟踪半导体行业景气度和估值分位",
-  "比较宁德时代和比亚迪的盈利质量",
-  "生成本周 A 股宏观与资金面摘要"
-];
+
 
 // ── 研究场景：点击填入简洁研究请求，编排由提示词模板驱动 ──
 // 编排指令（委派流程/命令模板/共振背离规则）在 config/lead_soul.md →
@@ -219,6 +214,42 @@ const researchScenes: ResearchScene[] = [
     title: "股指期货专题分析 · 周度",
     description: "ISO 自然周聚合：周涨跌幅/周均基差/周均 PCR 与 IV，周度联动信号",
     prompt: "请做一份股指期货专题分析（周度）",
+  },
+  {
+    id: "option-etf-daily",
+    title: "期权ETF专题分析 · 日度",
+    description: "7 大期权 ETF × 期权 × 市场环境三层次联动，方向矩阵与共振/背离标注",
+    prompt: "请做一份期权ETF专题分析（日度）",
+  },
+  {
+    id: "option-etf-weekly",
+    title: "期权ETF专题分析 · 周度",
+    description: "ISO 自然周聚合：周涨跌幅/周均成交额/份额净申赎，周度资金与情绪信号",
+    prompt: "请做一份期权ETF专题分析（周度）",
+  },
+  {
+    id: "market-linkage-daily",
+    title: "市场联动分析 · 日度",
+    description: "8 维资金与情绪联动：主力/北向/两融/基差/PCR 与 IV/ETF 份额/Shibor/龙虎榜",
+    prompt: "请做一份市场联动分析（日度）",
+  },
+  {
+    id: "market-linkage-weekly",
+    title: "市场联动分析 · 周度",
+    description: "ISO 自然周聚合长窗口：中期资金趋势与综合联动评分",
+    prompt: "请做一份市场联动分析（周度）",
+  },
+  {
+    id: "cb-daily",
+    title: "可转债全景分析 · 日度",
+    description: "问财 16 大看板模块 × 估值与双低策略 × 条款事件，全市场温度与个券挖掘",
+    prompt: "请做一份可转债全景分析（日度）",
+  },
+  {
+    id: "cb-weekly",
+    title: "可转债全景分析 · 周度",
+    description: "ISO 自然周聚合：中证转债指数/估值全景/双低策略池/综合研判（0-100 分）",
+    prompt: "请做一份可转债全景分析（周度）",
   },
 ];
 
@@ -1866,15 +1897,6 @@ function WorkspaceShell({
                       </button>
                     ))}
                   </div>
-                </div>
-                <div className="quick-prompt-grid">
-                  {quickPrompts.map((prompt, index) => (
-                    <button key={prompt} type="button" onClick={() => onDraftChange(prompt)}>
-                      <span className="prompt-index">0{index + 1}</span>
-                      {prompt}
-                      <ChevronRight size={15} aria-hidden="true" />
-                    </button>
-                  ))}
                 </div>
               </div>
             }

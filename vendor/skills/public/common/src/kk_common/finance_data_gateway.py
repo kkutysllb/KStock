@@ -146,6 +146,24 @@ class FinanceDataGateway:
     def top10_floatholders(self, **kwargs: Any) -> pd.DataFrame:
         return self.request("top10_floatholders", **kwargs)
 
+    def stk_surv(self, **kwargs: Any) -> pd.DataFrame:
+        """机构调研明细（Tushare stk_surv）。"""
+        return self.request("stk_surv", **kwargs)
+
+    # ── 公司 / 事件 ──────────────────────────────────────────────────
+    def stock_company(self, **kwargs: Any) -> pd.DataFrame:
+        """上市公司基本信息（董事长/主营/员工等，Tushare stock_company）。"""
+        return self.request("stock_company", **kwargs)
+
+    def report_rc(self, **kwargs: Any) -> pd.DataFrame:
+        """业绩快报（Tushare report_rc）。"""
+        return self.request("report_rc", **kwargs)
+
+    # ── 筹码 / 资金 ──────────────────────────────────────────────────
+    def cyq_chips(self, **kwargs: Any) -> pd.DataFrame:
+        """每日筹码分布（Tushare cyq_chips）。"""
+        return self.request("cyq_chips", **kwargs)
+
     # ── 指数 / 板块 ──────────────────────────────────────────────────
     def index_basic(self, **kwargs: Any) -> pd.DataFrame:
         return self.request("index_basic", **kwargs)

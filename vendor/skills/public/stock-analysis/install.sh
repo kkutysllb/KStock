@@ -10,11 +10,8 @@ if ! command -v python3 > /dev/null 2>&1; then
     exit 1
 fi
 
-# Install Python dependencies
-if [ -f requirements.txt ]; then
-    pip3 install -r requirements.txt
-    echo "  → Python dependencies installed"
-fi
+# Python dependencies are pre-installed in the built-in Python client
+# (see SKILL.md frontmatter requires.packages for the authoritative list).
 
 echo "  ✓  stock-analysis installed successfully."
 echo ""

@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -116,7 +117,7 @@ ARRAY_RECORD_RULES = {
     "generate_pie_chart": ({"category", "value"}, set()),
     "generate_radar_chart": ({"name", "value"}, {"group"}),
     "generate_sankey_chart": ({"source", "target", "value"}, set()),
-    "generate_scatter_chart": ({"x", "y"}, {"group"}),
+    "generate_scatter_chart": ({"x", "y"}, {"group", "label", "name"}),
     "generate_treemap_chart": ({"name", "value"}, {"children"}),
     "generate_venn_chart": ({"value", "sets"}, {"label"}),
     "generate_violin_chart": ({"category", "value"}, {"group"}),
@@ -134,6 +135,102 @@ def _fail(path: str, message: str) -> None:
 
 def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+_SIGNED_NUMBER = re.compile(r"(^|[^\d])([+-])\s*\d+(?:\.\d+)?")
+_FIRST_NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
+_POSITIVE_TERMS = (
+    "净流入", "流入", "增加", "净增", "上涨", "涨幅", "偏多", "多头", "回升", "盈利", "增长",
+)
+_NEGATIVE_TERMS = (
+    "净流出", "流出", "减少", "净减", "下跌", "跌幅", "偏空", "空头", "回撤", "亏损", "下降",
+)
+_UP_COLOR = "#e64646"
+_DOWN_COLOR = "#22a06b"
+_NEUTRAL_COLOR = "#5ab0ff"
+_DIRECTIONAL_CHART_TERMS = (
+    "净流入",
+    "净流出",
+    "净额",
+    "净买入",
+    "净买",
+    "流入",
+    "流出",
+    "资金",
+    "份额变化",
+    "份额净变化",
+    "净申购",
+    "净赎回",
+    "涨跌",
+    "涨幅",
+    "跌幅",
+    "涨跌幅",
+    "变化率",
+    "基差",
+    "贴水",
+)
+
+
+def _semantic_value_class(label: Any, value: Any, extra: Any = "") -> str:
+    """A-share visual semantics: red means up/inflow/increase, green means down/outflow/decrease."""
+    text = f"{_text(label)} {_text(value)} {_text(extra)}"
+    signed = _SIGNED_NUMBER.search(text)
+    if signed:
+        return "value-up" if signed.group(2) == "+" else "value-down"
+    if "评分" in _text(label):
+        number = _FIRST_NUMBER.search(_text(value))
+        if number:
+            score = float(number.group(0))
+            if score >= 60:
+                return "value-up"
+            if score <= 40:
+                return "value-down"
+    if any(term in text for term in _POSITIVE_TERMS):
+        return "value-up"
+    if any(term in text for term in _NEGATIVE_TERMS):
+        return "value-down"
+    return "value-neutral"
+
+
+def _status_label(status: Any) -> str:
+    raw = _text(status).strip().lower()
+    if raw in {"ok", "available", "complete", "completed", "success", "done"}:
+        return "已覆盖"
+    if raw in {"partial", "warning", "warn"}:
+        return "部分覆盖"
+    if raw in {"missing", "unavailable", "failed", "error"}:
+        return "缺失"
+    return _text(status) or "—"
+
+
+def _chart_value_color(value: float, fallback: str, context: Any = "", label: Any = "") -> str:
+    """Color bar values by financial semantics, not by positive numbers alone.
+
+    Only directional charts (price/flow/share/basis change) use A-share
+    red-up/green-down numeric coloring. Absolute-value charts such as Shibor,
+    PCR, IV and balances keep the dashboard palette.
+    """
+    label_text = _text(label)
+    if any(term in label_text for term in _POSITIVE_TERMS):
+        return _UP_COLOR
+    if any(term in label_text for term in _NEGATIVE_TERMS):
+        return _DOWN_COLOR
+    if "中性" in label_text:
+        return _NEUTRAL_COLOR
+
+    context_text = _text(context)
+    if "评分" in context_text:
+        if value >= 60:
+            return _UP_COLOR
+        if value <= 40:
+            return _DOWN_COLOR
+        return fallback
+    if any(term in context_text for term in _DIRECTIONAL_CHART_TERMS):
+        if value > 0:
+            return _UP_COLOR
+        if value < 0:
+            return _DOWN_COLOR
+    return fallback
 
 
 def _validate_optional_common_fields(args: dict[str, Any], path: str) -> None:
@@ -391,6 +488,7 @@ def _normalize_chart(chart: Any) -> dict[str, Any] | None:
     for field in CHART_FIELDS[tool]:
         if field in chart and field not in {"title"}:
             args.setdefault(field, chart[field])
+    args = _normalize_chart_args(tool, args)
     title = _text(chart.get("title") or args.get("title") or "图表")
     if "title" in CHART_FIELDS[tool] and title:
         args.setdefault("title", title)
@@ -400,6 +498,36 @@ def _normalize_chart(chart: Any) -> dict[str, Any] | None:
         "alt": _text(chart.get("alt") or title),
         "args": args,
     }
+
+
+def _normalize_chart_args(tool: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Normalize common LLM/product aliases before strict chart validation."""
+    out = dict(args)
+    if "axisXTitle" in CHART_FIELDS[tool] and "axisXTitle" not in out and "x_label" in out:
+        out["axisXTitle"] = out["x_label"]
+    if "axisYTitle" in CHART_FIELDS[tool] and "axisYTitle" not in out and "y_label" in out:
+        out["axisYTitle"] = out["y_label"]
+    out.pop("x_label", None)
+    out.pop("y_label", None)
+
+    if tool == "generate_radar_chart" and isinstance(out.get("data"), list):
+        normalized_rows: list[Any] = []
+        for row in out["data"]:
+            if (
+                isinstance(row, dict)
+                and "name" not in row
+                and isinstance(row.get("group"), str)
+                and row.get("group", "").strip()
+                and "value" in row
+            ):
+                normalized = dict(row)
+                normalized["name"] = normalized["group"]
+                normalized["group"] = "default"
+                normalized_rows.append(normalized)
+            else:
+                normalized_rows.append(row)
+        out["data"] = normalized_rows
+    return out
 
 
 def _normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -495,6 +623,10 @@ def _svg_palette(variant: str) -> list[str]:
     return _SVG_PALETTE.get(variant, _SVG_PALETTE["light"])
 
 
+def _svg_tip_attrs(label: str) -> str:
+    return f'class="chart-mark" tabindex="0" data-tip="{_svg_esc(label)}"'
+
+
 def _svg_legend(entries: list[tuple[str, str]], variant: str) -> str:
     items, x = [], 4
     y = _SVG_H - 10
@@ -543,6 +675,11 @@ def _svg_line_chart(args: dict[str, Any], variant: str, alt: str = "") -> str:
         color = palette[index % len(palette)]
         coords = " ".join(f"{x_at(i):.1f},{y_at(v):.1f}" for i, (_, v) in enumerate(pts))
         parts.append(f'<polyline points="{coords}" fill="none" stroke="{color}" stroke-width="2"/>')
+        for i, (x_label, v) in enumerate(pts):
+            tip = f"{label} · {x_label}: {v:g}"
+            parts.append(
+                f'<circle {_svg_tip_attrs(tip)} cx="{x_at(i):.1f}" cy="{y_at(v):.1f}" r="4" fill="{color}"/>'
+            )
     labels = groups.get(next(iter(groups)), [])
     step = max(len(labels) // 6, 1)
     for i, (x_label, _) in enumerate(labels):
@@ -573,14 +710,24 @@ def _svg_bar_chart(args: dict[str, Any], variant: str, alt: str = "") -> str:
         return _SVG_T + (hi - v) * (_SVG_H - _SVG_T - _SVG_B) / (hi - lo)
 
     parts = [_svg_y_axis(lo, hi, variant)]
-    baseline = y_at(0.0)
+    plot_top = float(_SVG_T)
+    plot_bottom = float(_SVG_H - _SVG_B)
+    baseline = min(max(y_at(0.0), plot_top), plot_bottom)
+    context = f"{args.get('title', '')} {alt} {args.get('axisYTitle', '')}"
     for i, row in enumerate(rows):
-        color = palette[i % len(palette)]
+        value = float(row["value"])
+        label = row.get("category", "")
+        color = _chart_value_color(value, palette[i % len(palette)], context, label)
         x = _SVG_L + i * slot + (slot - bar_w) / 2
-        value_y = y_at(float(row["value"]))
+        value_y = min(max(y_at(value), plot_top), plot_bottom)
         y = min(value_y, baseline)
         height = abs(baseline - value_y)
-        parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{height:.1f}" fill="{color}"/>')
+        tip = f"{row.get('category', '')}: {value:g}"
+        if row.get("group"):
+            tip = f"{row.get('group')} · {tip}"
+        parts.append(
+            f'<rect {_svg_tip_attrs(tip)} x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{height:.1f}" fill="{color}"/>'
+        )
         parts.append(
             f'<text x="{x + bar_w / 2:.1f}" y="{_SVG_H - _SVG_B + 14}" font-size="10" text-anchor="middle" fill="{_svg_fg(variant)}">{_svg_esc(row.get("category", ""))}</text>'
         )
@@ -608,8 +755,9 @@ def _svg_pie_chart(args: dict[str, Any], variant: str, alt: str = "") -> str:
         x1, y1 = cx + radius * _math.cos(rad1), cy + radius * _math.sin(rad1)
         x2, y2 = cx + radius * _math.cos(rad2), cy + radius * _math.sin(rad2)
         large = 1 if sweep > 180 else 0
+        tip = f"{row.get('category', '')}: {float(row['value']):g} ({100 * float(row['value']) / total:.1f}%)"
         parts.append(
-            f'<path d="M {cx} {cy} L {x1:.1f} {y1:.1f} A {radius} {radius} 0 {large} 1 {x2:.1f} {y2:.1f} Z" fill="{color}"/>'
+            f'<path {_svg_tip_attrs(tip)} d="M {cx} {cy} L {x1:.1f} {y1:.1f} A {radius} {radius} 0 {large} 1 {x2:.1f} {y2:.1f} Z" fill="{color}"/>'
         )
         legend.append((f"{row.get('category', '')} {row['value']:g}", color))
         angle += sweep
@@ -649,6 +797,10 @@ def _svg_radar_chart(args: dict[str, Any], variant: str, alt: str = "") -> str:
         parts.append(
             f'<text x="{x:.1f}" y="{y:.1f}" font-size="11" text-anchor="middle" fill="{_svg_fg(variant)}">{_svg_esc(row.get("name", ""))}</text>'
         )
+        px, py = point(i, radius * values[i] / hi)
+        parts.append(
+            f'<circle {_svg_tip_attrs(f"{row.get("name", "")}: {values[i]:g}")} cx="{px:.1f}" cy="{py:.1f}" r="4.5" fill="{color}"/>'
+        )
     return (
         f'<svg viewBox="0 0 {_SVG_W} {_SVG_H}" role="img" aria-label="{_svg_esc(alt)}" style="max-width:100%;height:auto">'
         + "".join(parts) + "</svg>"
@@ -678,7 +830,11 @@ def _svg_scatter_chart(args: dict[str, Any], variant: str, alt: str = "") -> str
     parts = [_svg_y_axis(y_lo, y_hi, variant)]
     for i, row in enumerate(rows):
         color = palette[i % len(palette)]
-        parts.append(f'<circle cx="{x_at(float(row["x"])):.1f}" cy="{y_at(float(row["y"])):.1f}" r="4" fill="{color}"/>')
+        label = row.get("name") or row.get("label") or row.get("group") or f"点 {i + 1}"
+        tip = f"{label}: x={float(row['x']):g}, y={float(row['y']):g}"
+        parts.append(
+            f'<circle {_svg_tip_attrs(tip)} cx="{x_at(float(row["x"])):.1f}" cy="{y_at(float(row["y"])):.1f}" r="4.5" fill="{color}"/>'
+        )
     return (
         f'<svg viewBox="0 0 {_SVG_W} {_SVG_H}" role="img" aria-label="{_svg_esc(alt)}" style="max-width:100%;height:auto">'
         + "".join(parts) + "</svg>"
@@ -710,16 +866,22 @@ def _svg_spreadsheet(args: dict[str, Any], variant: str, alt: str) -> str:
     border = "1px solid " + _svg_grid(variant)
     fg = _svg_fg(variant)
     th_bg = _svg_grid(variant)
-    head = "".join(f"<th style='padding:6px 10px;text-align:left;background:{th_bg};color:{fg};border:{border}'>{_svg_esc(h)}</th>" for h in headers)
+    head = "".join(
+        f"<th style='padding:6px 10px;text-align:left;background:{th_bg};color:{fg};border:{border}'>{_svg_esc(h)}</th>"
+        for h in headers
+    )
     body = "".join(
         "<tr>"
-        + "".join(f"<td style='padding:6px 10px;border:{border}'>{_svg_esc(cell)}</td>" for cell in row)
+        + "".join(
+            f"<td class='{_semantic_value_class(headers[index] if index < len(headers) else '', cell)}' style='padding:6px 10px;border:{border}'>{_svg_esc(cell)}</td>"
+            for index, cell in enumerate(row)
+        )
         + "</tr>"
         for row in body_rows
     )
     return (
         f'<div class="table-scroll" role="img" aria-label="{_svg_esc(alt)}">'
-        f'<table style="border-collapse:collapse;font-size:12px;color:{fg};min-width:100%;width:max-content">'
+        f'<table class="data-table" data-sortable-table style="border-collapse:collapse;font-size:12px;color:{fg};min-width:100%;width:max-content">'
         f"<thead><tr style='border-bottom:2px solid {_svg_grid(variant)}'>{head}</tr></thead>"
         f"<tbody>{body}</tbody></table></div>"
     )
@@ -786,18 +948,94 @@ def _render_reference_item(item: Any, esc) -> str:
     return f"<li>{text}</li>" if text else ""
 
 
+def _render_kpi(row: Any, esc) -> str:
+    if not isinstance(row, dict):
+        return ""
+    label_raw = row.get("metric", "指标")
+    value_raw = row.get("current", "—")
+    change_raw = row.get("change", "—")
+    klass = _semantic_value_class(label_raw, value_raw, change_raw)
+    return (
+        f'<div class="kpi {klass}"><span class="metric-label"><i class="status-dot" aria-hidden="true"></i>{esc(label_raw)}</span>'
+        f'<strong class="value {klass}">{esc(value_raw)}</strong>'
+        f'<small>{esc(change_raw)}</small></div>'
+    )
+
+
 def _render_metric(metric: Any, esc) -> str:
     if not isinstance(metric, dict):
         return ""
-    label = esc(metric.get("label") or metric.get("name") or metric.get("id") or "指标")
-    value = esc(_text(metric.get("value", "—")) + _text(metric.get("unit") or ""))
+    label_raw = metric.get("label") or metric.get("name") or metric.get("id") or "指标"
+    value_raw = _text(metric.get("value", "—")) + _text(metric.get("unit") or "")
+    klass = _semantic_value_class(label_raw, value_raw)
+    label = esc(label_raw)
+    value = esc(value_raw)
     source = esc(metric.get("source") or metric.get("as_of") or "")
-    return f'<div class="metric"><span>{label}</span><strong>{value}</strong>{f"<small>{source}</small>" if source else ""}</div>'
+    return (
+        f'<div class="metric {klass}"><span class="metric-label"><i class="status-dot" aria-hidden="true"></i>{label}</span>'
+        f'<strong class="value {klass}">{value}</strong>{f"<small>{source}</small>" if source else ""}</div>'
+    )
+
+
+def _section_score(section: dict[str, Any]) -> str:
+    for metric in _list(section.get("metrics")):
+        if not isinstance(metric, dict):
+            continue
+        label = _text(metric.get("label") or metric.get("name") or metric.get("id"))
+        if "评分" in label or "score" in label.lower():
+            value = _text(metric.get("value", ""))
+            unit = _text(metric.get("unit") or "")
+            return f"{value}{unit}" if value else "—"
+    summary = _text(section.get("summary"))
+    match = re.search(r"(?:评分|score)\s*[:：]?\s*(-?\d+(?:\.\d+)?(?:\s*/\s*100)?)", summary, re.I)
+    return match.group(1).replace(" ", "") if match else "—"
+
+
+def _section_direction(section: dict[str, Any]) -> str:
+    text = f"{_text(section.get('title'))} {_text(section.get('summary'))}"
+    if any(term in text for term in ("强偏多", "偏多", "流入", "增加", "上涨")):
+        return "偏多"
+    if any(term in text for term in ("强偏空", "偏空", "流出", "减少", "下跌")):
+        return "偏空"
+    return "中性"
+
+
+def _render_section_matrix(sections: list[Any], esc) -> str:
+    rows = [section for section in sections if isinstance(section, dict)]
+    if not rows:
+        return ""
+    body = []
+    for index, section in enumerate(rows, start=1):
+        title = _text(section.get("title") or section.get("id") or f"分区 {index}")
+        score = _section_score(section)
+        direction = _section_direction(section)
+        status = _status_label(section.get("status"))
+        summary = _text(section.get("summary") or "—")
+        score_class = _semantic_value_class("评分", score, direction)
+        direction_class = _semantic_value_class("方向", direction)
+        body.append(
+            "<tr>"
+            f"<td>{index}</td>"
+            f"<td>{esc(title)}</td>"
+            f'<td class="{score_class}"><strong class="value {score_class}">{esc(score)}</strong></td>'
+            f'<td class="{direction_class}">{esc(direction)}</td>'
+            f"<td>{esc(status)}</td>"
+            f"<td>{esc(summary)}</td>"
+            "</tr>"
+        )
+    return (
+        '<section class="section dashboard-matrix">'
+        '<div class="section-head"><h2>分区评分矩阵</h2><span>sortable</span></div>'
+        '<div class="table-scroll">'
+        '<table class="data-table matrix-table" data-sortable-table>'
+        '<thead><tr><th>#</th><th>维度</th><th>评分</th><th>方向</th><th>状态</th><th>摘要</th></tr></thead>'
+        f"<tbody>{''.join(body)}</tbody></table></div></section>"
+    )
 
 
 def _render_section(section: dict[str, Any], variant: str, esc) -> str:
     title = esc(section.get("title") or section.get("id") or "分析分区")
-    status = esc(section.get("status") or "")
+    status = esc(_status_label(section.get("status")))
     summary = esc(section.get("summary") or "")
     metrics = "".join(_render_metric(metric, esc) for metric in _list(section.get("metrics")))
     charts = "".join(
@@ -817,6 +1055,70 @@ def _render_section(section: dict[str, Any], variant: str, esc) -> str:
         f"{f'<details><summary>数据缺口</summary><ul>{gaps}</ul></details>' if gaps else ''}"
         "</section>"
     )
+
+
+def _dashboard_runtime() -> str:
+    return """<script>
+(function initDashboardInteractions() {
+  const tooltip = document.getElementById("chart-tooltip");
+  const showTip = (target, event) => {
+    if (!tooltip || !target) return;
+    const text = target.getAttribute("data-tip");
+    if (!text) return;
+    tooltip.textContent = text;
+    tooltip.hidden = false;
+    const x = event && "clientX" in event ? event.clientX : target.getBoundingClientRect().left;
+    const y = event && "clientY" in event ? event.clientY : target.getBoundingClientRect().top;
+    tooltip.style.left = Math.min(window.innerWidth - tooltip.offsetWidth - 12, x + 14) + "px";
+    tooltip.style.top = Math.max(12, y - tooltip.offsetHeight - 12) + "px";
+    target.classList.add("is-active");
+  };
+  const hideTip = (target) => {
+    if (tooltip) tooltip.hidden = true;
+    if (target) target.classList.remove("is-active");
+  };
+  document.querySelectorAll(".chart-mark[data-tip]").forEach((mark) => {
+    mark.addEventListener("pointerenter", (event) => showTip(mark, event));
+    mark.addEventListener("pointermove", (event) => showTip(mark, event));
+    mark.addEventListener("pointerleave", () => hideTip(mark));
+    mark.addEventListener("focus", (event) => showTip(mark, event));
+    mark.addEventListener("blur", () => hideTip(mark));
+  });
+  document.querySelectorAll("[data-sortable-table]").forEach((table) => {
+    table.querySelectorAll("th").forEach((th, index) => {
+      th.setAttribute("tabindex", "0");
+      th.setAttribute("role", "button");
+      th.title = "点击排序";
+      const sort = () => {
+        const tbody = table.tBodies[0];
+        if (!tbody) return;
+        const direction = th.dataset.sortDir === "asc" ? "desc" : "asc";
+        table.querySelectorAll("th").forEach((item) => item.removeAttribute("data-sort-dir"));
+        th.dataset.sortDir = direction;
+        const rows = Array.from(tbody.rows);
+        rows.sort((a, b) => {
+          const av = a.cells[index]?.textContent?.trim() || "";
+          const bv = b.cells[index]?.textContent?.trim() || "";
+          const an = Number(av.replace(/[%亿份,，\\s]/g, ""));
+          const bn = Number(bv.replace(/[%亿份,，\\s]/g, ""));
+          const result = Number.isFinite(an) && Number.isFinite(bn)
+            ? an - bn
+            : av.localeCompare(bv, "zh-Hans-CN", { numeric: true });
+          return direction === "asc" ? result : -result;
+        });
+        rows.forEach((row) => tbody.appendChild(row));
+      };
+      th.addEventListener("click", sort);
+      th.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          sort();
+        }
+      });
+    });
+  });
+})();
+</script>"""
 
 
 def _html(payload: dict[str, Any], variant: str) -> str:
@@ -839,13 +1141,9 @@ def _html(payload: dict[str, Any], variant: str) -> str:
     muted = "#9aa8b2" if dark else "#65727d"
     line = "#34414b" if dark else "#d7dee3"
 
-    kpis = "".join(
-        f'<div class="kpi"><span>{esc(row.get("metric", "指标"))}</span>'
-        f'<strong>{esc(row.get("current", "—"))}</strong>'
-        f'<small>{esc(row.get("change", "—"))}</small></div>'
-        for row in overview[:6]
-    )
+    kpis = "".join(_render_kpi(row, esc) for row in overview[:6])
     chart_cards = "".join(_render_chart_card(chart, variant, esc) for chart in charts if isinstance(chart, dict))
+    matrix_card = _render_section_matrix(sections, esc)
     section_cards = "".join(_render_section(section, variant, esc) for section in sections if isinstance(section, dict))
     core_items = "".join(_render_text_item(item, esc, ("content", "detail", "summary")) for item in core) or "<li>暂无。</li>"
     risk_items = "".join(_render_text_item(item, esc, ("detail", "content", "summary")) for item in risks) or "<li>暂无。</li>"
@@ -863,29 +1161,57 @@ def _html(payload: dict[str, Any], variant: str) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
 <style>
-:root {{ color-scheme: {"dark" if dark else "light"}; --bg:{background}; --panel:{panel}; --line:{line}; --muted:{muted}; --text:{text}; --accent:#b47b26; }}
+:root {{ color-scheme: {"dark" if dark else "light"}; --bg:{background}; --panel:{panel}; --line:{line}; --muted:{muted}; --text:{text}; --accent:#d39b3f; --up:#e64646; --down:#22a06b; --info:#5ab0ff; --warn:#e8a33d; }}
 * {{ box-sizing:border-box; }}
 html,body {{ max-width:100%; overflow-x:hidden; }}
-body {{ margin:0; background:var(--bg); color:var(--text); font:15px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }}
-main {{ max-width:1180px; margin:0 auto; padding:28px 22px 42px; }}
-header {{ border-bottom:1px solid var(--line); padding:8px 0 22px; margin-bottom:20px; }}
+body {{ margin:0; background:
+  radial-gradient(circle at 15% -10%, rgba(211,155,63,.16), transparent 34%),
+  radial-gradient(circle at 85% 0%, rgba(90,176,255,.10), transparent 28%),
+  var(--bg); color:var(--text); font:15px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }}
+main {{ max-width:1240px; margin:0 auto; padding:30px 22px 46px; }}
+header {{ border:1px solid var(--line); border-radius:22px; padding:22px 24px; margin-bottom:18px; background:linear-gradient(135deg, color-mix(in srgb, var(--panel) 88%, #000 12%), color-mix(in srgb, var(--panel) 96%, var(--accent) 4%)); box-shadow:0 20px 70px rgba(0,0,0,.22); }}
 h1 {{ margin:0 0 6px; font-size:28px; }}
 h2 {{ margin:0 0 12px; font-size:17px; color:var(--accent); }}
 h3 {{ margin:0 0 12px; font-size:15px; color:var(--accent); }}
 a {{ color:var(--accent); }}
 .meta,.muted {{ color:var(--muted); }}
-.summary {{ background:var(--panel); border-left:3px solid var(--accent); padding:16px 18px; margin-bottom:18px; }}
+.summary {{ background:linear-gradient(135deg, color-mix(in srgb, var(--panel) 92%, var(--info) 8%), var(--panel)); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:18px; padding:18px 20px; margin-bottom:18px; }}
 .nav {{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 18px; }}
-.nav a {{ border:1px solid var(--line); border-radius:999px; padding:5px 10px; text-decoration:none; color:var(--text); background:var(--panel); }}
+.nav a {{ border:1px solid var(--line); border-radius:999px; padding:6px 12px; text-decoration:none; color:var(--text); background:color-mix(in srgb, var(--panel) 86%, var(--info) 14%); }}
 .kpis {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:18px; }}
-.kpi,.metric,.chart,.section {{ background:var(--panel); border:1px solid var(--line); padding:16px; }}
+.kpi,.metric,.chart,.section {{ background:color-mix(in srgb, var(--panel) 94%, #000 6%); border:1px solid var(--line); border-radius:18px; padding:16px; box-shadow:0 14px 38px rgba(0,0,0,.14); }}
+.kpi,.metric {{ position:relative; overflow:hidden; }}
 .kpi span,.kpi small,.metric span,.metric small {{ display:block; color:var(--muted); }}
-.kpi strong,.metric strong {{ display:block; font-size:24px; margin:2px 0; }}
+.metric-label {{ display:flex !important; align-items:center; gap:7px; min-width:0; }}
+.status-dot {{ flex:0 0 auto; width:8px; height:8px; border-radius:999px; background:var(--accent); box-shadow:0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }}
+.value-up .status-dot {{ background:var(--up); box-shadow:0 0 0 4px color-mix(in srgb, var(--up) 14%, transparent); }}
+.value-down .status-dot {{ background:var(--down); box-shadow:0 0 0 4px color-mix(in srgb, var(--down) 14%, transparent); }}
+.value-neutral .status-dot {{ background:var(--info); box-shadow:0 0 0 4px color-mix(in srgb, var(--info) 12%, transparent); }}
+.kpi strong,.metric strong {{ display:block; font-size:24px; margin:2px 0; letter-spacing:.01em; }}
+.value-up {{ color:var(--up) !important; }}
+.value-down {{ color:var(--down) !important; }}
+.value-neutral {{ color:var(--text); }}
 .metrics {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:12px 0 16px; }}
 .charts {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; margin-bottom:18px; }}
 .chart img {{ display:block; width:100%; height:auto; background:{background}; }}
-.chart {{ min-width:0; overflow:hidden; }}
+.chart {{ min-width:0; overflow:hidden; isolation:isolate; clip-path:inset(0 round 18px); background-image:linear-gradient(rgba(127,127,127,.055) 1px, transparent 1px),linear-gradient(90deg, rgba(127,127,127,.055) 1px, transparent 1px); background-size:22px 22px; }}
+.chart svg {{ display:block; width:100%; height:auto; overflow:hidden; }}
+.chart-mark {{ cursor:crosshair; transition:opacity .16s ease, filter .16s ease, stroke-width .16s ease; outline:none; }}
+.chart-mark:hover,.chart-mark:focus,.chart-mark.is-active {{ filter:drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 70%, transparent)); stroke:var(--text); stroke-width:1.5; opacity:.92; }}
+#chart-tooltip {{ position:fixed; z-index:9999; pointer-events:none; max-width:280px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:color-mix(in srgb, var(--panel) 92%, #000 8%); color:var(--text); box-shadow:0 12px 36px rgba(0,0,0,.28); font-size:12px; line-height:1.45; }}
+#chart-tooltip[hidden] {{ display:none; }}
 .table-scroll {{ width:100%; max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }}
+.data-table th {{ cursor:pointer; user-select:none; position:sticky; top:0; z-index:1; }}
+.data-table {{ border-collapse:separate; border-spacing:0; color:var(--text); min-width:100%; }}
+.data-table th,.data-table td {{ border-bottom:1px solid var(--line); padding:8px 10px; text-align:left; }}
+.data-table th {{ background:color-mix(in srgb, var(--panel) 72%, var(--accent) 28%); color:var(--text); font-size:12px; letter-spacing:.04em; }}
+.data-table th::after {{ content:"⇅"; color:var(--muted); font-size:10px; margin-left:6px; }}
+.data-table th[data-sort-dir="asc"]::after {{ content:"↑"; color:var(--accent); }}
+.data-table th[data-sort-dir="desc"]::after {{ content:"↓"; color:var(--accent); }}
+.data-table tbody tr:nth-child(even) {{ background:rgba(127,127,127,.045); }}
+.data-table tbody tr:hover {{ background:rgba(211,155,63,.08); }}
+.data-table td {{ white-space:nowrap; }}
+.matrix-table td:last-child {{ white-space:normal; max-width:520px; color:var(--muted); }}
 .section {{ margin-top:14px; }}
 .section-head {{ display:flex; justify-content:space-between; gap:12px; align-items:flex-start; border-bottom:1px solid var(--line); margin:-2px 0 12px; }}
 .section-head span {{ color:var(--muted); font-size:12px; border:1px solid var(--line); border-radius:999px; padding:2px 8px; }}
@@ -909,6 +1235,7 @@ footer {{ color:var(--muted); font-size:12px; border-top:1px solid var(--line); 
 <div class="summary"><h2>执行摘要</h2><p>{summary}</p><div class="muted">综合评估：{assessment}　风险等级：{risk_level}</div></div>
 {f'<nav class="nav" aria-label="报告分区">{nav_items}</nav>' if nav_items else ''}
 <div class="kpis">{kpis}</div>
+{matrix_card}
 {f'<div class="charts">{chart_cards}</div>' if chart_cards else ''}
 {section_cards}
 <section class="section"><h2>核心分析</h2><ul>{core_items}</ul></section>
@@ -916,6 +1243,8 @@ footer {{ color:var(--muted); font-size:12px; border-top:1px solid var(--line); 
 <section class="section"><h2>参考资料</h2><ul>{reference_items}</ul></section>
 <footer>以上分析基于公开数据与逻辑推演，不构成投资建议。</footer>
 </main>
+<div id="chart-tooltip" hidden></div>
+{_dashboard_runtime()}
 </body>
 </html>
 """

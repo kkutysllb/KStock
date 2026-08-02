@@ -60,7 +60,7 @@ def main():
     if not script:
         print(json.dumps({
             "error": "缠论分析引擎不可用",
-            "hint": "请确保 scripts/chan_engine/ 目录存在且包含缠论引擎代码"
+            "hint": "请确保 scripts/analyze_stock_chan.py 存在且依赖 chan_theory_v2/ 引擎包"
         }, ensure_ascii=False))
         sys.exit(1)
 

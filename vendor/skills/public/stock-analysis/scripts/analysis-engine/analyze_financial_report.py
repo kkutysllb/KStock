@@ -750,7 +750,7 @@ def main():
         print("[错误] 未输入股票信息")
         sys.exit(1)
 
-    from analysis.financial_analyzer import FinancialAnalyzer
+    from financial_analyzer import FinancialAnalyzer
 
     # 初始化 Tushare API
     from dotenv import load_dotenv

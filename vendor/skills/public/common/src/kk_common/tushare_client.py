@@ -77,12 +77,15 @@ class TushareClient:
     # 股票相关接口
     # =============================================================================
 
-    def stock_basic(self, exchange: str = '', list_status: str = 'L',
+    def stock_basic(self, ts_code: Optional[str] = None, name: Optional[str] = None,
+                   exchange: str = '', list_status: str = 'L',
                    fields: Optional[str] = None) -> pd.DataFrame:
         """
         获取股票基本信息
 
         Args:
+            ts_code: 股票代码，如 600519.SH（与官方接口一致，按单只过滤）
+            name: 股票名称，如 贵州茅台（与官方接口一致）
             exchange: 交易所代码 (SSE/SZSE/BSE/NEEQ)
             list_status: 上市状态 (L=上市, D=退市, P=暂停)
             fields: 返回字段
@@ -93,6 +96,8 @@ class TushareClient:
         _rate_limit()
         try:
             df = self.pro.stock_basic(
+                ts_code=ts_code,
+                name=name,
                 exchange=exchange,
                 list_status=list_status,
                 fields=fields
@@ -1007,12 +1012,26 @@ class TushareClient:
             复权行情 DataFrame
         """
         _rate_limit()
+        # 兼容小写频率（daily/weekly/monthly）：tushare 库 pro_bar 仅识别大写 D/W/M，
+        # 传小写会导致内部各频率分支均不命中、data 未赋值而抛 UnboundLocalError。
+        if freq in ('daily', 'weekly', 'monthly'):
+            freq = freq[0].upper()
+        import contextlib
+        import io
+        _stdout_buf = io.StringIO()
         try:
-            df = ts.pro_bar(
-                ts_code=ts_code, asset=asset,
-                start_date=start_date, end_date=end_date,
-                freq=freq, adj=adj, **kwargs,
-            )
+            # tushare 库 pro_bar 内部存在裸 print(e) 到 stdout 的缺陷
+            # （except 分支不 return、循环继续），会污染 JSON 等结构化输出，
+            # 此处重定向其 stdout 到缓冲区，仅记入日志。
+            with contextlib.redirect_stdout(_stdout_buf):
+                df = ts.pro_bar(
+                    ts_code=ts_code, asset=asset,
+                    start_date=start_date, end_date=end_date,
+                    freq=freq, adj=adj, **kwargs,
+                )
+            _internal_output = _stdout_buf.getvalue().strip()
+            if _internal_output:
+                logger.debug(f"pro_bar 内部输出: {_internal_output}")
             return _to_dataframe(df)
         except Exception as e:
             logger.error(f"获取 pro_bar 行情失败: {e}")

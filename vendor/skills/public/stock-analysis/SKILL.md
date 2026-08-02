@@ -1,7 +1,7 @@
 ---
 name: stock-analysis
-description: A股个股十五维一体深度分析引擎——技术面+财务面+财报深度解读+筹码面+估值面+多模型估值+股本股东+事件统计+消息/机构/资讯层+实时行情+经营数据穿透+缠论分析+艾略特波浪+谐波形态+机器学习预测+社交媒体情绪分析，附10大智能选股策略。开箱即用的跨平台技能包，支持 OpenClaw/Claude Code/Qoder 等 Agent 架构。
-version: 3.5.0
+description: A股个股十四维一体深度分析引擎——技术面+财务面+财报深度解读+筹码面+估值面+多模型估值+股本股东+事件统计+消息/机构/资讯层+实时行情+经营数据穿透+缠论分析+艾略特波浪+谐波形态+社交媒体情绪分析，附智能选股策略。开箱即用的跨平台技能包，支持 OpenClaw/Claude Code/Qoder 等 Agent 架构。
+version: 3.6.0
 author: kk-quant
 license: MIT
 category: finance
@@ -43,8 +43,6 @@ capabilities:
     description: "艾略特波浪分析：5浪推动+3浪调整结构、斐波那契关系校验、趋势见顶/调整完成信号"
   - id: harmonic-pattern-analysis
     description: "谐波形态分析：Gartley/Bat/Butterfly/Crab等XABCD五点形态、PRZ潜在反转区"
-  - id: ml-trend-prediction
-    description: "机器学习趋势预测：LightGBM/XGBoost/CatBoost集成模型、多源特征工程、置信度评分"
   - id: multi-valuation-models
     description: "多估值模型分析：DCF现金流折现+DDM股息折现+PE-Band历史分位+PB-ROE矩阵+EV/EBITDA+SOTP分部估值+10项估值陷阱检测+多模型交叉验证+综合目标价"
   - id: financial-deep-analysis
@@ -87,7 +85,7 @@ inputs:
 metadata:
   openclaw:
     emoji: "📊"
-    version: "3.5.0"
+    version: "3.6.0"
     author: "kk-quant"
     category: "finance"
     tags:
@@ -105,7 +103,7 @@ metadata:
     install:
       - id: pip-deps
         kind: pip
-        package: "tushare pandas numpy matplotlib scikit-learn lightgbm"
+        package: "pandas numpy matplotlib scipy python-dotenv"
         python: python3
         label: "Install Python dependencies"
 
@@ -120,11 +118,11 @@ tags:
   - iwencai
 ---
 
-# A股个股十五维一体深度分析引擎
+# A股个股十四维一体深度分析引擎
 
 ## 技能概述
 
-本技能包提供完整的A股个股分析能力，整合七大核心维度 + 8大高级分析模块 + 10大智能选股策略：
+本技能包提供完整的A股个股分析能力，整合七大核心维度 + 7大高级分析模块 + 智能选股策略：
 
 1. **技术面分析引擎** — 多周期K线+6大技术指标+支撑压力位
 2. **财务面分析引擎** — 营收/利润/ROE/现金流全维度
@@ -136,11 +134,10 @@ tags:
 8. **缠论分析引擎** — 形态学+动力学+多级别联立+三类买卖点
 9. **艾略特波浪引擎** — 5浪推动+3浪调整+斐波那契校验
 10. **谐波形态引擎** — Gartley/Bat/Butterfly/Crab XABCD五点形态
-11. **机器学习预测引擎** — LightGBM/XGBoost/CatBoost集成预测
-12. **社交媒体情绪引擎** — 多平台舆情采集+情绪评分+恐惧贪婪指数+反转检测
-13. **财报深度解读引擎** — 三表勾稽+盈利质量评分+造假红旗检测+杜邦分析+现金流矩阵
-14. **多估值模型引擎** — DCF+DDM+SOTP+PE-Band+PB-ROE+EV/EBITDA+估值陷阱+交叉验证+目标价
-15. **股本股东+事件统计引擎** — 股本结构+股东户数趋势+前十大股东+增减持+实控人+质押风险+6类事件统计
+11. **社交媒体情绪引擎** — 多平台舆情采集+情绪评分+恐惧贪婪指数+反转检测
+12. **财报深度解读引擎** — 三表勾稽+盈利质量评分+造假红旗检测+杜邦分析+现金流矩阵
+13. **多估值模型引擎** — DCF+DDM+SOTP+PE-Band+PB-ROE+EV/EBITDA+估值陷阱+交叉验证+目标价
+14. **股本股东+事件统计引擎** — 股本结构+股东户数趋势+前十大股东+增减持+实控人+质押风险+6类事件统计
 
 ## 分析脚本列表
 
@@ -168,12 +165,13 @@ tags:
 | `analyze_stock_chan.py` | 缠论分析（分型/笔/线段/中枢/MACD背驰/三类买卖点） | `--stock 600519.SH --json` |
 | `analyze_elliott_wave.py` | 艾略特波浪分析（5浪推动+3浪调整+斐波那契校验） | `--stock 600519.SH --json` |
 | `analyze_harmonic_pattern.py` | 谐波形态分析（Gartley/Bat/Butterfly/Crab XABCD） | `--stock 600519.SH --json` |
-| `analyze_trend_prediction.py` | 机器学习趋势预测（LightGBM/XGBoost/CatBoost集成） | `--stock 600519.SH --json` |
 | `analyze_social_media.py` | 社交媒体情绪分析（多平台舆情+情绪评分+恐惧贪婪指数+反转检测） | `--stock 600519.SH --days 7 --json` |
 
-### 智能选股策略（`scripts/selection-strategies/`）
+### 智能选股策略
 
-| 脚本文件 | 策略 | 说明 |
+10 大策略 CLI 位于独立技能 `selection-strategies/`（/mnt/skills/public/selection-strategies/，价值/高股息/成长/动量/技术突破/超跌反弹/涨停龙头/资金追踪/多因子）；本技能内嵌 `scripts/run_chan_stock_selector.py`（缠论背驰选股）：
+
+| 脚本文件（独立技能） | 策略 | 说明 |
 |---------|------|------|
 | `run_value_investment.py` | 价值投资 | 低PE/PB、高ROE的低估优质股 |
 | `run_high_dividend.py` | 高股息 | 股息率高、分红稳定的防御型 |
@@ -185,12 +183,6 @@ tags:
 | `run_fund_flow_tracking.py` | 资金追踪 | 跟随主力大单净流入方向 |
 | `run_chan_stock_selector.py` | 缠论背驰选股 | MACD背驰信号全市场扫描 |
 | `run_multi_factor.py` | 多因子横截面 | 7大因子截面Z-score标准化+等权/加权评分+TopN组合 |
-
-### ML 训练脚本（`scripts/ml-prediction/`）
-
-| 脚本文件 | 功能 | 参数 |
-|---------|------|------|
-| `run_model_train.py` | 趋势预测模型训练（LightGBM/XGBoost/CatBoost） | `--json` |
 
 ### CLI 工具（`scripts/`）
 
@@ -244,9 +236,6 @@ python3 scripts/analysis-engine/analyze_elliott_wave.py --stock 600519.SH --swin
 # 谐波形态分析
 python3 scripts/analysis-engine/analyze_harmonic_pattern.py --stock 600519.SH --json
 
-# 机器学习趋势预测
-python3 scripts/analysis-engine/analyze_trend_prediction.py --stock 600519.SH --json
-
 # 社交媒体情绪分析
 python3 scripts/analysis-engine/analyze_social_media.py --stock 600519.SH --json
 python3 scripts/analysis-engine/analyze_social_media.py --stock 600519.SH --days 14 --json
@@ -268,34 +257,23 @@ python3 scripts/management-query-cli.py --query "贵州茅台股本结构"
 
 # =================== 智能选股 ===================
 
-# 价值投资策略
-python3 scripts/selection-strategies/run_value_investment.py --json
+# 缠论背驰选股（本技能内嵌，全市场/指定股票池）
+python3 scripts/run_chan_stock_selector.py --json
+python3 scripts/run_chan_stock_selector.py --pool hs300 --signal buy --json
 
-# 高股息策略
-python3 scripts/selection-strategies/run_high_dividend.py --json
+# 10 大智能选股策略（价值/高股息/成长/动量/技术突破/超跌反弹/涨停龙头/资金追踪/缠论背驰/多因子）
+# 位于独立技能：cd /mnt/skills/public/selection-strategies && python3 run_multi_factor.py --json 等，详见该技能 SKILL.md
 
-# 缠论背驰选股（全市场/指定股票池）
-python3 scripts/selection-strategies/run_chan_stock_selector.py --json
-python3 scripts/selection-strategies/run_chan_stock_selector.py --pool hs300 --signal buy --json
-
-# 多因子横截面选股（7因子Z-score+TopN等权组合）
-python3 scripts/selection-strategies/run_multi_factor.py --json
-python3 scripts/selection-strategies/run_multi_factor.py --top-n 20 --momentum-window 10 --json
-
-# =================== 模型训练 ===================
+# =================== 多估值模型 ===================
 
 # 多估值模型分析（DCF+DDM+PE-Band+PB-ROE+EV/EBITDA+交叉验证）
 python3 scripts/analysis-engine/analyze_valuation_models.py --stock 600519.SH --json
 python3 scripts/analysis-engine/analyze_valuation_models.py --stock 600519.SH --years 5 --json
-
-# 趋势预测模型训练
-python3 scripts/ml-prediction/run_model_train.py --json
-python3 scripts/ml-prediction/run_model_train.py --stocks 000001.SZ,600519.SH --json
 ```
 
-## 十五维分析执行流程
+## 十四维分析执行流程
 
-### 阶段一：并行数据采集（15路并发）
+### 阶段一：并行数据采集（14路并发）
 
 **维度1: 技术面** — analyze_technical.py
 **维度2: 财务面** — analyze_financial_report.py
@@ -310,12 +288,11 @@ python3 scripts/ml-prediction/run_model_train.py --stocks 000001.SZ,600519.SH --
 **维度11: 缠论分析** — analyze_stock_chan.py（形态学+动力学+多级别联立+三类买卖点）
 **维度12: 艾略特波浪** — analyze_elliott_wave.py（5浪推动+3浪调整+斐波那契校验）
 **维度13: 谐波形态** — analyze_harmonic_pattern.py（Gartley/Bat/Butterfly/Crab XABCD）
-**维度14: 机器学习预测** — analyze_trend_prediction.py（LightGBM/XGBoost/CatBoost集成）
-**维度15: 社交媒体情绪** — analyze_social_media.py（多平台舆情+情绪评分+恐惧贪婪指数+反转检测）
+**维度14: 社交媒体情绪** — analyze_social_media.py（多平台舆情+情绪评分+恐惧贪婪指数+反转检测）
 
 ### 阶段二：数据融合与交叉验证
 
-十五维数据融合策略：
+十四维数据融合策略：
 1. **财务 x 经营**：利润表质量 x 收入结构 — 判断营收真实性
 2. **财报深度 x 估值**：三表勾稽验证 x 估值分位 — 验证盈利支撑估值的合理性
 3. **资金 x 合同**：实时资金流向 x 重大合同 — 识别主力布局
@@ -324,14 +301,13 @@ python3 scripts/ml-prediction/run_model_train.py --stocks 000001.SZ,600519.SH --
 6. **资讯 x 行情**：新闻热点 x 资金流向 — 验证市场反应方向
 7. **缠论 x 波浪**：缠论买卖点 x 波浪结构位置 — 双理论交叉验证
 8. **波浪 x 谐波**：波浪阶段 x 谐波形态PRZ — 精确反转点位
-9. **ML x 技术面**：机器学习预测方向 x 传统技术指标信号 — AI+传统双验证
 11. **多模型估值 x 财报深度**：DCF/PE-Band等估值结果 x 三表勾稽质量 — 验证估值假设的财务支撑
 13. **股东 x 事件**：股东增减持方向 x 监管函/解禁事件 — 内部人行为 vs 外部事件交叉验证
 14. **质押 x 估值**：质押风险 x 多模型估值 — 高质押低估值的陷阱识别
 
 ### 阶段三：报告输出
 
-十五维综合评分（0-100），权重分配：
+十四维综合评分（0-100），权重分配：
 | 维度 | 权重 | 说明 |
 |------|------|------|
 | 技术面 | 6% | 趋势与买卖点 |
@@ -347,12 +323,11 @@ python3 scripts/ml-prediction/run_model_train.py --stocks 000001.SZ,600519.SH --
 | 缠论分析 | 7% | 形态动力学信号 |
 | 艾略特波浪 | 4% | 波浪结构判断 |
 | 谐波形态 | 4% | PRZ反转信号 |
-| 机器学习预测 | 7% | AI趋势预测 |
 | 社交媒体情绪 | 5% | 舆情与情绪驱动 |
 
 ### 报告生成（内置 render_html_report 工具）
 
-十五维综合评分完成后，本技能**不自行编写报告或绘图代码**，而是调用内置 `render_html_report` 工具统一渲染。流程：
+十四维综合评分完成后，本技能**不自行编写报告或绘图代码**，而是调用内置 `render_html_report` 工具统一渲染。流程：
 
 1. 将综合评分、各维度分项、关键指标、风险与数据来源整理为报告 JSON，顶层字段：`title` / `generated_at` / `summary` / `assessment` / `risk_level` / `data_overview` / `core_analysis` / `risks` / `references` / `charts`。
 2. 为每个图表按 `charts[].{tool, title, alt, args}` 结构构造，图表以内嵌 SVG 渲染，**禁止使用远程图片 URL**。至少 3 个图表。args 的完整字段规范以工具描述中的契约说明为准。
@@ -370,13 +345,14 @@ python3 scripts/ml-prediction/run_model_train.py --stocks 000001.SZ,600519.SH --
 ## Python 依赖
 
 ```
-tushare>=1.4.0
 pandas>=2.0.0
 numpy>=1.24.0
 matplotlib>=3.7.0
-scikit-learn>=1.3.0
-lightgbm>=4.0.0
+scipy>=1.10.0
+python-dotenv>=1.0.0
 ```
+
+> 注：Tushare 数据经 common 技能 `get_finance_data_gateway()` 获取，禁止直接 `import tushare`。
 
 ## 数据来源标注
 

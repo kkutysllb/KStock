@@ -230,7 +230,6 @@ button {
 .settings-back,
 .settings-group button,
 .pill-control,
-.quick-prompt-grid button,
 .template-grid button {
   border: 0;
   cursor: pointer;
@@ -1390,49 +1389,6 @@ body.sidebar-resizing {
   color: #8f98a3;
 }
 
-.quick-prompt-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 34px;
-}
-
-.quick-prompt-grid button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 48px;
-  border: 1px solid rgba(255, 255, 255, 0.085);
-  border-radius: 10px;
-  padding: 12px 13px;
-  background: linear-gradient(135deg, rgba(255,255,255,.055), rgba(255,255,255,.018));
-  color: #d9dde3;
-  font-size: 13px;
-  text-align: left;
-}
-
-.quick-prompt-grid button svg {
-  margin-left: auto;
-  color: #68737f;
-  transition: transform 140ms ease, color 140ms ease;
-}
-
-.prompt-index {
-  color: #56c7a5;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-
-.quick-prompt-grid button:hover {
-  border-color: rgba(86, 199, 165, 0.5);
-  background: rgba(86, 199, 165, 0.08);
-}
-
-.quick-prompt-grid button:hover svg {
-  color: #56c7a5;
-  transform: translateX(2px);
-}
-
 /* ── 研究场景卡片（前端引导 agent 编排技能）── */
 .research-scenes {
   margin-top: 42px;
@@ -2315,7 +2271,6 @@ button.context-file-row:hover {
   }
 
   .landing-band,
-  .quick-prompt-grid,
   .template-grid,
   .settings-shell,
   .workspace-shell {

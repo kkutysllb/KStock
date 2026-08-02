@@ -654,8 +654,8 @@ def main():
         print("[错误] 未输入股票信息")
         sys.exit(1)
 
-    # 导入分析模块
-    from analysis.technical_analyzer import TechnicalDataFetcher, TechnicalAnalyzer
+    # 导入分析模块（与脚本同目录的库模块）
+    from technical_analyzer import TechnicalDataFetcher, TechnicalAnalyzer
 
     # 股票解析
     print(f"\n正在查询股票信息: {stock_input!r} ...")
