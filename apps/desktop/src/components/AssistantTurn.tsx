@@ -3,14 +3,14 @@
 // ToolCard[]（主 agent）→ 正文 text（markdown 源文本）→ error。
 // 流式时正文末尾闪动光标；空 turn 流式中显示 pending 占位。
 
-import { AlertTriangle, Sparkles } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import type { ChatMessage, HumanInputPayload } from "../lib/sessionStore";
 import { Markdown } from "../lib/markdown";
 import { StageBadge } from "./StageBadge";
 import { ReasoningBlock } from "./ReasoningBlock";
 import { SubagentGroup } from "./SubagentGroup";
 import { ClarificationCard } from "./ClarificationCard";
-import { groupToolCalls, ToolCallGroup } from "./ToolCallGroup";
+import { ToolActivitySummary } from "./ToolActivitySummary";
 
 interface AssistantTurnProps {
   msg: ChatMessage;
@@ -72,9 +72,6 @@ export function AssistantTurn({
 
   return (
     <article className="assistant-turn" aria-label="助手消息">
-      <div className="turn-avatar" aria-hidden="true">
-        <Sparkles size={14} />
-      </div>
       <div className="turn-body">
         {(showStage || msg.status === "compacted") && <div className="turn-header">
           {showStage && <StageBadge stage={msg.stage} streaming={streaming} />}
@@ -95,11 +92,11 @@ export function AssistantTurn({
 
         {msg.subagents?.map((t) => <SubagentGroup key={t.taskId} task={t} showToolCalls={showToolCalls} />)}
 
-        {showToolCalls && groupToolCalls(
-          msg.toolCalls?.filter((c) => c.name !== "ask_clarification") ?? []
-        ).map((calls) => (
-          <ToolCallGroup key={calls[0].name} calls={calls} />
-        ))}
+        {showToolCalls && (
+          <ToolActivitySummary
+            calls={msg.toolCalls?.filter((c) => c.name !== "ask_clarification") ?? []}
+          />
+        )}
 
         {/*
          * 交互式澄清（choice_with_other）：用 ClarificationCard 替换 fallback 正文。

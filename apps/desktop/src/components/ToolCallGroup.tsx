@@ -5,17 +5,18 @@ import { ToolCard } from "./ToolCard";
 
 interface ToolCallGroupProps {
   calls: ToolCall[];
+  compact?: boolean;
 }
 
 /** 同名工具调用的聚合视图：默认只显示摘要，展开后保留每次调用的完整详情。 */
-export function ToolCallGroup({ calls }: ToolCallGroupProps) {
+export function ToolCallGroup({ calls, compact = false }: ToolCallGroupProps) {
   const [firstCall] = calls;
   const [expanded, setExpanded] = useState(false);
   const status = groupStatus(calls);
   const summary = summarize(calls);
 
   return (
-    <div className={`tool-group status-${status}`}>
+    <div className={`tool-group status-${status}${compact ? " tool-group-compact" : ""}`}>
       <button
         type="button"
         className="tool-group-header"
