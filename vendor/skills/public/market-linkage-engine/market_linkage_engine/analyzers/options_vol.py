@@ -29,10 +29,23 @@ OPTION_NAME_KEYWORDS = {
     "510050.SH": ["50ETF"],
     "510300.SH": ["300ETF"],
     "510500.SH": ["500ETF"],
-    "512100.SH": ["1000ETF", "中证1000"],
+    "512100.SH": ["中证1000"],
     "588000.SH": ["科创50"],
     "159915.SZ": ["创业板"],
     "159901.SZ": ["深证100"],
+}
+
+# 期权品种 → (交易所, 标的价格来源, 中金所 opt_code)
+# 中证1000 用中金所股指期权（IM，标的就是 000852 指数，行权价为点位量级）
+# 其余 6 只为 ETF 期权（标的为 ETF 价格，行权价为元量级）
+OPTION_SOURCE = {
+    "510050.SH": ("SSE", "etf", None),
+    "510300.SH": ("SSE", "etf", None),
+    "510500.SH": ("SSE", "etf", None),
+    "512100.SH": ("CFFEX", "index", "OP000852.SH"),
+    "588000.SH": ("SSE", "etf", None),
+    "159915.SZ": ("SZSE", "etf", None),
+    "159901.SZ": ("SZSE", "etf", None),
 }
 
 
@@ -134,22 +147,29 @@ class OptionsVolatilityAnalyzer(BaseAnalyzer):
 
     def _analyze_etf(self, etf_code: str, etf_name: str,
                      trade_date: Optional[str], days: int) -> Dict[str, Any]:
-        """分析单个 ETF 期权：opt_basic 合约信息 + opt_daily 行情 → PCR / ATM IV。"""
-        exchange = "SSE" if etf_code.startswith(("510", "512", "588")) else "SZSE"
+        """分析单个期权品种：opt_basic 合约信息 + opt_daily 行情 → PCR / ATM IV。
+
+        中证1000 走中金所（CFFEX）股指期权（IM，opt_code=OP000852，标的是 000852 指数）；
+        其余 6 只为 ETF 期权（SSE/SZSE，标的是 ETF 价格）。
+        """
+        exchange, src_type, opt_code = OPTION_SOURCE.get(etf_code, ("SSE", "etf", None))
         basic = self._get_basic(exchange)
         if basic.empty or "call_put" not in basic.columns:
             return {"etf_code": etf_code, "etf_name": etf_name,
-                    "error": "opt_basic 无 call_put 字段（数据权限受限）"}
+                    "error": f"opt_basic({exchange}) 无 call_put 字段（数据权限受限）"}
 
-        # 按 name 关键词过滤该 ETF 的合约（如 "50ETF购8月3000" / "科创50购3月1700"）
-        keywords = OPTION_NAME_KEYWORDS.get(etf_code, [etf_name[:4]])
-        mask = pd.Series([False] * len(basic), index=basic.index)
-        for kw in keywords:
-            mask |= basic["name"].astype(str).str.contains(kw, na=False)
-        contracts = basic[mask]
+        # 合约过滤：CFFEX 按 opt_code 精确匹配；ETF 期权按 name 关键词
+        if exchange == "CFFEX" and opt_code:
+            contracts = basic[basic.get("opt_code") == opt_code] if "opt_code" in basic.columns else basic
+        else:
+            keywords = OPTION_NAME_KEYWORDS.get(etf_code, [etf_name[:4]])
+            mask = pd.Series([False] * len(basic), index=basic.index)
+            for kw in keywords:
+                mask |= basic["name"].astype(str).str.contains(kw, na=False)
+            contracts = basic[mask]
         if contracts.empty:
             return {"etf_code": etf_code, "etf_name": etf_name,
-                    "error": f"未匹配到 {etf_name} 期权合约（name 关键词 {keywords}）"}
+                    "error": f"未匹配到 {etf_name} 期权合约"}
 
         # 拉行情并按合约代码合并
         try:
@@ -186,15 +206,20 @@ class OptionsVolatilityAnalyzer(BaseAnalyzer):
         pcr = round(put_vol / call_vol, 2) if call_vol > 0 else None
         pcr_oi = round(put_oi / call_oi, 2) if call_oi > 0 else None
 
-        # 隐含波动率：标的 ETF 价格 + 活跃合约 BS 反解 → ATM（剩余期限≤60天、|moneyness-1| 最小）
-        # 注意：BS 反解必须用 ETF 价格（行权价 2.85 元量级），指数点位差 1000 倍不能用于定价
+        # 隐含波动率：标的价 + 活跃合约 BS 反解 → ATM（剩余期限≤60天、|moneyness-1| 最小）
+        # 注意：ETF 期权用 ETF 价格（行权价元量级）；中证1000 股指期权用指数点位（行权价点位量级）
         idx_code = OPTION_ETFS_INDEX.get(etf_code)
         idx_chg = None
         spot = None
         try:
-            fund_df = self.fetcher.fetch_fund_daily(etf_code, days=3, end=trade_date)
-            if len(fund_df):
-                spot = float(fund_df.iloc[-1]["close"])
+            if src_type == "etf":
+                fund_df = self.fetcher.fetch_fund_daily(etf_code, days=3, end=trade_date)
+                if len(fund_df):
+                    spot = float(fund_df.iloc[-1]["close"])
+            elif idx_code:
+                idx_df = self.fetcher.fetch_index_daily(idx_code, days=3, end=trade_date)
+                if len(idx_df):
+                    spot = float(idx_df.iloc[-1]["close"])
         except Exception:
             pass
         if idx_code:
