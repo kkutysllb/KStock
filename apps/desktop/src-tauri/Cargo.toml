@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+base64 = "0.22"
+rfd = "0.15"
+serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = ["tray-icon"] }
 
 [build-dependencies]

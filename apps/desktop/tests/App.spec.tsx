@@ -16,6 +16,10 @@ const turnsMock = vi.hoisted(() => ({
   artifactUrl: vi.fn(),
 }));
 
+const tauriMock = vi.hoisted(() => ({
+  invoke: vi.fn(),
+}));
+
 // gatewayControl mock：restartGateway / waitForGateway 由各测试覆盖返回值。
 const controlMock = vi.hoisted(() => ({
   restartGateway: vi.fn(),
@@ -72,6 +76,10 @@ vi.mock("../src/lib/turnsClient", () => ({
   getWorkspaceChanges: turnsMock.getWorkspaceChanges,
 }));
 
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: tauriMock.invoke,
+}));
+
 // gatewayControlClient mock：重启后端的 restart + 健康轮询由各测试覆盖。
 vi.mock("../src/lib/gatewayControlClient", () => ({
   restartGateway: controlMock.restartGateway,
@@ -92,6 +100,8 @@ beforeEach(() => {
     (threadId: string, virtualPath: string) =>
       `http://localhost:18001/api/threads/${encodeURIComponent(threadId)}/artifacts/${virtualPath.replace(/^\/+/, "")}`
   );
+  tauriMock.invoke.mockReset();
+  delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   controlMock.restartGateway.mockReset();
   controlMock.waitForGateway.mockReset();
 });
@@ -329,6 +339,8 @@ test("交付文件中的 Markdown 和日志在产品内预览并提供下载", a
   const revokeObjectUrl = vi.fn();
   Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectUrl });
   Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revokeObjectUrl });
+  Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+  tauriMock.invoke.mockResolvedValue({ saved: true, path: "/tmp/report.md" });
 
   render(<App />);
 
@@ -346,14 +358,27 @@ test("交付文件中的 Markdown 和日志在产品内预览并提供下载", a
   ));
   expect(await screen.findByRole("dialog", { name: "report.md" })).toBeVisible();
   expect(screen.getByRole("heading", { name: "周报" })).toBeVisible();
-  expect(screen.getByRole("link", { name: "下载" })).toHaveAttribute("download", "report.md");
+  fireEvent.click(screen.getByRole("button", { name: "下载" }));
+  await waitFor(() => expect(tauriMock.invoke).toHaveBeenCalledWith(
+    "save_artifact_file",
+    expect.objectContaining({
+      name: "report.md",
+      contentsBase64: expect.any(String),
+    })
+  ));
+  const savePayload = tauriMock.invoke.mock.calls[0]?.[1] as { contentsBase64: string };
+  expect(Buffer.from(savePayload.contentsBase64, "base64").toString("utf8")).toBe("# 周报\n\n正文");
 
   fireEvent.click(screen.getByRole("button", { name: "关闭" }));
   fireEvent.click(await screen.findByRole("button", { name: /bash-1\.log/ }));
 
   expect(await screen.findByRole("dialog", { name: "bash-1.log" })).toBeVisible();
   expect(screen.getByText(/line one/)).toBeVisible();
-  expect(screen.getByRole("link", { name: "下载" })).toHaveAttribute("download", "bash-1.log");
+  fireEvent.click(screen.getByRole("button", { name: "下载" }));
+  await waitFor(() => expect(tauriMock.invoke).toHaveBeenCalledTimes(2));
+  const logPayload = tauriMock.invoke.mock.calls[1]?.[1] as { name: string; contentsBase64: string };
+  expect(logPayload.name).toBe("bash-1.log");
+  expect(Buffer.from(logPayload.contentsBase64, "base64").toString("utf8")).toBe("line one\nline two");
 
   fetchSpy.mockRestore();
 });

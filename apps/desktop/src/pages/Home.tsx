@@ -130,8 +130,8 @@ import {
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings" | "reports";
 type ArtifactPreview =
-  | { kind: "html"; name: string; url: string }
-  | { kind: "markdown" | "text"; name: string; url: string; text: string };
+  | { kind: "html"; name: string; href: string; url: string }
+  | { kind: "markdown" | "text"; name: string; href: string; url: string; text: string };
 type AuthMode = "login" | "register";
 
 const WORKSPACE_SIDEBAR_WIDTH_KEY = "kstock.workspaceSidebarWidth";
@@ -1525,6 +1525,7 @@ function WorkspaceShell({
   // 交付/上传文件预览：fetch + blob 应用内预览（导航式打开不带会话 cookie，会触发 401）。
   const [artifactPreview, setArtifactPreview] = useState<ArtifactPreview | null>(null);
   const [artifactError, setArtifactError] = useState<string | null>(null);
+  const [artifactSaving, setArtifactSaving] = useState(false);
 
   const openArtifact = useCallback(async (href: string, name: string) => {
     setArtifactError(null);
@@ -1537,13 +1538,13 @@ function WorkspaceShell({
       if (previewKind === "html") {
         setArtifactPreview((current) => {
           if (current) URL.revokeObjectURL(current.url);
-          return { kind: "html", name, url };
+          return { kind: "html", name, href, url };
         });
       } else if (previewKind === "markdown" || previewKind === "text") {
         const text = await readBlobText(blob);
         setArtifactPreview((current) => {
           if (current) URL.revokeObjectURL(current.url);
-          return { kind: previewKind, name, url, text };
+          return { kind: previewKind, name, href, url, text };
         });
       } else {
         const anchor = document.createElement("a");
@@ -1565,6 +1566,25 @@ function WorkspaceShell({
       return null;
     });
   }, []);
+
+  const saveArtifactPreview = useCallback(async () => {
+    if (!artifactPreview || artifactSaving) return;
+    setArtifactError(null);
+    setArtifactSaving(true);
+    try {
+      const response = await fetch(artifactPreview.href, { credentials: "include" });
+      if (!response.ok) throw new Error(`下载失败（${response.status}）`);
+      const blob = await response.blob();
+      const saveResult = await saveArtifactBlob(artifactPreview.name, blob);
+      if (saveResult === "unsupported") {
+        fallbackDownloadBlob(artifactPreview.name, blob);
+      }
+    } catch (err) {
+      setArtifactError(err instanceof Error ? err.message : "文件下载失败");
+    } finally {
+      setArtifactSaving(false);
+    }
+  }, [artifactPreview, artifactSaving]);
   return (
     <div
       className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${rightPanelOpen ? "context-open" : ""} density-${generalPreferences.density} ${generalPreferences.reduce_motion ? "reduce-motion" : ""}`}
@@ -1953,7 +1973,9 @@ ${text}` : text)
             <div className="report-preview-bar">
               <strong className="report-preview-title">{artifactPreview.name}</strong>
               <div className="report-preview-actions">
-                <a className="subtle-button" href={artifactPreview.url} download={artifactPreview.name}>下载</a>
+                <button className="subtle-button" type="button" onClick={saveArtifactPreview} disabled={artifactSaving}>
+                  {artifactSaving ? "保存中…" : "下载"}
+                </button>
                 <button className="subtle-button" type="button" onClick={closeArtifactPreview}>关闭</button>
               </div>
             </div>
@@ -2135,6 +2157,52 @@ function readBlobText(blob: Blob): Promise<string> {
     });
   }
   return new Response(blob).text();
+}
+
+async function saveArtifactBlob(name: string, blob: Blob): Promise<"saved" | "cancelled" | "unsupported"> {
+  if (!isTauriRuntime()) return "unsupported";
+  const { invoke } = await import("@tauri-apps/api/core");
+  const contentsBase64 = bytesToBase64(await readBlobBytes(blob));
+  const result = await invoke<{ saved: boolean }>("save_artifact_file", { name, contentsBase64 });
+  return result.saved ? "saved" : "cancelled";
+}
+
+async function readBlobBytes(blob: Blob): Promise<Uint8Array> {
+  if (typeof blob.arrayBuffer === "function") return new Uint8Array(await blob.arrayBuffer());
+  if (typeof FileReader !== "undefined") {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener("load", () => resolve(new Uint8Array(reader.result as ArrayBuffer)));
+      reader.addEventListener("error", () => reject(reader.error ?? new Error("文件读取失败")));
+      reader.readAsArrayBuffer(blob);
+    });
+  }
+  return new Uint8Array(await new Response(blob).arrayBuffer());
+}
+
+function isTauriRuntime(): boolean {
+  const win = window as Window & { __TAURI_INTERNALS__?: unknown; __TAURI__?: unknown };
+  return Boolean(win.__TAURI_INTERNALS__ || win.__TAURI__);
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function fallbackDownloadBlob(name: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function SettingsPage({
