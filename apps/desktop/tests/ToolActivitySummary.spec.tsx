@@ -12,7 +12,7 @@ const call = (patch: Partial<ToolCall>): ToolCall => ({
 });
 
 describe("ToolActivitySummary", () => {
-  it("默认只显示一行摘要，点击后才展开工具分组", () => {
+  it("默认只显示一行摘要，展开后直接显示单次调用卡片", () => {
     render(
       <ToolActivitySummary
         calls={[
@@ -31,9 +31,9 @@ describe("ToolActivitySummary", () => {
     fireEvent.click(summary);
 
     expect(summary).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getAllByText("read_file").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("工具调用 read_file")).toHaveLength(2);
+    expect(screen.queryByText("2 次调用")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole("button", { name: /read_file/ })[0]);
     fireEvent.click(screen.getAllByRole("button", { name: /read_file 已完成/ })[0]);
 
     expect(screen.getByText("/tmp/report.md")).toBeVisible();

@@ -2,7 +2,7 @@ import { AlertCircle, Check, ChevronRight, Loader2 } from "lucide-react";
 import { useState } from "react";
 import type { ToolCall } from "../lib/sessionStore";
 import { summarizeToolActivity, type ToolActivityStatus } from "../lib/toolActivity";
-import { groupToolCalls, ToolCallGroup } from "./ToolCallGroup";
+import { ToolCard } from "./ToolCard";
 
 interface ToolActivitySummaryProps {
   calls: ToolCall[];
@@ -36,8 +36,8 @@ export function ToolActivitySummary({ calls }: ToolActivitySummaryProps) {
       </button>
       {expanded && (
         <div className="tool-activity-details">
-          {groupToolCalls(calls).map((group) => (
-            <ToolCallGroup key={group[0].name} calls={group} compact />
+          {calls.map((call) => (
+            <ToolCard key={call.id} call={call} />
           ))}
         </div>
       )}
