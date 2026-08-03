@@ -211,13 +211,14 @@ case "$(uname -s)" in
         # _internal/Python 是指向 framework 真实 binary 的 symlink；对 symlink
         # 路径做 codesign --verify --strict 会误报
         # "code has no resources but signature indicates they must be present"。
-        # 因此这里只打印 symlink 证据，实际验证 framework bundle 与真实版本
-        # binary，不再验证 symlink 入口本身。
+        # Python.framework 目录本身同样是 PyInstaller 重组后的非标准 framework
+        # 布局，strict verify 会误报同类 resource 问题；这里只打印结构证据，
+        # 实际只验证真实版本 binary，不再验证 symlink 或 framework 目录本身。
         if [ -e "dist/kstock-gateway/_internal/Python" ]; then
             ls -l "dist/kstock-gateway/_internal/Python"
         fi
         if [ -d "dist/kstock-gateway/_internal/Python.framework" ]; then
-            codesign --verify --deep --strict --verbose=2 "dist/kstock-gateway/_internal/Python.framework"
+            find "dist/kstock-gateway/_internal/Python.framework" -maxdepth 3 \( -type l -o -type f \) | sort | sed -n '1,40p'
         fi
         if [ -e "dist/kstock-gateway/_internal/Python.framework/Versions/3.12/Python" ]; then
             ls -l "dist/kstock-gateway/_internal/Python.framework/Versions/3.12/Python"
