@@ -207,15 +207,21 @@ case "$(uname -s)" in
         # PyInstaller 在 GitHub macOS runner 上会额外收集 Framework Python：
         #   _internal/Python
         #   _internal/Python.framework/Python
-        # 这两处由 PyInstaller 在 build 阶段用 APPLE_SIGNING_IDENTITY 签名；此处
-        # 只验证，不再重签 framework 内部或 symlink 入口。
+        # 这两处由 PyInstaller 在 build 阶段用 APPLE_SIGNING_IDENTITY 签名。
+        # _internal/Python 是指向 framework 真实 binary 的 symlink；对 symlink
+        # 路径做 codesign --verify --strict 会误报
+        # "code has no resources but signature indicates they must be present"。
+        # 因此这里只打印 symlink 证据，实际验证 framework bundle 与真实版本
+        # binary，不再验证 symlink 入口本身。
         if [ -e "dist/kstock-gateway/_internal/Python" ]; then
             ls -l "dist/kstock-gateway/_internal/Python"
-            codesign --verify --strict --verbose=2 "dist/kstock-gateway/_internal/Python"
         fi
-        if [ -e "dist/kstock-gateway/_internal/Python.framework/Python" ]; then
-            ls -l "dist/kstock-gateway/_internal/Python.framework/Python"
-            codesign --verify --strict --verbose=2 "dist/kstock-gateway/_internal/Python.framework/Python"
+        if [ -d "dist/kstock-gateway/_internal/Python.framework" ]; then
+            codesign --verify --deep --strict --verbose=2 "dist/kstock-gateway/_internal/Python.framework"
+        fi
+        if [ -e "dist/kstock-gateway/_internal/Python.framework/Versions/3.12/Python" ]; then
+            ls -l "dist/kstock-gateway/_internal/Python.framework/Versions/3.12/Python"
+            codesign --verify --strict --verbose=2 "dist/kstock-gateway/_internal/Python.framework/Versions/3.12/Python"
         fi
         codesign --verify --deep --strict --verbose=2 dist/kstock-gateway/kstock-gateway
         echo "  signed Mach-O files: $SIGN_COUNT"
