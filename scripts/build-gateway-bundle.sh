@@ -45,17 +45,34 @@ case "$(uname -s)" in
     ;;
 esac
 
-# 优先复用本机已有的 uv standalone Python；CI 首次构建时不存在，自动下载。
-STANDALONE_PY=""
-for cand in "${STANDALONE_GLOB[@]}"; do
-    [ -x "$cand" ] && STANDALONE_PY="$cand"
-done
+# 定位 uv standalone Python 3.12 解释器。
+# 优先用 uv 自身查询：CI 上 setup-uv 可能把 UV_PYTHON_INSTALL_DIR 指到
+# runner 工具缓存目录（uv python install 的安装位置不再固定），不能猜路径；
+# --managed 只匹配 standalone，避免误用系统 Python。旧版 uv 无 --managed，
+# 回退到已知安装目录（本地开发机路径）。
+find_standalone_py() {
+    if command -v uv >/dev/null 2>&1; then
+        local py
+        py="$(uv python find --managed 3.12 2>/dev/null || true)"
+        if [ -n "$py" ]; then
+            # Windows 上 uv 输出反斜杠路径，转为 MSYS 风格
+            if command -v cygpath >/dev/null 2>&1; then
+                py="$(cygpath -u "$py" 2>/dev/null || echo "$py")"
+            fi
+            [ -x "$py" ] && { echo "$py"; return 0; }
+        fi
+    fi
+    for cand in "${STANDALONE_GLOB[@]}"; do
+        [ -x "$cand" ] && { echo "$cand"; return 0; }
+    done
+    return 1
+}
+
+STANDALONE_PY="$(find_standalone_py || true)"
 if [ -z "$STANDALONE_PY" ]; then
     echo "==> 未找到 uv standalone Python 3.12，自动下载（uv python install 3.12）…"
     uv python install 3.12
-    for cand in "${STANDALONE_GLOB[@]}"; do
-        [ -x "$cand" ] && STANDALONE_PY="$cand"
-    done
+    STANDALONE_PY="$(find_standalone_py || true)"
 fi
 if [ -z "$STANDALONE_PY" ]; then
     echo "!! 自动下载后仍未找到 standalone Python 3.12" >&2
