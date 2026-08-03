@@ -745,6 +745,26 @@ def test_ensure_default_soul_preserves_user_content(tmp_path):
 # ── 用户数据根目录：~/.kstock 默认与历史 v1 目录迁移 ────────────────
 
 
+def _legacy_root_for(home: Path, monkeypatch) -> Path:
+    """按平台构造历史 v1 数据根（与 run_gateway._legacy_app_data_roots 一致）。
+
+    macOS: ~/Library/Application Support/KStock
+    Windows: %APPDATA%\\KStock
+    Linux: $XDG_DATA_HOME/KStock（默认 ~/.local/share/KStock）
+    """
+    import sys
+
+    if sys.platform == "darwin":
+        return home / "Library" / "Application Support" / "KStock"
+    if sys.platform == "win32":
+        appdata = home / "AppData" / "Roaming"
+        monkeypatch.setenv("APPDATA", str(appdata))
+        return appdata / "KStock"
+    xdg = home / ".local" / "share"
+    monkeypatch.setenv("XDG_DATA_HOME", str(xdg))
+    return xdg / "KStock"
+
+
 def test_resolve_app_data_root_defaults_to_kstock_home(monkeypatch):
     """无 KSTOCK_APP_DATA_DIR 时默认 ~/.kstock（不再用 Application Support）。"""
     monkeypatch.delenv("KSTOCK_APP_DATA_DIR", raising=False)
@@ -772,7 +792,7 @@ def test_migrate_legacy_data_root_moves_content(monkeypatch, tmp_path):
 
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    legacy = home / "Library" / "Application Support" / "KStock"
+    legacy = _legacy_root_for(home, monkeypatch)
     (legacy / "config").mkdir(parents=True)
     (legacy / "runtime" / "qilin" / "data").mkdir(parents=True)
     # 模拟旧 runtime.yaml：sqlite_dir 指向旧根（含空格路径）
@@ -811,7 +831,7 @@ def test_migrate_legacy_skips_when_target_exists(monkeypatch, tmp_path):
 
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    legacy = home / "Library" / "Application Support" / "KStock"
+    legacy = _legacy_root_for(home, monkeypatch)
     (legacy / "config").mkdir(parents=True)
     (legacy / "runtime").mkdir(parents=True)
 
@@ -832,7 +852,7 @@ def test_migrate_legacy_skips_empty_legacy_dir(monkeypatch, tmp_path):
 
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    legacy = home / "Library" / "Application Support" / "KStock"
+    legacy = _legacy_root_for(home, monkeypatch)
     legacy.mkdir(parents=True)
 
     target = home / ".kstock"
