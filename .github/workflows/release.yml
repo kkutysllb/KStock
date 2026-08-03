@@ -97,12 +97,13 @@ jobs:
             -name '*.exe' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \
             -o -name '*.sig' \
           \) -exec cp {} dist-release/ \;
-          # macOS 的 .app.tar.gz 文件名不含架构标记，按 uname 架构重命名，
-          # 供 latest.json 正确映射 darwin-aarch64 / darwin-x86_64
+          # 发布仅覆盖三个平台：macOS Apple Silicon / Windows x64 / Linux x64
+          # （不提供 macOS Intel 产物；macos-latest runner 即 Apple Silicon）。
+          # tauri 产物文件名不含架构标记，固定重命名为 aarch64，
+          # 供 latest.json 映射到标准 updater 平台键 darwin-aarch64。
           if [ "$RUNNER_OS" = "macOS" ]; then
-            arch="$(uname -m)"
-            mv dist-release/KStock.app.tar.gz "dist-release/KStock_${arch}.app.tar.gz"
-            mv dist-release/KStock.app.tar.gz.sig "dist-release/KStock_${arch}.app.tar.gz.sig"
+            mv dist-release/KStock.app.tar.gz dist-release/KStock_aarch64.app.tar.gz
+            mv dist-release/KStock.app.tar.gz.sig dist-release/KStock_aarch64.app.tar.gz.sig
           fi
           ls -lh dist-release
       - uses: actions/upload-artifact@v4
@@ -148,9 +149,13 @@ jobs:
                   "url": url_prefix + os.path.basename(path),
               }
 
+          # 仅三个发布平台（不含 macOS Intel），latest.json 平台键为
+          # tauri updater 协议固定格式：
+          #   macOS Apple Silicon -> darwin-aarch64
+          #   Windows x64        -> windows-x86_64
+          #   Linux x64          -> linux-x86_64
           for f in glob.glob("dist-release/*.app.tar.gz"):
-              is_arm = ("aarch64" in f) or ("arm64" in f)
-              add("darwin-aarch64" if is_arm else "darwin-x86_64", f)
+              add("darwin-aarch64", f)
           msis = glob.glob("dist-release/*.msi")
           if msis:
               add("windows-x86_64", msis[0])
@@ -158,7 +163,7 @@ jobs:
               for f in glob.glob("dist-release/*.exe"):
                   add("windows-x86_64", f)
                   break
-          for f in glob.glob("dist-release/*.AppImage") + glob.glob("dist-release/*.deb"):
+          for f in glob.glob("dist-release/*.deb"):
               add("linux-x86_64", f)
 
           if not platforms:
