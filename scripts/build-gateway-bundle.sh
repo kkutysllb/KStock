@@ -6,14 +6,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "==> PyInstaller 构建 gateway（dist/kstock-gateway/）"
-uv run pyinstaller scripts/kstock-gateway.spec --noconfirm --clean
-# speech_recognition 的 flac-mac 是上游 wheel 自带的旧 macOS SDK 可执行文件，
-# PyInstaller 会提示它可能破坏 code-signing / hardened runtime。KStock
-# gateway 不使用本地语音转码能力，发布包中移除该可选二进制，避免 Apple
-# notarization 在预签后继续因老 SDK 二进制失败。
-rm -f dist/kstock-gateway/_internal/speech_recognition/flac-mac 2>/dev/null || true
-
 # ── 内置 Python 运行时（agent 技能脚本开箱即用）──────────────────────
 # 打包版 agent 通过 bash 执行技能脚本（python3 xxx.py），系统 Python 没有
 # kk_common/pandas/tushare 等依赖；PyInstaller 产物只有 bootloader，不能当
@@ -68,6 +60,24 @@ case "$STANDALONE_PY" in
     ;;
 esac
 echo "==> 内置 Python 运行时: $STANDALONE_PY"
+
+echo "==> PyInstaller 构建 gateway（dist/kstock-gateway/）"
+uv run --python "$STANDALONE_PY" pyinstaller scripts/kstock-gateway.spec --noconfirm --clean
+# speech_recognition 的 flac-mac 是上游 wheel 自带的旧 macOS SDK 可执行文件，
+# PyInstaller 会提示它可能破坏 code-signing / hardened runtime。KStock
+# gateway 不使用本地语音转码能力，发布包中移除该可选二进制，避免 Apple
+# notarization 在预签后继续因老 SDK 二进制失败。
+rm -f dist/kstock-gateway/_internal/speech_recognition/flac-mac 2>/dev/null || true
+case "$(uname -s)" in
+  Darwin)
+    if [ -d "dist/kstock-gateway/_internal/Python.framework" ]; then
+        echo "!! macOS gateway 不应包含 Python.framework；请确认 PyInstaller 使用 uv standalone Python 构建" >&2
+        find dist/kstock-gateway/_internal/Python.framework -maxdepth 3 \( -type l -o -type f \) | sort | sed -n '1,80p' >&2
+        exit 1
+    fi
+    ;;
+esac
+
 rm -rf "$PYTHON_RUNTIME"
 # --relocatable: 创建可移动的 venv（解释器按相对路径定位），随包分发后
 # 在任意路径可运行，不依赖构建机绝对路径。
@@ -182,10 +192,9 @@ case "$(uname -s)" in
         SIGN_LIST="$(mktemp)"
         find dist/kstock-gateway -type f -print0 |
           while IFS= read -r -d '' CANDIDATE; do
-              # PyInstaller 负责签名 framework（尤其是 Python.framework）并维护
-              # bundle seal / symlink 入口。后置裸扫逐个 codesign framework 内部
-              # Mach-O 会让 notarization 继续在 Python.framework/Python 上报
-              # "signature is invalid"。
+              # framework bundle 必须作为整体处理，不能后置裸扫逐个重签内部
+              # Mach-O；Python.framework 在前面的产物 guard 中已被禁止进入
+              # gateway，其他 framework 交由其所属构建工具维护 bundle seal。
               case "$CANDIDATE" in
                 */_internal/Python|*.framework/*)
                   continue
@@ -204,26 +213,6 @@ case "$(uname -s)" in
             SIGN_COUNT=$((SIGN_COUNT + 1))
         done < "$SIGN_LIST"
         rm -f "$SIGN_LIST"
-        # PyInstaller 在 GitHub macOS runner 上会额外收集 Framework Python：
-        #   _internal/Python
-        #   _internal/Python.framework/Python
-        # 这两处由 PyInstaller 在 build 阶段用 APPLE_SIGNING_IDENTITY 签名。
-        # _internal/Python 是指向 framework 真实 binary 的 symlink；对 symlink
-        # 路径做 codesign --verify --strict 会误报
-        # "code has no resources but signature indicates they must be present"。
-        # Python.framework 目录/内部 binary 同样是 PyInstaller 重组后的非标准
-        # framework 布局，strict verify 会误报同类 resource 问题；这里只打印
-        # 结构证据，不再对 Python.framework 任何入口做本地 strict verify。
-        if [ -e "dist/kstock-gateway/_internal/Python" ]; then
-            ls -l "dist/kstock-gateway/_internal/Python"
-        fi
-        if [ -d "dist/kstock-gateway/_internal/Python.framework" ]; then
-            find "dist/kstock-gateway/_internal/Python.framework" -maxdepth 3 \( -type l -o -type f \) | sort | sed -n '1,40p'
-        fi
-        if [ -e "dist/kstock-gateway/_internal/Python.framework/Versions/3.12/Python" ]; then
-            ls -l "dist/kstock-gateway/_internal/Python.framework/Versions/3.12/Python"
-            file "dist/kstock-gateway/_internal/Python.framework/Versions/3.12/Python"
-        fi
         codesign --verify --deep --strict --verbose=2 dist/kstock-gateway/kstock-gateway
         echo "  signed Mach-O files: $SIGN_COUNT"
     else

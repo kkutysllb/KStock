@@ -163,6 +163,15 @@ def test_build_gateway_bundle_uses_shared_python_runtime_locator():
     assert "uv python find --managed" not in script
 
 
+def test_build_gateway_bundle_runs_pyinstaller_with_standalone_python():
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    locator_index = script.index("STANDALONE_PY=")
+    pyinstaller_index = script.index("pyinstaller scripts/kstock-gateway.spec")
+    assert locator_index < pyinstaller_index
+    assert 'uv run --python "$STANDALONE_PY" pyinstaller scripts/kstock-gateway.spec' in script
+
+
 def test_build_gateway_bundle_accepts_linux_versioned_libpython_name():
     script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
 
@@ -201,8 +210,14 @@ def test_build_gateway_bundle_signs_macos_gateway_resources_before_tauri_bundle(
     assert "codesign" in script
     assert "--options runtime" in script
     assert "--timestamp" in script
-    assert "Python.framework" in script
-    assert '_internal/Python"' in script
+    assert "dist/kstock-gateway/kstock-gateway" in script
+
+
+def test_build_gateway_bundle_rejects_macos_python_framework_from_pyinstaller():
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    assert "macOS gateway 不应包含 Python.framework" in script
+    assert 'dist/kstock-gateway/_internal/Python.framework' in script
 
 
 def test_pyinstaller_spec_uses_macos_developer_id_signing_identity():
@@ -217,7 +232,7 @@ def test_build_gateway_bundle_does_not_resign_pyinstaller_framework_contents():
     script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
 
     assert "*.framework/*" in script
-    assert "PyInstaller 负责签名 framework" in script
+    assert "不能后置裸扫逐个重签内部" in script
 
 
 def test_build_gateway_bundle_does_not_strict_verify_python_framework_symlink():
@@ -226,7 +241,6 @@ def test_build_gateway_bundle_does_not_strict_verify_python_framework_symlink():
     assert 'codesign --verify --strict --verbose=2 "dist/kstock-gateway/_internal/Python"' not in script
     assert 'codesign --verify --deep --strict --verbose=2 "dist/kstock-gateway/_internal/Python.framework"' not in script
     assert 'codesign --verify --strict --verbose=2 "dist/kstock-gateway/_internal/Python.framework/Versions' not in script
-    assert "Python.framework/Versions/3.12/Python" in script
 
 
 def test_build_gateway_bundle_removes_incompatible_speech_recognition_flac_binary():
