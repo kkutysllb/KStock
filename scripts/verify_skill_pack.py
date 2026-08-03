@@ -10,6 +10,14 @@ if __package__ in {None, ""}:
 from scripts.sync_upstreams import DEFAULT_MANIFEST, DEFAULT_VENDOR_ROOT, load_skill_manifest
 
 
+def _force_utf8_stdio() -> None:
+    """Keep Windows CI from failing when stdout defaults to cp1252."""
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
 def collect_pack_issues(
     vendor_root: Path = DEFAULT_VENDOR_ROOT,
     manifest_path: Path = DEFAULT_MANIFEST,
@@ -32,6 +40,7 @@ def collect_pack_issues(
 
 
 def main() -> None:
+    _force_utf8_stdio()
     parser = argparse.ArgumentParser(description="校验 KStock 精选技能包。")
     parser.add_argument("--vendor-root", type=Path, default=DEFAULT_VENDOR_ROOT)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)

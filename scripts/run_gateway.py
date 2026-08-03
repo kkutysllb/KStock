@@ -537,8 +537,8 @@ def _setup_bundled_python_env() -> None:
     打包版 agent 通过 bash 执行技能脚本（``python3 xxx.py``），系统 Python
     没有 kk_common/pandas/tushare 等依赖；PyInstaller 产物只有 bootloader，
     不能当解释器用。构建时额外携带 python-build-standalone 运行时
-    （``_internal/python-runtime/``，见 build-gateway-bundle.sh），这里把它的
-    ``bin/`` 前置到 PATH 并导出 ``KSTOCK_PYTHON``。agent 的 bash 子进程继承
+    （``_internal/python-runtime/``，见 build-gateway-bundle.sh），这里把解释器
+    所在目录前置到 PATH 并导出 ``KSTOCK_PYTHON``。agent 的 bash 子进程继承
     本进程环境，``python3`` 直接解析到内置解释器；secrets 也已在进程环境
     （``_load_secrets_env``），kk_common 的 TUSHARE_TOKEN 开箱即得。
     源码模式（开发/测试）不做任何事，保持原有环境。
@@ -546,13 +546,19 @@ def _setup_bundled_python_env() -> None:
     if not getattr(sys, "frozen", False):
         return
     meipass = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
-    runtime_bin = meipass / "python-runtime" / "bin"
-    python_bin = runtime_bin / "python3"
-    if not python_bin.exists():
+    runtime_root = meipass / "python-runtime"
+    candidates = [
+        runtime_root / "bin" / "python3",
+        runtime_root / "bin" / "python3.12",
+        runtime_root / "python.exe",
+        runtime_root / "Scripts" / "python.exe",
+    ]
+    python_bin = next((candidate for candidate in candidates if candidate.exists()), None)
+    if python_bin is None:
         print("  [warn] python-runtime 缺失，技能脚本将回退系统 python3", flush=True)
         return
     os.environ["KSTOCK_PYTHON"] = str(python_bin)
-    os.environ["PATH"] = f"{runtime_bin}{os.pathsep}{os.environ.get('PATH', '')}"
+    os.environ["PATH"] = f"{python_bin.parent}{os.pathsep}{os.environ.get('PATH', '')}"
     print(f"  Bundled python : {python_bin}（已接入 PATH）", flush=True)
 
 

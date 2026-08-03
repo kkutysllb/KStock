@@ -20,23 +20,18 @@ PYTHON_RUNTIME="dist/kstock-gateway/_internal/python-runtime"
 # 平台差异：解释器实体路径 / 动态库名 / venv 布局（uv venv 在 Windows 无 bin/）
 case "$(uname -s)" in
   Darwin)
-    STANDALONE_GLOB=("$HOME"/.local/share/uv/python/cpython-3.12*/bin/python3)
     RUNTIME_PY="$PYTHON_RUNTIME/bin/python3"
-    LIB_REL="lib/libpython3.12.dylib"
+    LIB_RELS=("lib/libpython3.12.dylib")
     LIB_DST="$PYTHON_RUNTIME/lib/"
     ;;
   Linux)
-    STANDALONE_GLOB=("$HOME"/.local/share/uv/python/cpython-3.12*/bin/python3)
     RUNTIME_PY="$PYTHON_RUNTIME/bin/python3"
-    LIB_REL="lib/libpython3.12.so"
+    LIB_RELS=("lib/libpython3.12.so" "lib/libpython3.12.so.1.0")
     LIB_DST="$PYTHON_RUNTIME/lib/"
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    # Windows 上 uv 的 standalone 安装目录是 %LOCALAPPDATA%\uv\python
-    PY_HOME="${LOCALAPPDATA:-$HOME/AppData/Local}/uv/python"
-    STANDALONE_GLOB=("$PY_HOME"/cpython-3.12*/python.exe)
     RUNTIME_PY="$PYTHON_RUNTIME/python.exe"
-    LIB_REL="python312.dll"
+    LIB_RELS=("python312.dll")
     LIB_DST="$PYTHON_RUNTIME/"
     ;;
   *)
@@ -46,39 +41,24 @@ case "$(uname -s)" in
 esac
 
 # 定位 uv standalone Python 3.12 解释器。
-# 优先用 uv 自身查询：CI 上 setup-uv 可能把 UV_PYTHON_INSTALL_DIR 指到
-# runner 工具缓存目录（uv python install 的安装位置不再固定），不能猜路径；
-# --managed 只匹配 standalone，避免误用系统 Python。旧版 uv 无 --managed，
-# 回退到已知安装目录（本地开发机路径）。
-find_standalone_py() {
-    if command -v uv >/dev/null 2>&1; then
-        local py
-        py="$(uv python find --managed 3.12 2>/dev/null || true)"
-        if [ -n "$py" ]; then
-            # Windows 上 uv 输出反斜杠路径，转为 MSYS 风格
-            if command -v cygpath >/dev/null 2>&1; then
-                py="$(cygpath -u "$py" 2>/dev/null || echo "$py")"
-            fi
-            [ -x "$py" ] && { echo "$py"; return 0; }
-        fi
-    fi
-    for cand in "${STANDALONE_GLOB[@]}"; do
-        [ -x "$cand" ] && { echo "$cand"; return 0; }
-    done
-    return 1
-}
-
-STANDALONE_PY="$(find_standalone_py || true)"
-if [ -z "$STANDALONE_PY" ]; then
-    echo "==> 未找到 uv standalone Python 3.12，自动下载（uv python install 3.12）…"
-    uv python install 3.12
-    STANDALONE_PY="$(find_standalone_py || true)"
+# CI 上 setup-uv 可能把安装目录放到 runner 临时/cache 位置，必须以
+# ``uv python dir`` 为权威来源，不能猜 ``$HOME/.local/share/uv``。
+STANDALONE_PY="$(uv run python scripts/kstock_python_runtime.py --version 3.12 --install-if-missing)"
+if command -v cygpath >/dev/null 2>&1; then
+    STANDALONE_PY="$(cygpath -u "$STANDALONE_PY" 2>/dev/null || echo "$STANDALONE_PY")"
 fi
 if [ -z "$STANDALONE_PY" ]; then
-    echo "!! 自动下载后仍未找到 standalone Python 3.12" >&2
+    echo "!! 未找到 uv standalone Python 3.12" >&2
     exit 1
 fi
-STANDALONE_ROOT="$(cd "$(dirname "$(dirname "$STANDALONE_PY")")" && pwd)"
+case "$STANDALONE_PY" in
+  */bin/python*|*/Scripts/python.exe)
+    STANDALONE_ROOT="$(cd "$(dirname "$(dirname "$STANDALONE_PY")")" && pwd)"
+    ;;
+  *)
+    STANDALONE_ROOT="$(cd "$(dirname "$STANDALONE_PY")" && pwd)"
+    ;;
+esac
 echo "==> 内置 Python 运行时: $STANDALONE_PY"
 rm -rf "$PYTHON_RUNTIME"
 # --relocatable: 创建可移动的 venv（解释器按相对路径定位），随包分发后
@@ -90,10 +70,20 @@ uv venv --python "$STANDALONE_PY" --relocatable "$PYTHON_RUNTIME"
 # 这里把解释器实体与动态库复制进 venv，使运行时完全自包含。
 rm -f "$PYTHON_RUNTIME"/bin/python "$PYTHON_RUNTIME"/bin/python3 "$PYTHON_RUNTIME"/bin/python3.12 \
     "$PYTHON_RUNTIME"/python.exe "$PYTHON_RUNTIME"/Scripts/python.exe
-cp "$STANDALONE_ROOT/bin/python3.12" "$PYTHON_RUNTIME/bin/python3" 2>/dev/null \
-    || cp "$STANDALONE_ROOT/python.exe" "$PYTHON_RUNTIME/python.exe"
-mkdir -p "$(dirname "$LIB_DST")"
-cp "$STANDALONE_ROOT/$LIB_REL" "$LIB_DST"
+mkdir -p "$(dirname "$RUNTIME_PY")" "$LIB_DST"
+cp "$STANDALONE_PY" "$RUNTIME_PY"
+LIB_COPIED=0
+for LIB_REL in "${LIB_RELS[@]}"; do
+    if [ -f "$STANDALONE_ROOT/$LIB_REL" ]; then
+        cp "$STANDALONE_ROOT/$LIB_REL" "$LIB_DST"
+        LIB_COPIED=1
+        break
+    fi
+done
+if [ "$LIB_COPIED" -ne 1 ]; then
+    echo "!! standalone Python 动态库缺失: ${LIB_RELS[*]} under $STANDALONE_ROOT" >&2
+    exit 1
+fi
 # Windows 解释器运行时还依赖 vcruntime140.dll（与 python.exe 同目录查找）
 if [ -f "$STANDALONE_ROOT/vcruntime140.dll" ]; then
     cp "$STANDALONE_ROOT/vcruntime140.dll" "$PYTHON_RUNTIME/"
