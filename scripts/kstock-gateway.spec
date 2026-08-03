@@ -16,11 +16,15 @@
       _internal/                # Python 运行时 + 全部依赖
 """
 from pathlib import Path
+import os
 
 from PyInstaller.utils.hooks import collect_data_files
 
 repo_root = Path(SPECPATH).resolve().parent  # spec 位于 <仓库>/scripts/，仓库根是上一级
 print(f"[kstock-gateway.spec] repo_root = {repo_root}")
+codesign_identity = os.environ.get("APPLE_SIGNING_IDENTITY") or None
+if codesign_identity:
+    print("[kstock-gateway.spec] using APPLE_SIGNING_IDENTITY for PyInstaller macOS signing")
 
 datas = [
     (str(repo_root / "vendor" / "skills"), "vendor/skills"),
@@ -78,7 +82,7 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
-    codesign_identity=None,
+    codesign_identity=codesign_identity,
     entitlements_file=None,
 )
 

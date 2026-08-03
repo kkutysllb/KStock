@@ -182,6 +182,15 @@ case "$(uname -s)" in
         SIGN_LIST="$(mktemp)"
         find dist/kstock-gateway -type f -print0 |
           while IFS= read -r -d '' CANDIDATE; do
+              # PyInstaller 负责签名 framework（尤其是 Python.framework）并维护
+              # bundle seal / symlink 入口。后置裸扫逐个 codesign framework 内部
+              # Mach-O 会让 notarization 继续在 Python.framework/Python 上报
+              # "signature is invalid"。
+              case "$CANDIDATE" in
+                */_internal/Python|*.framework/*)
+                  continue
+                  ;;
+              esac
               if file "$CANDIDATE" | grep -q "Mach-O"; then
                   printf '%s\n' "$CANDIDATE"
               fi
@@ -198,21 +207,14 @@ case "$(uname -s)" in
         # PyInstaller 在 GitHub macOS runner 上会额外收集 Framework Python：
         #   _internal/Python
         #   _internal/Python.framework/Python
-        # notarization 会按这些路径逐个校验。find -type f 不会覆盖符号链接路径；
-        # 先显式签顶层 Python 入口，再签整个 framework，避免后续重签内部 binary
-        # 破坏 framework seal。
+        # 这两处由 PyInstaller 在 build 阶段用 APPLE_SIGNING_IDENTITY 签名；此处
+        # 只验证，不再重签 framework 内部或 symlink 入口。
         if [ -e "dist/kstock-gateway/_internal/Python" ]; then
-            codesign --force --timestamp --options runtime --sign "$APPLE_SIGNING_IDENTITY" \
-                "dist/kstock-gateway/_internal/Python"
-        fi
-        if [ -d "dist/kstock-gateway/_internal/Python.framework" ]; then
-            codesign --force --timestamp --options runtime --sign "$APPLE_SIGNING_IDENTITY" \
-                "dist/kstock-gateway/_internal/Python.framework"
-        fi
-        if [ -e "dist/kstock-gateway/_internal/Python" ]; then
+            ls -l "dist/kstock-gateway/_internal/Python"
             codesign --verify --strict --verbose=2 "dist/kstock-gateway/_internal/Python"
         fi
         if [ -e "dist/kstock-gateway/_internal/Python.framework/Python" ]; then
+            ls -l "dist/kstock-gateway/_internal/Python.framework/Python"
             codesign --verify --strict --verbose=2 "dist/kstock-gateway/_internal/Python.framework/Python"
         fi
         codesign --verify --deep --strict --verbose=2 dist/kstock-gateway/kstock-gateway

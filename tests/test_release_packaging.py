@@ -205,6 +205,21 @@ def test_build_gateway_bundle_signs_macos_gateway_resources_before_tauri_bundle(
     assert '_internal/Python"' in script
 
 
+def test_pyinstaller_spec_uses_macos_developer_id_signing_identity():
+    spec = Path("scripts/kstock-gateway.spec").read_text(encoding="utf-8")
+
+    assert "APPLE_SIGNING_IDENTITY" in spec
+    assert "codesign_identity=codesign_identity" in spec
+    assert "codesign_identity=None" not in spec
+
+
+def test_build_gateway_bundle_does_not_resign_pyinstaller_framework_contents():
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    assert "*.framework/*" in script
+    assert "PyInstaller 负责签名 framework" in script
+
+
 def test_build_gateway_bundle_removes_incompatible_speech_recognition_flac_binary():
     script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
 
