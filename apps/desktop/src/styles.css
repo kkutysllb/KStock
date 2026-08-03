@@ -2839,46 +2839,67 @@ button.context-file-row:hover {
 
 .tool-card-detail {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 8px 10px;
+  padding: 7px;
+  display: grid;
+  gap: 6px;
 }
 
 .tool-args {
-  margin: 0 0 8px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
-.tool-arg-row {
+.tool-detail-disclosure {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.tool-detail-toggle {
   display: flex;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 7px;
+  width: 100%;
+  border: none;
+  padding: 7px 8px;
+  background: transparent;
+  color: #b8bec7;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tool-detail-toggle:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tool-detail-toggle span {
+  color: #c9cdd4;
+}
+
+.tool-detail-toggle em {
+  margin-left: auto;
+  color: #737d88;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.tool-detail-value {
+  margin: 0;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+  background: rgba(0, 0, 0, 0.2);
+  color: #a9afb8;
+  font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
   font-size: 11px;
   line-height: 1.6;
-  align-items: flex-start;
-}
-
-.tool-arg-row > dt {
-  flex: 0 0 auto;
-  min-width: 60px;
-  color: #8f96a0;
-  font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
-}
-
-.tool-arg-row > dd {
-  margin: 0;
-  flex: 1;
-  min-width: 0;
-  color: #c9cdd4;
-  font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
-  word-break: break-word;
+  max-height: 320px;
+  overflow: auto;
   white-space: pre-wrap;
-}
-
-.tool-card-detail .tool-result {
-  margin: 0;
-  padding: 0;
-  border-top: none;
-  background: transparent;
+  word-break: break-word;
 }
 
 .tool-card.status-running .tool-card-header {
@@ -3270,7 +3291,7 @@ button.context-file-row:hover {
 .subagent-group {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: rgba(255, 255, 255, 0.015);
 }
 
@@ -3278,7 +3299,22 @@ button.context-file-row:hover {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  border: none;
+  padding: 2px 0;
+  background: transparent;
+  color: inherit;
   font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.subagent-header:disabled {
+  cursor: default;
+}
+
+.subagent-header:not(:disabled):hover .subagent-description {
+  color: #ffffff;
 }
 
 .subagent-description {
@@ -3293,6 +3329,12 @@ button.context-file-row:hover {
   padding: 1px 6px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.05);
+}
+
+.subagent-step-count {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: #737d88;
 }
 
 .subagent-status-label {

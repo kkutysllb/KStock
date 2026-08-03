@@ -2,7 +2,8 @@
 // - 标题行：description + model + status 徽章
 // - 嵌套 steps（subagent 的 ai 消息文本 + 其工具调用，用 ToolCard 渲染）
 
-import { AlertCircle, Check, Clock, Loader2, X } from "lucide-react";
+import { useState } from "react";
+import { AlertCircle, Check, ChevronRight, Clock, Loader2, X } from "lucide-react";
 import type { SubagentStep, SubagentTask } from "../lib/sessionStore";
 import { groupToolCalls, ToolCallGroup } from "./ToolCallGroup";
 
@@ -12,18 +13,29 @@ interface SubagentGroupProps {
 }
 
 export function SubagentGroup({ task, showToolCalls = true }: SubagentGroupProps) {
+  const [expanded, setExpanded] = useState(false);
+  const hasSteps = task.steps.length > 0;
+
   return (
     <div
       className={`subagent-group status-${task.status}`}
       aria-label={`子代理 ${task.description ?? task.taskId}`}
     >
-      <div className="subagent-header">
+      <button
+        type="button"
+        className="subagent-header"
+        aria-expanded={expanded}
+        disabled={!hasSteps}
+        onClick={() => hasSteps && setExpanded((value) => !value)}
+      >
         <SubagentStatusIcon status={task.status} />
         <span className="subagent-description">{task.description ?? "子任务"}</span>
         {task.model && <span className="subagent-model">{task.model}</span>}
+        {hasSteps && <span className="subagent-step-count">{task.steps.length} 条执行记录</span>}
         <span className="subagent-status-label">{statusLabel(task.status)}</span>
-      </div>
-      {task.steps.length > 0 && (
+        {hasSteps && <ChevronRight size={13} className={expanded ? "chevron-expanded" : ""} aria-hidden="true" />}
+      </button>
+      {expanded && hasSteps && (
         <div className="subagent-steps">
           {task.steps.map((step) => (
             <SubagentStepView key={step.index} step={step} showToolCalls={showToolCalls} />

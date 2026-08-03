@@ -45,6 +45,9 @@ describe("ToolActivitySummary", () => {
 
     expect(screen.getByLabelText("工具调用 read_file")).toBeVisible();
     fireEvent.click(screen.getAllByRole("button", { name: "read_file" })[0]);
+    expect(screen.getByRole("button", { name: /参数 path/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("/tmp/report.md")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /参数 path/ }));
     expect(screen.getByText("/tmp/report.md")).toBeVisible();
   });
 
@@ -75,6 +78,9 @@ describe("ToolActivitySummary", () => {
 
     expect(screen.getAllByLabelText("工具调用 read_file")).toHaveLength(2);
     fireEvent.click(screen.getAllByRole("button", { name: "read_file" })[0]);
+    expect(screen.getByRole("button", { name: /执行结果/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("读取完成")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /执行结果/ }));
     expect(screen.getByText("读取完成")).toBeVisible();
   });
 

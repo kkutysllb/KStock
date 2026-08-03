@@ -1,7 +1,7 @@
 import { AlertCircle, Check, ChevronRight, Loader2 } from "lucide-react";
 import { useState } from "react";
 import type { ToolCall } from "../lib/sessionStore";
-import { ToolCard } from "./ToolCard";
+import { getToolDisplayName, ToolCard } from "./ToolCard";
 
 interface ToolCallGroupProps {
   calls: ToolCall[];
@@ -14,6 +14,7 @@ export function ToolCallGroup({ calls, compact = false }: ToolCallGroupProps) {
   const [expanded, setExpanded] = useState(false);
   const status = groupStatus(calls);
   const summary = summarize(calls);
+  const toolName = getToolDisplayName(firstCall ? { name: firstCall.name, status } : undefined);
 
   return (
     <div className={`tool-group status-${status}${compact ? " tool-group-compact" : ""}`}>
@@ -24,7 +25,7 @@ export function ToolCallGroup({ calls, compact = false }: ToolCallGroupProps) {
         onClick={() => setExpanded((value) => !value)}
       >
         <GroupStatusIcon status={status} />
-        <code>{firstCall?.name ?? "工具调用"}</code>
+        <code>{toolName}</code>
         <span className="tool-group-count">{calls.length} 次调用</span>
         <span className="tool-group-status">{statusLabel(status)}</span>
         {summary && <span className="tool-group-summary">{summary}</span>}
@@ -74,8 +75,7 @@ function GroupStatusIcon({ status }: { status: ToolCall["status"] }) {
 }
 
 function summarize(calls: ToolCall[]): string {
-  const result = [...calls].reverse().find((call) => call.result?.trim());
-  if (!result?.result) return "";
-  const compact = result.result.replace(/\s+/g, " ").trim();
-  return compact.length > 92 ? `${compact.slice(0, 92)}…` : compact;
+  if (calls.some((call) => call.result?.trim())) return "有输出";
+  if (calls.some((call) => Object.keys(call.args ?? {}).length > 0)) return "有参数";
+  return "";
 }

@@ -147,4 +147,36 @@ describe("AssistantTurn 澄清渲染", () => {
     expect(container.querySelector(".tool-card")).toBeNull();
     expect(screen.queryByLabelText("研究阶段")).not.toBeInTheDocument();
   });
+
+  it("subagent 步骤里的执行结果默认折叠，避免工具回填内容铺满主界面", () => {
+    const message: ChatMessage = {
+      id: "assistant-subagent",
+      role: "assistant",
+      createdAt: "2026-08-02T12:00:00.000Z",
+      status: "done",
+      subagents: [
+        {
+          taskId: "task-1",
+          description: "运行市场联动技能",
+          status: "completed",
+          steps: [
+            {
+              index: 1,
+              text: "## 执行结果\n\n### 1. SKILL.md 前 120 行已阅读\n\nPython path configuration",
+            },
+          ],
+        },
+      ],
+    };
+
+    render(<AssistantTurn msg={message} showReasoning={false} />);
+
+    const toggle = screen.getByRole("button", { name: /1 条执行记录/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/Python path configuration/)).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    expect(screen.getByText(/Python path configuration/)).toBeVisible();
+  });
 });
