@@ -41,3 +41,9 @@ def test_release_script_uses_strict_semver_tags_for_previous_release():
 
     assert "previous_release_tag" in script
     assert "v[0-9]*.[0-9]*.[0-9]*" in script
+
+
+def test_release_script_stages_tauri_cargo_lock():
+    script = (REPO_ROOT / "build-release.sh").read_text(encoding="utf-8")
+
+    assert '"apps/desktop/src-tauri/Cargo.lock"' in script

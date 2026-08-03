@@ -41,6 +41,7 @@ VERSION_FILES=(
 LOCK_FILES=(
   "pnpm-lock.yaml"
   "uv.lock"
+  "apps/desktop/src-tauri/Cargo.lock"
 )
 
 usage() {
