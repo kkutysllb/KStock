@@ -40,7 +40,7 @@ def test_archive_creates_user_scoped_dated_file_and_index(tmp_path: Path):
     store = ReportLibraryStore(tmp_path)
     source = _write(tmp_path / "thread.html", "<html>one</html>")
     row = store.archive(source, "report-1", "thread-1", _meta("alice", "2026-08-01T10:00:00+08:00"))
-    assert (tmp_path / "reports/alice/2026/08/01/report-1.html").read_text() == "<html>one</html>"
+    assert (tmp_path / "reports/alice/2026/08/01/report-1.html").read_text(encoding="utf-8") == "<html>one</html>"
     assert store.get_report("report-1", user_id="alice")["relative_path"] == row["relative_path"]
     assert store.list_reports(user_id="bob") == []
 
@@ -52,7 +52,7 @@ def test_cross_date_update_keeps_only_latest_report(tmp_path: Path):
     store.archive(first, "same", "thread", _meta("alice", "2026-08-01T10:00:00+08:00"))
     store.archive(second, "same", "thread", _meta("alice", "2026-08-02T10:00:00+08:00"))
     assert not (tmp_path / "reports/alice/2026/08/01/same.html").exists()
-    assert (tmp_path / "reports/alice/2026/08/02/same.html").read_text() == "second"
+    assert (tmp_path / "reports/alice/2026/08/02/same.html").read_text(encoding="utf-8") == "second"
     assert len(store.list_reports(user_id="alice")) == 1
 
 
@@ -123,7 +123,7 @@ def test_archive_failure_preserves_existing_report(tmp_path: Path):
     store.archive(old, "stable", "thread", _meta("alice", "2026-08-01T10:00:00+08:00"))
     with pytest.raises(ValueError):
         store.archive(tmp_path / "missing.html", "stable", "thread", _meta("alice", "2026-08-02T10:00:00+08:00"))
-    assert (tmp_path / "reports/alice/2026/08/01/stable.html").read_text() == "old"
+    assert (tmp_path / "reports/alice/2026/08/01/stable.html").read_text(encoding="utf-8") == "old"
     assert store.get_report("stable", user_id="alice")["generated_at"].startswith("2026-08-01")
 
 

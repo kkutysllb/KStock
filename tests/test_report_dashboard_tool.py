@@ -139,7 +139,7 @@ def _render_report(tmp_path, monkeypatch, p):
     result = render_html_report_tool.func(
         runtime(tmp_path), json.dumps(p, ensure_ascii=False), "call-x"
     )
-    return result, (tmp_path / "outputs/report.html").read_text()
+    return result, (tmp_path / "outputs/report.html").read_text(encoding="utf-8")
 
 
 def _minimum_chart_fillers():
@@ -225,7 +225,7 @@ def test_radar_chart_accepts_group_only_dimension_rows(tmp_path, monkeypatch):
     )
 
     assert "error" not in result.update["messages"][0].content
-    html = (tmp_path / "outputs/report.html").read_text()
+    html = (tmp_path / "outputs/report.html").read_text(encoding="utf-8")
     assert "沪深300ETF" in html
     assert "中证500ETF" in html
 
