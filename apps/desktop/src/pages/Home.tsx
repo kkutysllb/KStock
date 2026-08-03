@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { listen } from "@tauri-apps/api/event";
 import {
   Activity,
   ArrowLeft,
@@ -132,6 +133,11 @@ import {
 } from "../lib/generalSettingsClient";
 
 type ViewMode = "landing" | "auth" | "workspace" | "settings" | "reports";
+type DesktopMenuCommand =
+  | "new-task"
+  | "open-settings"
+  | "open-reports"
+  | "check-update";
 type ArtifactPreview =
   | { kind: "html"; name: string; href: string; url: string }
   | { kind: "markdown" | "text"; name: string; href: string; url: string; text: string };
@@ -701,7 +707,7 @@ export function Home() {
     localStorage.setItem(REASONING_MODE_KEY, mode);
   };
 
-  const handleNewSession = () => {
+  const handleNewSession = useCallback(() => {
     const nextSession = createSession("新研究会话");
     if (!sessionsLoaded) {
       localSessionBeforeHistoryLoadedRef.current = true;
@@ -713,7 +719,60 @@ export function Home() {
     // 待发附件是会话级状态：新建任务必须清空，避免上一个任务的文件残留
     // 到新任务面板或随下一条消息发送。
     setPendingAttachments([]);
-  };
+  }, [sessionsLoaded]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    void listen<{ command?: string }>("kstock://menu", (event) => {
+      const command = event.payload?.command as DesktopMenuCommand | undefined;
+      switch (command) {
+        case "new-task":
+          if (currentUser) {
+            handleNewSession();
+            setView("workspace");
+          } else {
+            setAuthMode("login");
+            setView("auth");
+          }
+          break;
+        case "open-settings":
+          setSettingsSectionId("general");
+          if (currentUser) {
+            setView("settings");
+          } else {
+            setAuthMode("login");
+            setView("auth");
+          }
+          break;
+        case "open-reports":
+          if (currentUser) {
+            setView("reports");
+          } else {
+            setAuthMode("login");
+            setView("auth");
+          }
+          break;
+        case "check-update":
+          window.dispatchEvent(new CustomEvent("kstock:check-update"));
+          break;
+      }
+    }).then((dispose) => {
+      if (disposed) {
+        dispose();
+        return;
+      }
+      unlisten = dispose;
+    }).catch(() => {
+      // 浏览器预览环境没有 Tauri 事件桥，忽略即可。
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [currentUser, handleNewSession]);
 
   const handleSelectSession = (sessionId: string) => {
     setActiveSessionId(sessionId);

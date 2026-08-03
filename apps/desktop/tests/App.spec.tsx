@@ -21,6 +21,15 @@ const tauriMock = vi.hoisted(() => ({
   invoke: vi.fn(),
 }));
 
+const tauriEventMock = vi.hoisted(() => ({
+  listen: vi.fn(),
+  handlers: [] as Array<(event: { payload: unknown }) => void>,
+}));
+
+const updaterMock = vi.hoisted(() => ({
+  check: vi.fn(),
+}));
+
 // gatewayControl mock：restartGateway / waitForGateway 由各测试覆盖返回值。
 const controlMock = vi.hoisted(() => ({
   restartGateway: vi.fn(),
@@ -81,6 +90,14 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: tauriMock.invoke,
 }));
 
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: tauriEventMock.listen,
+}));
+
+vi.mock("@tauri-apps/plugin-updater", () => ({
+  check: updaterMock.check,
+}));
+
 // gatewayControlClient mock：重启后端的 restart + 健康轮询由各测试覆盖。
 vi.mock("../src/lib/gatewayControlClient", () => ({
   restartGateway: controlMock.restartGateway,
@@ -103,6 +120,14 @@ beforeEach(() => {
       `http://localhost:18001/api/threads/${encodeURIComponent(threadId)}/artifacts/${virtualPath.replace(/^\/+/, "")}`
   );
   tauriMock.invoke.mockReset();
+  tauriEventMock.handlers = [];
+  tauriEventMock.listen.mockReset();
+  tauriEventMock.listen.mockImplementation(async (_event: string, handler: (event: { payload: unknown }) => void) => {
+    tauriEventMock.handlers.push(handler);
+    return vi.fn();
+  });
+  updaterMock.check.mockReset();
+  updaterMock.check.mockResolvedValue(null);
   delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   controlMock.restartGateway.mockReset();
   controlMock.waitForGateway.mockReset();
@@ -111,6 +136,15 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
 });
+
+async function emitDesktopMenuCommand(command: string) {
+  await waitFor(() => expect(tauriEventMock.listen).toHaveBeenCalledWith("kstock://menu", expect.any(Function)));
+  await act(async () => {
+    for (const handler of tauriEventMock.handlers) {
+      handler({ payload: { command } });
+    }
+  });
+}
 
 test("首屏展示产品入口页", async () => {
   render(<App />);
@@ -159,6 +193,46 @@ test("已登录启动后直接进入工作台并打开设置模型页", async ()
   // 新 CRUD UI：无已配置模型时显示空状态提示与添加按钮。
   expect(await screen.findByText("尚未配置任何模型。点击「添加模型」，从模板创建或自定义一个。")).toBeVisible();
   expect(screen.getByRole("button", { name: "+ 添加模型" })).toBeVisible();
+});
+
+test("桌面系统菜单事件可新建任务、打开设置并触发更新检查", async () => {
+  authMock.tryGetCurrentUser.mockResolvedValueOnce({
+    id: "u1",
+    email: "tester@kstock.dev",
+    system_role: "user",
+  });
+  vi.mocked(listModels).mockResolvedValueOnce({
+    models: [{
+      name: "test-model",
+      display_name: "Test",
+      description: null,
+      use: "openai",
+      model: "gpt-4",
+      api_base: null,
+      api_key_env: null,
+      supports_thinking: false,
+      supports_vision: false,
+      supports_reasoning_effort: false,
+    }],
+    default_model: "test-model",
+  });
+
+  render(<App />);
+
+  expect(await screen.findByRole("textbox", { name: "消息输入" })).toBeVisible();
+  expect(screen.getAllByText("新研究会话")).toHaveLength(1);
+
+  await emitDesktopMenuCommand("new-task");
+
+  expect(screen.getAllByText("新研究会话")).toHaveLength(2);
+
+  await emitDesktopMenuCommand("check-update");
+
+  await waitFor(() => expect(updaterMock.check).toHaveBeenCalledTimes(1));
+
+  await emitDesktopMenuCommand("open-settings");
+
+  expect(screen.getByRole("heading", { name: "常规" })).toBeVisible();
 });
 
 test("注册入口展示邮箱密码与确认密码表单", async () => {

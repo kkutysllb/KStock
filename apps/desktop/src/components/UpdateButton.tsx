@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Download, RotateCw } from "lucide-react";
 import { useAppUpdate } from "../lib/useAppUpdate";
 
@@ -10,7 +11,15 @@ import { useAppUpdate } from "../lib/useAppUpdate";
  * - 失败时仍显示图标，点击可重试下载。
  */
 export function UpdateButton() {
-  const { state, startUpdate } = useAppUpdate();
+  const { state, check, startUpdate } = useAppUpdate();
+
+  useEffect(() => {
+    const handleCheckUpdate = () => {
+      void check();
+    };
+    window.addEventListener("kstock:check-update", handleCheckUpdate);
+    return () => window.removeEventListener("kstock:check-update", handleCheckUpdate);
+  }, [check]);
 
   if (state.phase === "idle" || state.phase === "checking") return null;
 
