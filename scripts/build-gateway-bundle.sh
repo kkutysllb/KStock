@@ -195,6 +195,26 @@ case "$(uname -s)" in
             SIGN_COUNT=$((SIGN_COUNT + 1))
         done < "$SIGN_LIST"
         rm -f "$SIGN_LIST"
+        # PyInstaller 在 GitHub macOS runner 上会额外收集 Framework Python：
+        #   _internal/Python
+        #   _internal/Python.framework/Python
+        # notarization 会按这些路径逐个校验。find -type f 不会覆盖符号链接路径；
+        # 先显式签顶层 Python 入口，再签整个 framework，避免后续重签内部 binary
+        # 破坏 framework seal。
+        if [ -e "dist/kstock-gateway/_internal/Python" ]; then
+            codesign --force --timestamp --options runtime --sign "$APPLE_SIGNING_IDENTITY" \
+                "dist/kstock-gateway/_internal/Python"
+        fi
+        if [ -d "dist/kstock-gateway/_internal/Python.framework" ]; then
+            codesign --force --timestamp --options runtime --sign "$APPLE_SIGNING_IDENTITY" \
+                "dist/kstock-gateway/_internal/Python.framework"
+        fi
+        if [ -e "dist/kstock-gateway/_internal/Python" ]; then
+            codesign --verify --strict --verbose=2 "dist/kstock-gateway/_internal/Python"
+        fi
+        if [ -e "dist/kstock-gateway/_internal/Python.framework/Python" ]; then
+            codesign --verify --strict --verbose=2 "dist/kstock-gateway/_internal/Python.framework/Python"
+        fi
         codesign --verify --deep --strict --verbose=2 dist/kstock-gateway/kstock-gateway
         echo "  signed Mach-O files: $SIGN_COUNT"
     else

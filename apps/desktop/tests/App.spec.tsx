@@ -159,7 +159,7 @@ test("已登录启动后直接进入工作台并打开设置模型页", async ()
   // 新 CRUD UI：无已配置模型时显示空状态提示与添加按钮。
   expect(await screen.findByText("尚未配置任何模型。点击「添加模型」，从模板创建或自定义一个。")).toBeVisible();
   expect(screen.getByRole("button", { name: "+ 添加模型" })).toBeVisible();
-}, 10_000);
+});
 
 test("注册入口展示邮箱密码与确认密码表单", async () => {
   render(<App />);
@@ -304,17 +304,22 @@ test("发消息触发流式 run 并逐帧累积 assistant 文本", async () => {
   fireEvent.change(textarea, { target: { value: "分析茅台" } });
   fireEvent.click(sendButton);
 
+  await waitFor(() => {
+    expect(turnsMock.streamRun).toHaveBeenCalledTimes(1);
+  });
+
   // user message 渲染（在 UserBubble 的 <p> 中；session title/topbar 也有同文本需 selector 精确定位）。
   // 用 waitFor + getByText 轮询最新 DOM，避免 streamRun 帧更新替换节点后断言旧引用。
   await waitFor(() => {
     expect(screen.getByText("分析茅台", { selector: "p" })).toBeVisible();
   });
   // assistant 流式文本累积（"你好" + "，世界"）
-  expect(await screen.findByText(/你好.*世界/)).toBeVisible();
+  await waitFor(() => {
+    expect(screen.getByText(/你好.*世界/)).toBeVisible();
+  });
   // ensureThread 被调用
   expect(turnsMock.ensureThread).toHaveBeenCalledTimes(1);
   // streamRun 被调用，参数包含正确的 threadId 与 input
-  expect(turnsMock.streamRun).toHaveBeenCalledTimes(1);
   const runOpts = turnsMock.streamRun.mock.calls[0][0];
   expect(runOpts.threadId).toBe("thread-test");
   expect(runOpts.input.messages[0].content).toBe("分析茅台");

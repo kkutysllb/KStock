@@ -201,6 +201,8 @@ def test_build_gateway_bundle_signs_macos_gateway_resources_before_tauri_bundle(
     assert "codesign" in script
     assert "--options runtime" in script
     assert "--timestamp" in script
+    assert "Python.framework" in script
+    assert '_internal/Python"' in script
 
 
 def test_build_gateway_bundle_removes_incompatible_speech_recognition_flac_binary():
@@ -220,3 +222,12 @@ def test_check_ci_verifies_source_package_contract():
     script = Path("scripts/check-ci.sh").read_text(encoding="utf-8")
 
     assert "verify_package_resources.py --source-only" in script
+
+
+def test_build_desktop_uses_nsis_on_windows_to_avoid_wix_light():
+    script = Path("scripts/build-desktop.sh").read_text(encoding="utf-8")
+
+    assert "--bundles nsis" in script
+    assert "MINGW" in script
+    command_lines = "\n".join(line for line in script.splitlines() if not line.strip().startswith("#"))
+    assert "msi" not in command_lines.lower()
