@@ -8,6 +8,9 @@ use tauri::{Emitter, Manager};
 use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
 
+const TRAY_ICON_RGBA: &[u8] = include_bytes!("../icons/tray-icon.rgba");
+const TRAY_ICON_SIZE: u32 = 128;
+
 #[derive(Default)]
 struct ZoomState {
   factor: Mutex<f64>,
@@ -233,7 +236,8 @@ fn build_app_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
 }
 
 /// 构建托盘图标及菜单：显示窗口 / 隐藏窗口 / 检查更新 / 退出。
-fn build_tray(app: &tauri::AppHandle, icon: tauri::image::Image) -> tauri::Result<()> {
+fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+  let icon = tauri::image::Image::new(TRAY_ICON_RGBA, TRAY_ICON_SIZE, TRAY_ICON_SIZE);
   let show_item = MenuItem::with_id(app, "tray-show", "显示窗口", true, None::<&str>)?;
   let hide_item = MenuItem::with_id(app, "tray-hide", "隐藏窗口", true, None::<&str>)?;
   let check_update_item = MenuItem::with_id(app, "tray-check-update", "检查更新…", true, None::<&str>)?;
@@ -251,6 +255,7 @@ fn build_tray(app: &tauri::AppHandle, icon: tauri::image::Image) -> tauri::Resul
   )?;
   TrayIconBuilder::new()
     .icon(icon)
+    .icon_as_template(true)
     .tooltip("KStock 量化助手")
     .menu(&tray_menu)
     .build(app)?;
@@ -386,9 +391,7 @@ fn main() {
         window.set_title("")?;
       }
       build_app_menu(app.handle())?;
-      if let Some(icon) = app.default_window_icon() {
-        build_tray(app.handle(), icon.clone())?;
-      }
+      build_tray(app.handle())?;
       Ok(())
     })
     .on_menu_event(|app, event| match event.id().as_ref() {
