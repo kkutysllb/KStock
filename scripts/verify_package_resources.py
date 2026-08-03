@@ -139,6 +139,25 @@ class Verifier:
                 "Missing one of: " + ", ".join(str(path) for path in candidates),
             )
 
+        stdlib_roots = [
+            runtime / "lib" / "python3.12",
+            runtime / "Lib",
+        ]
+        stdlib_root = next((path for path in stdlib_roots if (path / "encodings").is_dir()), None)
+        if stdlib_root is None:
+            self.fail(
+                "product python-runtime stdlib encodings",
+                "Missing encodings under one of: " + ", ".join(str(path) for path in stdlib_roots),
+            )
+        else:
+            self.pass_("product python-runtime stdlib encodings")
+            if os.name != "nt":
+                lib_dynload = stdlib_root / "lib-dynload"
+                if lib_dynload.is_dir():
+                    self.pass_("product python-runtime stdlib lib-dynload")
+                else:
+                    self.fail("product python-runtime stdlib lib-dynload", f"Missing: {lib_dynload}")
+
     def run(self) -> int:
         self.verify_source_contract()
         if not self.source_only:

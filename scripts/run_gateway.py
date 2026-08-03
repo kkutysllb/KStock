@@ -558,6 +558,7 @@ def _setup_bundled_python_env() -> None:
         print("  [warn] python-runtime 缺失，技能脚本将回退系统 python3", flush=True)
         return
     os.environ["KSTOCK_PYTHON"] = str(python_bin)
+    os.environ["PYTHONHOME"] = str(runtime_root)
     site_package_roots = [
         runtime_root / "Lib" / "site-packages",
         *runtime_root.glob("lib/python*/site-packages"),

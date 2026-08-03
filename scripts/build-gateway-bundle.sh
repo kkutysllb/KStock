@@ -20,11 +20,15 @@ case "$(uname -s)" in
     RUNTIME_PY="$PYTHON_RUNTIME/bin/python3"
     LIB_RELS=("lib/libpython3.12.dylib")
     LIB_DST="$PYTHON_RUNTIME/lib/"
+    STDLIB_SRC_REL="lib/python3.12"
+    STDLIB_DST="$PYTHON_RUNTIME/lib/python3.12"
     ;;
   Linux)
     RUNTIME_PY="$PYTHON_RUNTIME/bin/python3"
     LIB_RELS=("lib/libpython3.12.so" "lib/libpython3.12.so.1.0")
     LIB_DST="$PYTHON_RUNTIME/lib/"
+    STDLIB_SRC_REL="lib/python3.12"
+    STDLIB_DST="$PYTHON_RUNTIME/lib/python3.12"
     ;;
   MINGW*|MSYS*|CYGWIN*)
     # Windows venv 的标准解释器位置是 Scripts/python.exe。不能把
@@ -33,6 +37,8 @@ case "$(uname -s)" in
     RUNTIME_PY="$PYTHON_RUNTIME/Scripts/python.exe"
     LIB_RELS=("python312.dll")
     LIB_DST="$PYTHON_RUNTIME/Scripts/"
+    STDLIB_SRC_REL="Lib"
+    STDLIB_DST="$PYTHON_RUNTIME/Lib"
     ;;
   *)
     echo "!! 不支持平台: $(uname -s)" >&2
@@ -129,6 +135,34 @@ rm -rf "$PYTHON_RUNTIME"/bin/2to3* "$PYTHON_RUNTIME"/bin/idle3* "$PYTHON_RUNTIME
 # 技能依赖（kk_common 数据客户端 + 第三方库）
 uv pip install --python "$RUNTIME_PY" pandas tushare python-dotenv akshare
 uv pip install --python "$RUNTIME_PY" vendor/skills/public/common
+
+# uv venv 只会创建 site-packages，解释器标准库仍通过 pyvenv.cfg home 指向
+# 构建机的 standalone Python。CI 产物安装到客户机器后该 home 路径不存在，
+# python3 会在初始化阶段找不到 encodings 而崩溃。依赖安装完成后再把
+# standalone 标准库复制进 runtime 自身，并排除会让 pip/uv 视为系统受管
+# Python 的 EXTERNALLY-MANAGED，使 python-runtime 真正可移动、离线自包含。
+STDLIB_SRC="$STANDALONE_ROOT/$STDLIB_SRC_REL"
+if [ ! -d "$STDLIB_SRC/encodings" ]; then
+    echo "!! standalone Python 标准库缺失 encodings: $STDLIB_SRC" >&2
+    exit 1
+fi
+mkdir -p "$STDLIB_DST"
+find "$STDLIB_SRC" -mindepth 1 -maxdepth 1 \
+    ! -name site-packages \
+    ! -name EXTERNALLY-MANAGED \
+    -exec cp -R {} "$STDLIB_DST/" \;
+if [ ! -d "$STDLIB_DST/encodings" ]; then
+    echo "!! python-runtime 标准库复制失败: $STDLIB_DST/encodings" >&2
+    exit 1
+fi
+case "$(uname -s)" in
+  Darwin|Linux)
+    if [ ! -d "$STDLIB_DST/lib-dynload" ]; then
+        echo "!! python-runtime 标准库复制失败: $STDLIB_DST/lib-dynload" >&2
+        exit 1
+    fi
+    ;;
+esac
 
 # Windows wheels（如 curl_cffi/numpy/pandas）会把二进制 DLL 放在
 # site-packages/*.libs。PyInstaller 主程序分析阶段能识别这些目录，但这里

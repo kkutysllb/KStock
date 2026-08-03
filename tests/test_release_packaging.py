@@ -148,10 +148,12 @@ def test_gateway_runtime_env_supports_windows_venv_scripts_layout(tmp_path, monk
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
     monkeypatch.setenv("PATH", "original-path")
     monkeypatch.delenv("KSTOCK_PYTHON", raising=False)
+    monkeypatch.delenv("PYTHONHOME", raising=False)
 
     run_gateway._setup_bundled_python_env()
 
     assert os.environ["KSTOCK_PYTHON"] == str(python_exe)
+    assert os.environ["PYTHONHOME"] == str(runtime_dir)
     path_parts = os.environ["PATH"].split(os.pathsep)
     assert path_parts[:3] == [str(python_exe.parent), str(runtime_dir), str(dll_dir)]
 
@@ -184,6 +186,20 @@ def test_build_gateway_bundle_preserves_windows_venv_scripts_layout():
     assert 'RUNTIME_PY="$PYTHON_RUNTIME/Scripts/python.exe"' in script
     assert 'cp "$RUNTIME_PY" "$PYTHON_RUNTIME/Scripts/python3.exe"' in script
     assert "python3.dll" in script
+
+
+def test_build_gateway_bundle_copies_python_standard_library():
+    """发布包的 python-runtime 不能依赖 CI 构建机的 pyvenv.cfg home 路径。"""
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    assert 'STDLIB_SRC_REL="lib/python3.12"' in script
+    assert 'STDLIB_SRC_REL="Lib"' in script
+    assert 'STDLIB_SRC="$STANDALONE_ROOT/$STDLIB_SRC_REL"' in script
+    assert 'STDLIB_DST="$PYTHON_RUNTIME/lib/python3.12"' in script
+    assert 'STDLIB_DST="$PYTHON_RUNTIME/Lib"' in script
+    assert "encodings" in script
+    assert "lib-dynload" in script
+    assert "! -name EXTERNALLY-MANAGED" in script
 
 
 def test_build_gateway_bundle_adds_windows_site_package_dll_dirs_before_import_check():
