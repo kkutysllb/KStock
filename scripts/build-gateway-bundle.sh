@@ -8,6 +8,11 @@ cd "$(dirname "$0")/.."
 
 echo "==> PyInstaller 构建 gateway（dist/kstock-gateway/）"
 uv run pyinstaller scripts/kstock-gateway.spec --noconfirm --clean
+# speech_recognition 的 flac-mac 是上游 wheel 自带的旧 macOS SDK 可执行文件，
+# PyInstaller 会提示它可能破坏 code-signing / hardened runtime。KStock
+# gateway 不使用本地语音转码能力，发布包中移除该可选二进制，避免 Apple
+# notarization 在预签后继续因老 SDK 二进制失败。
+rm -f dist/kstock-gateway/_internal/speech_recognition/flac-mac 2>/dev/null || true
 
 # ── 内置 Python 运行时（agent 技能脚本开箱即用）──────────────────────
 # 打包版 agent 通过 bash 执行技能脚本（python3 xxx.py），系统 Python 没有
@@ -92,6 +97,15 @@ fi
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*)
     cp "$RUNTIME_PY" "$PYTHON_RUNTIME/Scripts/python3.exe"
+    # curl_cffi/_wrapper.pyd 依赖 python3.dll（不是 python312.dll）。
+    # uv standalone Python 根目录同时提供 python312.dll + python3.dll，
+    # 两者都必须随 venv 分发到解释器同目录。
+    if [ -f "$STANDALONE_ROOT/python3.dll" ]; then
+        cp "$STANDALONE_ROOT/python3.dll" "$PYTHON_RUNTIME/Scripts/"
+    else
+        echo "!! standalone Python 缺失 python3.dll: $STANDALONE_ROOT" >&2
+        exit 1
+    fi
     ;;
 esac
 # Windows 解释器运行时还依赖 vcruntime140.dll（与 python.exe 同目录查找）
@@ -156,6 +170,38 @@ esac
 du -sh "$PYTHON_RUNTIME"
 
 python scripts/verify_package_resources.py
+
+# Tauri 只会签外层 .app 和 Rust 主程序，不会递归签 resources/gateway 里
+# PyInstaller 收集的 Mach-O 二进制。Apple notarization 会逐个检查这些
+# 嵌套二进制，必须在 tauri build 之前用 Developer ID + secure timestamp +
+# hardened runtime 预签整个 gateway 分发目录。
+case "$(uname -s)" in
+  Darwin)
+    if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+        echo "==> 签名 macOS gateway 内嵌二进制（Developer ID + timestamp + hardened runtime）"
+        SIGN_LIST="$(mktemp)"
+        find dist/kstock-gateway -type f -print0 |
+          while IFS= read -r -d '' CANDIDATE; do
+              if file "$CANDIDATE" | grep -q "Mach-O"; then
+                  printf '%s\n' "$CANDIDATE"
+              fi
+          done |
+          awk '{ print length, $0 }' |
+          sort -rn |
+          cut -d' ' -f2- > "$SIGN_LIST"
+        SIGN_COUNT=0
+        while IFS= read -r MACHO; do
+            codesign --force --timestamp --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$MACHO"
+            SIGN_COUNT=$((SIGN_COUNT + 1))
+        done < "$SIGN_LIST"
+        rm -f "$SIGN_LIST"
+        codesign --verify --deep --strict --verbose=2 dist/kstock-gateway/kstock-gateway
+        echo "  signed Mach-O files: $SIGN_COUNT"
+    else
+        echo "（跳过 macOS gateway 预签：APPLE_SIGNING_IDENTITY 未设置，本地/未签名构建）"
+    fi
+    ;;
+esac
 
 echo "==> 产物大小:"
 du -sh dist/kstock-gateway

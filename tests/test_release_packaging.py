@@ -174,6 +174,7 @@ def test_build_gateway_bundle_preserves_windows_venv_scripts_layout():
 
     assert 'RUNTIME_PY="$PYTHON_RUNTIME/Scripts/python.exe"' in script
     assert 'cp "$RUNTIME_PY" "$PYTHON_RUNTIME/Scripts/python3.exe"' in script
+    assert "python3.dll" in script
 
 
 def test_build_gateway_bundle_adds_windows_site_package_dll_dirs_before_import_check():
@@ -191,6 +192,21 @@ def test_build_gateway_bundle_installs_windows_sitecustomize_for_dll_loading():
     assert "sitecustomize.py" in script
     assert "add_dll_directory" in script
     assert "*.libs" in script
+
+
+def test_build_gateway_bundle_signs_macos_gateway_resources_before_tauri_bundle():
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    assert "APPLE_SIGNING_IDENTITY" in script
+    assert "codesign" in script
+    assert "--options runtime" in script
+    assert "--timestamp" in script
+
+
+def test_build_gateway_bundle_removes_incompatible_speech_recognition_flac_binary():
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    assert "speech_recognition/flac-mac" in script
 
 
 def test_build_gateway_bundle_verifies_product_package_resources():
