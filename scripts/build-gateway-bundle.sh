@@ -30,6 +30,13 @@ rm -rf "$PYTHON_RUNTIME"
 # --relocatable: 创建可移动的 venv（解释器按相对路径定位），随包分发后
 # 在任意路径可运行，不依赖构建机绝对路径。
 uv venv --python "$STANDALONE_PY" --relocatable "$PYTHON_RUNTIME"
+# venv 的 bin/python 是指向构建机 standalone 的绝对路径符号链接，且 venv 内
+# 没有 libpython3.12.dylib（解释器按 @executable_path/../lib 加载），直接随包
+# 分发会在目标机器报 ``Reason: tried .../lib/libpython3.12.dylib (no such file)``。
+# 这里把解释器实体与 dylib 复制进 venv，使运行时完全自包含。
+rm -f "$PYTHON_RUNTIME"/bin/python "$PYTHON_RUNTIME"/bin/python3 "$PYTHON_RUNTIME"/bin/python3.12
+cp "$STANDALONE_ROOT/bin/python3.12" "$PYTHON_RUNTIME/bin/python3"
+cp "$STANDALONE_ROOT/lib/libpython3.12.dylib" "$PYTHON_RUNTIME/lib/"
 # 裁剪不需要的组件（减小体积）
 rm -rf "$PYTHON_RUNTIME"/bin/2to3* "$PYTHON_RUNTIME"/bin/idle3* "$PYTHON_RUNTIME"/bin/pydoc3* \
     "$PYTHON_RUNTIME"/lib/python3.12/{idlelib,test,tkinter,turtledemo,ensurepip,lib2to3} 2>/dev/null || true
