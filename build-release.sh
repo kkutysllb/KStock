@@ -403,8 +403,11 @@ import os
 
 runs = json.loads(os.environ.get("RUNS_JSON") or "[]")
 tag = os.environ["TAG"]
+# tag push 触发的 run 的 headBranch 就是 tag 名，重推同一 tag 后列表里会
+# 出现多个同 tag 的 run；必须跳过已完成的旧 run，否则会 watch 到上一次
+# 的失败 run（曾误命中 30834340557 导致 watch 立即失败）。
 for run in runs:
-    if run.get("headBranch") == tag:
+    if run.get("headBranch") == tag and run.get("status") != "completed":
         print(run.get("databaseId", ""))
         break
 PY
