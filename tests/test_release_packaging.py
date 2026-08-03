@@ -180,8 +180,17 @@ def test_build_gateway_bundle_adds_windows_site_package_dll_dirs_before_import_c
     script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
 
     assert "RUNTIME_SITE_PACKAGES" in script
+    assert "cygpath -u \"$RUNTIME_SITE_PACKAGES\"" in script
     assert "-name \"*.libs\"" in script
     assert "export PATH" in script
+
+
+def test_build_gateway_bundle_installs_windows_sitecustomize_for_dll_loading():
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    assert "sitecustomize.py" in script
+    assert "add_dll_directory" in script
+    assert "*.libs" in script
 
 
 def test_build_gateway_bundle_verifies_product_package_resources():

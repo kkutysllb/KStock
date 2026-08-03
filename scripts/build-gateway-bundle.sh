@@ -113,10 +113,43 @@ uv pip install --python "$RUNTIME_PY" vendor/skills/public/common
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*)
     RUNTIME_SITE_PACKAGES="$("$RUNTIME_PY" -c "import site; print(next(p for p in site.getsitepackages() if p.endswith('site-packages')))")"
+    RUNTIME_SITE_PACKAGES_POSIX="$RUNTIME_SITE_PACKAGES"
+    if command -v cygpath >/dev/null 2>&1; then
+        RUNTIME_SITE_PACKAGES_POSIX="$(cygpath -u "$RUNTIME_SITE_PACKAGES")"
+    fi
+    cat > "$RUNTIME_SITE_PACKAGES_POSIX/sitecustomize.py" <<'PY'
+"""KStock bundled Windows runtime DLL search path bootstrap.
+
+Windows wheels such as curl_cffi, numpy and pandas keep dependent DLLs in
+site-packages/*.libs.  Register these directories before any user script imports
+those packages, so every bundled python/python3 process works out of the box.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+_KSTOCK_DLL_DIRECTORY_HANDLES = []
+
+if os.name == "nt":
+    site_packages = Path(__file__).resolve().parent
+    for dll_dir in sorted(site_packages.glob("*.libs")):
+        if not dll_dir.is_dir():
+            continue
+        dll_dir_text = str(dll_dir)
+        os.environ["PATH"] = dll_dir_text + os.pathsep + os.environ.get("PATH", "")
+        add_dll_directory = getattr(os, "add_dll_directory", None)
+        if add_dll_directory is not None:
+            _KSTOCK_DLL_DIRECTORY_HANDLES.append(add_dll_directory(dll_dir_text))
+PY
+    DLL_DIR_COUNT=0
     while IFS= read -r DLL_DIR; do
         PATH="$DLL_DIR:$PATH"
-    done < <(find "$RUNTIME_SITE_PACKAGES" -maxdepth 1 -type d -name "*.libs" 2>/dev/null)
+        DLL_DIR_COUNT=$((DLL_DIR_COUNT + 1))
+    done < <(find "$RUNTIME_SITE_PACKAGES_POSIX" -maxdepth 1 -type d -name "*.libs" 2>/dev/null)
     export PATH
+    echo "  Windows runtime DLL dirs: $DLL_DIR_COUNT under $RUNTIME_SITE_PACKAGES"
     ;;
 esac
 "$RUNTIME_PY" -c "import kk_common, pandas, tushare, akshare, dotenv; print('  python-runtime OK')"

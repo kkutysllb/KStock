@@ -47,3 +47,17 @@ def test_release_script_stages_tauri_cargo_lock():
     script = (REPO_ROOT / "build-release.sh").read_text(encoding="utf-8")
 
     assert '"apps/desktop/src-tauri/Cargo.lock"' in script
+
+
+def test_release_workflow_macos_keychain_is_non_interactive():
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+
+    assert 'security list-keychains -d user -s "$keychain"' in workflow
+    assert 'security set-keychain-settings -lut 21600 "$keychain"' in workflow
+    assert "security set-key-partition-list" in workflow
+
+
+def test_release_workflow_build_step_has_timeout():
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+
+    assert "timeout-minutes: 60" in workflow

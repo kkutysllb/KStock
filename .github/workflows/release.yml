@@ -58,14 +58,22 @@ jobs:
           keychain="$RUNNER_TEMP/kstock.keychain"
           keychain_password="$(uuidgen)"
           security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security list-keychains -d user -s "$keychain"
           security default-keychain -s "$keychain"
           security unlock-keychain -p "$keychain_password" "$keychain"
-          security import "$RUNNER_TEMP/kstock.p12" -k "$keychain" -P "$MAC_CERTIFICATE_PWD" -T /usr/bin/codesign -T /usr/bin/productsign
+          security import "$RUNNER_TEMP/kstock.p12" -k "$keychain" -P "$MAC_CERTIFICATE_PWD" -A -T /usr/bin/codesign -T /usr/bin/productsign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
           # 从钥匙串解析证书身份（如 "Developer ID Application: xxx (TEAMID)"），供 tauri codesign 使用
           identity="$(security find-identity -v -p codesigning "$keychain" | grep -o '"[^"]*"' | tr -d '"' | head -1)"
+          if [ -z "$identity" ]; then
+            echo "未在 CI keychain 中找到 Developer ID Application 签名身份" >&2
+            security find-identity -v -p codesigning "$keychain" >&2
+            exit 1
+          fi
           echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
       - name: 校验并构建（check-release.sh）
+        timeout-minutes: 60
         env:
           # macOS 公证：tauri bundler 检测到三个变量齐备后自动 notarytool 公证并 staple
           APPLE_ID: ${{ secrets.APPLE_ID }}
