@@ -17,6 +17,8 @@
 """
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files
+
 repo_root = Path(SPECPATH).resolve().parent  # spec 位于 <仓库>/scripts/，仓库根是上一级
 print(f"[kstock-gateway.spec] repo_root = {repo_root}")
 
@@ -24,9 +26,13 @@ datas = [
     (str(repo_root / "vendor" / "skills"), "vendor/skills"),
     (str(repo_root / "config" / "qilin.config.yaml"), "config"),
     (str(repo_root / "config" / "lead_soul.md"), "config"),
-    # qilin 包数据文件（alembic 迁移脚本、qilinmem 提示模板等）不在 import 链中，
+    # qilin 包数据文件（alembic 迁移脚本、qilinmem 提示模板等）不在 import 链中 ，
     # 需整体复制；与 PYZ 内的编译源码重复但不冲突（文件系统访问用这份）。
     (str(repo_root / "vendor" / "qilin" / "qilin"), "qilin"),
+    # akshare 包内数据文件（file_fold/calendar.json 交易日历等）：PyInstaller 默认
+    # 只收集 .py，这些文件不进 import 链，缺失会令工具运行时抛
+    # FileNotFoundError: .../akshare/file_fold/calendar.json（打包版工具暂不可用）。
+    *collect_data_files("akshare"),
 ]
 
 a = Analysis(
@@ -34,7 +40,15 @@ a = Analysis(
     pathex=[str(repo_root)],
     binaries=[],
     datas=datas,
-    hiddenimports=[],
+    # 引擎按 runtime.yaml 的 tools 配置运行时动态 import 的工具模块：
+    # 静态 import 链看不到它们，必须显式声明才能随包分发（含依赖链，
+    # 如函数内懒加载的 akshare），否则打包版引擎 run 报
+    # ModuleNotFoundError: scripts.kstock_tools.xxx。
+    hiddenimports=[
+        "scripts.kstock_tools.akshare_data_tool",
+        "scripts.kstock_tools.akshare_news_tool",
+        "scripts.kstock_tools.report_dashboard_tool",
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

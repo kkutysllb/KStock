@@ -431,6 +431,61 @@ def _ensure_data_space() -> dict[str, Path]:
     }
 
 
+def _patch_cors_allow_tauri_origin() -> None:
+    """放行 Tauri 桌面端 webview 的 ``tauri://`` origin（vendor 只读原则）。
+
+    引擎 ``app.gateway.csrf_middleware._normalize_origin`` 只接受 http/https
+    scheme，会把 macOS / Linux 打包态 webview 的 ``tauri://localhost`` 过滤掉，
+    导致 CORSMiddleware 白名单缺项（preflight 400）、CSRF origin 校验拒绝
+    （403），前端表现为“无法连接本地引擎，请确认 gateway 已启动”。Windows 的
+    ``https://tauri.localhost`` 不受影响；开发态 ``http://localhost:1420`` 也不受影响。
+
+    ``get_configured_cors_origins`` / ``is_allowed_auth_origin`` 运行时解析
+    模块级 ``_normalize_origin``，替换模块属性即可全局生效。
+    """
+    from app.gateway import csrf_middleware as _csrf_middleware
+
+    _original_normalize = _csrf_middleware._normalize_origin
+
+    def _normalize_with_tauri(origin: str) -> str | None:
+        stripped = origin.strip()
+        if stripped.startswith("tauri://"):
+            return stripped
+        return _original_normalize(origin)
+
+    _csrf_middleware._normalize_origin = _normalize_with_tauri
+
+
+def _patch_csrf_double_submit_for_tauri_origin() -> None:
+    """打包态 tauri:// 文档下 WebKit 的 document.cookie 为空（自定义 scheme
+    不暴露 cookie），前端读不到 csrf_token，无法构造 X-CSRF-Token header，
+    所有受保护写请求（创建会话等）返回 403 CSRF token missing。
+
+    tauri:// origin 只可能来自本地桌面端 webview——浏览器强制 Origin 为
+    真实来源，外部站点无法伪造 tauri:// 前缀——因此对白名单内的 tauri://
+    origin 跳过 double-submit 校验（origin 白名单校验即 CSRF 防护），
+    其余来源保持原 double-submit 逻辑不变。
+    """
+    from app.gateway import csrf_middleware as _csrf_middleware
+    from starlette.responses import JSONResponse
+
+    _original_dispatch = _csrf_middleware.CSRFMiddleware.dispatch
+
+    async def _dispatch_with_tauri_exempt(self, request, call_next):
+        origin = (request.headers.get("origin") or "").strip()
+        if origin.startswith("tauri://"):
+            if origin not in _csrf_middleware._configured_cors_origins():
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Cross-site request denied."},
+                )
+            # 白名单 tauri:// 来源：免 double-submit，直接进入业务处理
+            return await call_next(request)
+        return await _original_dispatch(self, request, call_next)
+
+    _csrf_middleware.CSRFMiddleware.dispatch = _dispatch_with_tauri_exempt
+
+
 def _configure_gateway_security() -> None:
     """注入桌面端 webview 的 CORS origin 白名单。
 
@@ -474,6 +529,31 @@ def _load_secrets_env(data_root: Path) -> None:
             loaded += 1
     if loaded:
         print(f"  secrets.env   : 已加载 {loaded} 个密钥", flush=True)
+
+
+def _setup_bundled_python_env() -> None:
+    """打包态把内置 Python 运行时接入 PATH，agent 技能脚本开箱即用。
+
+    打包版 agent 通过 bash 执行技能脚本（``python3 xxx.py``），系统 Python
+    没有 kk_common/pandas/tushare 等依赖；PyInstaller 产物只有 bootloader，
+    不能当解释器用。构建时额外携带 python-build-standalone 运行时
+    （``_internal/python-runtime/``，见 build-gateway-bundle.sh），这里把它的
+    ``bin/`` 前置到 PATH 并导出 ``KSTOCK_PYTHON``。agent 的 bash 子进程继承
+    本进程环境，``python3`` 直接解析到内置解释器；secrets 也已在进程环境
+    （``_load_secrets_env``），kk_common 的 TUSHARE_TOKEN 开箱即得。
+    源码模式（开发/测试）不做任何事，保持原有环境。
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    meipass = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+    runtime_bin = meipass / "python-runtime" / "bin"
+    python_bin = runtime_bin / "python3"
+    if not python_bin.exists():
+        print("  [warn] python-runtime 缺失，技能脚本将回退系统 python3", flush=True)
+        return
+    os.environ["KSTOCK_PYTHON"] = str(python_bin)
+    os.environ["PATH"] = f"{runtime_bin}{os.pathsep}{os.environ.get('PATH', '')}"
+    print(f"  Bundled python : {python_bin}（已接入 PATH）", flush=True)
 
 
 def _allow_public_landing_news() -> None:
@@ -613,6 +693,8 @@ def create_app():
     paths = _ensure_data_space()
     _load_secrets_env(paths["data_root"])
     _configure_gateway_security()
+    _patch_cors_allow_tauri_origin()
+    _patch_csrf_double_submit_for_tauri_origin()
     _allow_public_landing_news()
     _allow_public_data_source_status()
     _install_secrets_injection()
@@ -780,6 +862,9 @@ if __name__ == "__main__":
     import multiprocessing
 
     multiprocessing.freeze_support()
+
+    # 打包态下把内置 Python 运行时接入 PATH（supervisor 与 server 子进程都继承）。
+    _setup_bundled_python_env()
 
     if "--serve" in sys.argv:
         # server 模式：真正的 uvicorn 进程，由 supervisor 启动。

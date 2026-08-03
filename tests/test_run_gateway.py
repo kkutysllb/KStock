@@ -602,6 +602,115 @@ def test_install_secrets_injection_patches_build_run_config(monkeypatch):
     assert config["configurable"]["thread_id"] == "thread-1"
 
 
+# ── Tauri 桌面端 origin（CORS / CSRF）────────────────────────────
+
+
+def test_patch_cors_allow_tauri_origin_keeps_tauri_scheme(monkeypatch):
+    """引擎归一化只接受 http/https scheme，会丢弃 macOS/Linux 打包态 webview 的
+    ``tauri://localhost`` origin（CORS preflight 400 / CSRF 403 → 前端报
+    「无法连接本地引擎」）。包装层补丁必须让 tauri:// origin 进入白名单。"""
+    monkeypatch.setenv(
+        "GATEWAY_CORS_ORIGINS",
+        "http://localhost:1420,tauri://localhost,https://tauri.localhost",
+    )
+
+    from scripts.run_gateway import _patch_cors_allow_tauri_origin
+
+    # 补丁前：tauri://localhost 被引擎过滤
+    from app.gateway import csrf_middleware
+
+    assert "tauri://localhost" not in csrf_middleware._configured_cors_origins()
+
+    # 补丁后：tauri://localhost 保留，其余 http/https origin 行为不变
+    _patch_cors_allow_tauri_origin()
+    origins = csrf_middleware._configured_cors_origins()
+    assert "tauri://localhost" in origins
+    assert "http://localhost:1420" in origins
+    assert "https://tauri.localhost" in origins
+
+
+def test_patch_csrf_exempts_whitelisted_tauri_origin(monkeypatch):
+    """打包态 tauri://localhost 文档下 document.cookie 为空，前端构造不了
+    X-CSRF-Token header；白名单内 tauri:// origin 的写请求应免 double-submit
+    直接放行（origin 白名单校验即 CSRF 防护）。"""
+    monkeypatch.setenv("GATEWAY_CORS_ORIGINS", "tauri://localhost,http://localhost:1420")
+
+    from scripts.run_gateway import (
+        _patch_cors_allow_tauri_origin,
+        _patch_csrf_double_submit_for_tauri_origin,
+    )
+
+    _patch_cors_allow_tauri_origin()
+    _patch_csrf_double_submit_for_tauri_origin()
+
+    from fastapi import Request
+    from starlette.responses import JSONResponse
+
+    from app.gateway.csrf_middleware import CSRFMiddleware
+
+    middleware = CSRFMiddleware(lambda scope, receive, send: None)
+
+    async def _call_next(request):
+        return JSONResponse(status_code=200, content={"ok": True})
+
+    async def _dispatch(scope: dict):
+        return await CSRFMiddleware.dispatch(middleware, Request(scope), _call_next)
+
+    import asyncio
+
+    # 白名单 tauri://localhost + 无 X-CSRF-Token header → 放行（不再 403）
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/v1/threads",
+        "headers": [(b"origin", b"tauri://localhost"), (b"host", b"localhost:18001")],
+    }
+    resp = asyncio.run(_dispatch(scope))
+    assert resp.status_code == 200, "白名单 tauri:// origin 应免 double-submit 放行"
+
+    # 非白名单 tauri 前缀 origin → 403 拒绝（安全边界不放松）
+    scope["headers"][0] = (b"origin", b"tauri://evil.example")
+    resp = asyncio.run(_dispatch(scope))
+    assert resp.status_code == 403
+
+    # 非 tauri origin（如 dev 1420）无 header → 仍走原 double-submit → 403
+    scope["headers"][0] = (b"origin", b"http://localhost:1420")
+    resp = asyncio.run(_dispatch(scope))
+    assert resp.status_code == 403
+
+
+def test_patch_cors_allows_tauri_origin_in_auth_origin_check(monkeypatch):
+    """CSRF 的 ``is_allowed_auth_origin`` 对 ``tauri://localhost`` Origin 的
+    登录请求必须放行（否则登录 POST 返回 403 Cross-site auth request denied）。"""
+    monkeypatch.setenv(
+        "GATEWAY_CORS_ORIGINS",
+        "http://localhost:1420,tauri://localhost",
+    )
+
+    from scripts.run_gateway import _patch_cors_allow_tauri_origin
+    from app.gateway.csrf_middleware import is_allowed_auth_origin
+
+    _patch_cors_allow_tauri_origin()
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/v1/auth/login/local",
+        "headers": [
+            (b"origin", b"tauri://localhost"),
+            (b"host", b"localhost:18001"),
+            (b"content-type", b"application/json"),
+        ],
+    }
+    from fastapi import Request
+
+    assert is_allowed_auth_origin(Request(scope))
+
+    # 非白名单恶意 Origin 仍被拒绝（回归：不得放宽安全边界）
+    scope["headers"][0] = (b"origin", b"https://evil.example")
+    assert not is_allowed_auth_origin(Request(scope))
+
+
 # ── Lead Agent 运行守则（SOUL.md）初始化 ─────────────────────────────
 
 
