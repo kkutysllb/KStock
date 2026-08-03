@@ -255,3 +255,10 @@ def test_build_desktop_uses_nsis_on_windows_to_avoid_wix_light():
     assert "MINGW" in script
     command_lines = "\n".join(line for line in script.splitlines() if not line.strip().startswith("#"))
     assert "msi" not in command_lines.lower()
+
+
+def test_desktop_vitest_limits_file_parallelism_for_ci_stability():
+    config = Path("apps/desktop/vite.config.ts").read_text(encoding="utf-8")
+
+    assert "fileParallelism: false" in config
+    assert "maxWorkers: 1" in config
