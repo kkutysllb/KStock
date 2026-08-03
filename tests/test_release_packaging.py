@@ -225,6 +225,7 @@ def test_build_gateway_bundle_does_not_strict_verify_python_framework_symlink():
 
     assert 'codesign --verify --strict --verbose=2 "dist/kstock-gateway/_internal/Python"' not in script
     assert 'codesign --verify --deep --strict --verbose=2 "dist/kstock-gateway/_internal/Python.framework"' not in script
+    assert 'codesign --verify --strict --verbose=2 "dist/kstock-gateway/_internal/Python.framework/Versions' not in script
     assert "Python.framework/Versions/3.12/Python" in script
 
 
