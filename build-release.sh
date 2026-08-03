@@ -64,18 +64,18 @@ RAW_VERSION="${VERSION#v}"
 
 # ── --delete-tag 模式：删除本地与远程 tag（独立模式，不触发发布）───────────────
 if [ "$DELETE_TAG" = 1 ]; then
-  echo "==> 删除 tag $VERSION（本地 + 远程）"
-  if git tag -d "$VERSION" >/dev/null 2>&1; then
-    echo "   本地 tag 已删除: $VERSION"
+  echo "==> 删除 tag ${VERSION}（本地 + 远程）"
+  if git tag -d "${VERSION}" >/dev/null 2>&1; then
+    echo "   本地 tag 已删除: ${VERSION}"
   else
-    echo "   （本地 tag 不存在或删除失败）: $VERSION"
+    echo "   （本地 tag 不存在或删除失败）: ${VERSION}"
   fi
-  if git push origin --delete "refs/tags/$VERSION" >/dev/null 2>&1; then
-    echo "   远程 tag 已删除: origin/$VERSION"
+  if git push origin --delete "refs/tags/${VERSION}" >/dev/null 2>&1; then
+    echo "   远程 tag 已删除: origin/${VERSION}"
   else
-    echo "   （远程 tag 不存在或删除失败，请检查网络/权限）: origin/$VERSION"
+    echo "   （远程 tag 不存在或删除失败，请检查网络/权限）: origin/${VERSION}"
   fi
-  echo "==> 完成。如需重新发布，直接重新执行 ./build-release.sh $VERSION"
+  echo "==> 完成。如需重新发布，直接重新执行 ./build-release.sh ${VERSION}"
   exit 0
 fi
 
@@ -151,11 +151,11 @@ PY
 git diff --stat
 
 # ── 本地预检（可跳过）─────────────────────────────────────────────────────────
+# 只跑测试 / 类型检查 / cargo check；完整打包由 GitHub Actions（release.yml）在
+# 推送 tag 后执行，本地不打包（打包需要签名私钥，仅配置在 CI secrets 中）。
 if [ "$SKIP_CHECK" = 0 ]; then
   echo "==> 本地预检: check-ci.sh（测试 + 类型检查 + cargo check）"
   bash scripts/check-ci.sh
-  echo "==> 本地预检: build-desktop.sh（本机构建，产物不签名）"
-  bash scripts/build-desktop.sh
 else
   echo "==> 已跳过本地预检（--skip-check）"
 fi
@@ -169,7 +169,7 @@ if [ -n "$prev_tag" ] && [ "$prev_tag" != "$VERSION" ]; then
 else
   git log --oneline --no-merges -20 > "$notes_file"
 fi
-echo "==> 发布说明（${prev_tag:-（无历史 tag）} → $VERSION）:"
+echo "==> 发布说明（${prev_tag:-（无历史 tag）} → ${VERSION}）:"
 cat "$notes_file"
 
 # ── 提交 + 打 tag + 推送 ──────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ if [ "$NO_PUSH" = 1 ]; then
   exit 0
 fi
 
-echo "==> 推送 main 与 $VERSION（将触发 GitHub Actions Release 工作流）"
+echo "==> 推送 main 与 ${VERSION}（将触发 GitHub Actions Release 工作流）"
 git push origin main
 git push origin "$VERSION"
 
