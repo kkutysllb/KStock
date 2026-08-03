@@ -61,3 +61,18 @@ def test_release_workflow_build_step_has_timeout():
     workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
     assert "timeout-minutes: 60" in workflow
+
+
+def test_release_workflow_uses_stable_linux_builder():
+    """Linux 安装包应在稳定旧 Linux 基线上构建，避免 ubuntu-latest 漂移。"""
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+
+    assert "ubuntu-22.04" in workflow
+    assert "ubuntu-latest, macos-latest, windows-latest" not in workflow
+
+
+def test_ci_workflow_uses_stable_linux_builder():
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "ubuntu-22.04" in workflow
+    assert "ubuntu-latest, macos-latest, windows-latest" not in workflow

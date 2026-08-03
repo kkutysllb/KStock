@@ -293,6 +293,26 @@ def test_build_desktop_uses_nsis_on_windows_to_avoid_wix_light():
     assert "msi" not in command_lines.lower()
 
 
+def test_build_desktop_uses_verbose_tauri_logs_for_unix_bundlers():
+    """linuxdeploy/AppImage 子进程失败时，CI 日志不能只剩一行包装错误。"""
+    script = Path("scripts/build-desktop.sh").read_text(encoding="utf-8")
+
+    assert "--verbose" in script
+
+
+def test_build_desktop_skips_linux_appimage_bundle():
+    """Linux 发布只保留 deb/rpm，避免 AppImage linuxdeploy 成为发布阻断点。"""
+    script = Path("scripts/build-desktop.sh").read_text(encoding="utf-8")
+
+    assert "Linux)" in script
+    assert "--bundles deb,rpm" in script
+    linux_branch = script.split("Linux)", 1)[1].split(";;", 1)[0]
+    linux_command_lines = "\n".join(
+        line for line in linux_branch.splitlines() if not line.strip().startswith("#")
+    )
+    assert "appimage" not in linux_command_lines.lower()
+
+
 def test_desktop_vitest_limits_file_parallelism_for_ci_stability():
     config = Path("apps/desktop/vite.config.ts").read_text(encoding="utf-8")
 
