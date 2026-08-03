@@ -23,9 +23,11 @@ import pandas as pd
 # ---------------------------------------------------------------------
 # 接入 common（提供 TushareClient + IwencaiClient）
 # 通过 sys.path 注入同级 common 包，兼容多种安装方式。
+# 目录结构：public/<skill>/<pkg>/data/fetcher.py → 向上 3 级到 public/，
+# 再取同级 common/src（此前多算一级指向 skills/common/src，注入从未生效）。
 # ---------------------------------------------------------------------
 _KK_COMMON_SRC = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "common", "src")
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "common", "src")
 )
 if os.path.isdir(_KK_COMMON_SRC) and _KK_COMMON_SRC not in sys.path:
     sys.path.insert(0, _KK_COMMON_SRC)

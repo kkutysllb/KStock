@@ -248,12 +248,18 @@ def _generate_runtime_config(
         # 5) skills.path 指向不存在的目录时回退到内置技能包（应用升级后旧安装
         #    路径已被删除；打包态资源根随安装位置变化，旧绝对路径必然失效）。
         #    仅当路径确实不存在且内置技能包存在时回退，用户自定义有效路径保留。
+        #    开发模式（非打包）额外约束：skills.path 指向打包版安装目录
+        #    （/Applications/*.app）时同样回退到仓库 vendor/skills —— 技能必须
+        #    来自仓库源码，否则开发验证跑的是旧打包技能，效果失真。
         existing_skills = dict(existing.get("skills") or {})
         skills_path = existing_skills.get("path")
         if isinstance(skills_path, str) and skills_path:
             skills_path_resolved = Path(skills_path).expanduser()
             if not skills_path_resolved.is_absolute():
                 skills_path_resolved = repo_root / skills_path
+            is_app_bundle = any(part.endswith(".app") for part in skills_path_resolved.parts)
+            if not getattr(sys, "frozen", False) and is_app_bundle:
+                skills_path_resolved = repo_root / "vendor" / "skills"
             if not skills_path_resolved.exists():
                 bundled_skills = repo_root / (template_cfg.get("skills") or {}).get(
                     "path", "vendor/skills"
@@ -531,22 +537,18 @@ def _load_secrets_env(data_root: Path) -> None:
         print(f"  secrets.env   : 已加载 {loaded} 个密钥", flush=True)
 
 
-def _setup_bundled_python_env() -> None:
-    """打包态把内置 Python 运行时接入 PATH，agent 技能脚本开箱即用。
+def _activate_python_runtime(runtime_root: Path, *, pythonhome: bool) -> Optional[Path]:
+    """把内置 python-runtime 接入 PATH / KSTOCK_PYTHON（可选 PYTHONHOME）。
 
-    打包版 agent 通过 bash 执行技能脚本（``python3 xxx.py``），系统 Python
-    没有 kk_common/pandas/tushare 等依赖；PyInstaller 产物只有 bootloader，
-    不能当解释器用。构建时额外携带 python-build-standalone 运行时
-    （``_internal/python-runtime/``，见 build-gateway-bundle.sh），这里把解释器
-    所在目录前置到 PATH 并导出 ``KSTOCK_PYTHON``。agent 的 bash 子进程继承
-    本进程环境，``python3`` 直接解析到内置解释器；secrets 也已在进程环境
-    （``_load_secrets_env``），kk_common 的 TUSHARE_TOKEN 开箱即得。
-    源码模式（开发/测试）不做任何事，保持原有环境。
+    Args:
+        runtime_root: python-runtime 根目录（含 bin/python3 与 lib/python3.12）。
+        pythonhome: 是否同时导出 PYTHONHOME。仅打包态设置——源码模式下
+            PYTHONHOME 会干扰 gateway 进程自身的标准库/site-packages 定位；
+            新构建的 runtime 前缀相对定位可自举，无需 PYTHONHOME。
+
+    Returns:
+        解释器路径；runtime 缺失或布局异常时返回 None。
     """
-    if not getattr(sys, "frozen", False):
-        return
-    meipass = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
-    runtime_root = meipass / "python-runtime"
     candidates = [
         runtime_root / "bin" / "python3",
         runtime_root / "bin" / "python3.12",
@@ -555,10 +557,10 @@ def _setup_bundled_python_env() -> None:
     ]
     python_bin = next((candidate for candidate in candidates if candidate.exists()), None)
     if python_bin is None:
-        print("  [warn] python-runtime 缺失，技能脚本将回退系统 python3", flush=True)
-        return
+        return None
     os.environ["KSTOCK_PYTHON"] = str(python_bin)
-    os.environ["PYTHONHOME"] = str(runtime_root)
+    if pythonhome:
+        os.environ["PYTHONHOME"] = str(runtime_root)
     site_package_roots = [
         runtime_root / "Lib" / "site-packages",
         *runtime_root.glob("lib/python*/site-packages"),
@@ -571,7 +573,6 @@ def _setup_bundled_python_env() -> None:
             path_prefixes.extend(
                 path for path in sorted(site_packages.glob("*.libs")) if path.is_dir()
             )
-
     existing_path = os.environ.get("PATH", "")
     existing_parts = [part for part in existing_path.split(os.pathsep) if part]
     merged_parts: list[str] = []
@@ -579,7 +580,43 @@ def _setup_bundled_python_env() -> None:
         if part not in merged_parts:
             merged_parts.append(part)
     os.environ["PATH"] = os.pathsep.join(merged_parts)
-    print(f"  Bundled python : {python_bin}（已接入 PATH）", flush=True)
+    return python_bin
+
+
+def _setup_bundled_python_env() -> None:
+    """把内置 Python 运行时接入 PATH，agent 技能脚本开箱即用。
+
+    打包态（frozen）：用 PyInstaller 资源内 ``_internal/python-runtime/``
+    （设 PYTHONHOME）。源码模式（开发）：复用仓库构建产物
+    ``dist/kstock-gateway/_internal/python-runtime/`` —— 与打包版同源同一套
+    内置 client，保证开发环境验证效果与打包环境一致；不设 PYTHONHOME。
+    产物缺失时提示先构建（scripts/build-gateway-bundle.sh）。
+    """
+    if getattr(sys, "frozen", False):
+        meipass = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+        runtime_root = meipass / "python-runtime"
+        python_bin = _activate_python_runtime(runtime_root, pythonhome=True)
+        if python_bin is None:
+            print("  [warn] python-runtime 缺失，技能脚本将回退系统 python3", flush=True)
+        else:
+            print(f"  Bundled python : {python_bin}（已接入 PATH）", flush=True)
+        return
+
+    # 源码模式（开发）：与打包版共用同一套内置 python client（构建产物）。
+    dev_runtime = REPO_ROOT / "dist" / "kstock-gateway" / "_internal" / "python-runtime"
+    python_bin = _activate_python_runtime(dev_runtime, pythonhome=False)
+    if python_bin is None:
+        print(
+            "  [warn] 未找到内置 python client（dist/kstock-gateway/_internal/"
+            "python-runtime），技能脚本将回退系统 python3；请先运行 "
+            "scripts/build-gateway-bundle.sh 构建",
+            flush=True,
+        )
+    else:
+        print(
+            f"  Bundled python : {python_bin}（开发模式接入，与打包版同源）",
+            flush=True,
+        )
 
 
 def _allow_public_landing_news() -> None:

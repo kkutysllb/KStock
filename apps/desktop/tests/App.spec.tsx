@@ -224,7 +224,9 @@ test("桌面系统菜单事件可新建任务、打开设置并触发更新检�
 
   await emitDesktopMenuCommand("new-task");
 
-  expect(screen.getAllByText("新研究会话")).toHaveLength(2);
+  await waitFor(() => {
+    expect(screen.getAllByText("新研究会话")).toHaveLength(2);
+  });
 
   await emitDesktopMenuCommand("check-update");
 
@@ -397,6 +399,47 @@ test("发消息触发流式 run 并逐帧累积 assistant 文本", async () => {
   const runOpts = turnsMock.streamRun.mock.calls[0][0];
   expect(runOpts.threadId).toBe("thread-test");
   expect(runOpts.input.messages[0].content).toBe("分析茅台");
+});
+
+test("浮动面板未收到任务技能上下文时不展示默认技能库数量", async () => {
+  authMock.tryGetCurrentUser.mockResolvedValueOnce({
+    id: "u1", email: "t@k.dev", system_role: "user",
+  });
+  vi.mocked(listModels).mockResolvedValueOnce({
+    models: [{
+      name: "test-model",
+      display_name: "Test",
+      description: null,
+      use: "openai",
+      model: "gpt-4",
+      api_base: null,
+      api_key_env: null,
+      supports_thinking: false,
+      supports_vision: false,
+      supports_reasoning_effort: false,
+    }],
+    default_model: "test-model",
+  });
+  turnsMock.streamRun.mockImplementation(async (opts) => {
+    opts.handlers.onFrame({ event: "messages", data: [{ type: "ai", content: "处理中", id: "m1" }, {}] });
+    opts.handlers.onFrame({ event: "end", data: null });
+  });
+
+  render(<App />);
+
+  const textarea = await screen.findByRole("textbox", { name: "消息输入" });
+  await screen.findByRole("combobox", { name: "模型选择" });
+  const sendButton = screen.getByRole("button", { name: "发送消息" });
+  await waitFor(() => {
+    expect(sendButton).toBeEnabled();
+  });
+  fireEvent.change(textarea, { target: { value: "分析市场联动" } });
+  fireEvent.click(sendButton);
+  fireEvent.click(await screen.findByRole("button", { name: "显示环境信息" }));
+
+  await waitFor(() => expect(screen.getByText("处理中")).toBeVisible());
+  expect(screen.queryByText("11 个")).toBeNull();
+  expect(screen.queryByText("技能")).toBeNull();
 });
 
 test("交付文件中的 Markdown 和日志在产品内预览并提供下载", async () => {

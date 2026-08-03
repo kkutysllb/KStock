@@ -69,7 +69,6 @@ import {
   bindThreadId,
   createAssistantTurn,
   createSession,
-  DEFAULT_ACTIVE_SKILLS,
   setSessionMessages,
   threadToSession,
   updateMessageInSession,
@@ -1682,11 +1681,9 @@ function WorkspaceShell({
   const taskTokens = latestUsage?.usage?.total_tokens ?? 0;
   const todos = latestAssistant?.todos ?? [];
   const subagents = latestAssistant?.subagents ?? [];
-  // 技能数优先取本任务实际读取过的技能（引擎 skill_context），未运行时回退会话预置列表
-  const activeSkills =
-    latestAssistant?.skills?.length
-      ? latestAssistant.skills
-      : (activeSession?.activeSkills ?? DEFAULT_ACTIVE_SKILLS);
+  // 浮动面板只展示本任务实际读取过的技能（引擎 skill_context）。
+  // 不再回退到会话/全局默认技能库，避免把“可用技能总数”误显示成“当前任务技能数”。
+  const taskSkills = latestAssistant?.skills ?? [];
   const uploadPanelFiles = mergeUploadPanelFiles(threadUploads, pendingAttachments);
   const deliveryFiles = mergeDeliveryFiles(activeSession?.threadId, latestAssistant?.artifacts, workspaceChanges);
   // ChatFeed 命令式 ref + 贴底状态：驱动「回到底部」浮动按钮。
@@ -2048,7 +2045,7 @@ function WorkspaceShell({
         <ContextSection icon={Activity} title="任务摘要" count={latestAssistant ? 1 : 0}>
           <ContextLine icon={Activity} label="任务状态" value={taskStatusLabel(latestAssistant?.status)} />
           <ContextLine icon={Cpu} label="QiLin 引擎" value="已连接" />
-          <ContextLine icon={Sparkles} label="技能" value={`${activeSkills.length} 个`} />
+          {taskSkills.length > 0 && <ContextLine icon={Sparkles} label="技能" value={`${taskSkills.length} 个`} />}
           {latestAssistant?.stage && <ContextLine icon={FileText} label="当前阶段" value={latestAssistant.stage} />}
         </ContextSection>
 
