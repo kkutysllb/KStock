@@ -6,6 +6,7 @@
 #   ./build-release.sh v0.1.0 --skip-check    # 跳过本地预检（构建留给 CI）
 #   ./build-release.sh v0.1.0 --no-push       # 只提交 + 打 tag，不推送
 #   ./build-release.sh v0.1.0 --force         # 工作区有改动 / 分支落后时仍继续
+#   ./build-release.sh --delete-tag v0.1.0    # 删除本地与远程 tag（独立模式，不触发发布）
 #   ./build-release.sh --watch                # 监控最近一次 Release workflow 运行结果
 set -euo pipefail
 
@@ -16,6 +17,7 @@ SKIP_CHECK=0
 NO_PUSH=0
 FORCE=0
 WATCH=0
+DELETE_TAG=0
 
 for arg in "$@"; do
   case "$arg" in
@@ -23,9 +25,10 @@ for arg in "$@"; do
     --no-push) NO_PUSH=1 ;;
     --force) FORCE=1 ;;
     --watch) WATCH=1 ;;
+    --delete-tag) DELETE_TAG=1 ;;
     --*)
       echo "未知参数: $arg" >&2
-      echo "用法: ./build-release.sh [vX.Y.Z] [--skip-check] [--no-push] [--force] [--watch]" >&2
+      echo "用法: ./build-release.sh [vX.Y.Z] [--skip-check] [--no-push] [--force] [--watch] [--delete-tag vX.Y.Z]" >&2
       exit 1
       ;;
     *) VERSION="$arg" ;;
@@ -58,6 +61,23 @@ if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 RAW_VERSION="${VERSION#v}"
+
+# ── --delete-tag 模式：删除本地与远程 tag（独立模式，不触发发布）───────────────
+if [ "$DELETE_TAG" = 1 ]; then
+  echo "==> 删除 tag $VERSION（本地 + 远程）"
+  if git tag -d "$VERSION" >/dev/null 2>&1; then
+    echo "   本地 tag 已删除: $VERSION"
+  else
+    echo "   （本地 tag 不存在或删除失败）: $VERSION"
+  fi
+  if git push origin --delete "refs/tags/$VERSION" >/dev/null 2>&1; then
+    echo "   远程 tag 已删除: origin/$VERSION"
+  else
+    echo "   （远程 tag 不存在或删除失败，请检查网络/权限）: origin/$VERSION"
+  fi
+  echo "==> 完成。如需重新发布，直接重新执行 ./build-release.sh $VERSION"
+  exit 0
+fi
 
 # ── git 状态校验 ─────────────────────────────────────────────────────────────
 if [ -n "$(git status --porcelain)" ]; then
