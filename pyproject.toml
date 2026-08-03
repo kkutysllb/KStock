@@ -42,6 +42,8 @@ qilin = { path = "vendor/qilin", editable = true }
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    # 发布构建：把 gateway（含全部依赖 + 技能包）打包为独立可执行目录
+    "pyinstaller>=6.11",
 ]
 
 [tool.pytest.ini_options]

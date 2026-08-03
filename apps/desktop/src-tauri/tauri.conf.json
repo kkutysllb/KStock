@@ -33,6 +33,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "category": "Finance",
     "icon": [
       "icons/32x32.png",
@@ -42,6 +43,18 @@
       "icons/icon.ico"
     ],
     "shortDescription": "对话式 Stock Quant 桌面端",
-    "longDescription": "KStock 使用 QiLin 引擎和精选 KSkills 技能，以对话方式完成股票研究、分析和报告任务。"
+    "longDescription": "KStock 使用 QiLin 引擎和精选 KSkills 技能，以对话方式完成股票研究、分析和报告任务。",
+    "resources": {
+      "../../../dist/kstock-gateway": "gateway"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE5MjE2NjkwQkNENzMzMzIKUldReU05ZThrR1loR1FqZlh4VjQzTTZ6Z0FDT3BZa0lXbk5lSGJsWGRxdEM5bTBpbFY5TFIrUEsK",
+      "endpoints": [
+        "https://github.com/kkutysllb/KStock/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

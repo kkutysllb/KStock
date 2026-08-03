@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -79,7 +80,10 @@ def test_scan_archives_dark_light_pair_once_and_is_idempotent(tmp_path: Path):
     assert row["title"] == "周度分析"
     assert row["report_type"] == "weekly-futures-analysis"
     assert row["thread_id"] == "thread-a"
-    assert row["generated_at"].startswith("2026-08-02")
+    # generated_at 取源文件 mtime（扫描归档时间），动态断言避免跨午夜失败
+    source_html = tmp_path / "threads" / "thread-a" / "user-data" / "outputs" / "2026-08-02_weekly-futures-analysis-dark.html"
+    expected_date = datetime.fromtimestamp(source_html.stat().st_mtime).astimezone().isoformat()[:10]
+    assert row["generated_at"].startswith(expected_date)
     assert (tmp_path / "reports/alice").exists()
 
     # 幂等：再次扫描不新增

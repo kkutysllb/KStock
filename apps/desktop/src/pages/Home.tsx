@@ -120,6 +120,7 @@ import { McpExtensionsCard } from "../components/McpExtensionsCard";
 import { SkillsExtensionsCard } from "../components/SkillsExtensionsCard";
 import { AttachmentPicker, AttachmentChips } from "../components/AttachmentPicker";
 import { GeneralSettings } from "../components/GeneralSettings";
+import { UpdateButton } from "../components/UpdateButton";
 import { SidebarResizeHandle } from "../components/SidebarResizeHandle";
 import { DataSourcesSettings } from "../components/DataSourcesSettings";
 import { Markdown } from "../lib/markdown";
@@ -1781,26 +1782,29 @@ function WorkspaceShell({
           </>
         )}
         <div className="sidebar-footer">
-          <button
-            className="nav-command sidebar-account-trigger"
-            type="button"
-            title={currentUser?.email ?? "未登录"}
-            aria-expanded={accountMenuOpen}
-            aria-controls="sidebar-account-actions"
-            onClick={() => setAccountMenuOpen((open) => !open)}
-          >
-            <CircleUserRound size={17} />
-            {!sidebarCollapsed && (
-              <>
-                <span>{currentUser?.email ?? "未登录"}</span>
-                <ChevronRight
-                  className={accountMenuOpen ? "chevron-expanded" : ""}
-                  size={14}
-                  aria-hidden="true"
-                />
-              </>
-            )}
-          </button>
+          <div className="sidebar-footer-row">
+            <button
+              className="nav-command sidebar-account-trigger"
+              type="button"
+              title={currentUser?.email ?? "未登录"}
+              aria-expanded={accountMenuOpen}
+              aria-controls="sidebar-account-actions"
+              onClick={() => setAccountMenuOpen((open) => !open)}
+            >
+              <CircleUserRound size={17} />
+              {!sidebarCollapsed && (
+                <>
+                  <span>{currentUser?.email ?? "未登录"}</span>
+                  <ChevronRight
+                    className={accountMenuOpen ? "chevron-expanded" : ""}
+                    size={14}
+                    aria-hidden="true"
+                  />
+                </>
+              )}
+            </button>
+            <UpdateButton />
+          </div>
           {accountMenuOpen && !sidebarCollapsed && (
             <div id="sidebar-account-actions" className="sidebar-account-actions">
               <button className="nav-command" type="button" onClick={onOpenSettings} aria-label="打开设置">

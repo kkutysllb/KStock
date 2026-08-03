@@ -1,0 +1,79 @@
+# -*- mode: python ; coding: utf-8 -*-
+"""KStock gateway PyInstaller spec（onedir）。
+
+把 gateway（含全部 Python 依赖、内置技能包、配置模板）打包为自包含目录
+``dist/kstock-gateway/``，作为 Tauri 桌面端的内置后端随安装包分发，
+实现真正的开箱即用（无需用户安装 Python / 依赖）。
+
+构建命令：
+    uv run pyinstaller scripts/kstock-gateway.spec --noconfirm --clean
+
+打包态资源布局（与 run_gateway.py 的 REPO_ROOT = sys._MEIPASS 对应）：
+    kstock-gateway/
+      kstock-gateway(.exe)      # 可执行文件（supervisor 模式）
+      vendor/skills/            # 内置技能包（runtime.yaml 的 skills.path 指向这里）
+      config/                   # qilin.config.yaml / lead_soul.md 模板
+      _internal/                # Python 运行时 + 全部依赖
+"""
+from pathlib import Path
+
+repo_root = Path(SPECPATH).resolve().parent  # spec 位于 <仓库>/scripts/，仓库根是上一级
+print(f"[kstock-gateway.spec] repo_root = {repo_root}")
+
+datas = [
+    (str(repo_root / "vendor" / "skills"), "vendor/skills"),
+    (str(repo_root / "config" / "qilin.config.yaml"), "config"),
+    (str(repo_root / "config" / "lead_soul.md"), "config"),
+    # qilin 包数据文件（alembic 迁移脚本、qilinmem 提示模板等）不在 import 链中，
+    # 需整体复制；与 PYZ 内的编译源码重复但不冲突（文件系统访问用这份）。
+    (str(repo_root / "vendor" / "qilin" / "qilin"), "qilin"),
+]
+
+a = Analysis(
+    [str(repo_root / "scripts" / "run_gateway.py")],
+    pathex=[str(repo_root)],
+    binaries=[],
+    datas=datas,
+    hiddenimports=[],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[
+        "pytest",
+        "_pytest",
+        "tkinter",
+        "test",
+    ],
+    noarchive=False,
+    optimize=0,
+)
+
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name="kstock-gateway",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,  # supervisor 模式打印启动日志，必须是控制台程序
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name="kstock-gateway",
+)

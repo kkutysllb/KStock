@@ -15,6 +15,24 @@ vi.mock("../src/lib/runtimeConfigClient", () => ({
     typeof e === "object" && e !== null && "message" in e && "status" in e,
 }));
 
+// mock tokenStatsClient：TokenStats 卡片的真实 fetch 在 jsdom 中必然失败，
+// 会渲染第二个 role="alert"（"无法连接本地引擎"），导致 getByRole 断言歧义。
+vi.mock("../src/lib/tokenStatsClient", () => ({
+  __esModule: true,
+  getTokenStats: vi.fn().mockResolvedValue({
+    days: [],
+    total_tokens: 0,
+    total_runs: 0,
+    completed_tasks: 0,
+    api_calls: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_tokens: 0,
+    cache_hit_rate: 0,
+  }),
+  isTokenStatsApiError: () => false,
+}));
+
 import { RuntimeSettings } from "../src/components/RuntimeSettings";
 
 // ── 固定数据 ──
@@ -220,9 +238,7 @@ describe("RuntimeSettings max_recursion_limit 编辑", () => {
     fireEvent.click(saveBtns[saveBtns.length - 1]);
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        "max_recursion_limit 必须 >= 1"
-      );
+      expect(screen.getByText("max_recursion_limit 必须 >= 1")).toBeInTheDocument();
     });
   });
 });

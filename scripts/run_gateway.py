@@ -61,7 +61,13 @@ import threading
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+# 源码模式下仓库根是脚本上两级目录；PyInstaller 打包后（onedir），资源根是
+# 可执行目录本身（sys._MEIPASS 即目录），其中包含 vendor/、config/ 模板与
+# scripts 包，语义与仓库根一致。
+if getattr(sys, "frozen", False):
+    REPO_ROOT = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+else:
+    REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # 直接运行 ``python scripts/run_gateway.py`` 时 sys.path[0] 是 scripts/ 而非
 # 仓库根，需显式注入才能 ``from scripts.xxx import ...``（kstock_models 等）。
@@ -238,6 +244,26 @@ def _generate_runtime_config(
             existing_skills["path"] = existing_skills.pop("root")
             existing["skills"] = existing_skills
             changed = True
+
+        # 5) skills.path 指向不存在的目录时回退到内置技能包（应用升级后旧安装
+        #    路径已被删除；打包态资源根随安装位置变化，旧绝对路径必然失效）。
+        #    仅当路径确实不存在且内置技能包存在时回退，用户自定义有效路径保留。
+        existing_skills = dict(existing.get("skills") or {})
+        skills_path = existing_skills.get("path")
+        if isinstance(skills_path, str) and skills_path:
+            skills_path_resolved = Path(skills_path).expanduser()
+            if not skills_path_resolved.is_absolute():
+                skills_path_resolved = repo_root / skills_path
+            if not skills_path_resolved.exists():
+                bundled_skills = repo_root / (template_cfg.get("skills") or {}).get(
+                    "path", "vendor/skills"
+                )
+                if bundled_skills.is_dir() and existing_skills.get("path") != str(
+                    bundled_skills
+                ):
+                    existing_skills["path"] = str(bundled_skills)
+                    existing["skills"] = existing_skills
+                    changed = True
 
         if changed:
             with runtime_config_path.open("w", encoding="utf-8") as fh:
@@ -687,7 +713,11 @@ def _run_supervisor() -> None:
 
     模块级 ``app = create_app()`` 仍会执行（幂等：建目录 / 清日志 / 加载 secrets
     均无副作用），但 supervisor 本身不调用 uvicorn，只管理子进程生命周期。
+
+    收到 SIGTERM/SIGINT（桌面端宿主退出时联动下发）会先终止子进程再退出，
+    避免 uvicorn 子进程孤儿化继续占用 18001 端口。
     """
+    import signal
     import subprocess
     import time as _time
 
@@ -695,14 +725,36 @@ def _run_supervisor() -> None:
 
     env = os.environ.copy()
     env[SUPERVISOR_PID_ENV] = str(os.getpid())
-    cmd = [sys.executable, str(Path(__file__).resolve()), "--serve"]
+    if getattr(sys, "frozen", False):
+        # PyInstaller 打包态：sys.executable 即打包后的 gateway 可执行文件，
+        # argv[1] 仅作占位（子进程只检查 ``--serve in sys.argv``）。
+        cmd = [sys.executable, "--serve"]
+    else:
+        cmd = [sys.executable, str(Path(__file__).resolve()), "--serve"]
 
+    stop = threading.Event()
+
+    def _on_signal(_signum, _frame) -> None:
+        stop.set()
+
+    signal.signal(signal.SIGTERM, _on_signal)
+    if hasattr(signal, "SIGINT"):
+        signal.signal(signal.SIGINT, _on_signal)
+
+    proc: subprocess.Popen | None = None
     attempt = 0
-    while True:
+    while not stop.is_set():
         print(f"[supervisor] 启动 gateway 子进程（第 {attempt + 1} 次）…", flush=True)
         proc = subprocess.Popen(cmd, env=env)
-        code = proc.wait()
-        if code == RESTART_EXIT_CODE:
+        while not stop.is_set():
+            try:
+                code = proc.wait(timeout=1)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        if stop.is_set():
+            break
+        if code == RESTART_EXIT_CODE:  # type: ignore[possibly-undefined]
             attempt += 1
             print(
                 f"[supervisor] 子进程请求重启（exit {code}），1 秒后重新启动…",
@@ -713,8 +765,22 @@ def _run_supervisor() -> None:
         print(f"[supervisor] 子进程退出（exit {code}），supervisor 结束。", flush=True)
         sys.exit(code)
 
+    if proc is not None and proc.poll() is None:
+        print("[supervisor] 收到退出信号，终止 gateway 子进程…", flush=True)
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    print("[supervisor] 已退出。", flush=True)
+
 
 if __name__ == "__main__":
+    # PyInstaller 多进程/多线程安全入口（打包态下必要，源码模式无副作用）
+    import multiprocessing
+
+    multiprocessing.freeze_support()
+
     if "--serve" in sys.argv:
         # server 模式：真正的 uvicorn 进程，由 supervisor 启动。
         _run_server()

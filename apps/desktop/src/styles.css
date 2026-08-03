@@ -6429,3 +6429,59 @@ button.context-file-row:hover {
 
   .data-sources-safe-note { white-space: normal; }
 }
+
+/* 自动更新下载图标（UpdateButton）：侧边栏用户位置右侧，检测到新版本时显示 */
+.sidebar-footer-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-footer-row .nav-command {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-update-button {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #81cdb2;
+  cursor: pointer;
+}
+
+.sidebar-update-button:hover {
+  background: rgba(129, 205, 178, 0.12);
+}
+
+.sidebar-update-button:disabled {
+  cursor: default;
+}
+
+.sidebar-update-button.busy svg {
+  animation: update-spin 1.2s linear infinite;
+}
+
+@keyframes update-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sidebar-update-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff6b6b;
+  box-shadow: 0 0 0 2px #0b1f19;
+}

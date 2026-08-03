@@ -69,14 +69,27 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # updater 签名：tauri bundler 检测到签名密钥后为产物生成 .sig 与 latest.json
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: bash scripts/check-release.sh
       - name: 收集安装包
         run: |
           mkdir -p dist-release
+          # 安装包 + 签名文件（.sig，tauri-cli 已签名；latest.json 在 publish 阶段生成）
           find apps/desktop/src-tauri/target/release/bundle -type f \( \
             -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.msi' -o \
             -name '*.exe' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \
+            -o -name '*.sig' \
           \) -exec cp {} dist-release/ \;
+          # macOS 的 .app.tar.gz 文件名不含架构标记，按 uname 架构重命名，
+          # 供 latest.json 正确映射 darwin-aarch64 / darwin-x86_64
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            arch="$(uname -m)"
+            mv dist-release/KStock.app.tar.gz "dist-release/KStock_${arch}.app.tar.gz"
+            mv dist-release/KStock.app.tar.gz.sig "dist-release/KStock_${arch}.app.tar.gz.sig"
+          fi
+          ls -lh dist-release
       - uses: actions/upload-artifact@v4
         with:
           name: kstock-${{ matrix.os }}
@@ -94,6 +107,56 @@ jobs:
         with:
           path: dist-release
           merge-multiple: true
+      - name: 生成 latest.json（updater 元数据，基于各平台产物 + .sig）
+        env:
+          KSTOCK_VERSION: ${{ github.ref_name }}
+        run: |
+          python3 - "$KSTOCK_VERSION" <<'PY'
+          import glob
+          import json
+          import os
+          import sys
+          from datetime import datetime, timezone
+
+          version = sys.argv[1].lstrip("v")
+          url_prefix = "https://github.com/kkutysllb/KStock/releases/latest/download/"
+          platforms = {}
+
+          def add(key, path):
+              sig_file = path + ".sig"
+              if not os.path.exists(sig_file):
+                  raise SystemExit(f"缺少签名文件: {sig_file}")
+              with open(sig_file, encoding="utf-8") as fh:
+                  signature = fh.read().strip()
+              platforms[key] = {
+                  "signature": signature,
+                  "url": url_prefix + os.path.basename(path),
+              }
+
+          for f in glob.glob("dist-release/*.app.tar.gz"):
+              is_arm = ("aarch64" in f) or ("arm64" in f)
+              add("darwin-aarch64" if is_arm else "darwin-x86_64", f)
+          msis = glob.glob("dist-release/*.msi")
+          if msis:
+              add("windows-x86_64", msis[0])
+          else:
+              for f in glob.glob("dist-release/*.exe"):
+                  add("windows-x86_64", f)
+                  break
+          for f in glob.glob("dist-release/*.AppImage") + glob.glob("dist-release/*.deb"):
+              add("linux-x86_64", f)
+
+          if not platforms:
+              raise SystemExit("未找到任何 updater 产物")
+          data = {
+              "version": version,
+              "pub_date": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+              "platforms": platforms,
+          }
+          with open("dist-release/latest.json", "w", encoding="utf-8") as fh:
+              json.dump(data, fh, indent=2, ensure_ascii=False)
+          print(json.dumps(data, indent=2, ensure_ascii=False))
+          PY
       - name: 列出安装包
         run: ls -lh dist-release
       - uses: softprops/action-gh-release@v2
