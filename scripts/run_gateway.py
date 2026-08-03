@@ -706,6 +706,7 @@ def create_app():
     """应用工厂：先打垫片、初始化用户数据空间、配 CORS，再构造 QiLin gateway。"""
     _patch_aiosqlite_busy_timeout()
     _apply_vendor_extensions_config_compat_shim()
+    paths = _ensure_data_space()
     # ── 开发日志：先清空网关负责的两个文件（覆写模式，不残留上次运行）──
     from scripts.kstock_dev_logs import (
         LOGS_DIR as DEV_LOGS_DIR,
@@ -715,7 +716,6 @@ def create_app():
     )
     ensure_logs_dir()
     clear_server_logs()
-    paths = _ensure_data_space()
     _load_secrets_env(paths["data_root"])
     _configure_gateway_security()
     _patch_cors_allow_tauri_origin()

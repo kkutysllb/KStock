@@ -1,4 +1,6 @@
 use serde::Serialize;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -47,6 +49,27 @@ impl GatewayProcess {
     Ok(exe)
   }
 
+  fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app
+      .path()
+      .home_dir()
+      .map(|home| home.join(".kstock"))
+      .map_err(|err| format!("无法定位用户目录：{err}"))
+  }
+
+  fn gateway_log_file(app: &AppHandle) -> Result<std::fs::File, String> {
+    let logs_dir = Self::app_data_dir(app)?.join("logs");
+    fs::create_dir_all(&logs_dir).map_err(|err| format!("无法创建 gateway 日志目录：{err}"))?;
+    let log_path = logs_dir.join("desktop-gateway.log");
+    let mut file = OpenOptions::new()
+      .create(true)
+      .append(true)
+      .open(&log_path)
+      .map_err(|err| format!("无法打开 gateway 启动日志 {}：{err}", log_path.display()))?;
+    let _ = writeln!(file, "\n=== starting bundled gateway ===");
+    Ok(file)
+  }
+
   /// 确保 gateway 在运行：
   /// - 端口已有实例（历史残留 / 手动启动）→ 直接采用，不重复拉起；
   /// - 无实例 → 启动资源目录内的 gateway 可执行文件并等待端口就绪。
@@ -67,8 +90,16 @@ impl GatewayProcess {
     }
 
     let exe = Self::gateway_executable(app)?;
+    let app_data_dir = Self::app_data_dir(app)?;
+    let log_file = Self::gateway_log_file(app)?;
+    let stderr_file = log_file
+      .try_clone()
+      .map_err(|err| format!("无法复制 gateway 日志句柄：{err}"))?;
     let mut cmd = Command::new(&exe);
-    cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    cmd
+      .env("KSTOCK_APP_DATA_DIR", app_data_dir)
+      .stdout(Stdio::from(log_file))
+      .stderr(Stdio::from(stderr_file));
     #[cfg(unix)]
     {
       // 新建进程组：退出时 kill(-pid) 可整树终止（supervisor + uvicorn 子进程）

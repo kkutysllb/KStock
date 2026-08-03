@@ -17,10 +17,27 @@ frontend / desktop）。覆写模式：每次进程启动清空自己的日志�
 from __future__ import annotations
 
 import logging
+import os
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-LOGS_DIR = REPO_ROOT / "logs"
+
+
+def default_logs_dir() -> Path:
+    """返回 KStock 日志目录。
+
+    源码开发态继续使用仓库 ``logs/``，方便本地调试；PyInstaller 打包态
+    ``__file__`` 位于 ``.app/Contents/Resources/gateway/_internal``，该目录
+    属于已签名、只读的应用包资源，不能写日志。打包态必须写入用户数据空间。
+    """
+    if getattr(sys, "frozen", False):
+        data_root = Path(os.environ.get("KSTOCK_APP_DATA_DIR") or (Path.home() / ".kstock"))
+        return data_root / "logs"
+    return REPO_ROOT / "logs"
+
+
+LOGS_DIR = default_logs_dir()
 
 # 四类日志的规范文件名。frontend/desktop 由 Node wrapper 清空写入，
 # gateway/langgraph 由本模块的 FileHandler 清空写入。

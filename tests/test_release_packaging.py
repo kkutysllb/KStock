@@ -276,3 +276,10 @@ def test_desktop_vitest_limits_file_parallelism_for_ci_stability():
 
     assert "fileParallelism: false" in config
     assert "maxWorkers: 1" in config
+
+
+def test_tauri_gateway_startup_preserves_gateway_stderr_in_user_logs():
+    source = Path("apps/desktop/src-tauri/src/gateway.rs").read_text(encoding="utf-8")
+
+    assert "desktop-gateway.log" in source
+    assert "Stdio::null()" not in source

@@ -5,12 +5,14 @@
 autoend fixture 在测试后移除追加的 handler，避免污染其他测试。
 """
 import logging
+import sys
 
 import pytest
 
 from scripts.kstock_dev_logs import (
     LOG_FILES,
     clear_dev_log,
+    default_logs_dir,
     ensure_logs_dir,
     install_gateway_log_handlers,
     make_file_handler,
@@ -37,6 +39,14 @@ def isolated_root_handlers():
 
 
 # ── ensure_logs_dir ─────────────────────────────────────────────────
+
+
+def test_default_logs_dir_uses_user_data_root_when_frozen(tmp_path, monkeypatch):
+    """打包态不能把日志写进 App Bundle/MEIPASS；必须写入用户数据空间。"""
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(tmp_path / "data"))
+
+    assert default_logs_dir() == tmp_path / "data" / "logs"
 
 
 def test_ensure_logs_dir_creates_directory(tmp_path, monkeypatch):

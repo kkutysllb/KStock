@@ -19,6 +19,14 @@ from scripts.run_gateway import _generate_runtime_config
 
 # ── aiosqlite busy_timeout 修复 ────────────────────────────────────────
 
+
+def test_create_app_initializes_data_space_before_server_logs():
+    """打包态日志目录不能先创建 ~/.kstock，否则会阻断历史数据迁移。"""
+    source = Path("scripts/run_gateway.py").read_text(encoding="utf-8")
+
+    assert source.index("paths = _ensure_data_space()") < source.index("from scripts.kstock_dev_logs import")
+
+
 def test_patch_aiosqlite_sets_busy_timeout(tmp_path):
     """连接建立后必须应用 30s busy_timeout 与 WAL。"""
     import aiosqlite
