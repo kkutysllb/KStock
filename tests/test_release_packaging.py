@@ -164,3 +164,16 @@ def test_build_gateway_bundle_accepts_linux_versioned_libpython_name():
     script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
 
     assert "lib/libpython3.12.so.1.0" in script
+
+
+def test_build_gateway_bundle_verifies_product_package_resources():
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    assert "verify_package_resources.py" in script
+    assert "--source-only" not in script
+
+
+def test_check_ci_verifies_source_package_contract():
+    script = Path("scripts/check-ci.sh").read_text(encoding="utf-8")
+
+    assert "verify_package_resources.py --source-only" in script

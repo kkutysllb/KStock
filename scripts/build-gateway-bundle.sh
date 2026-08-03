@@ -98,6 +98,8 @@ uv pip install --python "$RUNTIME_PY" vendor/skills/public/common
 "$RUNTIME_PY" -c "import kk_common, pandas, tushare, akshare, dotenv; print('  python-runtime OK')"
 du -sh "$PYTHON_RUNTIME"
 
+python scripts/verify_package_resources.py
+
 echo "==> 产物大小:"
 du -sh dist/kstock-gateway
 ls -lh dist/kstock-gateway/kstock-gateway*

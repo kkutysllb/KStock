@@ -1,208 +1,540 @@
 #!/usr/bin/env bash
-# KStock 一键发布脚本
+# KStock release lifecycle manager.
 #
-# 用法:
-#   ./build-release.sh v0.1.0                 # 校验 + 本地预检 + 提交 + 打 tag + 推送（触发 CI 发布）
-#   ./build-release.sh v0.1.0 --skip-check    # 跳过本地预检（构建留给 CI）
-#   ./build-release.sh v0.1.0 --no-push       # 只提交 + 打 tag，不推送
-#   ./build-release.sh v0.1.0 --force         # 工作区有改动 / 分支落后时仍继续
-#   ./build-release.sh --delete-tag v0.1.0    # 删除本地与远程 tag（独立模式，不触发发布）
-#   ./build-release.sh --watch                # 监控最近一次 Release workflow 运行结果
+# 本地脚本只负责准备 release commit/tag，并把真正的跨平台桌面打包、签名、
+# 上传交给 GitHub Actions 的 .github/workflows/release.yml。
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
+SCRIPT_NAME="$(basename "$0")"
 VERSION=""
-SKIP_CHECK=0
-NO_PUSH=0
-FORCE=0
-WATCH=0
-DELETE_TAG=0
+TAG=""
+REMOTE="origin"
+EXPECTED_BRANCH="main"
+RELEASE_WORKFLOW="release.yml"
+RELEASE_LOG_DIR=".release-logs"
+REPO_SLUG=""
 
-for arg in "$@"; do
-  case "$arg" in
-    --skip-check) SKIP_CHECK=1 ;;
-    --no-push) NO_PUSH=1 ;;
-    --force) FORCE=1 ;;
-    --watch) WATCH=1 ;;
-    --delete-tag) DELETE_TAG=1 ;;
-    --*)
-      echo "未知参数: $arg" >&2
-      echo "用法: ./build-release.sh [vX.Y.Z] [--skip-check] [--no-push] [--force] [--watch] [--delete-tag vX.Y.Z]" >&2
-      exit 1
-      ;;
-    *) VERSION="$arg" ;;
+PUSH=true
+WATCH=true
+YES=false
+DRY_RUN=false
+SKIP_CHECKS=false
+SKIP_LOCK=false
+NO_COMMIT=false
+NO_TAG=false
+ALLOW_DIRTY=false
+NO_FETCH=false
+RESUME=false
+DELETE_TAG=false
+WATCH_LATEST=false
+
+VERSION_FILES=(
+  "package.json"
+  "apps/desktop/package.json"
+  "apps/desktop/src-tauri/tauri.conf.json"
+  "apps/desktop/src-tauri/Cargo.toml"
+  "pyproject.toml"
+)
+
+LOCK_FILES=(
+  "pnpm-lock.yaml"
+  "uv.lock"
+)
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./build-release.sh <version|vversion> [options]
+  ./build-release.sh --watch
+  ./build-release.sh --delete-tag <version|vversion>
+
+Examples:
+  ./build-release.sh v0.1.1 --yes
+  ./build-release.sh 0.1.1 --no-watch
+  ./build-release.sh v0.1.1 --resume --yes
+  ./build-release.sh v0.1.1 --skip-checks --no-push
+
+Options:
+  --push              Atomic-push current branch and tag. Default: true.
+  --no-push           Prepare local commit/tag only.
+  --watch             Watch release workflow. Without a version, watch latest run.
+  --no-watch          Do not wait for GitHub Actions after push.
+  --resume            Do not update/commit/tag/push; watch an existing remote tag run.
+  --yes               Auto-confirm prompts.
+  --dry-run           Print plan and commands without changing files.
+  --skip-checks       Skip local pre-release checks. Alias: --skip-check.
+  --skip-lock         Do not refresh lockfiles.
+  --no-commit         Update files and run checks, but do not commit.
+  --no-tag            Do not create a tag.
+  --allow-dirty       Allow starting from a dirty worktree. Alias: --force.
+  --no-fetch          Do not fetch remote tags before checking conflicts.
+  --delete-tag        Delete local and remote tag, then exit.
+  --remote <name>     Git remote. Default: origin.
+  --branch <name>     Expected release branch. Default: main.
+  --workflow <name>   GitHub Actions workflow file/name. Default: release.yml.
+  -h, --help          Show help.
+EOF
+}
+
+log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33mWARN:\033[0m %s\n' "$*" >&2; }
+die() { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
+
+run() {
+  printf '+'
+  for arg in "$@"; do
+    printf ' %q' "$arg"
+  done
+  printf '\n'
+  if [[ "$DRY_RUN" == true ]]; then
+    return 0
+  fi
+  "$@"
+}
+
+run_shell() {
+  local command="$1"
+  printf '+ %s\n' "$command"
+  if [[ "$DRY_RUN" == true ]]; then
+    return 0
+  fi
+  bash -lc "$command"
+}
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+confirm() {
+  local prompt="$1"
+  if [[ "$YES" == true ]]; then
+    return 0
+  fi
+  local answer
+  read -r -p "$prompt [y/N] " answer
+  case "$answer" in
+    y|Y|yes|YES) return 0 ;;
+    *) return 1 ;;
   esac
-done
+}
 
-# ── --watch 模式：监控最近一次 Release workflow 运行 ─────────────────────────
-if [ "$WATCH" = 1 ]; then
-  command -v gh >/dev/null || { echo "需要安装 GitHub CLI (gh)" >&2; exit 1; }
-  run_id="$(gh run list --workflow=release.yml --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
-  if [ -z "$run_id" ]; then
-    echo "没有找到 release.yml 的运行记录，请先推送 tag 触发发布。" >&2
-    exit 1
+normalize_version() {
+  local value="$1"
+  value="${value#v}"
+  [[ "$value" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] || die "Invalid version: $1"
+  VERSION="$value"
+  TAG="v$value"
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help) usage; exit 0 ;;
+      --push) PUSH=true ;;
+      --no-push) PUSH=false ;;
+      --watch) WATCH=true; WATCH_LATEST=true ;;
+      --no-watch) WATCH=false ;;
+      --resume) RESUME=true; PUSH=false ;;
+      --yes) YES=true ;;
+      --dry-run) DRY_RUN=true ;;
+      --skip-check|--skip-checks) SKIP_CHECKS=true ;;
+      --skip-lock) SKIP_LOCK=true ;;
+      --no-commit) NO_COMMIT=true ;;
+      --no-tag) NO_TAG=true ;;
+      --force|--allow-dirty) ALLOW_DIRTY=true ;;
+      --no-fetch) NO_FETCH=true ;;
+      --delete-tag) DELETE_TAG=true ;;
+      --remote) [[ $# -ge 2 ]] || die "--remote requires a value"; REMOTE="$2"; shift ;;
+      --branch) [[ $# -ge 2 ]] || die "--branch requires a value"; EXPECTED_BRANCH="$2"; shift ;;
+      --workflow) [[ $# -ge 2 ]] || die "--workflow requires a value"; RELEASE_WORKFLOW="$2"; shift ;;
+      --*) die "Unknown option: $1" ;;
+      *)
+        [[ -z "$VERSION" ]] || die "Only one version argument is allowed"
+        normalize_version "$1"
+        WATCH_LATEST=false
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$VERSION" && "$WATCH_LATEST" != true ]]; then
+    local current
+    current="$(python3 -c 'import json;print(json.load(open("apps/desktop/src-tauri/tauri.conf.json"))["version"])')"
+    normalize_version "$current"
+    echo "未指定版本，使用当前版本: $TAG"
   fi
-  echo "监控 workflow 运行 #$run_id（Ctrl-C 可中断，不影响 CI 执行）…"
-  gh run watch "$run_id" --exit-status
-  gh run view "$run_id"
-  exit $?
-fi
+}
 
-# ── 版本解析 ──────────────────────────────────────────────────────────────────
-if [ -z "$VERSION" ]; then
-  current="$(python3 -c 'import json;print(json.load(open("apps/desktop/src-tauri/tauri.conf.json"))["version"])')"
-  VERSION="v$current"
-  echo "未指定版本，使用当前版本: $VERSION"
-fi
+repo_slug() {
+  local url slug
+  url="$(git remote get-url "$REMOTE")" || die "Unknown git remote: $REMOTE"
+  case "$url" in
+    git@github.com:*) slug="${url#git@github.com:}" ;;
+    ssh://git@github.com/*) slug="${url#ssh://git@github.com/}" ;;
+    https://github.com/*) slug="${url#https://github.com/}" ;;
+    http://github.com/*) slug="${url#http://github.com/}" ;;
+    *) die "Cannot infer GitHub repo from remote URL: $url" ;;
+  esac
+  slug="${slug%.git}"
+  [[ "$slug" == */* ]] || die "Cannot infer GitHub repo from remote URL: $url"
+  printf '%s\n' "$slug"
+}
 
-if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "错误: 版本号格式应为 vX.Y.Z，收到: $VERSION" >&2
-  exit 1
-fi
-RAW_VERSION="${VERSION#v}"
+remote_tag_exists() {
+  git ls-remote --exit-code --tags "$REMOTE" "refs/tags/$TAG" >/dev/null 2>&1
+  local status=$?
+  case "$status" in
+    0) return 0 ;;
+    2) return 1 ;;
+    *) die "Could not check remote tag $TAG on $REMOTE" ;;
+  esac
+}
 
-# ── --delete-tag 模式：删除本地与远程 tag（独立模式，不触发发布）───────────────
-if [ "$DELETE_TAG" = 1 ]; then
-  echo "==> 删除 tag ${VERSION}（本地 + 远程）"
-  if git tag -d "${VERSION}" >/dev/null 2>&1; then
-    echo "   本地 tag 已删除: ${VERSION}"
-  else
-    echo "   （本地 tag 不存在或删除失败）: ${VERSION}"
+previous_release_tag() {
+  git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$' | head -1 || true
+}
+
+ensure_repo_state() {
+  need_cmd git
+  need_cmd python3
+  git remote get-url "$REMOTE" >/dev/null || die "Unknown git remote: $REMOTE"
+  REPO_SLUG="$(repo_slug)"
+
+  if [[ "$WATCH_LATEST" == true && -z "$VERSION" ]]; then
+    need_cmd gh
+    return 0
   fi
-  if git push origin --delete "refs/tags/${VERSION}" >/dev/null 2>&1; then
-    echo "   远程 tag 已删除: origin/${VERSION}"
-  else
-    echo "   （远程 tag 不存在或删除失败，请检查网络/权限）: origin/${VERSION}"
-  fi
-  echo "==> 完成。如需重新发布，直接重新执行 ./build-release.sh ${VERSION}"
-  exit 0
-fi
 
-# ── git 状态校验 ─────────────────────────────────────────────────────────────
-if [ -n "$(git status --porcelain)" ]; then
-  if [ "$FORCE" = 1 ]; then
-    echo "警告: 工作区有未提交改动（--force），将一并提交。"
-  else
-    echo "错误: 工作区有未提交改动，请先提交或使用 --force 一并提交。" >&2
-    echo "未提交文件:" >&2
-    git status --short >&2
-    exit 1
-  fi
-fi
-
-branch="$(git branch --show-current)"
-if [ "$branch" != "main" ]; then
-  echo "错误: 发布必须在 main 分支，当前分支: $branch" >&2
-  exit 1
-fi
-
-if [ "$NO_PUSH" = 0 ]; then
-  git fetch origin >/dev/null 2>&1 || echo "警告: git fetch 失败，跳过远端同步校验。"
-  behind="$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0)"
-  if [ "$behind" != "0" ]; then
-    if [ "$FORCE" = 1 ]; then
-      echo "警告: 本地落后 origin/main $behind 个提交（--force），继续。"
-    else
-      echo "错误: 本地落后 origin/main $behind 个提交，请先 git pull。" >&2
-      exit 1
+  local current_branch
+  current_branch="$(git symbolic-ref --quiet --short HEAD || true)"
+  if [[ "$RESUME" != true && "$DELETE_TAG" != true ]]; then
+    [[ -n "$current_branch" ]] || die "Detached HEAD is not supported for release tagging"
+    if [[ "$current_branch" != "$EXPECTED_BRANCH" ]]; then
+      confirm "Current branch is '$current_branch', expected '$EXPECTED_BRANCH'. Continue anyway?" || die "Release aborted"
     fi
   fi
-fi
 
-# ── 同步版本号到各清单文件 ───────────────────────────────────────────────────
-echo "==> 同步版本号 $VERSION 到 package.json / tauri.conf.json / Cargo.toml / pyproject.toml"
-python3 - "$RAW_VERSION" <<'PY'
+  local status
+  status="$(git status --porcelain --untracked-files=normal)"
+  if [[ -n "$status" && "$ALLOW_DIRTY" != true && "$RESUME" != true && "$DELETE_TAG" != true ]]; then
+    die "Worktree is not clean. Commit/stash changes or pass --allow-dirty"$'\n'"$status"
+  fi
+  if [[ -n "$status" && "$RESUME" == true ]]; then
+    warn "Resume mode ignores current worktree changes:"
+    printf '%s\n' "$status" >&2
+  fi
+
+  if [[ "$NO_FETCH" != true ]]; then
+    log "Fetching tags from $REMOTE"
+    run git fetch "$REMOTE" --tags
+  fi
+
+  if [[ "$DELETE_TAG" == true ]]; then
+    return 0
+  fi
+
+  if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+    [[ "$RESUME" == true ]] || die "Local tag already exists: $TAG"
+  fi
+  if remote_tag_exists; then
+    [[ "$RESUME" == true ]] || die "Remote tag already exists on $REMOTE: $TAG"
+  elif [[ "$RESUME" == true ]]; then
+    die "Cannot resume; remote tag does not exist on $REMOTE: $TAG"
+  fi
+
+  if [[ "$WATCH" == true || "$RESUME" == true ]]; then
+    need_cmd gh
+  fi
+}
+
+delete_tag() {
+  [[ -n "$TAG" ]] || die "--delete-tag requires a version"
+  confirm "Delete local and remote tag $TAG from $REMOTE?" || die "Delete aborted"
+  run git tag -d "$TAG" || true
+  run git push "$REMOTE" --delete "refs/tags/$TAG" || true
+  log "Tag delete command finished for $TAG"
+}
+
+print_plan() {
+  local branch previous_tag
+  branch="$(git symbolic-ref --quiet --short HEAD || true)"
+  previous_tag="$(previous_release_tag)"
+  log "Release plan"
+  cat <<EOF
+  Mode:           $([[ "$RESUME" == true ]] && echo "resume existing tag" || echo "prepare new tag")
+  Tag:            $TAG
+  Repo:           $REPO_SLUG
+  Branch:         ${branch:-<detached>}
+  Previous tag:   ${previous_tag:-<none>}
+  Refresh locks:  $([[ "$SKIP_LOCK" == true ]] && echo no || echo yes)
+  Run checks:     $([[ "$SKIP_CHECKS" == true ]] && echo no || echo yes)
+  Commit:         $([[ "$NO_COMMIT" == true || "$RESUME" == true ]] && echo no || echo yes)
+  Tag:            $([[ "$NO_TAG" == true || "$RESUME" == true ]] && echo no || echo yes)
+  Push:           $([[ "$PUSH" == true ]] && echo "atomic branch+tag" || echo no)
+  Watch:          $([[ "$WATCH" == true ]] && echo yes || echo no)
+  Workflow:       $RELEASE_WORKFLOW
+EOF
+}
+
+update_versions() {
+  log "Updating version files to $VERSION"
+  python3 - "$VERSION" <<'PY'
 import json
 import re
 import sys
+from pathlib import Path
 
 version = sys.argv[1]
 json_files = [
-    "package.json",
-    "apps/desktop/package.json",
-    "apps/desktop/src-tauri/tauri.conf.json",
+    Path("package.json"),
+    Path("apps/desktop/package.json"),
+    Path("apps/desktop/src-tauri/tauri.conf.json"),
 ]
 for path in json_files:
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    data["version"] = version
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    old = data.get("version")
+    if old != version:
+        data["version"] = version
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"updated {path}: {old} -> {version}")
+    else:
+        print(f"unchanged {path}: {version}")
 
-toml_files = [
-    "apps/desktop/src-tauri/Cargo.toml",
-    "pyproject.toml",
-]
-for path in toml_files:
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
-    text = re.sub(
-        r'^version = "[^"]*"',
-        f'version = "{version}"',
-        text,
-        count=1,
-        flags=re.MULTILINE,
-    )
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
+for path in [Path("apps/desktop/src-tauri/Cargo.toml"), Path("pyproject.toml")]:
+    text = path.read_text(encoding="utf-8")
+    new_text, count = re.subn(r'^version = "[^"]*"', f'version = "{version}"', text, count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise SystemExit(f"Could not update version in {path}")
+    if new_text != text:
+        path.write_text(new_text, encoding="utf-8")
+        print(f"updated {path}: {version}")
+    else:
+        print(f"unchanged {path}: {version}")
 PY
-git diff --stat
+}
 
-# ── 本地预检（可跳过）─────────────────────────────────────────────────────────
-# 只跑测试 / 类型检查 / cargo check；完整打包由 GitHub Actions（release.yml）在
-# 推送 tag 后执行，本地不打包（打包需要签名私钥，仅配置在 CI secrets 中）。
-if [ "$SKIP_CHECK" = 0 ]; then
-  echo "==> 本地预检: check-ci.sh（测试 + 类型检查 + cargo check）"
-  bash scripts/check-ci.sh
-else
-  echo "==> 已跳过本地预检（--skip-check）"
-fi
-
-# ── 生成发布说明（自上一 tag 以来的提交）─────────────────────────────────────
-notes_file="$(mktemp)"
-trap 'rm -f "$notes_file"' EXIT
-prev_tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-if [ -n "$prev_tag" ] && [ "$prev_tag" != "$VERSION" ]; then
-  git log --oneline --no-merges "$prev_tag"..HEAD > "$notes_file"
-else
-  git log --oneline --no-merges -20 > "$notes_file"
-fi
-echo "==> 发布说明（${prev_tag:-（无历史 tag）} → ${VERSION}）:"
-cat "$notes_file"
-
-# ── 提交 + 打 tag + 推送 ──────────────────────────────────────────────────────
-echo "==> 提交版本号变更"
-git add -A
-if git diff --cached --quiet; then
-  echo "   （版本号无变化，跳过提交）"
-else
-  git commit -m "chore: release $VERSION" -m "$(cat "$notes_file")"
-fi
-
-echo "==> 打 tag $VERSION"
-git tag -a "$VERSION" -m "KStock $VERSION" -m "$(cat "$notes_file")"
-
-if [ "$NO_PUSH" = 1 ]; then
-  echo "==> 已跳过推送（--no-push）。推送命令:"
-  echo "    git push origin main && git push origin $VERSION"
-  exit 0
-fi
-
-echo "==> 推送 main 与 ${VERSION}（将触发 GitHub Actions Release 工作流）"
-git push origin main
-git push origin "$VERSION"
-
-# ── 输出 CI 入口 ──────────────────────────────────────────────────────────────
-if command -v gh >/dev/null 2>&1; then
-  run_url="$(gh run list --workflow=release.yml --limit 1 --json url --jq '.[0].url' 2>/dev/null || true)"
-  if [ -n "$run_url" ]; then
-    echo ""
-    echo "==> Release workflow 已触发: $run_url"
-    echo "    可执行 ./build-release.sh --watch 等待构建完成，"
-    echo "    构建完成后安装包将自动上传到 GitHub Release:"
-    echo "    https://github.com/kkutysllb/KStock/releases/tag/$VERSION"
+refresh_lockfiles() {
+  if [[ "$SKIP_LOCK" == true ]]; then
+    log "Skipping lockfile refresh"
+    return 0
   fi
-fi
-echo "==> 完成。"
+  need_cmd pnpm
+  need_cmd uv
+  log "Refreshing lockfiles"
+  run pnpm install --lockfile-only --ignore-scripts
+  run uv lock
+}
+
+run_checks() {
+  if [[ "$SKIP_CHECKS" == true ]]; then
+    log "Skipping checks"
+    return 0
+  fi
+  log "Running release checks"
+  run_shell "python scripts/verify_package_resources.py --source-only"
+  run_shell "bash scripts/check-ci.sh"
+}
+
+release_notes() {
+  local previous_tag range
+  previous_tag="$(previous_release_tag)"
+  range="HEAD"
+  if [[ -n "$previous_tag" && "$previous_tag" != "$TAG" ]]; then
+    range="$previous_tag..HEAD"
+  fi
+  git log --pretty=format:'- %s (%h)' --no-merges "$range" || true
+}
+
+commit_and_tag() {
+  if [[ "$NO_COMMIT" == true ]]; then
+    log "Skipping commit because --no-commit was provided"
+    return 0
+  fi
+  log "Creating release commit"
+  local paths=()
+  for path in "${VERSION_FILES[@]}" "${LOCK_FILES[@]}"; do
+    [[ -e "$path" ]] && paths+=("$path")
+  done
+  run git add "${paths[@]}"
+  if git diff --cached --quiet --; then
+    warn "No release metadata changes to commit; tagging current HEAD."
+  else
+    run git commit -m "chore(release): $TAG"
+  fi
+
+  if [[ "$NO_TAG" == true ]]; then
+    log "Skipping tag because --no-tag was provided"
+    return 0
+  fi
+  log "Creating annotated tag $TAG"
+  local notes
+  notes="$(release_notes)"
+  [[ -n "$notes" ]] || notes="- Version metadata update."
+  run git tag -a "$TAG" -m "KStock $TAG" -m "$notes"
+}
+
+push_release() {
+  if [[ "$PUSH" != true ]]; then
+    log "Local release is ready"
+    cat <<EOF
+Next manual command:
+  git push --atomic $REMOTE $(git symbolic-ref --short HEAD) $TAG
+EOF
+    return 0
+  fi
+  confirm "Atomic-push branch and tag $TAG to $REMOTE now?" || die "Push aborted"
+  local branch
+  branch="$(git symbolic-ref --short HEAD)"
+  if [[ "$NO_TAG" == true ]]; then
+    run git push "$REMOTE" "$branch"
+  else
+    run git push --atomic "$REMOTE" "$branch" "$TAG"
+  fi
+}
+
+find_release_run_id() {
+  local runs_json="$1"
+  RUNS_JSON="$runs_json" TAG="$TAG" python3 <<'PY'
+import json
+import os
+
+runs = json.loads(os.environ.get("RUNS_JSON") or "[]")
+tag = os.environ["TAG"]
+for run in runs:
+    if run.get("headBranch") == tag:
+        print(run.get("databaseId", ""))
+        break
+PY
+}
+
+save_failure_logs() {
+  local run_id="$1"
+  mkdir -p "$RELEASE_LOG_DIR"
+  local summary_path="$RELEASE_LOG_DIR/run-$run_id.json"
+  local log_path="$RELEASE_LOG_DIR/run-$run_id.log"
+  gh run view "$run_id" --repo "$REPO_SLUG" --json status,conclusion,jobs,url,name,displayTitle,event,headSha,createdAt,updatedAt >"$summary_path" 2>/dev/null || true
+  gh run view "$run_id" --repo "$REPO_SLUG" --log-failed >"$log_path" 2>&1 || true
+  warn "Saved failed run diagnostics:"
+  warn "  $summary_path"
+  warn "  $log_path"
+}
+
+watch_latest_run() {
+  need_cmd gh
+  local run_id
+  run_id="$(gh run list --repo "$REPO_SLUG" --workflow "$RELEASE_WORKFLOW" --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
+  [[ -n "$run_id" ]] || die "No release workflow runs found"
+  log "Watching latest release run $run_id"
+  if ! gh run watch "$run_id" --repo "$REPO_SLUG" --exit-status; then
+    save_failure_logs "$run_id"
+    exit 1
+  fi
+}
+
+wait_for_release_run() {
+  if [[ "$WATCH" != true || "$NO_TAG" == true || "$DRY_RUN" == true ]]; then
+    return 0
+  fi
+  log "Waiting for GitHub Actions release run for $TAG"
+  local run_id="" output=""
+  for attempt in $(seq 1 30); do
+    output="$(gh run list --repo "$REPO_SLUG" --workflow "$RELEASE_WORKFLOW" --limit 30 --json databaseId,event,headBranch,status,conclusion,displayTitle,createdAt)"
+    run_id="$(find_release_run_id "$output")"
+    if [[ -n "$run_id" ]]; then
+      break
+    fi
+    printf 'Still waiting for run (%s/30)...\n' "$attempt"
+    sleep 10
+  done
+  [[ -n "$run_id" ]] || die "No GitHub Actions run appeared for $TAG in $RELEASE_WORKFLOW"
+
+  log "Watching GitHub Actions run $run_id"
+  if ! gh run watch "$run_id" --repo "$REPO_SLUG" --exit-status; then
+    save_failure_logs "$run_id"
+    die "GitHub Actions release run failed: $run_id"
+  fi
+}
+
+verify_release_assets() {
+  if [[ "$DRY_RUN" == true || "$WATCH" != true || "$NO_TAG" == true ]]; then
+    return 0
+  fi
+  log "Verifying GitHub Release assets for $TAG"
+  local release_json
+  release_json="$(gh release view "$TAG" --repo "$REPO_SLUG" --json tagName,url,assets)"
+  RELEASE_JSON="$release_json" VERSION="$VERSION" python3 <<'PY'
+import json
+import os
+import sys
+
+data = json.loads(os.environ["RELEASE_JSON"])
+version = os.environ["VERSION"]
+assets = [asset.get("name", "") for asset in data.get("assets", [])]
+
+def has_suffix(suffix):
+    return any(name.endswith(suffix) and (version in name or suffix == ".json") for name in assets)
+
+checks = [
+    ("macOS dmg", has_suffix(".dmg")),
+    ("macOS updater archive", any(name.endswith(".app.tar.gz") for name in assets)),
+    ("Windows installer", has_suffix(".msi") or has_suffix(".exe")),
+    ("Linux package", has_suffix(".deb") or has_suffix(".rpm") or has_suffix(".AppImage")),
+    ("latest.json", "latest.json" in assets),
+]
+missing = [label for label, ok in checks if not ok]
+if missing:
+    print(f"Release {data.get('tagName')} is missing expected assets:", file=sys.stderr)
+    for label in missing:
+        print(f"  - {label}", file=sys.stderr)
+    print("Assets found:", file=sys.stderr)
+    for name in sorted(assets):
+        print(f"  - {name}", file=sys.stderr)
+    sys.exit(1)
+
+print(f"Release assets verified: {data.get('url', '<no url>')}")
+for name in sorted(assets):
+    print(f"  - {name}")
+PY
+}
+
+main() {
+  parse_args "$@"
+  ensure_repo_state
+
+  if [[ "$WATCH_LATEST" == true && -z "$VERSION" ]]; then
+    watch_latest_run
+    exit 0
+  fi
+  if [[ "$DELETE_TAG" == true ]]; then
+    delete_tag
+    exit 0
+  fi
+
+  print_plan
+  if [[ "$DRY_RUN" == true ]]; then
+    log "Dry run only; no files changed"
+    exit 0
+  fi
+  if [[ "$RESUME" == true ]]; then
+    wait_for_release_run
+    verify_release_assets
+    log "Release lifecycle complete for $TAG"
+    exit 0
+  fi
+  confirm "Proceed with release $TAG?" || die "Release aborted"
+
+  update_versions
+  refresh_lockfiles
+  run_checks
+  commit_and_tag
+  push_release
+  if [[ "$PUSH" == true ]]; then
+    wait_for_release_run
+    verify_release_assets
+  fi
+  log "Release lifecycle complete for $TAG"
+}
+
+main "$@"
