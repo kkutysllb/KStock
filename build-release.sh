@@ -175,7 +175,11 @@ cat "$notes_file"
 # ── 提交 + 打 tag + 推送 ──────────────────────────────────────────────────────
 echo "==> 提交版本号变更"
 git add -A
-git commit -m "chore: release $VERSION" -m "$(cat "$notes_file")"
+if git diff --cached --quiet; then
+  echo "   （版本号无变化，跳过提交）"
+else
+  git commit -m "chore: release $VERSION" -m "$(cat "$notes_file")"
+fi
 
 echo "==> 打 tag $VERSION"
 git tag -a "$VERSION" -m "KStock $VERSION" -m "$(cat "$notes_file")"
