@@ -81,25 +81,38 @@ def test_python_runtime_locator_cli_keeps_stdout_path_only_when_install_logs(tmp
     """build-gateway-bundle.sh 用 $(...) 捕获 stdout，安装日志不能混进路径。"""
     uv_dir = tmp_path / "uv-python"
     expected = uv_dir / "cpython-3.12.13-linux-x86_64-gnu" / "bin" / "python3.12"
-    fake_uv = tmp_path / "uv"
-    fake_uv.write_text(
-        f"""#!/usr/bin/env bash
-set -euo pipefail
-if [ "$1 $2" = "python dir" ]; then
-  echo "{uv_dir}"
-elif [ "$1 $2 $3" = "python install 3.12" ]; then
-  echo "Installed Python 3.12"
-  mkdir -p "{expected.parent}"
-  printf '#!/bin/sh\\n' > "{expected}"
-  chmod +x "{expected}"
-else
-  echo "unexpected args: $*" >&2
-  exit 2
-fi
+    fake_uv_py = tmp_path / "fake_uv.py"
+    fake_uv_py.write_text(
+        f"""from __future__ import annotations
+
+import os
+import stat
+import sys
+from pathlib import Path
+
+uv_dir = Path({str(uv_dir)!r})
+expected = Path({str(expected)!r})
+
+if sys.argv[1:] == ["python", "dir"]:
+    print(uv_dir)
+elif sys.argv[1:] == ["python", "install", "3.12"]:
+    print("Installed Python 3.12")
+    expected.parent.mkdir(parents=True, exist_ok=True)
+    expected.write_text("#!/bin/sh\\n", encoding="utf-8")
+    expected.chmod(expected.stat().st_mode | stat.S_IXUSR)
+else:
+    print(f"unexpected args: {{sys.argv[1:]}}", file=sys.stderr)
+    raise SystemExit(2)
 """,
         encoding="utf-8",
     )
-    fake_uv.chmod(fake_uv.stat().st_mode | stat.S_IXUSR)
+    if os.name == "nt":
+        fake_uv = tmp_path / "uv.cmd"
+        fake_uv.write_text(f'@echo off\r\n"{sys.executable}" "{fake_uv_py}" %*\r\n', encoding="utf-8")
+    else:
+        fake_uv = tmp_path / "uv"
+        fake_uv.write_text(f'#!/usr/bin/env sh\nexec "{sys.executable}" "{fake_uv_py}" "$@"\n', encoding="utf-8")
+        fake_uv.chmod(fake_uv.stat().st_mode | stat.S_IXUSR)
 
     result = subprocess.run(
         [
