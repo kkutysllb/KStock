@@ -76,3 +76,25 @@ def test_ci_workflow_uses_stable_linux_builder():
 
     assert "ubuntu-22.04" in workflow
     assert "ubuntu-latest, macos-latest, windows-latest" not in workflow
+
+
+def test_release_workflow_collects_only_tauri_artifacts():
+    """收集安装包必须按 KStock* 前缀精确匹配，防止误收 gateway 资源目录
+    里的内部可执行文件（如 speech_recognition/flac-win32.exe）。"""
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+
+    assert "-name 'KStock*'" in workflow
+    assert "-name '*.exe'" not in workflow
+    assert "-name '*.sig'" not in workflow
+
+
+def test_release_workflow_matches_windows_installer_precisely():
+    """latest.json 生成脚本对 Windows 产物必须按 KStock* 前缀匹配，
+    否则 flac-win32.exe 会被当成安装包并因缺 .sig 而失败。"""
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+
+    assert 'glob.glob("dist-release/KStock*.exe")' in workflow
+    assert 'glob.glob("dist-release/KStock*.msi")' in workflow
+    assert 'glob.glob("dist-release/KStock*.app.tar.gz")' in workflow
+    assert 'glob.glob("dist-release/KStock*.deb")' in workflow
+    assert 'glob.glob("dist-release/*.exe")' not in workflow

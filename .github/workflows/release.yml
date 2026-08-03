@@ -94,12 +94,12 @@ jobs:
       - name: 收集安装包
         run: |
           mkdir -p dist-release
-          # 安装包 + 签名文件（.sig，tauri-cli 已签名；latest.json 在 publish 阶段生成）
-          find apps/desktop/src-tauri/target/release/bundle -type f \( \
-            -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.msi' -o \
-            -name '*.exe' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \
-            -o -name '*.sig' \
-          \) -exec cp {} dist-release/ \;
+          # 仅收集 tauri 发布产物（安装包 + .sig 签名文件，latest.json 在 publish 阶段生成）。
+          # 所有产物文件名均以 KStock 开头（KStock_0.1.1_x64-setup.exe、
+          # KStock.app.tar.gz、KStock_0.1.1_amd64.deb 等），按 KStock* 前缀精确匹配，
+          # 避免误收 gateway 资源目录里的内部可执行文件（如 speech_recognition
+          # 自带的 flac-win32.exe，曾被当成安装包收集进 dist-release）。
+          find apps/desktop/src-tauri/target/release/bundle -type f -name 'KStock*' -exec cp {} dist-release/ \;
           # 发布仅覆盖三个平台：macOS Apple Silicon / Windows x64 / Linux x64
           # （不提供 macOS Intel 产物；macos-latest runner 即 Apple Silicon）。
           # tauri 产物文件名不含架构标记，固定重命名为 aarch64，
@@ -157,16 +157,20 @@ jobs:
           #   macOS Apple Silicon -> darwin-aarch64
           #   Windows x64        -> windows-x86_64
           #   Linux x64          -> linux-x86_64
-          for f in glob.glob("dist-release/*.app.tar.gz"):
+          # 全部用 KStock* 前缀精确匹配：dist-release 里还混有 gateway 资源
+          # 目录的内部文件（如 speech_recognition 自带的 flac-win32.exe），
+          # 宽松的全局匹配会把 flac-win32.exe 误当作 Windows 安装包，随后
+          # 因缺 .sig 签名文件而失败。
+          for f in glob.glob("dist-release/KStock*.app.tar.gz"):
               add("darwin-aarch64", f)
-          msis = glob.glob("dist-release/*.msi")
+          msis = glob.glob("dist-release/KStock*.msi")
           if msis:
               add("windows-x86_64", msis[0])
           else:
-              for f in glob.glob("dist-release/*.exe"):
+              for f in glob.glob("dist-release/KStock*.exe"):
                   add("windows-x86_64", f)
                   break
-          for f in glob.glob("dist-release/*.deb"):
+          for f in glob.glob("dist-release/KStock*.deb"):
               add("linux-x86_64", f)
 
           if not platforms:
