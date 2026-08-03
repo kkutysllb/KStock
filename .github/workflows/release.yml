@@ -45,11 +45,14 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri -> target
-          # 缓存键的 OS 维度是 runner.os（"Linux"，不区分 22.04/24.04），
-          # runner 变更后 restore-keys 前缀回退会恢复旧 runner 的 target
-          # 缓存，cargo 误判依赖已构建而跳过编译（E0463: can't find crate）。
-          # 用独立 key-prefix 隔离，每次换 runner/依赖大版本时 bump。
-          key-prefix: v2-
+          # 该 action 的输入名是 prefix-key/shared-key/key，并没有 key-prefix（之前
+          # 写的 key-prefix: v2- 被静默忽略，等于没有隔离）。缓存键的 OS 维度只有
+          # runner.os（"Linux"，不区分 22.04/24.04），ubuntu-latest → ubuntu-22.04
+          # 后 restore-keys 前缀回退恢复了旧镜像的 target 缓存，cargo 误判依赖已
+          # 构建而跳过编译，报 E0463: can't find crate for tauri。
+          # 用 shared-key 按 matrix.os 隔离命名空间：换 runner 镜像即换缓存键，
+          # 不再跨镜像恢复；依赖大版本变更时手动 bump 后缀。
+          shared-key: ${{ matrix.os }}
       - run: pnpm install --frozen-lockfile
       # Python 运行时依赖（vendor/qilin + gateway 运行面）由 uv 统一管理
       - run: uv sync
