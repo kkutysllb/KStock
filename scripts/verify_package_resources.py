@@ -75,6 +75,7 @@ class Verifier:
                 "qilin.config.yaml",
                 "lead_soul.md",
                 "qilin",
+                "scripts.kstock_uploads_config",
                 "scripts.kstock_tools.akshare_data_tool",
                 "scripts.kstock_tools.akshare_news_tool",
                 "scripts.kstock_tools.report_dashboard_tool",

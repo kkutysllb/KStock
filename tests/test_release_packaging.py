@@ -228,6 +228,12 @@ def test_pyinstaller_spec_uses_macos_developer_id_signing_identity():
     assert "codesign_identity=None" not in spec
 
 
+def test_pyinstaller_spec_includes_runtime_config_dynamic_imports():
+    spec = Path("scripts/kstock-gateway.spec").read_text(encoding="utf-8")
+
+    assert "scripts.kstock_uploads_config" in spec
+
+
 def test_build_gateway_bundle_does_not_resign_pyinstaller_framework_contents():
     script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
 

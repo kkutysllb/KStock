@@ -45,10 +45,11 @@ a = Analysis(
     binaries=[],
     datas=datas,
     # 引擎按 runtime.yaml 的 tools 配置运行时动态 import 的工具模块：
-    # 静态 import 链看不到它们，必须显式声明才能随包分发（含依赖链，
-    # 如函数内懒加载的 akshare），否则打包版引擎 run 报
-    # ModuleNotFoundError: scripts.kstock_tools.xxx。
+    # 静态 import 链看不到它们，必须显式声明才能随包分发。runtime-config
+    # 路由也会按字符串动态 import KStock 自定义配置模型（uploads）。
+    # 否则打包版会在运行时接口访问时抛 ModuleNotFoundError。
     hiddenimports=[
+        "scripts.kstock_uploads_config",
         "scripts.kstock_tools.akshare_data_tool",
         "scripts.kstock_tools.akshare_news_tool",
         "scripts.kstock_tools.report_dashboard_tool",
