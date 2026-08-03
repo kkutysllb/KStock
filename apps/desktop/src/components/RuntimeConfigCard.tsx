@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RotateCcw, Save } from "lucide-react";
 
 /**
@@ -71,9 +71,14 @@ export function RuntimeConfigCard({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const didMountRef = useRef(false);
 
   // initialValue 外部变化（如重新加载）→ 重置 draft
   useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
     setDraft(deepClone(initialValue));
     setError(null);
     setFieldErrors({});

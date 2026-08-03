@@ -134,13 +134,15 @@ else:
     assert "Installed Python 3.12" in result.stderr
 
 
-def test_gateway_runtime_env_supports_windows_python_exe_layout(tmp_path, monkeypatch):
-    """Windows 打包态 python-runtime/python.exe 也必须接入 KSTOCK_PYTHON/PATH。"""
+def test_gateway_runtime_env_supports_windows_venv_scripts_layout(tmp_path, monkeypatch):
+    """Windows 打包态应优先使用 venv 标准 Scripts/python.exe 布局。"""
     import scripts.run_gateway as run_gateway
 
     runtime_dir = tmp_path / "python-runtime"
-    python_exe = runtime_dir / "python.exe"
+    python_exe = runtime_dir / "Scripts" / "python.exe"
     _make_executable(python_exe)
+    dll_dir = runtime_dir / "Lib" / "site-packages" / "curl_cffi.libs"
+    dll_dir.mkdir(parents=True)
 
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
@@ -150,7 +152,8 @@ def test_gateway_runtime_env_supports_windows_python_exe_layout(tmp_path, monkey
     run_gateway._setup_bundled_python_env()
 
     assert os.environ["KSTOCK_PYTHON"] == str(python_exe)
-    assert os.environ["PATH"].split(os.pathsep, 1)[0] == str(runtime_dir)
+    path_parts = os.environ["PATH"].split(os.pathsep)
+    assert path_parts[:3] == [str(python_exe.parent), str(runtime_dir), str(dll_dir)]
 
 
 def test_build_gateway_bundle_uses_shared_python_runtime_locator():
@@ -164,6 +167,21 @@ def test_build_gateway_bundle_accepts_linux_versioned_libpython_name():
     script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
 
     assert "lib/libpython3.12.so.1.0" in script
+
+
+def test_build_gateway_bundle_preserves_windows_venv_scripts_layout():
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    assert 'RUNTIME_PY="$PYTHON_RUNTIME/Scripts/python.exe"' in script
+    assert 'cp "$RUNTIME_PY" "$PYTHON_RUNTIME/Scripts/python3.exe"' in script
+
+
+def test_build_gateway_bundle_adds_windows_site_package_dll_dirs_before_import_check():
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    assert "RUNTIME_SITE_PACKAGES" in script
+    assert "-name \"*.libs\"" in script
+    assert "export PATH" in script
 
 
 def test_build_gateway_bundle_verifies_product_package_resources():

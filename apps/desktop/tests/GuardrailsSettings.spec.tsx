@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── mock runtimeConfigClient ──
@@ -62,6 +62,17 @@ const fullConfig = {
   safety_finish_reason: safetyFinishConfig,
 };
 
+async function clickEnabledSaveButtonInCard(title: string) {
+  const card = screen.getByLabelText(title);
+  const saveButton = within(card).getByRole("button", { name: /保存/ });
+  await waitFor(() => {
+    expect(saveButton).not.toBeDisabled();
+  });
+  await act(async () => {
+    fireEvent.click(saveButton);
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -118,14 +129,9 @@ describe("GuardrailsSettings 编辑与保存", () => {
       expect(screen.getByText("护栏中间件")).toBeInTheDocument();
     });
 
-    // 第一张卡的 checkbox（启用护栏）
-    const checkboxes = screen.getAllByRole("checkbox");
-    fireEvent.click(checkboxes[0]);
-
-    const saveBtns = screen
-      .getAllByRole("button")
-      .filter((b) => b.textContent?.includes("保存"));
-    fireEvent.click(saveBtns[0]);
+    const guardrailsCard = screen.getByLabelText("护栏中间件");
+    fireEvent.click(within(guardrailsCard).getAllByRole("checkbox")[0]);
+    await clickEnabledSaveButtonInCard("护栏中间件");
 
     await waitFor(() => {
       expect(mockRuntimeModule.updateRuntimeConfigSection).toHaveBeenCalledTimes(1);
@@ -150,11 +156,7 @@ describe("GuardrailsSettings 编辑与保存", () => {
     const roleInput = screen.getByDisplayValue("user") as HTMLInputElement;
     fireEvent.change(roleInput, { target: { value: "admin" } });
 
-    // 第二张卡的保存按钮
-    const saveBtns = screen
-      .getAllByRole("button")
-      .filter((b) => b.textContent?.includes("保存"));
-    fireEvent.click(saveBtns[1]);
+    await clickEnabledSaveButtonInCard("资源授权");
 
     await waitFor(() => {
       expect(mockRuntimeModule.updateRuntimeConfigSection).toHaveBeenCalledTimes(1);
@@ -182,11 +184,7 @@ describe("GuardrailsSettings 编辑与保存", () => {
     ) as HTMLInputElement;
     fireEvent.change(warnInput, { target: { value: "5" } });
 
-    // 第四张卡的保存按钮（循环检测）
-    const saveBtns = screen
-      .getAllByRole("button")
-      .filter((b) => b.textContent?.includes("保存"));
-    fireEvent.click(saveBtns[3]);
+    await clickEnabledSaveButtonInCard("循环检测");
 
     await waitFor(() => {
       expect(mockRuntimeModule.updateRuntimeConfigSection).toHaveBeenCalledTimes(1);
@@ -206,14 +204,9 @@ describe("GuardrailsSettings 编辑与保存", () => {
       expect(screen.getByText("护栏中间件")).toBeInTheDocument();
     });
 
-    // 切换护栏开关
-    const checkboxes = screen.getAllByRole("checkbox");
-    fireEvent.click(checkboxes[0]);
-
-    const saveBtns = screen
-      .getAllByRole("button")
-      .filter((b) => b.textContent?.includes("保存"));
-    fireEvent.click(saveBtns[0]);
+    const guardrailsCard = screen.getByLabelText("护栏中间件");
+    fireEvent.click(within(guardrailsCard).getAllByRole("checkbox")[0]);
+    await clickEnabledSaveButtonInCard("护栏中间件");
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("写入 runtime.yaml 失败");

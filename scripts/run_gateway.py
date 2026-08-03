@@ -550,15 +550,34 @@ def _setup_bundled_python_env() -> None:
     candidates = [
         runtime_root / "bin" / "python3",
         runtime_root / "bin" / "python3.12",
-        runtime_root / "python.exe",
         runtime_root / "Scripts" / "python.exe",
+        runtime_root / "python.exe",
     ]
     python_bin = next((candidate for candidate in candidates if candidate.exists()), None)
     if python_bin is None:
         print("  [warn] python-runtime 缺失，技能脚本将回退系统 python3", flush=True)
         return
     os.environ["KSTOCK_PYTHON"] = str(python_bin)
-    os.environ["PATH"] = f"{python_bin.parent}{os.pathsep}{os.environ.get('PATH', '')}"
+    site_package_roots = [
+        runtime_root / "Lib" / "site-packages",
+        *runtime_root.glob("lib/python*/site-packages"),
+    ]
+    path_prefixes = [python_bin.parent]
+    if runtime_root != python_bin.parent:
+        path_prefixes.append(runtime_root)
+    for site_packages in site_package_roots:
+        if site_packages.is_dir():
+            path_prefixes.extend(
+                path for path in sorted(site_packages.glob("*.libs")) if path.is_dir()
+            )
+
+    existing_path = os.environ.get("PATH", "")
+    existing_parts = [part for part in existing_path.split(os.pathsep) if part]
+    merged_parts: list[str] = []
+    for part in [*(str(path) for path in path_prefixes), *existing_parts]:
+        if part not in merged_parts:
+            merged_parts.append(part)
+    os.environ["PATH"] = os.pathsep.join(merged_parts)
     print(f"  Bundled python : {python_bin}（已接入 PATH）", flush=True)
 
 

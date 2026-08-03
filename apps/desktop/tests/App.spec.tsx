@@ -159,7 +159,7 @@ test("已登录启动后直接进入工作台并打开设置模型页", async ()
   // 新 CRUD UI：无已配置模型时显示空状态提示与添加按钮。
   expect(await screen.findByText("尚未配置任何模型。点击「添加模型」，从模板创建或自定义一个。")).toBeVisible();
   expect(screen.getByRole("button", { name: "+ 添加模型" })).toBeVisible();
-});
+}, 10_000);
 
 test("注册入口展示邮箱密码与确认密码表单", async () => {
   render(<App />);

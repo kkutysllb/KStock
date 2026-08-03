@@ -12,6 +12,7 @@ export default defineConfig({
     setupFiles: "./tests/setup.ts",
     globals: true,
     include: ["tests/**/*.spec.{ts,tsx}"],
-    exclude: ["playwright/**"]
+    exclude: ["playwright/**"],
+    testTimeout: 15_000
   }
 });

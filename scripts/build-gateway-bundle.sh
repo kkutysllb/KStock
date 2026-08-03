@@ -30,9 +30,12 @@ case "$(uname -s)" in
     LIB_DST="$PYTHON_RUNTIME/lib/"
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    RUNTIME_PY="$PYTHON_RUNTIME/python.exe"
+    # Windows venv 的标准解释器位置是 Scripts/python.exe。不能把
+    # standalone python.exe 放到 venv 根目录，否则解释器会把 prefix 识别到
+    # _internal 上一级，导致依赖被装进/导入自 _internal/Lib/site-packages。
+    RUNTIME_PY="$PYTHON_RUNTIME/Scripts/python.exe"
     LIB_RELS=("python312.dll")
-    LIB_DST="$PYTHON_RUNTIME/"
+    LIB_DST="$PYTHON_RUNTIME/Scripts/"
     ;;
   *)
     echo "!! 不支持平台: $(uname -s)" >&2
@@ -69,7 +72,7 @@ uv venv --python "$STANDALONE_PY" --relocatable "$PYTHON_RUNTIME"
 # 分发会在目标机器报 ``tried .../libpython3.12.dylib (no such file)``。
 # 这里把解释器实体与动态库复制进 venv，使运行时完全自包含。
 rm -f "$PYTHON_RUNTIME"/bin/python "$PYTHON_RUNTIME"/bin/python3 "$PYTHON_RUNTIME"/bin/python3.12 \
-    "$PYTHON_RUNTIME"/python.exe "$PYTHON_RUNTIME"/Scripts/python.exe
+    "$PYTHON_RUNTIME"/python.exe "$PYTHON_RUNTIME"/Scripts/python.exe "$PYTHON_RUNTIME"/Scripts/python3.exe
 mkdir -p "$(dirname "$RUNTIME_PY")" "$LIB_DST"
 cp "$STANDALONE_PY" "$RUNTIME_PY"
 LIB_COPIED=0
@@ -84,9 +87,16 @@ if [ "$LIB_COPIED" -ne 1 ]; then
     echo "!! standalone Python 动态库缺失: ${LIB_RELS[*]} under $STANDALONE_ROOT" >&2
     exit 1
 fi
+# Windows bash 技能通常写 ``python3 xxx.py``，随 venv 一起提供 python3.exe
+# 别名，避免目标机器依赖系统 PATH。
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    cp "$RUNTIME_PY" "$PYTHON_RUNTIME/Scripts/python3.exe"
+    ;;
+esac
 # Windows 解释器运行时还依赖 vcruntime140.dll（与 python.exe 同目录查找）
 if [ -f "$STANDALONE_ROOT/vcruntime140.dll" ]; then
-    cp "$STANDALONE_ROOT/vcruntime140.dll" "$PYTHON_RUNTIME/"
+    cp "$STANDALONE_ROOT/vcruntime140.dll" "$LIB_DST"
 fi
 # 裁剪不需要的组件（减小体积）
 rm -rf "$PYTHON_RUNTIME"/bin/2to3* "$PYTHON_RUNTIME"/bin/idle3* "$PYTHON_RUNTIME"/bin/pydoc3* \
@@ -95,6 +105,20 @@ rm -rf "$PYTHON_RUNTIME"/bin/2to3* "$PYTHON_RUNTIME"/bin/idle3* "$PYTHON_RUNTIME
 # 技能依赖（kk_common 数据客户端 + 第三方库）
 uv pip install --python "$RUNTIME_PY" pandas tushare python-dotenv akshare
 uv pip install --python "$RUNTIME_PY" vendor/skills/public/common
+
+# Windows wheels（如 curl_cffi/numpy/pandas）会把二进制 DLL 放在
+# site-packages/*.libs。PyInstaller 主程序分析阶段能识别这些目录，但这里
+# 额外创建的 python-runtime 是独立解释器，导入 akshare -> curl_cffi 时也
+# 必须把这些 DLL 目录加入 PATH。
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    RUNTIME_SITE_PACKAGES="$("$RUNTIME_PY" -c "import site; print(next(p for p in site.getsitepackages() if p.endswith('site-packages')))")"
+    while IFS= read -r DLL_DIR; do
+        PATH="$DLL_DIR:$PATH"
+    done < <(find "$RUNTIME_SITE_PACKAGES" -maxdepth 1 -type d -name "*.libs" 2>/dev/null)
+    export PATH
+    ;;
+esac
 "$RUNTIME_PY" -c "import kk_common, pandas, tushare, akshare, dotenv; print('  python-runtime OK')"
 du -sh "$PYTHON_RUNTIME"
 
