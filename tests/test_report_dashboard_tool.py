@@ -52,8 +52,12 @@ def test_tool_writes_thread_output_and_library(tmp_path, monkeypatch):
     result = render_html_report_tool.func(runtime(tmp_path), json.dumps(payload(), ensure_ascii=False), "call-1")
     payload_out = json.loads(result.update["messages"][0].content)
     assert payload_out["report_id"] == "report-1"
-    assert result.update["artifacts"] == ["/outputs/report.html"]
+    assert result.update["artifacts"] == ["/outputs/report.html", "/outputs/report-light.html"]
     assert (tmp_path / "outputs/report.html").exists()
+    assert (tmp_path / "outputs/report-light.html").exists()
+    # 主文件为 dark 主题，light 文件为浅色主题
+    assert 'data-theme="dark"' in (tmp_path / "outputs/report.html").read_text(encoding="utf-8")
+    assert 'data-theme="light"' in (tmp_path / "outputs/report-light.html").read_text(encoding="utf-8")
     assert (tmp_path / "data/reports/alice/2026/08/01/report-1.html").exists()
 
 
@@ -72,8 +76,10 @@ def test_from_file_tool_reads_workspace_json_and_writes_artifact(tmp_path, monke
 
     payload_out = json.loads(result.update["messages"][0].content)
     assert payload_out["thread_virtual_path"] == "/outputs/weekly.html"
-    assert result.update["artifacts"] == ["/outputs/weekly.html"]
+    assert payload_out["light_thread_virtual_path"] == "/outputs/weekly-light.html"
+    assert result.update["artifacts"] == ["/outputs/weekly.html", "/outputs/weekly-light.html"]
     assert (tmp_path / "outputs/weekly.html").exists()
+    assert (tmp_path / "outputs/weekly-light.html").exists()
     assert (tmp_path / "data/reports/alice/2026/08/01/report-1.html").exists()
 
 
@@ -95,11 +101,11 @@ def test_from_file_tool_rejects_non_workspace_input_path(tmp_path, monkeypatch):
 
 
 def test_tool_cleans_intermediate_render_outputs(tmp_path, monkeypatch):
-    """渲染中间产物（{stem}.md / -dark.html / -light.html）不得残留在 outputs 目录。"""
+    """渲染中间产物（{stem}.md / -dark.html）不得残留；dark/light 两份交付文件保留。"""
     monkeypatch.setenv("KSTOCK_APP_DATA_DIR", str(tmp_path / "data"))
     render_html_report_tool.func(runtime(tmp_path), json.dumps(payload(), ensure_ascii=False), "call-1")
-    leftovers = [p.name for p in (tmp_path / "outputs").iterdir()]
-    assert leftovers == ["report.html"]
+    leftovers = sorted(p.name for p in (tmp_path / "outputs").iterdir())
+    assert leftovers == ["report-light.html", "report.html"]
 
 
 def test_tool_rejects_non_html_filename_without_files(tmp_path, monkeypatch):

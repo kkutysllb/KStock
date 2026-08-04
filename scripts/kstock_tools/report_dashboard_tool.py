@@ -110,10 +110,11 @@ def _render_payload(runtime: Any, payload: dict[str, Any], tool_call_id: str, fi
             json.dump(payload, handle, ensure_ascii=False)
             temporary_input = Path(handle.name)
         # render 引擎输出 {stem}.md / {stem}-dark.html / {stem}-light.html 三份产物；
-        # 交付文件名按调用方指定的 filename（如 report.html）落盘，取 dark 版拷贝；
-        # 中间产物仅用于本次渲染，立即清理，outputs 目录只保留 filename 一份。
+        # 交付两份主题文件：filename（dark 主题主文件）+ {stem}-light.html（浅色版），
+        # md 与 -dark.html 是渲染中间产物，立即清理。
         _, dark_path, _ = render(temporary_input, outputs_dir, Path(filename).stem)
         output_path = outputs_dir / filename
+        light_path = outputs_dir / f"{Path(filename).stem}-light.html"
         if dark_path.resolve() != output_path.resolve():
             shutil.copyfile(dark_path, output_path)
         import itertools
@@ -121,7 +122,6 @@ def _render_payload(runtime: Any, payload: dict[str, Any], tool_call_id: str, fi
         for extra in itertools.chain(
             outputs_dir.glob(f"{Path(filename).stem}*.md"),
             outputs_dir.glob(f"{Path(filename).stem}-dark.html"),
-            outputs_dir.glob(f"{Path(filename).stem}-light.html"),
         ):
             if extra.resolve() != output_path.resolve():
                 extra.unlink(missing_ok=True)
@@ -156,6 +156,7 @@ def _render_payload(runtime: Any, payload: dict[str, Any], tool_call_id: str, fi
             "report_id": report_id,
             "thread_id": thread_id,
             "thread_virtual_path": f"/outputs/{filename}",
+            "light_thread_virtual_path": f"/outputs/{Path(filename).stem}-light.html",
             "library_relative_path": row["relative_path"],
             "size_bytes": row["size_bytes"],
         }
@@ -163,7 +164,7 @@ def _render_payload(runtime: Any, payload: dict[str, Any], tool_call_id: str, fi
         # 前端 ReportPanel 才能通过 values 快照展示报告产物。
         return Command(
             update={
-                "artifacts": [f"/outputs/{filename}"],
+                "artifacts": [f"/outputs/{filename}", f"/outputs/{Path(filename).stem}-light.html"],
                 "messages": [ToolMessage(json.dumps(result, ensure_ascii=False), tool_call_id=tool_call_id)],
             }
         )
@@ -202,9 +203,10 @@ def render_html_report_tool(
       (a) rows=string[][] 二维数组，首行即表头；(b) data=array<object> + 可选 columns
       (string[] 指定列序)。表格以完整 <table> 渲染，禁止用图表替代表格。
       图表以内嵌 SVG 渲染，禁止使用远程图片 URL。
-      ★ 一次调用即产出 dark/light 双主题 HTML，filename 指定主交付文件名（dark 主题）；
+      ★ 一次调用即产出 dark/light 双主题 HTML：filename 为 dark 主题主交付文件，
+      ★ 同时保留 {stem}-light.html 浅色主题文件，两份文件均随本次交付（artifacts）；
       ★ 禁止为 dark/light 双主题重复调用本工具（内容相同，只会造成重复交付文件）；
-      ★ 渲染后仅保留 filename 一份文件，中间产物自动清理。
+      ★ 渲染后保留上述两份交付文件，md 等中间产物自动清理。
     - 可选归档字段: report_id / subject{symbol} / period{start,end} /
       sections[{status}] / report_type，用于报告库元数据。
     - 全部数值必须与数据源输出一致，禁止改写或编造；表格数据必须完整收录。
@@ -236,9 +238,9 @@ def render_html_report_from_file_tool(
 
     The JSON file must obey the same report contract as `render_html_report`:
     top-level title/generated_at/summary, complete chart/table data, and embedded
-    SVG-compatible chart specs. The renderer still produces one dark/light dual
-    theme offline HTML dashboard and records `/outputs/{filename}` as an
-    artifact for delivery.
+    SVG-compatible chart specs. The renderer produces a dark/light dual-theme pair
+    — `{filename}` (dark) plus `{stem}-light.html` (light) — both recorded as
+    artifacts for delivery.
 
     Args:
         report_json_path: Path to a .json file under `/mnt/user-data/workspace`.

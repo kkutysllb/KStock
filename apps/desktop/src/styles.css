@@ -1237,6 +1237,8 @@ body.sidebar-resizing {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* 标题区优先占满剩余空间，长标题尽量完整显示；状态区/操作区按内容宽度收缩 */
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -1254,7 +1256,7 @@ body.sidebar-resizing {
 }
 
 .workspace-topbar > .research-status-bar {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   width: auto;
   min-width: 0;
   margin: 0;
@@ -1266,6 +1268,7 @@ body.sidebar-resizing {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .task-token-count {
@@ -1313,6 +1316,10 @@ body.sidebar-resizing {
   color: #31c7a2;
   font-style: normal;
   white-space: nowrap;
+  /* 窗口过窄时状态区被压缩，超长内容走省略号而不是溢出 */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .research-status-bar > .data-source-indicators {

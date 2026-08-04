@@ -1815,7 +1815,7 @@ function WorkspaceShell({
                         type="button"
                         onClick={() => onSelectSession(session.id)}
                       >
-                        <strong>{session.title}</strong>
+                        <strong title={session.title}>{session.title}</strong>
                         <span className="session-meta">
                           <Clock size={11} />
                           {session.updatedAt}
@@ -1903,7 +1903,7 @@ function WorkspaceShell({
               {sidebarCollapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
             </button>
             <Folder size={17} />
-            <strong>{activeSession?.title ?? "新研究会话"}</strong>
+            <strong title={activeSession?.title ?? "新研究会话"}>{activeSession?.title ?? "新研究会话"}</strong>
           </div>
           <div className="research-status-bar" aria-label="系统连接状态">
             <em><span className="status-pulse" />QiLin 已连接</em>
