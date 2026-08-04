@@ -148,3 +148,42 @@ describe("SubagentsSettings 全局参数保存", () => {
     });
   });
 });
+
+// ── Token 预算编辑与保存 ───────────────────────────────────────────
+
+describe("SubagentsSettings Token 预算编辑", () => {
+  it("关闭子代理预算开关后保存调用 PUT subagents 且保留未编辑字段", async () => {
+    mockRuntimeModule.updateRuntimeConfigSection.mockResolvedValue({
+      section: "subagents",
+      value: {},
+    });
+    render(<SubagentsSettings />);
+    await waitFor(() => {
+      expect(screen.getByText("Token 预算")).toBeInTheDocument();
+    });
+
+    // Token 预算卡的启用开关（页面唯一 checkbox，初始 enabled=true）
+    const checkbox = screen.getAllByRole("checkbox")[0];
+    fireEvent.click(checkbox);
+
+    // 点 Token 预算卡的保存按钮（第二张卡）
+    const saveBtns = screen
+      .getAllByRole("button")
+      .filter((b) => b.textContent?.includes("保存"));
+    fireEvent.click(saveBtns[1]);
+
+    await waitFor(() => {
+      expect(
+        mockRuntimeModule.updateRuntimeConfigSection
+      ).toHaveBeenCalledTimes(1);
+    });
+    const [section, value] =
+      mockRuntimeModule.updateRuntimeConfigSection.mock.calls[0];
+    expect(section).toBe("subagents");
+    expect(value.token_budget.enabled).toBe(false);
+    // 全局字段与角色定义保留（后端整段替换，未编辑字段不能丢）
+    expect(value.timeout_seconds).toBe(1800);
+    expect(value.max_total_per_run).toBe(6);
+    expect(value.custom_agents["stock-researcher"]).toBeTruthy();
+  });
+});

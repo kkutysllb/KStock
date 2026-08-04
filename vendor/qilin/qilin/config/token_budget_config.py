@@ -8,6 +8,19 @@ class TokenBudgetConfig(BaseModel):
 
     enabled: bool = Field(default=False, description="Whether to enable per-run token budget enforcement.")
     max_tokens: int = Field(default=200000, ge=1000, description="Maximum total tokens (input + output) allowed per run.")
+    max_budget_extensions: int = Field(
+        default=2,
+        ge=0,
+        description=(
+            "Safety-net budget auto-extension count. When the cumulative usage "
+            "hits max_tokens, the middleware may reset the counter and keep the "
+            "run going (clear-and-recount, mirroring max_turn_extensions for "
+            "recursion_limit) instead of hard-stopping. 0 disables the extension "
+            "entirely (legacy hard-stop behaviour). Healthy long runs are let "
+            "through; suspected dead loops are still capped by the same safety "
+            "valves (count ceiling / no progress / repeated identical tool calls)."
+        ),
+    )
     max_input_tokens: int | None = Field(default=None, ge=1, description="Optional separate limit for input tokens only.")
     max_output_tokens: int | None = Field(default=None, ge=1, description="Optional separate limit for output tokens only.")
     warn_threshold: float = Field(default=0.8, ge=0.0, le=1.0, description="Fraction of max_tokens at which a soft warning is injected. E.g., 0.8 means warn at 80% of max_tokens")

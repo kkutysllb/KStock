@@ -273,3 +273,42 @@ def test_put_subagents_invalid_returns_400(tmp_path, monkeypatch):
     assert resp.status_code == 400
     detail = resp.json()["detail"]
     assert detail["code"] == "validation_failed"
+
+
+# ── subagents.token_budget 兜底与编辑 ────────────────────────────────
+
+
+def test_get_subagents_token_budget_filled_with_engine_default(tmp_path, monkeypatch):
+    """GET subagents 段缺少 token_budget 时回填引擎默认（enabled=true, 200万）。"""
+    client = _client_under(tmp_path, monkeypatch, yaml_text="subagents:\n  timeout_seconds: 1800\n")
+    body = client.get("/api/v1/kstock/runtime-config").json()
+    tb = body["subagents"]["token_budget"]
+    assert tb["enabled"] is True
+    assert tb["max_tokens"] == 2_000_000
+    assert tb["max_budget_extensions"] == 2
+
+
+def test_put_subagents_token_budget_null_is_tolerated(tmp_path, monkeypatch):
+    """PUT subagents 带 token_budget: null 不 400，按未配置处理回填默认。"""
+    client = _client_under(tmp_path, monkeypatch)
+    resp = client.put("/api/v1/kstock/runtime-config/subagents", json={
+        "timeout_seconds": 3600,
+        "token_budget": None,
+    })
+    assert resp.status_code == 200
+    body = client.get("/api/v1/kstock/runtime-config").json()
+    assert body["subagents"]["timeout_seconds"] == 3600
+    assert body["subagents"]["token_budget"]["max_tokens"] == 2_000_000
+
+
+def test_put_subagents_token_budget_explicit_roundtrip(tmp_path, monkeypatch):
+    """PUT subagents 显式 token_budget（enabled=false）→ GET 返回该值。"""
+    client = _client_under(tmp_path, monkeypatch)
+    resp = client.put("/api/v1/kstock/runtime-config/subagents", json={
+        "token_budget": {"enabled": False, "max_tokens": 500000},
+    })
+    assert resp.status_code == 200
+    body = client.get("/api/v1/kstock/runtime-config").json()
+    tb = body["subagents"]["token_budget"]
+    assert tb["enabled"] is False
+    assert tb["max_tokens"] == 500000

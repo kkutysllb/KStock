@@ -46,6 +46,7 @@ const tokenBudgetConfig = {
   max_output_tokens: null,
   warn_threshold: 0.8,
   hard_stop_threshold: 1.0,
+  max_budget_extensions: 2,
 };
 
 const fullRuntimeConfig = {
@@ -177,6 +178,8 @@ describe("RuntimeSettings token_budget 编辑", () => {
     expect(section).toBe("token_budget");
     expect(value.enabled).toBe(true);
     expect(value.max_tokens).toBe(500000);
+    // 未编辑字段（预算续跑次数）应保留在保存值中，不会被覆盖丢弃
+    expect(value.max_budget_extensions).toBe(2);
   });
 });
 

@@ -9,8 +9,12 @@ token_usage:
   enabled: true
 
 token_budget:
-  enabled: false
+  # 成本刹车：安全自动续跑 + 调大轮数后，token 总预算兑底防失控。
+  enabled: true
   max_tokens: 200000
+  # 预算耗尽后自动清零重计续跑（与 max_turn_extensions 同语义）：健康长任务
+  # 不中断；次数封顶/零进展/重复动作三重安全阀拒绝时仍按旧行为硬停。0 = 禁用续跑。
+  max_budget_extensions: 2
   max_input_tokens: null
   max_output_tokens: null
   warn_threshold: 0.8
@@ -105,8 +109,11 @@ tools:
 subagents:
   # 全局默认趍时（秒），内置子代理用。custom_agents 用自己的 timeout_seconds。
   timeout_seconds: 1800
-  # 全局最大轮数覆盖（None = 保持内置默认 general-purpose=150, bash=60）
-  max_turns: null
+  # 全局最大轮数覆盖（None = 保持内置默认 general-purpose=150, bash=60）。
+  # 调至 250：复杂研究任务（杜邦分析、行业横比等）常超过 150 轮被截断；
+  # 配合 token_budget 成本刹车 + 安全自动续跑（max_turn_extensions），健康
+  # 长任务不再中断，死循环仍被 token 预算封住。bash 由 agents 段单独压低。
+  max_turns: 250
   # 单次 Lead Agent 运行允许的子代理委派总数（1-50）
   max_total_per_run: 6
   # 内置子代理 per-agent 覆盖（agents 段）。general-purpose 是 Lead Agent 的
@@ -148,6 +155,9 @@ subagents:
         - tushare-data
         - valuation-model
         - zhishu-query
+    # bash 是命令执行器，不受全局 250 影响，保持低轮数防失控。
+    bash:
+      max_turns: 60
   # 预置角色：覆盖量化研究全链路。users 可在 runtime.yaml 自定义添加。
   custom_agents:
 
@@ -182,7 +192,7 @@ subagents:
         - news-search
         - announcement-search
       model: inherit
-      max_turns: 80
+      max_turns: 150
       timeout_seconds: 900
 
     stock-researcher:
@@ -221,7 +231,7 @@ subagents:
         - report-search
         - announcement-search
       model: inherit
-      max_turns: 120
+      max_turns: 250
       timeout_seconds: 1200
 
     chan-theory-analyst:
@@ -259,7 +269,7 @@ subagents:
         - finance_data_search
       skills: []  # 纯技术分析，不需业务 skill
       model: inherit
-      max_turns: 80
+      max_turns: 150
       timeout_seconds: 900
 
     backtest-executor:
@@ -296,7 +306,7 @@ subagents:
         - finance_data_search
       skills: []
       model: inherit
-      max_turns: 100
+      max_turns: 200
       timeout_seconds: 1500
 
     report-writer:
@@ -336,5 +346,5 @@ subagents:
         - business-query
         - industry-analysis
       model: inherit
-      max_turns: 100
+      max_turns: 200
       timeout_seconds: 1200

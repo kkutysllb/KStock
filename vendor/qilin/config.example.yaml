@@ -69,11 +69,18 @@ token_usage:
 # ============================================================================
 # Prevents runaway API costs by enforcing hard token limits per run.
 # When warn_threshold is crossed, the agent receives an in-context warning.
-# When hard_stop_threshold is crossed, tool_calls are stripped and the agent
-# is forced to produce a final answer immediately.
+# When hard_stop_threshold is crossed, the budget may auto-extend (clear and
+# recount from zero, mirroring max_turn_extensions for recursion_limit) when
+# max_budget_extensions > 0 and the safety valves allow it (count ceiling /
+# no progress / repeated identical tool calls). Otherwise tool_calls are
+# stripped and the agent is forced to produce a final answer immediately.
 token_budget:
   enabled: false                # Set to true to activate budget enforcement
   max_tokens: 200000            # Total token limit (input + output) per run
+  # Budget auto-extension count (clear-and-recount). 0 disables the extension
+  # entirely (legacy hard-stop behaviour). Healthy long runs are let through;
+  # suspected dead loops are still capped by the safety valves.
+  max_budget_extensions: 2
   max_input_tokens: null        # Optional separate input-only limit
   max_output_tokens: null       # Optional separate output-only limit
   warn_threshold: 0.8           # Warn at 80% of the budget
@@ -1424,9 +1431,13 @@ sandbox:
 #   # UI can tell a budget-capped completion from a clean one. The 2,000,000
 #   # default is a generous ceiling — lower it to tighten cost controls. A
 #   # per-agent `token_budget` override (see `agents:` below) wins over this.
+#   # `max_budget_extensions` (default 2) lets a subagent reset its counter and
+#   # continue when it hits the ceiling, gated by the same safety valves as the
+#   # lead agent; 0 keeps the legacy hard-stop behaviour.
 #   # token_budget:
 #   #   enabled: true
 #   #   max_tokens: 2000000
+#   #   max_budget_extensions: 2
 #   #   warn_threshold: 0.7     # log a warning once this fraction of the budget is spent
 #
 #   # Optional per-agent overrides (applies to both built-in and custom agents)

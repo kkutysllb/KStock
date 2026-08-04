@@ -87,6 +87,10 @@ def _validate_section(section: str, payload: dict[str, Any]) -> dict[str, Any]:
 
     校验失败抛 HTTPException(400)，detail 含字段级错误明细（方便前端定位）。
     """
+    # subagents.token_budget 为 null 时视为未配置：剥离后由 default_factory 回填
+    # 引擎默认值（pydantic 不接受显式 None）。其他段的 None 是合法配置，原样保留。
+    if section == "subagents" and payload.get("token_budget") is None:
+        payload = {k: v for k, v in payload.items() if k != "token_budget"}
     model_cls = _resolve_model(_SECTION_MODELS[section])
     try:
         instance = model_cls(**payload)
@@ -189,7 +193,16 @@ def get_runtime_config_endpoint() -> RuntimeConfigResponse:
     for section, dotted in _SECTION_MODELS.items():
         raw = cfg.get(section)
         if isinstance(raw, dict):
-            result[section] = raw
+            if section == "subagents":
+                # subagents 段含 default_factory 嵌套对象（token_budget）：pydantic
+                # 规范化，缺失/null 时回填引擎默认值，保证前端拿到完整结构。
+                model_cls = _resolve_model(dotted)
+                try:
+                    result[section] = model_cls(**raw).model_dump()
+                except ValidationError:
+                    result[section] = raw
+            else:
+                result[section] = raw
         else:
             # 段缺失：用兜底默认值补齐必填字段（如 sandbox.use），再让 pydantic 回填
             model_cls = _resolve_model(dotted)

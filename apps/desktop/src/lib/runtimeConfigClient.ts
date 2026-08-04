@@ -78,6 +78,8 @@ export interface TokenBudgetConfig {
   max_output_tokens: number | null;
   warn_threshold: number;
   hard_stop_threshold: number;
+  /** 预算耗尽后清零重计续跑次数；0 = 禁用续跑，超限即硬停 */
+  max_budget_extensions: number;
 }
 
 // ── 权限与护栏 ──

@@ -7,13 +7,16 @@ import {
   updateRuntimeConfigSection,
   isRuntimeConfigApiError,
 } from "../lib/runtimeConfigClient";
-import { RuntimeConfigCard, type FieldDef } from "./RuntimeConfigCard";
+import { RuntimeConfigCard, TOKEN_BUDGET_FIELDS, type FieldDef } from "./RuntimeConfigCard";
 
 /**
  * 子代理设置页。
  *
  * 上半部分：全局参数（timeout_seconds / max_turns / max_total_per_run）—— 复用
  * RuntimeConfigCard 做受控编辑 + dirty 检测 + 保存。
+ *
+ * 中部：Token 预算（subagents.token_budget）—— 子代理每次运行的独立预算，与主代理
+ * 分开；未配置时引擎默认开启（200 万兑底）。保存时写入显式配置段。
  *
  * 下半部分：预置角色卡片列表（custom_agents）—— 只读展示。每个角色可展开看
  * 完整 system_prompt。暂不做 custom_agents 的 CRUD（角色由产品模板定义，用户级
@@ -51,6 +54,17 @@ export function SubagentsSettings() {
       await reload();
     },
     [reload]
+  );
+
+  const handleSaveBudget = useCallback(
+    async (value: Record<string, unknown>) => {
+      await updateRuntimeConfigSection("subagents", {
+        ...extractGlobalFields(subagentsCfg!),
+        token_budget: value,
+      });
+      await reload();
+    },
+    [reload, subagentsCfg]
   );
 
   const customAgentsEntries = useMemo(() => {
@@ -96,6 +110,15 @@ export function SubagentsSettings() {
         fields={GLOBAL_FIELDS}
         initialValue={extractGlobalFields(subagentsCfg)}
         onSave={handleSaveGlobal}
+        savedHint="已写入 runtime.yaml。需重启 gateway 生效。"
+      />
+
+      <RuntimeConfigCard
+        title="Token 预算"
+        description="子代理每次运行的独立 token 预算（与主代理分开，未配置时引擎默认开启 200 万兑底）。关闭 = 子代理不设预算限制，极端任务可能烧大量 token，不建议。需重启 gateway 生效。"
+        fields={TOKEN_BUDGET_FIELDS}
+        initialValue={(subagentsCfg.token_budget ?? {}) as unknown as Record<string, unknown>}
+        onSave={handleSaveBudget}
         savedHint="已写入 runtime.yaml。需重启 gateway 生效。"
       />
 
@@ -219,7 +242,8 @@ const GLOBAL_FIELDS: FieldDef[] = [
   },
 ];
 
-/** 从 SubagentsConfig 提取全局参数子集（RuntimeConfigCard 只编辑这三个字段）。 */
+/** 从 SubagentsConfig 提取全局参数子集（RuntimeConfigCard 只编辑这三个字段）。
+ * 完整回传 token_budget / agents / custom_agents，避免保存时整段替换丢掉未编辑字段。 */
 function extractGlobalFields(cfg: SubagentsConfig): Record<string, unknown> {
   return {
     timeout_seconds: cfg.timeout_seconds,

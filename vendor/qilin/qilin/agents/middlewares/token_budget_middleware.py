@@ -15,6 +15,16 @@ Warning injection uses the deferred pattern:
   - wrap_model_call injects it as a HumanMessage at the next model call.
 This preserves AIMessage(tool_calls) → ToolMessage pairing.
 
+Budget auto-extension (clear-and-recount):
+  When the cumulative usage hits the hard-stop threshold, the middleware may
+  instead reset its per-run counters (re-marking the current message history as
+  seen, i.e. the budget restarts from zero) and let the run continue — the
+  mirror of ``max_turn_extensions`` for ``recursion_limit``. Three safety
+  valves gate the extension (count ceiling / no progress / repeated identical
+  tool calls), so healthy long tasks are let through while dead loops are still
+  capped by the legacy hard stop. Configure with ``max_budget_extensions``
+  (0 = disable extension entirely, legacy hard-stop behaviour).
+
 Stop-reason surfacing (#3875 Phase 2):
   The hard stop does NOT raise — it strips tool_calls so the agent loop
   terminates naturally and produces a final answer. To let the caller (e.g.
@@ -72,6 +82,12 @@ class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
         self._pending_warnings: BoundedDict[str, list[str]] = BoundedDict(1000)
         self._seen_messages: BoundedDict[str, dict[str, tuple[int, int]]] = BoundedDict(1000)
         self._cumulative_usage: BoundedDict[str, TokenUsage] = BoundedDict(1000)
+        # Budget auto-extension bookkeeping (clear-and-recount). ``_extensions_used``
+        # counts how many times a run has already been extended; ``_extension_baseline``
+        # is the message count at the last extension so a no-progress cycle can be
+        # detected on the next over-budget hit.
+        self._extensions_used: BoundedDict[str, int] = BoundedDict(1000)
+        self._extension_baseline: BoundedDict[str, int] = BoundedDict(1000)
         # Stop reason set when the hard-stop fires. NOT cleared by
         # ``_clear_run_state``/``after_agent`` so the executor can consume it
         # after the run returns; bounded so abandoned runs cannot leak.
@@ -87,6 +103,8 @@ class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
             self._pending_warnings.clear()
             self._seen_messages.clear()
             self._cumulative_usage.clear()
+            self._extensions_used.clear()
+            self._extension_baseline.clear()
             self._stop_reason.clear()
 
     def consume_stop_reason(self, run_id: str | None) -> str | None:
@@ -115,6 +133,23 @@ class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
             self._pending_warnings.pop(run_id, None)
             self._seen_messages.pop(run_id, None)
             self._cumulative_usage.pop(run_id, None)
+            self._extensions_used.pop(run_id, None)
+            self._extension_baseline.pop(run_id, None)
+
+    @staticmethod
+    def _effective_input_tokens(usage: dict[str, Any]) -> int:
+        """输入 token 扣除缓存读取部分。
+
+        ``usage_metadata.input_tokens`` 对 OpenAI 兼容 provider 包含 prompt
+        cache 命中（``input_token_details.cache_read``），而缓存命中不产生
+        计费也不代表新增输入。预算统计应基于新增 token，否则上下文厚重且
+        缓存命中高的长任务会因"上下文长度"而非"真实成本"提前误杀。
+        无缓存字段（cache_read=0）时行为不变。
+        """
+        input_tokens = usage.get("input_tokens", 0) or 0
+        details = usage.get("input_token_details") or {}
+        cache_read = details.get("cache_read", 0) if isinstance(details, dict) else 0
+        return max(0, input_tokens - int(cache_read or 0))
 
     @override
     def before_agent(self, state: AgentState, runtime: Runtime) -> None:
@@ -134,7 +169,7 @@ class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
             for msg in messages:
                 if isinstance(msg, AIMessage) and msg.id and hasattr(msg, "usage_metadata"):
                     usage = msg.usage_metadata or {}
-                    input_tokens = usage.get("input_tokens", 0)
+                    input_tokens = self._effective_input_tokens(usage)
                     output_tokens = usage.get("output_tokens", 0)
                     seen[msg.id] = (input_tokens, output_tokens)
 
@@ -206,7 +241,7 @@ class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
                 if isinstance(msg, AIMessage) and msg.id and hasattr(msg, "usage_metadata"):
                     usage = msg.usage_metadata or {}
 
-                    input_tokens = usage.get("input_tokens", 0)
+                    input_tokens = self._effective_input_tokens(usage)
                     output_tokens = usage.get("output_tokens", 0)
 
                     # Check what previously recorded for this exact message
@@ -245,6 +280,11 @@ class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
                     trigger_budget = limit
 
             if highest_fraction >= self._config.hard_stop_threshold:
+                if self._can_extend_budget(run_id, messages):
+                    # 预算清零续跑：安全阀放行则不清零 run、不剥离 tool_calls，
+                    # 仅重置计数器从 0 重新累计，让健康长任务继续执行。
+                    self._extend_budget(run_id, messages)
+                    return None
                 logger.warning("Token budget hard stop triggered for run %s: %s limit exceeded", run_id, trigger_reason)
                 # Record the stop reason so the executor can surface
                 # ``stop_reason=token_capped`` to the lead after the run
@@ -270,6 +310,55 @@ class TokenBudgetMiddleware(AgentMiddleware[AgentState]):
                 return None
 
             return None
+
+    def _can_extend_budget(self, run_id: str, messages: list[Any]) -> bool:
+        """预算自动续跑的判定：健康长任务放行，疑似死循环拒绝。
+
+        三重安全阀（任一命中即拒绝续跑，维持原硬停行为）：
+        1. 次数封顶：``max_budget_extensions``（0 = 完全禁用续跑，保持旧行为）；
+        2. 零进展：距上次续跑消息数未增加（同一状态反复超限）；
+        3. 重复动作：最后两条 AI 消息携带完全相同的 ``tool_calls`` —— 模型在
+           同一位置重复同一动作是典型死循环信号（如反复调用同一工具同一参数）。
+        """
+        if self._config.max_budget_extensions <= 0:
+            return False
+        if self._extensions_used.get(run_id, 0) >= self._config.max_budget_extensions:
+            return False
+        baseline = self._extension_baseline.get(run_id)
+        if baseline is not None and len(messages) <= baseline:
+            return False
+        ai_messages = [m for m in messages if isinstance(m, AIMessage)]
+        if len(ai_messages) >= 2:
+            prev_calls = ai_messages[-2].tool_calls
+            last_calls = ai_messages[-1].tool_calls
+            if prev_calls and last_calls and prev_calls == last_calls:
+                return False
+        return True
+
+    def _extend_budget(self, run_id: str, messages: list[Any]) -> None:
+        """预算清零重计：把当前消息历史全部标记为已见，累计计数从 0 重新开始。
+
+        与 ``max_turn_extensions`` 的续跑语义对齐：run 本身与模型上下文都不
+        中断，仅预算计数器归零，因此健康长任务可以继续推进；真正失控的循环
+        由 ``_can_extend_budget`` 的安全阀拦下并落入硬停。
+        """
+        extensions = self._extensions_used.get(run_id, 0) + 1
+        self._extensions_used[run_id] = extensions
+        self._extension_baseline[run_id] = len(messages)
+        seen: dict[str, tuple[int, int]] = {}
+        for msg in messages:
+            if isinstance(msg, AIMessage) and msg.id and hasattr(msg, "usage_metadata"):
+                usage = msg.usage_metadata or {}
+                seen[msg.id] = (self._effective_input_tokens(usage), usage.get("output_tokens", 0))
+        self._seen_messages[run_id] = seen
+        self._cumulative_usage[run_id] = TokenUsage()
+        # 新一轮预算的 80% 警告可重新触发
+        self._warned.pop(run_id, None)
+        logger.info(
+            "Token budget auto-extending #%d for run %s (cumulative usage reset, budget restarts at 0)",
+            extensions,
+            run_id,
+        )
 
     @override
     def after_model(self, state: AgentState, runtime: Runtime) -> dict | None:

@@ -382,3 +382,67 @@ function normalizeContextSize(value: unknown): NormalizedContextSize {
   }
   return { type: "messages", value: 10 };
 }
+
+// ── 共享字段定义 ──────────────────────────────────────────────────────
+
+/** token 预算段字段（主代理 RuntimeSettings 与子代理 SubagentsSettings 共用）。 */
+export const TOKEN_BUDGET_FIELDS: FieldDef[] = [
+  {
+    key: "enabled",
+    label: "启用预算限制",
+    type: "boolean",
+    hint: "超过硬停止阈值时中止请求；预算耗尽时按续跑次数清零重计",
+  },
+  {
+    key: "max_tokens",
+    label: "最大 Token 总量",
+    type: "number",
+    min: 1000,
+    step: 1000,
+    hint: "一次会话的 token 预算总量（输入+输出）",
+  },
+  {
+    key: "max_input_tokens",
+    label: "最大输入 Token",
+    type: "number",
+    min: 1,
+    step: 1000,
+    hint: "留空 = 不单独限制输入",
+    placeholder: "留空 = 不限制",
+  },
+  {
+    key: "max_output_tokens",
+    label: "最大输出 Token",
+    type: "number",
+    min: 1,
+    step: 1000,
+    hint: "留空 = 不单独限制输出",
+    placeholder: "留空 = 不限制",
+  },
+  {
+    key: "warn_threshold",
+    label: "告警阈值",
+    type: "number",
+    min: 0,
+    max: 1,
+    step: 0.1,
+    hint: "占比，如 0.8 = 80% 时记录告警日志",
+  },
+  {
+    key: "hard_stop_threshold",
+    label: "硬停止阈值",
+    type: "number",
+    min: 0,
+    max: 1,
+    step: 0.1,
+    hint: "占比，如 1.0 = 100% 时中止请求",
+  },
+  {
+    key: "max_budget_extensions",
+    label: "预算续跑次数",
+    type: "number",
+    min: 0,
+    step: 1,
+    hint: "预算耗尽后清零重计继续执行的最大次数；0 = 禁用续跑，超限即硬停",
+  },
+];

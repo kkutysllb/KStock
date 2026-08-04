@@ -922,33 +922,60 @@ class SubagentExecutor:
                 )
                 return result
 
-            async for chunk in agent.astream(state, config=run_config, context=context, stream_mode="values"):  # type: ignore[arg-type]
-                # Cooperative cancellation: check if parent requested stop.
-                # Note: cancellation is only detected at astream iteration boundaries,
-                # so long-running tool calls within a single iteration will not be
-                # interrupted until the next chunk is yielded.
-                if result.cancel_event.is_set():
-                    logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} cancelled by parent")
-                    result.try_set_terminal(
-                        SubagentStatus.CANCELLED,
-                        error="Cancelled by user",
-                        token_usage_records=collector.snapshot_records(),
+            # ── 安全自动续跑主循环 ──────────────────────────────────────
+            # LangGraph 的 recursion_limit 是 per-run 语义：达到 max_turns 抛
+            # GraphRecursionError 后，用最后一个成功 chunk 的完整 state 重新
+            # astream，即从 0 重新计数（等价「自动清零重计」）。健康长任务
+            # 借此不中断；疑似死循环由 _can_extend_turn_budget 的三重安全阀
+            # 封住（次数封顶 / 零进展 / 重复动作），最终仍被外层恢复逻辑截停。
+            final_state = None
+            extensions_used = 0
+            baseline_message_id: str | None = None
+            while True:
+                try:
+                    async for chunk in agent.astream(state, config=run_config, context=context, stream_mode="values"):  # type: ignore[arg-type]
+                        # Cooperative cancellation: check if parent requested stop.
+                        # Note: cancellation is only detected at astream iteration boundaries,
+                        # so long-running tool calls within a single iteration will not be
+                        # interrupted until the next chunk is yielded.
+                        if result.cancel_event.is_set():
+                            logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} cancelled by parent")
+                            result.try_set_terminal(
+                                SubagentStatus.CANCELLED,
+                                error="Cancelled by user",
+                                token_usage_records=collector.snapshot_records(),
+                            )
+                            return result
+
+                        final_state = chunk
+                        result.update_token_usage_records(collector.snapshot_records())
+
+                        # Capture every step message (assistant turns AND tool outputs)
+                        # appended since the last chunk. A single super-step can append
+                        # several ToolMessages when the model emits multiple tool calls in
+                        # one turn, so capturing only messages[-1] would drop all but the
+                        # last output (#3779). Dedup/serialization live in capture_step_message.
+                        messages = chunk.get("messages", [])
+                        previous_count = len(ai_messages)
+                        processed_message_count = capture_new_step_messages(messages, ai_messages, seen_message_ids, processed_message_count)
+                        if len(ai_messages) > previous_count:
+                            logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} captured {len(ai_messages) - previous_count} step message(s); total #{len(ai_messages)}")
+                    break  # 正常完成（未触限）
+
+                except GraphRecursionError:
+                    if not self._can_extend_turn_budget(ai_messages, baseline_message_id, extensions_used):
+                        # 达到续跑上限或检测到疑似死循环：交给外层恢复逻辑截停。
+                        raise
+                    extensions_used += 1
+                    baseline_message_id = ai_messages[-1].get("id") if ai_messages else None
+                    state = final_state or state
+                    previous_limit = run_config["recursion_limit"]
+                    run_config = {**run_config, "recursion_limit": previous_limit * 2}
+                    logger.warning(
+                        f"[trace={self.trace_id}] Subagent {self.config.name} "
+                        f"reached max_turns={previous_limit}; auto-extending "
+                        f"#{extensions_used} (recursion_limit -> {run_config['recursion_limit']})"
                     )
-                    return result
-
-                final_state = chunk
-                result.update_token_usage_records(collector.snapshot_records())
-
-                # Capture every step message (assistant turns AND tool outputs)
-                # appended since the last chunk. A single super-step can append
-                # several ToolMessages when the model emits multiple tool calls in
-                # one turn, so capturing only messages[-1] would drop all but the
-                # last output (#3779). Dedup/serialization live in capture_step_message.
-                messages = chunk.get("messages", [])
-                previous_count = len(ai_messages)
-                processed_message_count = capture_new_step_messages(messages, ai_messages, seen_message_ids, processed_message_count)
-                if len(ai_messages) > previous_count:
-                    logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} captured {len(ai_messages) - previous_count} step message(s); total #{len(ai_messages)}")
 
             logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} completed async execution")
             token_usage_records = collector.snapshot_records()
@@ -1046,6 +1073,36 @@ class SubagentExecutor:
             )
 
         return result
+
+    def _can_extend_turn_budget(
+        self,
+        ai_messages: list[dict[str, Any]],
+        baseline_message_id: str | None,
+        extensions_used: int,
+    ) -> bool:
+        """安全自动续跑的判定：健康长任务放行，疑似死循环拒绝。
+
+        三重安全阀（任一命中即拒绝续跑，交给外层恢复逻辑截停）：
+        1. 次数封顶：``max_turn_extensions``（0 = 完全禁用续跑，保持旧行为）；
+        2. 零进展：本轮未产出任何新消息（末条消息 id 与轮开始时相同）；
+        3. 重复动作：最后两条 AI 消息携带完全相同的 ``tool_calls`` —— 模型在
+           同一位置重复同一动作是典型死循环信号（如反复调用同一工具同一参数）。
+        """
+        if self.config.max_turn_extensions <= 0:
+            return False
+        if extensions_used >= self.config.max_turn_extensions:
+            return False
+        if not ai_messages:
+            return False
+        if baseline_message_id is not None and ai_messages[-1].get("id") == baseline_message_id:
+            return False
+        assistant_turns = [m for m in ai_messages if m.get("role") == "assistant"]
+        if len(assistant_turns) >= 2:
+            prev_calls = assistant_turns[-2].get("tool_calls")
+            last_calls = assistant_turns[-1].get("tool_calls")
+            if prev_calls and last_calls and prev_calls == last_calls:
+                return False
+        return True
 
     def _execute_in_isolated_loop(self, task: str, result_holder: SubagentResult | None = None) -> SubagentResult:
         """Execute the subagent on the persistent isolated event loop.

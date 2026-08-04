@@ -512,13 +512,14 @@ def test_merges_subagent_agents_preserves_user_keys(tmp_path):
     runtime_cfg.parent.mkdir(parents=True, exist_ok=True)
     qilin_data_dir = tmp_path / "data"
 
-    # 用户给 general-purpose 配过 model（与模板不同）+ 自定义 bash 代理 key
+    # 用户给 general-purpose 配过 model（与模板不同）+ 自定义 python-exec 代理 key
     user_cfg = {
         "models": [{"name": "my-model"}],
         "subagents": {
             "agents": {
                 "general-purpose": {"model": "my-model"},
-                "bash": {"max_turns": 30},  # 用户自定义 key
+                "python-exec": {"max_turns": 10},  # 用户自定义 key
+                "bash": {"max_turns": 30},  # 模板也有同名 key（模板覆盖）
             },
         },
     }
@@ -531,8 +532,10 @@ def test_merges_subagent_agents_preserves_user_keys(tmp_path):
 
     # 模板 key 覆盖同名（skills 白名单生效）
     assert agents["general-purpose"]["skills"] == _TEMPLATE_GP_SKILLS
+    # 模板新加的 bash 覆盖用户同名（max_turns 60 是产品级默认）
+    assert agents["bash"]["max_turns"] == 60
     # 用户自定义 key 保留
-    assert agents["bash"]["max_turns"] == 30
+    assert agents["python-exec"]["max_turns"] == 10
 
 
 # ── 沙箱数据凭据注入 ─────────────────────────────────────────────────

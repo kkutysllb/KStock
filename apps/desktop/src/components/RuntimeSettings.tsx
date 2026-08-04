@@ -8,7 +8,7 @@ import {
   updateTopLevelField,
   isRuntimeConfigApiError,
 } from "../lib/runtimeConfigClient";
-import { RuntimeConfigCard, type FieldDef } from "./RuntimeConfigCard";
+import { RuntimeConfigCard, TOKEN_BUDGET_FIELDS, type FieldDef } from "./RuntimeConfigCard";
 import { TokenStats } from "./TokenStats";
 
 /**
@@ -16,7 +16,7 @@ import { TokenStats } from "./TokenStats";
  *
  * 合并编辑 runtime.yaml 的三个运行时控制项：
  *   - token_usage 段：是否统计 token 用量
- *   - token_budget 段：硬预算限制（max_tokens / 阈值）
+ *   - token_budget 段：硬预算限制（max_tokens / 阈值 / 预算耗尽自动续跑次数）
  *   - max_recursion_limit 顶层标量：agent 递归上限
  *
  * token 中间件在启动时初始化，保存后需重启 gateway 生效；
@@ -111,7 +111,7 @@ export function RuntimeSettings() {
 
       <RuntimeConfigCard
         title="Token 预算限制"
-        description="超过告警阈值时记录日志，超过硬停止阈值时中止请求。需重启 gateway 生效。"
+        description="超过告警阈值时记录日志；超过硬停止阈值时若续跑次数未耗尽则清零重计继续执行，否则中止请求。需重启 gateway 生效。"
         fields={TOKEN_BUDGET_FIELDS}
         initialValue={budgetConfig as unknown as Record<string, unknown>}
         onSave={handleSaveBudget}
@@ -138,59 +138,6 @@ const TOKEN_USAGE_FIELDS: FieldDef[] = [
     label: "启用统计",
     type: "boolean",
     hint: "统计每次请求的输入/输出/总 token",
-  },
-];
-
-const TOKEN_BUDGET_FIELDS: FieldDef[] = [
-  {
-    key: "enabled",
-    label: "启用预算限制",
-    type: "boolean",
-    hint: "超过硬停止阈值时中止请求",
-  },
-  {
-    key: "max_tokens",
-    label: "最大 Token 总量",
-    type: "number",
-    min: 1000,
-    step: 1000,
-    hint: "一次会话的 token 预算总量（输入+输出）",
-  },
-  {
-    key: "max_input_tokens",
-    label: "最大输入 Token",
-    type: "number",
-    min: 1,
-    step: 1000,
-    hint: "留空 = 不单独限制输入",
-    placeholder: "留空 = 不限制",
-  },
-  {
-    key: "max_output_tokens",
-    label: "最大输出 Token",
-    type: "number",
-    min: 1,
-    step: 1000,
-    hint: "留空 = 不单独限制输出",
-    placeholder: "留空 = 不限制",
-  },
-  {
-    key: "warn_threshold",
-    label: "告警阈值",
-    type: "number",
-    min: 0,
-    max: 1,
-    step: 0.1,
-    hint: "占比，如 0.8 = 80% 时记录告警日志",
-  },
-  {
-    key: "hard_stop_threshold",
-    label: "硬停止阈值",
-    type: "number",
-    min: 0,
-    max: 1,
-    step: 0.1,
-    hint: "占比，如 1.0 = 100% 时中止请求",
   },
 ];
 
