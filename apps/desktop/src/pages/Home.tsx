@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { listen } from "@tauri-apps/api/event";
+import {
+  getDesktopBridge,
+  isDesktopRuntime,
+  onMenuCommand,
+  openExternalUrl as desktopOpenExternalUrl,
+  toggleWindowMaximize as desktopToggleMaximize,
+} from "../lib/desktopBridge";
 import {
   Activity,
   ArrowLeft,
@@ -186,24 +192,12 @@ async function toggleWindowMaximize(event: React.MouseEvent<HTMLElement>) {
   if (target.closest("button, input, select, textarea, a")) {
     return;
   }
-
-  try {
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
-    await getCurrentWindow().toggleMaximize();
-  } catch {
-    // 浏览器预览环境没有 Tauri 原生窗口，忽略即可。
-  }
+  await desktopToggleMaximize();
 }
 
 async function openExternalUrl(url: string) {
-  if (!/^https?:\/\//i.test(url)) return;
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("open_external_url", { url });
-  } catch {
-    // 浏览器预览环境没有 Tauri command，回退到系统新标签页行为。
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
+  // 桥接层内部处理 http(s) 校验与浏览器预览回退。
+  await desktopOpenExternalUrl(url);
 }
 
 
@@ -348,7 +342,7 @@ export function Home() {
   const activeRunRef = useRef<{ threadId: string; runId: string } | null>(null);
   // 防止重复点击停止（cancelRun 是异步请求，连点会发多次）。
   const stoppingRef = useRef(false);
-  // 删除历史任务的二次确认状态（替代 window.confirm，在 Tauri webview 中可靠弹窗）。
+  // 删除历史任务的二次确认状态（替代 window.confirm，在桌面端 webview 中可靠弹窗）。
   // pendingDeleteSessionId：待删除的 session id；后端失败时填 confirmError 提示二次确认。
   const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
@@ -751,12 +745,10 @@ export function Home() {
   }, [sessionsLoaded]);
 
   useEffect(() => {
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-
-    void listen<{ command?: string }>("kstock://menu", (event) => {
-      const command = event.payload?.command as DesktopMenuCommand | undefined;
-      switch (command) {
+    // 桌面端系统菜单 / 托盘命令（由 preload 桥推送）。浏览器预览环境无桥时
+    // onMenuCommand 返回空 unlisten，不报错。
+    const dispose = onMenuCommand((command) => {
+      switch (command as DesktopMenuCommand) {
         case "new-task":
           if (currentUser) {
             handleNewSession();
@@ -787,20 +779,9 @@ export function Home() {
           window.dispatchEvent(new CustomEvent("kstock:check-update"));
           break;
       }
-    }).then((dispose) => {
-      if (disposed) {
-        dispose();
-        return;
-      }
-      unlisten = dispose;
-    }).catch(() => {
-      // 浏览器预览环境没有 Tauri 事件桥，忽略即可。
     });
 
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
+    return () => dispose();
   }, [currentUser, handleNewSession]);
 
   const handleSelectSession = (sessionId: string) => {
@@ -1055,7 +1036,7 @@ export function Home() {
   // 停止生成：立即响应 UI + 异步 cancel 后端 run + abort SSE 断流兼兜底。
   //
   // 重要：必须先 setStreamingId(null) 让 UI 即时从「生成中」更改为可输入态，
-  // 不能等 cancelRun / streamRun 返回——Tauri webview 中 fetch + ReadableStream
+  // 不能等 cancelRun / streamRun 返回——桌面端 webview 中 fetch + ReadableStream
   // 的 abort 有时不能即时释放 SSE 长连接的 reader.read()，导致 streamRun
   // promise 迟迟不 resolve、handleSend 的 finally 不执行、UI 卡在「生成中」。
   // 变更顺序后：UI 立即响应；cancel 后台异步发；abort 兑底断流；streamRun
@@ -1300,7 +1281,6 @@ function LandingPage({ onEnter, onAuth, dataSources }: { onEnter: () => void; on
       <nav
         className="landing-nav"
         aria-label="产品入口"
-        data-tauri-drag-region
         onDoubleClick={toggleWindowMaximize}
       >
         <div className="brand-mark">
@@ -1997,7 +1977,6 @@ function WorkspaceShell({
       <main className="conversation-stage">
         <header
           className="workspace-topbar"
-          data-tauri-drag-region
           onDoubleClick={toggleWindowMaximize}
         >
           <div>
@@ -2387,10 +2366,8 @@ function readBlobText(blob: Blob): Promise<string> {
 }
 
 async function saveArtifactBlob(name: string, blob: Blob): Promise<"saved" | "cancelled" | "unsupported"> {
-  if (!isTauriRuntime()) return "unsupported";
-  const { invoke } = await import("@tauri-apps/api/core");
-  const contentsBase64 = bytesToBase64(await readBlobBytes(blob));
-  const result = await invoke<{ saved: boolean }>("save_artifact_file", { name, contentsBase64 });
+  if (!isDesktopRuntime()) return "unsupported";
+  const result = await getDesktopBridge()!.saveArtifact(name, await readBlobBytes(blob));
   return result.saved ? "saved" : "cancelled";
 }
 
@@ -2407,19 +2384,6 @@ async function readBlobBytes(blob: Blob): Promise<Uint8Array> {
   return new Uint8Array(await new Response(blob).arrayBuffer());
 }
 
-function isTauriRuntime(): boolean {
-  const win = window as Window & { __TAURI_INTERNALS__?: unknown; __TAURI__?: unknown };
-  return Boolean(win.__TAURI_INTERNALS__ || win.__TAURI__);
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
-  }
-  return btoa(binary);
-}
 
 function fallbackDownloadBlob(name: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -2578,7 +2542,7 @@ function SettingsPage({
 function BackendControlBar() {
   const [state, setState] = useState<"idle" | "restarting" | "success" | "error">("idle");
   const [statusText, setStatusText] = useState("");
-  // 二次确认用受控 ConfirmDialog（window.confirm 在 Tauri webview 中不弹窗）。
+  // 二次确认用受控 ConfirmDialog（window.confirm 在桌面端 webview 中不弹窗）。
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const handleRestart = async () => {

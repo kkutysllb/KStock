@@ -26,11 +26,6 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: 安装 Linux Tauri 系统依赖
-        if: matrix.os == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -41,73 +36,29 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: apps/desktop/src-tauri -> target
-          # 该 action 的输入名是 prefix-key/shared-key/key，并没有 key-prefix（之前
-          # 写的 key-prefix: v2- 被静默忽略，等于没有隔离）。缓存键的 OS 维度只有
-          # runner.os（"Linux"，不区分 22.04/24.04），ubuntu-latest → ubuntu-22.04
-          # 后 restore-keys 前缀回退恢复了旧镜像的 target 缓存，cargo 误判依赖已
-          # 构建而跳过编译，报 E0463: can't find crate for tauri。
-          # 用 shared-key 按 matrix.os 隔离命名空间：换 runner 镜像即换缓存键，
-          # 不再跨镜像恢复；依赖大版本变更时手动 bump 后缀。
-          shared-key: ${{ matrix.os }}
       - run: pnpm install --frozen-lockfile
       # Python 运行时依赖（vendor/qilin + gateway 运行面）由 uv 统一管理
       - run: uv sync
-      - name: 导入 Apple 签名证书（macOS）
-        if: runner.os == 'macOS'
-        env:
-          MAC_CERTIFICATE: ${{ secrets.MAC_CERTIFICATE }}
-          MAC_CERTIFICATE_PWD: ${{ secrets.MAC_CERTIFICATE_PWD }}
-        run: |
-          echo "$MAC_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/kstock.p12"
-          keychain="$RUNNER_TEMP/kstock.keychain"
-          keychain_password="$(uuidgen)"
-          security create-keychain -p "$keychain_password" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security list-keychains -d user -s "$keychain"
-          security default-keychain -s "$keychain"
-          security unlock-keychain -p "$keychain_password" "$keychain"
-          security import "$RUNNER_TEMP/kstock.p12" -k "$keychain" -P "$MAC_CERTIFICATE_PWD" -A -T /usr/bin/codesign -T /usr/bin/productsign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
-          # 从钥匙串解析证书身份（如 "Developer ID Application: xxx (TEAMID)"），供 tauri codesign 使用
-          identity="$(security find-identity -v -p codesigning "$keychain" | grep -o '"[^"]*"' | tr -d '"' | head -1)"
-          if [ -z "$identity" ]; then
-            echo "未在 CI keychain 中找到 Developer ID Application 签名身份" >&2
-            security find-identity -v -p codesigning "$keychain" >&2
-            exit 1
-          fi
-          echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
       - name: 校验并构建（check-release.sh）
         timeout-minutes: 60
         env:
-          # macOS 公证：tauri bundler 检测到三个变量齐备后自动 notarytool 公证并 staple
+          # macOS 签名 + 公证（electron-builder 原生支持 CSC_LINK / APPLE_* 环境变量）
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PWD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # updater 签名：tauri bundler 检测到签名密钥后为产物生成 .sig 与 latest.json
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: bash scripts/check-release.sh
       - name: 收集安装包
         run: |
           mkdir -p dist-release
-          # 仅收集 tauri 发布产物（安装包 + .sig 签名文件，latest.json 在 publish 阶段生成）。
-          # 所有产物文件名均以 KStock 开头（KStock_0.1.1_x64-setup.exe、
-          # KStock.app.tar.gz、KStock_0.1.1_amd64.deb 等），按 KStock* 前缀精确匹配，
-          # 避免误收 gateway 资源目录里的内部可执行文件（如 speech_recognition
-          # 自带的 flac-win32.exe，曾被当成安装包收集进 dist-release）。
-          find apps/desktop/src-tauri/target/release/bundle -type f -name 'KStock*' -exec cp {} dist-release/ \;
-          # 发布仅覆盖三个平台：macOS Apple Silicon / Windows x64 / Linux x64
-          # （不提供 macOS Intel 产物；macos-latest runner 即 Apple Silicon）。
-          # tauri 产物文件名不含架构标记，固定重命名为 aarch64，
-          # 供 latest.json 映射到标准 updater 平台键 darwin-aarch64。
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            mv dist-release/KStock.app.tar.gz dist-release/KStock_aarch64.app.tar.gz
-            mv dist-release/KStock.app.tar.gz.sig dist-release/KStock_aarch64.app.tar.gz.sig
-          fi
+          # electron-builder 产物在 apps/desktop/release/
+          # 收集安装包 + updater 元数据（latest*.yml），排除 blockmap 等中间产物。
+          # electron-builder 自动为 electron-updater 生成 latest-mac.yml / latest.yml /
+          # latest-linux.yml，无需手动构造旧版 JSON 清单。
+          find apps/desktop/release -maxdepth 1 -type f \
+            \( -name 'KStock*' -o -name 'latest*.yml' \) \
+            -exec cp {} dist-release/ \;
           ls -lh dist-release
       - uses: actions/upload-artifact@v4
         with:
@@ -126,64 +77,6 @@ jobs:
         with:
           path: dist-release
           merge-multiple: true
-      - name: 生成 latest.json（updater 元数据，基于各平台产物 + .sig）
-        env:
-          KSTOCK_VERSION: ${{ github.ref_name }}
-        run: |
-          python3 - "$KSTOCK_VERSION" <<'PY'
-          import glob
-          import json
-          import os
-          import sys
-          from datetime import datetime, timezone
-
-          version = sys.argv[1].lstrip("v")
-          url_prefix = "https://github.com/kkutysllb/KStock/releases/latest/download/"
-          platforms = {}
-
-          def add(key, path):
-              sig_file = path + ".sig"
-              if not os.path.exists(sig_file):
-                  raise SystemExit(f"缺少签名文件: {sig_file}")
-              with open(sig_file, encoding="utf-8") as fh:
-                  signature = fh.read().strip()
-              platforms[key] = {
-                  "signature": signature,
-                  "url": url_prefix + os.path.basename(path),
-              }
-
-          # 仅三个发布平台（不含 macOS Intel），latest.json 平台键为
-          # tauri updater 协议固定格式：
-          #   macOS Apple Silicon -> darwin-aarch64
-          #   Windows x64        -> windows-x86_64
-          #   Linux x64          -> linux-x86_64
-          # 全部用 KStock* 前缀精确匹配：dist-release 里还混有 gateway 资源
-          # 目录的内部文件（如 speech_recognition 自带的 flac-win32.exe），
-          # 宽松的全局匹配会把 flac-win32.exe 误当作 Windows 安装包，随后
-          # 因缺 .sig 签名文件而失败。
-          for f in glob.glob("dist-release/KStock*.app.tar.gz"):
-              add("darwin-aarch64", f)
-          msis = glob.glob("dist-release/KStock*.msi")
-          if msis:
-              add("windows-x86_64", msis[0])
-          else:
-              for f in glob.glob("dist-release/KStock*.exe"):
-                  add("windows-x86_64", f)
-                  break
-          for f in glob.glob("dist-release/KStock*.deb"):
-              add("linux-x86_64", f)
-
-          if not platforms:
-              raise SystemExit("未找到任何 updater 产物")
-          data = {
-              "version": version,
-              "pub_date": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-              "platforms": platforms,
-          }
-          with open("dist-release/latest.json", "w", encoding="utf-8") as fh:
-              json.dump(data, fh, indent=2, ensure_ascii=False)
-          print(json.dumps(data, indent=2, ensure_ascii=False))
-          PY
       - name: 列出安装包
         run: ls -lh dist-release
       - uses: softprops/action-gh-release@v2

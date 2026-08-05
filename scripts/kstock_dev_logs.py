@@ -11,8 +11,8 @@ frontend / desktop）。覆写模式：每次进程启动清空自己的日志�
   gateway.log（全集），``langgraph`` named logger 额外写 langgraph.log
   （编排排查便利子集），``propagate`` 保持 True 让 gateway.log 仍含完整链路。
 - ``frontend.log`` / ``desktop.log`` —— 由 Node wrapper
-  ``scripts/run_with_log.mjs`` 的 stdout/stderr tee 写入（浏览器和 Tauri
-  Rust 运行时无法直接写本地文件）。
+  ``scripts/run_with_log.mjs`` 的 stdout/stderr tee 写入（浏览器和 Electron
+  主进程无法直接写本地文件）。
 """
 from __future__ import annotations
 

@@ -4,7 +4,7 @@ KStock 是一个跨平台桌面端股票量化智能体，核心引擎使用 QiL
 
 ## 现状
 
-- 桌面端：Tauri + React
+- 桌面端：Electron + React
 - 侧车：Python + QiLin
 - 技能：本地精选副本 + 同步脚本
 - CI：跨平台检查与发布脚本已建立

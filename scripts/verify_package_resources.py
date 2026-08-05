@@ -2,15 +2,14 @@
 # -*- coding: utf-8 -*-
 """Verify KStock desktop packaging resources.
 
-The source-only mode validates the contract between PyInstaller, Tauri and the
-gateway runtime before a release tag is created.  The default product mode
-validates the built ``dist/kstock-gateway`` directory before Tauri packaging.
+The source-only mode validates the contract between PyInstaller, electron-builder
+and the gateway runtime before a release tag is created.  The default product mode
+validates the built ``dist/kstock-gateway`` directory before electron-builder packaging.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from dataclasses import dataclass
@@ -64,7 +63,7 @@ class Verifier:
 
     def verify_source_contract(self) -> None:
         spec = self.repo_root / "scripts" / "kstock-gateway.spec"
-        tauri_conf = self.repo_root / "apps" / "desktop" / "src-tauri" / "tauri.conf.json"
+        electron_builder = self.repo_root / "apps" / "desktop" / "electron-builder.yml"
         run_gateway = self.repo_root / "scripts" / "run_gateway.py"
 
         self.require_file_contains(
@@ -92,20 +91,16 @@ class Verifier:
         self.require_path(self.repo_root / "config" / "qilin.config.yaml", "source config/qilin.config.yaml")
         self.require_path(self.repo_root / "config" / "lead_soul.md", "source config/lead_soul.md")
 
-        if self.require_path(tauri_conf, "source Tauri config"):
-            try:
-                data = json.loads(tauri_conf.read_text(encoding="utf-8"))
-            except json.JSONDecodeError as exc:
-                self.fail("source Tauri config JSON", str(exc))
+        if self.require_path(electron_builder, "source electron-builder config"):
+            text = electron_builder.read_text(encoding="utf-8")
+            # electron-builder extraResources 将 dist/kstock-gateway 映射到 resources/gateway。
+            if "from: ../../dist/kstock-gateway" in text and "to: gateway" in text:
+                self.pass_("source electron-builder extraResources maps dist/kstock-gateway to gateway")
             else:
-                resources = data.get("bundle", {}).get("resources", {})
-                if resources.get("../../../dist/kstock-gateway") == "gateway":
-                    self.pass_("source Tauri bundle.resources maps dist/kstock-gateway to gateway")
-                else:
-                    self.fail(
-                        "source Tauri bundle.resources",
-                        "Expected ../../../dist/kstock-gateway -> gateway",
-                    )
+                self.fail(
+                    "source electron-builder extraResources",
+                    "Expected from: ../../dist/kstock-gateway -> to: gateway",
+                )
 
     def verify_product_bundle(self) -> None:
         gateway = self.repo_root / "dist" / "kstock-gateway"
@@ -176,7 +171,7 @@ class Verifier:
         if self.source_only:
             print("\nSource contract OK — full product verification runs after gateway build.")
         else:
-            print("\nPackage resources OK — gateway bundle is ready for Tauri packaging.")
+            print("\nPackage resources OK — gateway bundle is ready for electron-builder packaging.")
         return 0
 
 

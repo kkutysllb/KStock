@@ -1,0 +1,78 @@
+appId: com.kkutysllb.kstock
+productName: KStock
+copyright: Copyright © 2024 kkutysllb
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+
+# 内置自包含 gateway（PyInstaller onedir 产物），运行时位于 resources/gateway。
+extraResources:
+  - from: ../../dist/kstock-gateway
+    to: gateway
+    filter: ["**/*"]
+
+mac:
+  category: public.app-category.finance
+  icon: build/icon.icns
+  target:
+    - dmg
+    - zip
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: null
+  entitlementsInherit: null
+  # GitHub Actions 上用 APPLE_SIGNING_IDENTITY（Developer ID）签名；
+  # 公证由 electron-builder 通过 notarize 配置自动完成。
+  notarize:
+    teamId: ${APPLE_TEAM_ID}
+  extraMetadata:
+    main: dist-electron/main.cjs
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+win:
+  icon: build/icon.ico
+  target:
+    - nsis
+  extraMetadata:
+    main: dist-electron/main.cjs
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  # 安装前终止残留的 gateway 进程，避免 DLL 占用导致复制失败。
+  include: build/installer.nsh
+
+linux:
+  icon: build/icons
+  category: Finance
+  target:
+    - deb
+  extraMetadata:
+    main: dist-electron/main.cjs
+
+deb:
+  depends:
+    - libnotify4
+    - libxtst6
+    - libnss3
+
+publish:
+  provider: github
+  owner: kkutysllb
+  repo: KStock
+  releaseType: release

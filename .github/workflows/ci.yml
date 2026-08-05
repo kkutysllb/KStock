@@ -18,11 +18,6 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: 安装 Linux Tauri 系统依赖
-        if: matrix.os == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -33,13 +28,6 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: apps/desktop/src-tauri -> target
-          # 与 release.yml 一致：按 runner 镜像隔离缓存命名空间，避免换镜像后
-          # restore-keys 前缀回退恢复旧镜像 target 缓存导致 E0463: can't find crate。
-          shared-key: ${{ matrix.os }}
       - run: pnpm install --frozen-lockfile
       # Python 运行时依赖（vendor/qilin + gateway 运行面）由 uv 统一管理
       - run: uv sync
@@ -52,10 +40,6 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: 安装 Linux Tauri 系统依赖
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

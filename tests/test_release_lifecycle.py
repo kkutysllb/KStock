@@ -30,10 +30,12 @@ def test_release_script_verifies_release_assets_after_watch():
 
     assert "verify_release_assets" in script
     assert "gh release view" in script
-    assert "latest.json" in script
+    # electron-builder 自动生成 latest-mac.yml / latest.yml / latest-linux.yml
+    assert "latest-mac.yml" in script
+    assert "latest.yml" in script
     assert ".dmg" in script
-    assert ".msi" in script or ".exe" in script
-    assert ".deb" in script or ".AppImage" in script
+    assert ".exe" in script
+    assert ".deb" in script
 
 
 def test_release_script_uses_strict_semver_tags_for_previous_release():
@@ -43,18 +45,29 @@ def test_release_script_uses_strict_semver_tags_for_previous_release():
     assert "v[0-9]*.[0-9]*.[0-9]*" in script
 
 
-def test_release_script_stages_tauri_cargo_lock():
+def test_release_script_stages_lock_files():
+    """release 提交必须包含 lock 文件（pnpm-lock.yaml + uv.lock），
+    确保跨平台可复现构建。Tauri 的 Cargo.lock 已随迁移删除。"""
     script = (REPO_ROOT / "build-release.sh").read_text(encoding="utf-8")
 
-    assert '"apps/desktop/src-tauri/Cargo.lock"' in script
+    assert '"pnpm-lock.yaml"' in script
+    assert '"uv.lock"' in script
+    assert 'Cargo.lock' not in script
+    assert 'tauri.conf.json' not in script
 
 
-def test_release_workflow_macos_keychain_is_non_interactive():
+def test_release_workflow_macos_signing_uses_electron_builder_env():
+    """electron-builder 原生支持 CSC_LINK / APPLE_* 环境变量进行签名与公证，
+    无需手动操作 macOS keychain。"""
     workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
-    assert 'security list-keychains -d user -s "$keychain"' in workflow
-    assert 'security set-keychain-settings -lut 21600 "$keychain"' in workflow
-    assert "security set-key-partition-list" in workflow
+    assert "CSC_LINK" in workflow
+    assert "CSC_KEY_PASSWORD" in workflow
+    assert "APPLE_ID" in workflow
+    assert "APPLE_APP_SPECIFIC_PASSWORD" in workflow
+    assert "APPLE_TEAM_ID" in workflow
+    assert "security list-keychains" not in workflow
+    assert "security set-key-partition-list" not in workflow
 
 
 def test_release_workflow_build_step_has_timeout():
@@ -78,7 +91,7 @@ def test_ci_workflow_uses_stable_linux_builder():
     assert "ubuntu-latest, macos-latest, windows-latest" not in workflow
 
 
-def test_release_workflow_collects_only_tauri_artifacts():
+def test_release_workflow_collects_only_electron_artifacts():
     """收集安装包必须按 KStock* 前缀精确匹配，防止误收 gateway 资源目录
     里的内部可执行文件（如 speech_recognition/flac-win32.exe）。"""
     workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
@@ -88,13 +101,11 @@ def test_release_workflow_collects_only_tauri_artifacts():
     assert "-name '*.sig'" not in workflow
 
 
-def test_release_workflow_matches_windows_installer_precisely():
-    """latest.json 生成脚本对 Windows 产物必须按 KStock* 前缀匹配，
-    否则 flac-win32.exe 会被当成安装包并因缺 .sig 而失败。"""
+def test_release_workflow_collects_updater_metadata():
+    """electron-builder 自动生成 latest*.yml updater 元数据，release.yml
+    只需 find + cp 收集，无需手动构造 latest.json。"""
     workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
-    assert 'glob.glob("dist-release/KStock*.exe")' in workflow
-    assert 'glob.glob("dist-release/KStock*.msi")' in workflow
-    assert 'glob.glob("dist-release/KStock*.app.tar.gz")' in workflow
-    assert 'glob.glob("dist-release/KStock*.deb")' in workflow
-    assert 'glob.glob("dist-release/*.exe")' not in workflow
+    assert "latest*.yml" in workflow
+    assert "glob.glob" not in workflow
+    assert "latest.json" not in workflow

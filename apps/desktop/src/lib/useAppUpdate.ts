@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Update } from "@tauri-apps/plugin-updater";
+import { getDesktopBridge, isDesktopRuntime } from "./desktopBridge";
 
 /**
  * 应用自动更新状态机（供侧边栏下载图标使用）。
  *
  * - 挂载后延迟自动检查一次，发现新版本进入 available；
- * - startUpdate：下载（累计字节进度）→ 安装 → 自动重启（tauri-plugin-process）；
- * - 非 Tauri 环境（浏览器预览 / vitest）检查失败时静默回到 idle，不影响页面。
+ * - startUpdate：下载（累计字节进度）→ 安装 → 自动重启（electron-updater quitAndInstall）；
+ * - 非桌面端环境（浏览器预览 / vitest）检查失败时静默回到 idle，不影响页面。
  */
 export type AppUpdateState =
   | { phase: "idle" }
@@ -18,43 +18,38 @@ export type AppUpdateState =
 
 export function useAppUpdate() {
   const [state, setState] = useState<AppUpdateState>({ phase: "idle" });
-  const updateRef = useRef<Update | null>(null);
   const checkedRef = useRef(false);
 
   const check = useCallback(async () => {
     setState({ phase: "checking" });
     try {
-      const { check: checkUpdate } = await import("@tauri-apps/plugin-updater");
-      const update = await checkUpdate();
-      updateRef.current = update;
+      const update = isDesktopRuntime()
+        ? await getDesktopBridge()!.updateCheck()
+        : null;
       if (!update) {
         setState({ phase: "idle" });
         return;
       }
       setState({ phase: "available", version: update.version });
     } catch {
-      // 非 Tauri 环境（浏览器预览 / 测试）或检查失败：静默跳过
+      // 非桌面端环境（浏览器预览 / 测试）或检查失败：静默跳过
       setState({ phase: "idle" });
     }
   }, []);
 
   const startUpdate = useCallback(async () => {
-    const update = updateRef.current;
-    if (!update) return;
+    if (!isDesktopRuntime()) return;
     setState({ phase: "downloading", downloadedBytes: 0 });
     try {
-      await update.downloadAndInstall((event) => {
-        if (event.event === "Progress") {
-          setState((prev) =>
-            prev.phase === "downloading"
-              ? { phase: "downloading", downloadedBytes: prev.downloadedBytes + event.data.chunkLength }
-              : prev,
-          );
-        }
+      await getDesktopBridge()!.updateDownload((progress) => {
+        setState((prev) =>
+          prev.phase === "downloading"
+            ? { phase: "downloading", downloadedBytes: progress.downloaded }
+            : prev,
+        );
       });
       setState({ phase: "installing" });
-      const { relaunch } = await import("@tauri-apps/plugin-process");
-      await relaunch();
+      await getDesktopBridge()!.updateInstall();
     } catch (err) {
       setState({ phase: "error", message: String(err) });
     }

@@ -6,7 +6,7 @@
 //
 // 示例：
 //   node scripts/run_with_log.mjs frontend -- pnpm -C apps/desktop dev
-//   node scripts/run_with_log.mjs desktop  -- pnpm -C apps/desktop tauri:dev
+//   node scripts/run_with_log.mjs desktop  -- pnpm -C apps/desktop electron:dev
 //
 // 行为：
 // - 启动时清空（truncate）logs/<log-name>.log，保证覆写语义（本次运行从头写入）

@@ -1,8 +1,9 @@
-// ── gateway 进程控制客户端（对接 Tauri gateway_restart command）──
+// ── gateway 进程控制客户端（对接 Electron 桌面端宿主重启 gateway）──
 //
-// gateway 的生命周期由 Tauri/Rust 独占管理。纯浏览器 dev:web 没有 Tauri
-// 宿主，仍可手工启动 gateway，但不能从页面重启它。
+// gateway 的生命周期由 Electron 主进程独占管理。纯浏览器 dev:web 没有宿主
+// 桥接，仍可手工启动 gateway，但不能从页面重启它。
 
+import { getDesktopBridge, isDesktopRuntime } from "./desktopBridge";
 import { GATEWAY_URL } from "./gatewayUrl";
 
 /** gateway 进程控制错误（归一化）。 */
@@ -18,17 +19,18 @@ export interface RestartResult {
 }
 
 /**
- * 请求 Tauri 宿主重启 gateway。
+ * 请求桌面端宿主重启 gateway。
  */
 export async function restartGateway(): Promise<RestartResult> {
-  const win = window as Window & { __TAURI_INTERNALS__?: unknown; __TAURI__?: unknown };
-  if (!win.__TAURI_INTERNALS__ && !win.__TAURI__) {
-    throw { message: "当前运行环境没有 Tauri 宿主，请手动重启 gateway", status: 0 } satisfies GatewayControlApiError;
+  if (!isDesktopRuntime()) {
+    throw {
+      message: "当前运行环境没有桌面端宿主，请手动重启 gateway",
+      status: 0,
+    } satisfies GatewayControlApiError;
   }
 
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const message = await invoke<string>("gateway_restart");
+    const message = await getDesktopBridge()!.restartGateway();
     return { message, supervised: false };
   } catch (error) {
     if (isGatewayControlApiError(error)) throw error;
@@ -46,6 +48,9 @@ export async function restartGateway(): Promise<RestartResult> {
  * 轮询 gateway ``/health`` 直到恢复或超时。
  *
  * gateway 重启后端口短暂不可用，前端用固定间隔轮询 ``/health`` 感知恢复。
+ * 轮询期间的 ``ERR_CONNECTION_REFUSED`` 是预期行为（进程正在切换），
+ * 会被 try/catch 静默吞掉——Chrome DevTools 仍可能打印红色网络日志，
+ * 但不影响功能。
  *
  * @param timeoutMs 总超时（默认 20s）
  * @param onProbe   每次探测回调（用于 UI 显示「等待恢复…第 N 次」）
@@ -57,8 +62,10 @@ export async function waitForGateway(
 ): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   let attempt = 0;
-  // 先等一小段时间让旧进程退出，避免立即探测到正在关闭的旧进程。
-  await sleep(800);
+  // 主进程 IPC restart 返回时 gateway 端口已就绪，但 uvicorn 完整启动
+  // （加载技能/初始化 SQLite）还需数百毫秒。短等让首次探测不撞上
+  // 刚 bind 但还没 ready 的连接。
+  await sleep(300);
   while (Date.now() < deadline) {
     attempt += 1;
     onProbe?.(attempt);
@@ -66,7 +73,7 @@ export async function waitForGateway(
       const resp = await fetch(`${GATEWAY_URL}/health`, { credentials: "include" });
       if (resp.ok) return true;
     } catch {
-      // 进程还没起来，继续轮询。
+      // 进程还没起来或正在切换，继续轮询。
     }
     await sleep(500);
   }

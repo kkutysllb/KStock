@@ -59,7 +59,6 @@ export default defineConfig({
           ) {
             return "markdown";
           }
-          if (id.includes("@tauri-apps")) return "tauri";
           if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/scheduler/")) {
             return "react-vendor";
           }

@@ -17,17 +17,12 @@ const turnsMock = vi.hoisted(() => ({
   artifactUrl: vi.fn(),
 }));
 
-const tauriMock = vi.hoisted(() => ({
-  invoke: vi.fn(),
-}));
-
-const tauriEventMock = vi.hoisted(() => ({
-  listen: vi.fn(),
-  handlers: [] as Array<(event: { payload: unknown }) => void>,
-}));
-
-const updaterMock = vi.hoisted(() => ({
-  check: vi.fn(),
+// 桌面端宿主桥接 mock：onMenuCommand 捕获回调，updateCheck/saveArtifact 由各测试覆盖返回值。
+const desktopBridgeMock = vi.hoisted(() => ({
+  onMenuCommand: vi.fn(),
+  updateCheck: vi.fn(),
+  saveArtifact: vi.fn(),
+  menuCallback: null as ((command: string) => void) | null,
 }));
 
 // gatewayControl mock：restartGateway / waitForGateway 由各测试覆盖返回值。
@@ -86,18 +81,6 @@ vi.mock("../src/lib/turnsClient", () => ({
   getWorkspaceChanges: turnsMock.getWorkspaceChanges,
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: tauriMock.invoke,
-}));
-
-vi.mock("@tauri-apps/api/event", () => ({
-  listen: tauriEventMock.listen,
-}));
-
-vi.mock("@tauri-apps/plugin-updater", () => ({
-  check: updaterMock.check,
-}));
-
 // gatewayControlClient mock：重启后端的 restart + 健康轮询由各测试覆盖。
 vi.mock("../src/lib/gatewayControlClient", () => ({
   restartGateway: controlMock.restartGateway,
@@ -119,16 +102,19 @@ beforeEach(() => {
     (threadId: string, virtualPath: string) =>
       `http://localhost:18001/api/threads/${encodeURIComponent(threadId)}/artifacts/${virtualPath.replace(/^\/+/, "")}`
   );
-  tauriMock.invoke.mockReset();
-  tauriEventMock.handlers = [];
-  tauriEventMock.listen.mockReset();
-  tauriEventMock.listen.mockImplementation(async (_event: string, handler: (event: { payload: unknown }) => void) => {
-    tauriEventMock.handlers.push(handler);
-    return vi.fn();
+  desktopBridgeMock.onMenuCommand.mockReset();
+  desktopBridgeMock.updateCheck.mockReset();
+  desktopBridgeMock.updateCheck.mockResolvedValue(null);
+  desktopBridgeMock.menuCallback = null;
+  desktopBridgeMock.onMenuCommand.mockImplementation((cb: (command: string) => void) => {
+    desktopBridgeMock.menuCallback = cb;
+    return () => undefined;
   });
-  updaterMock.check.mockReset();
-  updaterMock.check.mockResolvedValue(null);
-  delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  // 模拟 Electron preload 经 contextBridge 注入的 window.kstockDesktop。
+  Object.defineProperty(window, "kstockDesktop", {
+    configurable: true,
+    value: desktopBridgeMock,
+  });
   controlMock.restartGateway.mockReset();
   controlMock.waitForGateway.mockReset();
 });
@@ -138,11 +124,9 @@ afterEach(() => {
 });
 
 async function emitDesktopMenuCommand(command: string) {
-  await waitFor(() => expect(tauriEventMock.listen).toHaveBeenCalledWith("kstock://menu", expect.any(Function)));
+  await waitFor(() => expect(desktopBridgeMock.onMenuCommand).toHaveBeenCalled());
   await act(async () => {
-    for (const handler of tauriEventMock.handlers) {
-      handler({ payload: { command } });
-    }
+    desktopBridgeMock.menuCallback?.(command);
   });
 }
 
@@ -230,7 +214,7 @@ test("桌面系统菜单事件可新建任务、打开设置并触发更新检�
 
   await emitDesktopMenuCommand("check-update");
 
-  await waitFor(() => expect(updaterMock.check).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(desktopBridgeMock.updateCheck).toHaveBeenCalledTimes(1));
 
   await emitDesktopMenuCommand("open-settings");
 
@@ -487,8 +471,7 @@ test("交付文件中的 Markdown 和日志在产品内预览并提供下载", a
   const revokeObjectUrl = vi.fn();
   Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectUrl });
   Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revokeObjectUrl });
-  Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
-  tauriMock.invoke.mockResolvedValue({ saved: true, path: "/tmp/report.md" });
+  desktopBridgeMock.saveArtifact.mockResolvedValue({ saved: true, path: "/tmp/report.md" });
 
   render(<App />);
 
@@ -507,15 +490,12 @@ test("交付文件中的 Markdown 和日志在产品内预览并提供下载", a
   expect(await screen.findByRole("dialog", { name: "report.md" })).toBeVisible();
   expect(screen.getByRole("heading", { name: "周报" })).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "下载" }));
-  await waitFor(() => expect(tauriMock.invoke).toHaveBeenCalledWith(
-    "save_artifact_file",
-    expect.objectContaining({
-      name: "report.md",
-      contentsBase64: expect.any(String),
-    })
+  await waitFor(() => expect(desktopBridgeMock.saveArtifact).toHaveBeenCalledWith(
+    "report.md",
+    expect.any(Uint8Array),
   ));
-  const savePayload = tauriMock.invoke.mock.calls[0]?.[1] as { contentsBase64: string };
-  expect(Buffer.from(savePayload.contentsBase64, "base64").toString("utf8")).toBe("# 周报\n\n正文");
+  const reportBytes = desktopBridgeMock.saveArtifact.mock.calls[0]?.[1] as Uint8Array;
+  expect(Buffer.from(reportBytes).toString("utf8")).toBe("# 周报\n\n正文");
 
   fireEvent.click(screen.getByRole("button", { name: "关闭" }));
   fireEvent.click(await screen.findByRole("button", { name: /bash-1\.log/ }));
@@ -523,10 +503,10 @@ test("交付文件中的 Markdown 和日志在产品内预览并提供下载", a
   expect(await screen.findByRole("dialog", { name: "bash-1.log" })).toBeVisible();
   expect(screen.getByText(/line one/)).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "下载" }));
-  await waitFor(() => expect(tauriMock.invoke).toHaveBeenCalledTimes(2));
-  const logPayload = tauriMock.invoke.mock.calls[1]?.[1] as { name: string; contentsBase64: string };
-  expect(logPayload.name).toBe("bash-1.log");
-  expect(Buffer.from(logPayload.contentsBase64, "base64").toString("utf8")).toBe("line one\nline two");
+  await waitFor(() => expect(desktopBridgeMock.saveArtifact).toHaveBeenCalledTimes(2));
+  const logCall = desktopBridgeMock.saveArtifact.mock.calls[1];
+  expect(logCall?.[0]).toBe("bash-1.log");
+  expect(Buffer.from(logCall?.[1] as Uint8Array).toString("utf8")).toBe("line one\nline two");
 
   fetchSpy.mockRestore();
 });

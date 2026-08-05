@@ -8,10 +8,10 @@
   ],
   "scripts": {
     "test:sidecar": "python -m pytest sidecar/tests -q",
-    "dev:desktop": "node scripts/run_with_log.mjs desktop -- pnpm -C apps/desktop tauri:dev",
+    "dev:desktop": "node scripts/run_with_log.mjs desktop -- pnpm -C apps/desktop electron:dev",
     "dev:web": "node scripts/run_with_log.mjs frontend -- pnpm -C apps/desktop dev",
     "test:desktop": "pnpm -C apps/desktop test",
     "build:web": "pnpm -C apps/desktop build",
-    "build:desktop": "pnpm -C apps/desktop tauri:build"
+    "build:desktop": "bash scripts/build-desktop.sh"
   }
 }

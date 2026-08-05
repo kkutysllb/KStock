@@ -34,7 +34,7 @@ gateway 之前为上述三个符号注入兼容实现（带 ``hasattr`` 防御�
 
 - 数据根目录 ``KSTOCK_APP_DATA_DIR``（优先级见 ``_resolve_app_data_root``）：
     - 默认：``~/.kstock``（macOS / Windows / Linux 统一）
-    - 显式覆盖：``KSTOCK_APP_DATA_DIR`` 环境变量（Tauri 宿主 / 命令行调试）
+    - 显式覆盖：``KSTOCK_APP_DATA_DIR`` 环境变量（Electron 宿主 / 命令行调试）
 - 历史版本（v1，位于系统应用数据目录）首次启动时自动迁移到 ``~/.kstock``，
   见 ``_migrate_legacy_data_root``
 - 运行时环境变量（由本入口注入）：
@@ -133,7 +133,7 @@ def _resolve_app_data_root() -> Path:
     """解析 KStock 用户数据根目录（跨平台）。
 
     优先级：
-    1. ``KSTOCK_APP_DATA_DIR`` 环境变量 —— Tauri 宿主 / 命令行调试显式指定。
+    1. ``KSTOCK_APP_DATA_DIR`` 环境变量 —— Electron 宿主 / 命令行调试显式指定。
     2. 用户主目录 ``~/.kstock`` —— 产品默认（macOS / Windows / Linux 统一）。
 
     选择 ``~/.kstock`` 而不是系统 Application Support 目录：
@@ -437,74 +437,23 @@ def _ensure_data_space() -> dict[str, Path]:
     }
 
 
-def _patch_cors_allow_tauri_origin() -> None:
-    """放行 Tauri 桌面端 webview 的 ``tauri://`` origin（vendor 只读原则）。
-
-    引擎 ``app.gateway.csrf_middleware._normalize_origin`` 只接受 http/https
-    scheme，会把 macOS / Linux 打包态 webview 的 ``tauri://localhost`` 过滤掉，
-    导致 CORSMiddleware 白名单缺项（preflight 400）、CSRF origin 校验拒绝
-    （403），前端表现为“无法连接本地引擎，请确认 gateway 已启动”。Windows 的
-    ``https://tauri.localhost`` 不受影响；开发态 ``http://localhost:1420`` 也不受影响。
-
-    ``get_configured_cors_origins`` / ``is_allowed_auth_origin`` 运行时解析
-    模块级 ``_normalize_origin``，替换模块属性即可全局生效。
-    """
-    from app.gateway import csrf_middleware as _csrf_middleware
-
-    _original_normalize = _csrf_middleware._normalize_origin
-
-    def _normalize_with_tauri(origin: str) -> str | None:
-        stripped = origin.strip()
-        if stripped.startswith("tauri://"):
-            return stripped
-        return _original_normalize(origin)
-
-    _csrf_middleware._normalize_origin = _normalize_with_tauri
-
-
-def _patch_csrf_double_submit_for_tauri_origin() -> None:
-    """打包态 tauri:// 文档下 WebKit 的 document.cookie 为空（自定义 scheme
-    不暴露 cookie），前端读不到 csrf_token，无法构造 X-CSRF-Token header，
-    所有受保护写请求（创建会话等）返回 403 CSRF token missing。
-
-    tauri:// origin 只可能来自本地桌面端 webview——浏览器强制 Origin 为
-    真实来源，外部站点无法伪造 tauri:// 前缀——因此对白名单内的 tauri://
-    origin 跳过 double-submit 校验（origin 白名单校验即 CSRF 防护），
-    其余来源保持原 double-submit 逻辑不变。
-    """
-    from app.gateway import csrf_middleware as _csrf_middleware
-    from starlette.responses import JSONResponse
-
-    _original_dispatch = _csrf_middleware.CSRFMiddleware.dispatch
-
-    async def _dispatch_with_tauri_exempt(self, request, call_next):
-        origin = (request.headers.get("origin") or "").strip()
-        if origin.startswith("tauri://"):
-            if origin not in _csrf_middleware._configured_cors_origins():
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "Cross-site request denied."},
-                )
-            # 白名单 tauri:// 来源：免 double-submit，直接进入业务处理
-            return await call_next(request)
-        return await _original_dispatch(self, request, call_next)
-
-    _csrf_middleware.CSRFMiddleware.dispatch = _dispatch_with_tauri_exempt
-
-
 def _configure_gateway_security() -> None:
     """注入桌面端 webview 的 CORS origin 白名单。
 
-    桌面端 webview (Vite dev / Tauri 打包) 与 gateway 同在 ``localhost``，
-    但 origin 不同源；必须显式加入 ``GATEWAY_CORS_ORIGINS``。FastAPI 的
+    Electron 打包态渲染层加载 ``app://localhost``，gateway 请求经主进程同源
+    反向代理（``app://localhost/gateway/*``）转发到 ``http://localhost:18001``；
+    代理将 Origin 改写为 gateway 自身 origin，gateway 的 CSRFMiddleware 视为
+    同源请求，``csrf_token`` cookie 在 secure scheme 下 JS 可读，double-submit
+    正常工作——因此打包态无需任何 origin 归一化或 double-submit 豁免补丁。
+
+    仅开发态（Vite dev server ``http://localhost:1420`` 直连 gateway）需要把
+    渲染层 origin 加入 ``GATEWAY_CORS_ORIGINS``。FastAPI 的
     ``CORSMiddleware`` (allow_credentials=True) 与 ``CSRFMiddleware`` 的
-    origin 白名单均读该变量。覆盖开发态与跨平台打包态。
+    origin 白名单均读该变量。
     """
     desktop_origins = [
-        "http://localhost:1420",      # Vite dev server（Tauri dev / 浏览器预览）
+        "http://localhost:1420",      # Vite dev server（浏览器预览 / Electron dev）
         "http://127.0.0.1:1420",      # Vite dev 备用
-        "tauri://localhost",          # Tauri macOS / Linux 打包
-        "https://tauri.localhost",    # Tauri Windows 打包
     ]
     existing = os.environ.get("GATEWAY_CORS_ORIGINS", "").strip()
     if existing:
@@ -756,8 +705,6 @@ def create_app():
     clear_server_logs()
     _load_secrets_env(paths["data_root"])
     _configure_gateway_security()
-    _patch_cors_allow_tauri_origin()
-    _patch_csrf_double_submit_for_tauri_origin()
     _allow_public_landing_news()
     _allow_public_data_source_status()
     _install_secrets_injection()
@@ -860,8 +807,8 @@ if __name__ == "__main__":
 
     # windowed exe（spec console=False）下 sys.stdout/stderr 可能为 None，
     # 后续 print 会抽 AttributeError；统一兑底到 devnull，保证 gateway 在
-    # 任何启动场景（双击 / cmd / Tauri 拉起）均不会因缺标准流而崩溃。
-    # Tauri 拉起时 Rust 已将 stdout/stderr 重定向到 desktop-gateway.log，
+    # 任何启动场景（双击 / cmd / Electron 拉起）均不会因缺标准流而崩溃。
+    # Electron 拉起时主进程已将 stdout/stderr 重定向到 desktop-gateway.log，
     # 此处兑底不会影响日志输出。
     if sys.stdout is None:
         sys.stdout = open(os.devnull, "w", encoding="utf-8", errors="replace")

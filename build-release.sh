@@ -33,15 +33,12 @@ WATCH_LATEST=false
 VERSION_FILES=(
   "package.json"
   "apps/desktop/package.json"
-  "apps/desktop/src-tauri/tauri.conf.json"
-  "apps/desktop/src-tauri/Cargo.toml"
   "pyproject.toml"
 )
 
 LOCK_FILES=(
   "pnpm-lock.yaml"
   "uv.lock"
-  "apps/desktop/src-tauri/Cargo.lock"
 )
 
 usage() {
@@ -162,7 +159,7 @@ parse_args() {
 
   if [[ -z "$VERSION" && "$WATCH_LATEST" != true ]]; then
     local current
-    current="$(python3 -c 'import json;print(json.load(open("apps/desktop/src-tauri/tauri.conf.json"))["version"])')"
+    current="$(python3 -c 'import json;print(json.load(open("apps/desktop/package.json"))["version"])')"
     normalize_version "$current"
     echo "未指定版本，使用当前版本: $TAG"
   fi
@@ -291,7 +288,6 @@ version = sys.argv[1]
 json_files = [
     Path("package.json"),
     Path("apps/desktop/package.json"),
-    Path("apps/desktop/src-tauri/tauri.conf.json"),
 ]
 for path in json_files:
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -303,7 +299,7 @@ for path in json_files:
     else:
         print(f"unchanged {path}: {version}")
 
-for path in [Path("apps/desktop/src-tauri/Cargo.toml"), Path("pyproject.toml")]:
+for path in [Path("pyproject.toml")]:
     text = path.read_text(encoding="utf-8")
     new_text, count = re.subn(r'^version = "[^"]*"', f'version = "{version}"', text, count=1, flags=re.MULTILINE)
     if count != 1:
@@ -482,10 +478,10 @@ def has_suffix(suffix):
 
 checks = [
     ("macOS dmg", has_suffix(".dmg")),
-    ("macOS updater archive", any(name.endswith(".app.tar.gz") for name in assets)),
-    ("Windows installer", has_suffix(".msi") or has_suffix(".exe")),
-    ("Linux package", has_suffix(".deb") or has_suffix(".rpm") or has_suffix(".AppImage")),
-    ("latest.json", "latest.json" in assets),
+    ("macOS updater archive", any(name.endswith("-mac.zip") for name in assets)),
+    ("Windows installer", has_suffix(".exe")),
+    ("Linux package", has_suffix(".deb")),
+    ("updater metadata", any(name in ("latest-mac.yml", "latest.yml", "latest-linux.yml") for name in assets)),
 ]
 missing = [label for label, ok in checks if not ok]
 if missing:

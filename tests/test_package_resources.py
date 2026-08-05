@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import stat
 import subprocess
@@ -47,17 +46,11 @@ hiddenimports = [
 """,
         encoding="utf-8",
     )
-    (root / "apps" / "desktop" / "src-tauri").mkdir(parents=True)
-    (root / "apps" / "desktop" / "src-tauri" / "tauri.conf.json").write_text(
-        json.dumps(
-            {
-                "bundle": {
-                    "resources": {
-                        "../../../dist/kstock-gateway": "gateway",
-                    },
-                },
-            }
-        ),
+    (root / "apps" / "desktop").mkdir(parents=True)
+    (root / "apps" / "desktop" / "electron-builder.yml").write_text(
+        "extraResources:\n"
+        '  - from: ../../dist/kstock-gateway\n'
+        '    to: gateway\n',
         encoding="utf-8",
     )
     (root / "scripts" / "run_gateway.py").write_text(

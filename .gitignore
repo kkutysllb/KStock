@@ -1,6 +1,6 @@
 node_modules/
 dist/
-build/
+/build/
 coverage/
 .DS_Store
 .pytest_cache/
@@ -9,10 +9,9 @@ __pycache__/
 .venv/
 sidecar/.venv/
 apps/desktop/dist/
+apps/desktop/dist-electron/
+apps/desktop/release/
 apps/desktop/node_modules/
-apps/desktop/src-tauri/target/
-apps/desktop/src-tauri/gen/
-apps/desktop/src-tauri/build/
 apps/desktop/test-results/
 .kstock/
 # QiLin 引擎相对 CWD 默认落点 —— 正式运行时数据应走系统 app data 目录
@@ -30,3 +29,5 @@ logs/
 # （uv.lock 应提交，此处不忽略它）
 results/
 .release-logs/
+# 技能包 vendored Python 构建产物（bdist/lib），不入库
+vendor/**/build/

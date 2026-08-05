@@ -2,7 +2,7 @@
 """KStock gateway PyInstaller spec（onedir）。
 
 把 gateway（含全部 Python 依赖、内置技能包、配置模板）打包为自包含目录
-``dist/kstock-gateway/``，作为 Tauri 桌面端的内置后端随安装包分发，
+``dist/kstock-gateway/``，作为 Electron 桌面端的内置后端随安装包分发（electron-builder extraResources），
 实现真正的开箱即用（无需用户安装 Python / 依赖）。
 
 构建命令：
@@ -79,7 +79,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=False,  # windowed exe：GUI 子系统不再要求控制台，避免被 GUI 父进程 spawn 时弹出可见 cmd 黑窗口；日志由 Tauri 侧重定向 stdout/stderr 到 desktop-gateway.log
+    console=False,  # windowed exe：GUI 子系统不再要求控制台，避免被 GUI 父进程 spawn 时弹出可见 cmd 黑窗；日志由 Electron 主进程重定向 stdout/stderr 到 desktop-gateway.log
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

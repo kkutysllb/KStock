@@ -2,7 +2,7 @@
 # 构建自包含 gateway 分发目录（PyInstaller onedir）。
 #
 # 产物: dist/kstock-gateway/（可执行文件 + 全部 Python 依赖 + 技能包 + 配置模板）
-# 该目录作为 Tauri 桌面端的内置后端随安装包分发（见 tauri.conf.json bundle.resources）。
+# 该目录作为 Electron 桌面端的内置后端随安装包分发（见 electron-builder.yml extraResources）。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -68,7 +68,7 @@ esac
 echo "==> 内置 Python 运行时: $STANDALONE_PY"
 
 # PyInstaller 的 --clean 只清理分析缓存，不保证删除旧的 onedir 文件。
-# 先移除产品目录，避免旧版 supervisor 可执行文件或残留 DLL 被 Tauri
+# 先移除产品目录，避免旧版 supervisor 可执行文件或残留 DLL 被 electron-builder
 # 继续复制进 Windows 安装包。
 rm -rf "dist/kstock-gateway"
 rm -rf "build/kstock-gateway"
@@ -220,9 +220,9 @@ du -sh "$PYTHON_RUNTIME"
 
 python scripts/verify_package_resources.py
 
-# Tauri 只会签外层 .app 和 Rust 主程序，不会递归签 resources/gateway 里
+# electron-builder 只会签外层 .app 和 Electron 主程序，不会递归签 resources/gateway 里
 # PyInstaller 收集的 Mach-O 二进制。Apple notarization 会逐个检查这些
-# 嵌套二进制，必须在 tauri build 之前用 Developer ID + secure timestamp +
+# 嵌套二进制，必须在 electron-builder 之前用 Developer ID + secure timestamp +
 # hardened runtime 预签整个 gateway 分发目录。
 case "$(uname -s)" in
   Darwin)

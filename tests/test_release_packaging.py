@@ -219,7 +219,7 @@ def test_build_gateway_bundle_installs_windows_sitecustomize_for_dll_loading():
     assert "*.libs" in script
 
 
-def test_build_gateway_bundle_signs_macos_gateway_resources_before_tauri_bundle():
+def test_build_gateway_bundle_signs_macos_gateway_resources_before_desktop_bundle():
     script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
 
     assert "APPLE_SIGNING_IDENTITY" in script
@@ -284,33 +284,30 @@ def test_check_ci_verifies_source_package_contract():
     assert "verify_package_resources.py --source-only" in script
 
 
-def test_build_desktop_uses_nsis_on_windows_to_avoid_wix_light():
+def test_electron_builder_targets_nsis_on_windows():
+    """Windows 发布用 NSIS 安装器（避免 WiX light.exe 对大包脆弱）。"""
+    config = Path("apps/desktop/electron-builder.yml").read_text(encoding="utf-8")
+
+    assert "nsis" in config
+    assert "msi" not in config.lower()
+
+
+def test_electron_builder_skips_linux_appimage():
+    """Linux 发布只保留 deb，避免 AppImage linuxdeploy 成为发布阻断点。"""
+    config = Path("apps/desktop/electron-builder.yml").read_text(encoding="utf-8")
+    linux_section = config.split("linux:", 1)[1]
+
+    assert "deb" in linux_section
+    assert "appimage" not in linux_section.lower()
+
+
+def test_build_desktop_invokes_electron_build():
+    """build-desktop.sh 调用 electron:build，不再有 tauri 平台分支。"""
     script = Path("scripts/build-desktop.sh").read_text(encoding="utf-8")
 
-    assert "--bundles nsis" in script
-    assert "MINGW" in script
-    command_lines = "\n".join(line for line in script.splitlines() if not line.strip().startswith("#"))
-    assert "msi" not in command_lines.lower()
-
-
-def test_build_desktop_uses_verbose_tauri_logs_for_unix_bundlers():
-    """linuxdeploy/AppImage 子进程失败时，CI 日志不能只剩一行包装错误。"""
-    script = Path("scripts/build-desktop.sh").read_text(encoding="utf-8")
-
-    assert "--verbose" in script
-
-
-def test_build_desktop_skips_linux_appimage_bundle():
-    """Linux 发布只保留 deb/rpm，避免 AppImage linuxdeploy 成为发布阻断点。"""
-    script = Path("scripts/build-desktop.sh").read_text(encoding="utf-8")
-
-    assert "Linux)" in script
-    assert "--bundles deb,rpm" in script
-    linux_branch = script.split("Linux)", 1)[1].split(";;", 1)[0]
-    linux_command_lines = "\n".join(
-        line for line in linux_branch.splitlines() if not line.strip().startswith("#")
-    )
-    assert "appimage" not in linux_command_lines.lower()
+    assert "electron:build" in script
+    assert "tauri" not in script.lower()
+    assert "--bundles" not in script
 
 
 def test_desktop_vitest_limits_file_parallelism_for_ci_stability():
@@ -320,39 +317,40 @@ def test_desktop_vitest_limits_file_parallelism_for_ci_stability():
     assert "maxWorkers: 1" in config
 
 
-def test_tauri_gateway_startup_preserves_gateway_stderr_in_user_logs():
-    source = Path("apps/desktop/src-tauri/src/gateway.rs").read_text(encoding="utf-8")
+def test_electron_gateway_startup_preserves_gateway_stderr_in_user_logs():
+    source = Path("apps/desktop/electron/lib/gateway.ts").read_text(encoding="utf-8")
 
     assert "desktop-gateway.log" in source
-    assert ".stdout(Stdio::from(log_file))" in source
-    assert ".stderr(Stdio::from(stderr_file))" in source
+    # stdout/stderr 统一写入 gateway log fd（对齐 Rust .stdout/.stderr(Stdio::from(...))）。
+    assert 'stdio: ["ignore", logFd, logFd]' in source
 
 
-def test_nsis_preinstall_stops_gateway_before_windows_installer_copy():
-    """NSIS must not overwrite a DLL that the bundled gateway still has loaded."""
-    config = json.loads(Path("apps/desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
-    hook_path = Path("apps/desktop/src-tauri/nsis-hooks.nsh")
+def test_nsis_installer_hook_stops_gateway_before_copy():
+    """NSIS 安装器复制文件前终止 gateway，避免 DLL 占用导致复制失败。"""
+    config = Path("apps/desktop/electron-builder.yml").read_text(encoding="utf-8")
+    hook = Path("apps/desktop/build/installer.nsh").read_text(encoding="utf-8")
 
-    assert config["bundle"]["windows"]["nsis"]["installerHooks"] == "nsis-hooks.nsh"
-    source = hook_path.read_text(encoding="utf-8")
-    assert "NSIS_HOOK_PREINSTALL" in source
-    assert "kstock-gateway.exe" in source
-    assert "/F /T" in source
-
-
-def test_tauri_starts_gateway_directly_in_serve_mode_without_stdin():
-    source = Path("apps/desktop/src-tauri/src/gateway.rs").read_text(encoding="utf-8")
-
-    assert '.arg("--serve")' in source
-    assert ".stdin(Stdio::null())" in source
-    assert "CREATE_NO_WINDOW" in source
+    assert "installer.nsh" in config
+    assert "NSIS_HOOK_PREINSTALL" in hook
+    assert "kstock-gateway.exe" in hook
+    assert "/F /T" in hook
 
 
-def test_tauri_passes_the_single_gateway_endpoint_to_the_child_process():
-    source = Path("apps/desktop/src-tauri/src/gateway.rs").read_text(encoding="utf-8")
+def test_electron_starts_gateway_directly_in_serve_mode_without_stdin():
+    source = Path("apps/desktop/electron/lib/gateway.ts").read_text(encoding="utf-8")
 
-    assert '.env("GATEWAY_HOST", "localhost")' in source
-    assert '.env("GATEWAY_PORT", GATEWAY_PORT.to_string())' in source
+    assert '["--serve"]' in source
+    # stdin 设为 ignore（对齐 Rust Stdio::null()）。
+    assert '"ignore"' in source
+    # Windows 避免 cmd 黑窗（对齐 Rust CREATE_NO_WINDOW）。
+    assert "windowsHide: true" in source
+
+
+def test_electron_passes_the_single_gateway_endpoint_to_the_child_process():
+    source = Path("apps/desktop/electron/lib/gateway.ts").read_text(encoding="utf-8")
+
+    assert 'GATEWAY_HOST: "localhost"' in source
+    assert "GATEWAY_PORT: String(GATEWAY_PORT)" in source
 
 
 def test_gateway_bundle_removes_stale_product_output_before_pyinstaller():
@@ -375,12 +373,13 @@ def test_gateway_server_exports_endpoint_before_lazy_app_creation():
     assert "KStock gateway mode: single-process uvicorn" in source
 
 
-def test_tauri_registers_gateway_restart_command():
-    gateway = Path("apps/desktop/src-tauri/src/gateway.rs").read_text(encoding="utf-8")
-    main = Path("apps/desktop/src-tauri/src/main.rs").read_text(encoding="utf-8")
+def test_electron_registers_gateway_restart_command():
+    gateway = Path("apps/desktop/electron/lib/gateway.ts").read_text(encoding="utf-8")
+    main = Path("apps/desktop/electron/main.ts").read_text(encoding="utf-8")
 
-    assert "pub fn gateway_restart(" in gateway
-    assert "gateway::gateway_restart" in main
+    assert "async restart()" in gateway
+    assert "gatewayRestart" in main
+    assert "gateway.restart()" in main
 
 
 def test_packaged_gateway_has_no_python_supervisor_layer():
