@@ -83,20 +83,36 @@ function gatewayLogFd(): number {
   return fd;
 }
 
-/** 终止整个进程树。 */
+/** 终止整个进程树（SIGTERM，允许 graceful shutdown）。 */
 function killProcessTree(pid: number): void {
+  if (pid <= 0) return;
   if (platform() === "win32") {
+    // Windows taskkill /F 已是强制终止（等同 SIGKILL），不再二次优雅。
     spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
       windowsHide: true,
       stdio: "ignore",
     });
   } else {
     try {
-      // spawn 时已 detached 建独立进程组，kill(-pid) 整树终止。
+      // spawn 时已 detached 建独立进程组，kill(-pid) 整树 SIGTERM。
       process.kill(-pid, "SIGTERM");
     } catch {
       // 进程已退出或信号失败，忽略。
     }
+  }
+}
+
+/** SIGKILL 强制终止进程树（graceful 超时兜底）。 */
+function forceKill(pid: number): void {
+  if (pid <= 0) return;
+  if (platform() === "win32") {
+    // Windows killProcessTree 已用 /F，这里不重复。
+    return;
+  }
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    // 进程已退出或信号失败，忽略。
   }
 }
 
@@ -213,6 +229,40 @@ export class GatewayProcess {
     const child = this.child;
     if (child && child.exitCode === null && child.signalCode === null) {
       killProcessTree(child.pid ?? 0);
+    }
+    this.child = null;
+  }
+
+  /**
+   * 终止 gateway 进程树并等待子进程真正退出。
+   *
+   * 用于应用更新安装前的清理：先发 SIGTERM 让 uvicorn graceful shutdown，
+   * 若 ``timeoutMs`` 内未退出则 SIGKILL 强制终止（防止僵尸进程占用 .exe
+   * 或端口导致安装器替换文件失败）。仅 Unix 需要 SIGKILL 兜底；Windows
+   * 的 ``taskkill /F`` 本身就是强制终止。
+   */
+  async killAndWait(timeoutMs = 5000): Promise<void> {
+    const child = this.child;
+    if (!child || child.exitCode !== null || child.signalCode !== null) {
+      this.child = null;
+      return;
+    }
+    const pid = child.pid ?? 0;
+
+    const exited = new Promise<void>((resolve) => {
+      child.once("exit", () => resolve());
+    });
+
+    killProcessTree(pid);
+
+    // 等待 graceful exit，超时后 SIGKILL 强制终止整树。
+    const timer = new Promise<void>((resolve) => setTimeout(resolve, timeoutMs));
+    await Promise.race([exited, timer]);
+
+    if (child.exitCode === null && child.signalCode === null) {
+      forceKill(pid);
+      // 给 SIGKILL 一点时间生效。
+      await new Promise<void>((resolve) => setTimeout(resolve, 300));
     }
     this.child = null;
   }

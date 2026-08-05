@@ -26,7 +26,7 @@ import {
   buildTray,
 } from "./lib/menu";
 import { registerAppProtocol, registerPrivilegedScheme } from "./lib/protocol";
-import { initUpdater } from "./lib/updater";
+import { initUpdater, setGatewayShutdownHandler } from "./lib/updater";
 import {
   createMainWindow,
   getMainWindow,
@@ -69,6 +69,9 @@ if (!app.requestSingleInstanceLock()) {
     } catch (err) {
       console.error("[gateway] 自动启动失败（开发模式可忽略）:", err);
     }
+    // 注册安装前 gateway 终止回调：更新安装时先同步 kill gateway，
+    // 避免 .exe 占用 / 端口冲突导致安装失败。
+    setGatewayShutdownHandler(() => gateway.killAndWait());
 
     Menu.setApplicationMenu(buildAppMenu());
     createMainWindow();
@@ -83,7 +86,8 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== "darwin") app.quit();
   });
 
-  // 应用退出时联动终止内置 gateway 进程树。
+  // 应用退出时联动终止内置 gateway 进程树（fire-and-forget，
+  // 靠 OS 回收；安装重启路径走 killAndWait 同步等待）。
   app.on("before-quit", () => {
     gateway.stop();
   });
