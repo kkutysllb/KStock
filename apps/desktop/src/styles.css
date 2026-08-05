@@ -2655,17 +2655,22 @@ button.context-file-row:hover {
 }
 
 .user-message-editor {
-  width: min(640px, 100%);
+  width: 100%;
   padding: 10px;
   border: 1px solid rgba(157, 178, 168, 0.35);
   border-radius: 8px;
   background: #1a2e29;
 }
 
+.user-message-editing {
+  width: min(760px, 100%);
+  max-width: min(760px, 100%);
+}
+
 .user-message-editor textarea {
   display: block;
   width: 100%;
-  min-height: 76px;
+  min-height: 150px;
   resize: vertical;
   padding: 8px 10px;
   border: 1px solid rgba(157, 178, 168, 0.3);
