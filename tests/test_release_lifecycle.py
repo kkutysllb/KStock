@@ -92,12 +92,17 @@ def test_ci_workflow_uses_stable_linux_builder():
 
 
 def test_release_workflow_collects_only_electron_artifacts():
-    """收集安装包必须按 KStock* 前缀精确匹配，防止误收 gateway 资源目录
-    里的内部可执行文件（如 speech_recognition/flac-win32.exe）。"""
+    """收集安装包在 release/ 顶层（-maxdepth 1）按扩展名匹配，不递归进入
+    gateway 子目录误收内部可执行文件（如 speech_recognition/flac-win32.exe）。
+    覆盖三平台安装包格式：macOS (.dmg/.zip) / Windows (.exe) / Linux (.deb/.rpm)。"""
     workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
-    assert "-name 'KStock*'" in workflow
-    assert "-name '*.exe'" not in workflow
+    # -maxdepth 1 确保只在 release 顶层查找，不递归 gateway/_internal 等
+    assert "-maxdepth 1" in workflow
+    # 按扩展名匹配，不依赖 productName/name 前缀
+    assert "-name '*.dmg'" in workflow
+    assert "-name '*.deb'" in workflow
+    assert "-name '*.rpm'" in workflow
     assert "-name '*.sig'" not in workflow
 
 
