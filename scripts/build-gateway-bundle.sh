@@ -96,7 +96,9 @@ esac
 # PYZ 会缺失这些包，导致运行时 "ModuleNotFoundError: No module named
 # 'uvicorn'"。此处读取 PYZ 归档 toc，逐个验证关键包的顶层模块存在。
 INTERNAL_DIR="dist/kstock-gateway/_internal"
+# Windows PyInstaller 产物是 kstock-gateway.exe，其他平台无后缀。
 GATEWAY_BIN="dist/kstock-gateway/kstock-gateway"
+[ ! -f "$GATEWAY_BIN" ] && GATEWAY_BIN="${GATEWAY_BIN}.exe"
 if [ ! -d "$INTERNAL_DIR" ]; then
   echo "!! ERROR: $INTERNAL_DIR 不存在 —— PyInstaller 构建可能失败" >&2
   exit 1
@@ -143,7 +145,7 @@ find "$INTERNAL_DIR" -type d -name "__pycache__" -prune -exec rm -rf {} +
 find "$INTERNAL_DIR" -name "*.pyi" -delete
 find "$INTERNAL_DIR" -path "*/testing/*" -name "*.pyc" -delete 2>/dev/null || true
 CLEANUP_AFTER="$(find "$INTERNAL_DIR" -type f | wc -l | tr -d ' ')"
-echo "   文件数: $CLEANUP_BEFORE → $CLEANUP_AFTER（清理 $((CLEANUP_BEFORE - CLEANUP_AFTER)) 个）"
+echo "   文件数: ${CLEANUP_BEFORE} → ${CLEANUP_AFTER}（清理 $((CLEANUP_BEFORE - CLEANUP_AFTER)) 个）"
 
 rm -rf "$PYTHON_RUNTIME"
 # --relocatable: 创建可移动的 venv（解释器按相对路径定位），随包分发后
