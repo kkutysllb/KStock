@@ -6,9 +6,19 @@ directories:
   output: release
   buildResources: build
 
+# 桌面端不依赖需要 node-gyp 重建的原生模块（内置后端是 PyInstaller Python 运行时，
+# 不是 node-pty 等 native addon）。关闭 npm rebuild 可避免在 Python ≥ 3.12
+# （缺 distutils）的构建机上 node-gyp 失败，且加快构建。
+npmRebuild: false
+
+# 主进程入口由 package.json 的 "main": "dist-electron/main.cjs" 提供，
+# 必须随包分发；sourcemap / TypeScript 源码只用于开发，打进安装包无意义且增大体积。
 files:
   - dist/**/*
   - dist-electron/**/*
+  - package.json
+  - "!**/*.map"
+  - "!**/*.ts"
 
 # 内置自包含 gateway（PyInstaller onedir 产物），运行时位于 resources/gateway。
 extraResources:
@@ -24,16 +34,19 @@ mac:
     - zip
   hardenedRuntime: true
   gatekeeperAssess: false
-  entitlements: null
-  entitlementsInherit: null
-  # GitHub Actions 上用 APPLE_SIGNING_IDENTITY（Developer ID）签名；
-  # 公证由 electron-builder 通过 notarize 配置自动完成。
-  notarize:
-    teamId: ${APPLE_TEAM_ID}
-  extraMetadata:
-    main: dist-electron/main.cjs
+  entitlements: build/Entitlements.plist
+  entitlementsInherit: build/Entitlements.plist
+  # 代码签名在 CSC_LINK（base64 .p12）+ CSC_KEY_PASSWORD 存在时自动启用
+  # （GitHub Actions secrets 注入）。本地未签名构建用：
+  #   CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac
+  # 公证（notarization）：electron-builder v25 在 APPLE_ID /
+  # APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 三个环境变量齐全时自动公证。
+  # 不再设置 notarize.teamId —— v25 已弃用该字段，改为从 APPLE_TEAM_ID
+  # 环境变量读取，留空可避免 deprecation 警告。
+  # 入口 main 由 package.json 提供，不需要 extraMetadata（25.x 已移除该字段）。
 
 dmg:
+  title: "${productName} ${version}"
   contents:
     - x: 130
       y: 220
@@ -46,14 +59,14 @@ win:
   icon: build/icon.ico
   target:
     - nsis
-  extraMetadata:
-    main: dist-electron/main.cjs
 
 nsis:
   oneClick: false
   perMachine: false
   allowElevation: true
   allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
   # 安装前终止残留的 gateway 进程，避免 DLL 占用导致复制失败。
   include: build/installer.nsh
 
@@ -62,8 +75,7 @@ linux:
   category: Finance
   target:
     - deb
-  extraMetadata:
-    main: dist-electron/main.cjs
+    - rpm
 
 deb:
   depends:

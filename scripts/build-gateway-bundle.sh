@@ -89,6 +89,62 @@ case "$(uname -s)" in
     ;;
 esac
 
+# ── 验证 PyInstaller bundle 包含关键 ASGI/服务端包 ──────────────────
+# KStock 的 spec 不用 collect_all()，纯 Python 模块（uvicorn/fastapi 等）被
+# 打进 PYZ 压缩归档（嵌在可执行文件的 CArchive 里），不是以目录形式存在
+# 于 _internal。hiddenimports / collect_data_files 静默吞掉 ImportError 时，
+# PYZ 会缺失这些包，导致运行时 "ModuleNotFoundError: No module named
+# 'uvicorn'"。此处读取 PYZ 归档 toc，逐个验证关键包的顶层模块存在。
+INTERNAL_DIR="dist/kstock-gateway/_internal"
+GATEWAY_BIN="dist/kstock-gateway/kstock-gateway"
+if [ ! -d "$INTERNAL_DIR" ]; then
+  echo "!! ERROR: $INTERNAL_DIR 不存在 —— PyInstaller 构建可能失败" >&2
+  exit 1
+fi
+echo "==> 验证 PYZ 归档包含关键 ASGI 包"
+uv run python - "$GATEWAY_BIN" <<'PYEOF'
+import os, sys, tempfile
+from PyInstaller.archive.readers import CArchiveReader, ZlibArchiveReader
+
+exe = sys.argv[1]
+ca = CArchiveReader(exe)
+if 'PYZ.pyz' not in ca.toc:
+    print("!! FATAL: 可执行文件 CArchive 中无 PYZ.pyz 归档", file=sys.stderr)
+    sys.exit(1)
+pyz_blob = ca.extract('PYZ.pyz')
+fd, tmp = tempfile.mkstemp(suffix='.pyz')
+with os.fdopen(fd, 'wb') as f:
+    f.write(pyz_blob)
+try:
+    pyz = ZlibArchiveReader(tmp)
+    toc = set(pyz.toc)
+finally:
+    os.unlink(tmp)
+
+required = ['uvicorn', 'fastapi', 'starlette', 'pydantic']
+missing = [pkg for pkg in required
+           if pkg not in toc and not any(n.startswith(pkg + '.') for n in toc)]
+if missing:
+    print(f"!! FATAL: PYZ 归档缺失关键包: {missing}", file=sys.stderr)
+    print(f"   PYZ 内模块总数: {len(toc)}", file=sys.stderr)
+    sys.exit(1)
+print(f"   PYZ 内模块总数: {len(toc)}，uvicorn/fastapi/starlette/pydantic 均在位")
+PYEOF
+
+# ── 清理 test/cache/.pyi（防 EMFILE + 减小体积）─────────────────────
+# collect_data_files("akshare") 等会拉入 numpy/pandas 的测试数据与 .pyi
+# 类型存根，文件数可达数万。electron-builder 签名阶段逐文件打开会触发
+# EMFILE: too many open files；.pyi 在运行时无用；__pycache__ 是字节码
+# 缓存，PyInstaller 已预编译到 PYZ，删除不影响运行。
+echo "==> 清理 gateway bundle 测试数据 / 缓存 / 类型存根"
+CLEANUP_BEFORE="$(find "$INTERNAL_DIR" -type f | wc -l | tr -d ' ')"
+find "$INTERNAL_DIR" -type d \( -name "tests" -o -name "test" -o -name "_tests" \) -prune -exec rm -rf {} +
+find "$INTERNAL_DIR" -type d -name "__pycache__" -prune -exec rm -rf {} +
+find "$INTERNAL_DIR" -name "*.pyi" -delete
+find "$INTERNAL_DIR" -path "*/testing/*" -name "*.pyc" -delete 2>/dev/null || true
+CLEANUP_AFTER="$(find "$INTERNAL_DIR" -type f | wc -l | tr -d ' ')"
+echo "   文件数: $CLEANUP_BEFORE → $CLEANUP_AFTER（清理 $((CLEANUP_BEFORE - CLEANUP_AFTER)) 个）"
+
 rm -rf "$PYTHON_RUNTIME"
 # --relocatable: 创建可移动的 venv（解释器按相对路径定位），随包分发后
 # 在任意路径可运行，不依赖构建机绝对路径。

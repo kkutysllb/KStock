@@ -42,7 +42,16 @@ jobs:
       - name: 校验并构建（check-release.sh）
         timeout-minutes: 60
         env:
-          # macOS 签名 + 公证（electron-builder 原生支持 CSC_LINK / APPLE_* 环境变量）
+          # macOS 双层签名 + 公证（两层签名密钥分工不同）：
+          # 1) gateway 预签：build-gateway-bundle.sh 读取 APPLE_SIGNING_IDENTITY
+          #    （格式 "Developer ID Application: 名字 (TeamID)"），用 codesign
+          #    预签 PyInstaller gateway 内嵌的全部 Mach-O 二进制。electron-builder
+          #    不会递归签 extraResources，未预签会导致 Apple 公证 HARDFAIL。
+          # 2) .app 外壳签名：electron-builder 原生读取 CSC_LINK（base64 .p12）+
+          #    CSC_KEY_PASSWORD，签 KStock.app 主体。
+          # 3) 公证：electron-builder v25 在 APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD /
+          #    APPLE_TEAM_ID 三者齐全时自动提交 notarytool 公证。
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PWD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
