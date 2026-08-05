@@ -62,11 +62,14 @@ jobs:
         run: |
           mkdir -p dist-release
           # electron-builder 产物在 apps/desktop/release/
-          # 收集安装包 + updater 元数据（latest*.yml），排除 blockmap 等中间产物。
-          # electron-builder 自动为 electron-updater 生成 latest-mac.yml / latest.yml /
-          # latest-linux.yml，无需手动构造旧版 JSON 清单。
+          # 按扩展名收集所有安装包 + updater 元数据，不依赖文件名前缀。
+          # macOS 产物名基于 productName（KStock*），Linux deb/rpm 基于
+          # package.json name（kstock-desktop_*），用扩展名匹配最可靠。
+          # blockmap 是 electron-updater 增量更新的元数据，必须随包分发。
           find apps/desktop/release -maxdepth 1 -type f \
-            \( -name 'KStock*' -o -name 'latest*.yml' \) \
+            \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' \
+               -o -name '*.deb' -o -name '*.rpm' \
+               -o -name '*.blockmap' -o -name 'latest*.yml' \) \
             -exec cp {} dist-release/ \;
           ls -lh dist-release
       - uses: actions/upload-artifact@v4
