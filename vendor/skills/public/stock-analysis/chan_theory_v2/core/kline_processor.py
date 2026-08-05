@@ -978,7 +978,11 @@ class KlineProcessor:
                     normal_intervals = {
                         1800,    # 30分钟
                         3600,    # 1小时
+                        5400,    # 5分钟午休（11:30→13:00）
+                        5700,    # 5分钟午休（11:30→13:05，时间戳语义差异）
+                        6300,    # 15分钟午休（11:45→13:15）
                         7200,    # 2小时（午休）
+                        9000,    # 60分钟午休（11:30→14:00）
                         66600,   # 18.5小时（隔夜）
                         239400,  # 66.5小时（周末：周五15:00到周一9:30）
                         325800,  # 90.5小时（3天长假）
@@ -987,6 +991,19 @@ class KlineProcessor:
                     
                     # 允许10%的时间误差
                     is_normal_interval = any(abs(gap - normal) / normal < 0.1 for normal in normal_intervals)
+                    
+                    if not is_normal_interval:
+                        # 分钟级跨日/假期间隔：隔夜66600s加整天偏移（n天），
+                        # 覆盖隔夜/周末/长假（如412200/757800/930600等变体）。
+                        offset = (gap - 66600) / 86400.0
+                        is_normal_interval = 0.0 <= offset <= 13.0 and abs(offset - round(offset)) < 0.01
+                    
+                    if not is_normal_interval:
+                        # 日线及以上级别：间隔为整天（86400秒整数倍，1~62天）视为
+                        # 正常休市（普通交易日/周末/节假日/长假期）。分钟级间隔
+                        # （隔夜66600s、周末239400s等）均非整天数，不受此规则影响。
+                        days = gap / 86400.0
+                        is_normal_interval = 1.0 <= days <= 62.0 and abs(days - round(days)) < 0.01
                     
                     if not is_normal_interval and gap > 7200:  # 超过2小时且不是正常间隔
                         # 检查对应位置是否有价格跳空
