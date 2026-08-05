@@ -46,6 +46,11 @@
     "longDescription": "KStock 使用 QiLin 引擎和精选 KSkills 技能，以对话方式完成股票研究、分析和报告任务。",
     "resources": {
       "../../../dist/kstock-gateway": "gateway"
+    },
+    "windows": {
+      "nsis": {
+        "installerHooks": "nsis-hooks.nsh"
+      }
     }
   },
   "plugins": {

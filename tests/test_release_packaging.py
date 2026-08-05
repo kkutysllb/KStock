@@ -325,3 +325,15 @@ def test_tauri_gateway_startup_preserves_gateway_stderr_in_user_logs():
 
     assert "desktop-gateway.log" in source
     assert "Stdio::null()" not in source
+
+
+def test_nsis_preinstall_stops_gateway_before_windows_installer_copy():
+    """NSIS must not overwrite a DLL that the bundled gateway still has loaded."""
+    config = json.loads(Path("apps/desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
+    hook_path = Path("apps/desktop/src-tauri/nsis-hooks.nsh")
+
+    assert config["bundle"]["windows"]["nsis"]["installerHooks"] == "nsis-hooks.nsh"
+    source = hook_path.read_text(encoding="utf-8")
+    assert "NSIS_HOOK_PREINSTALL" in source
+    assert "kstock-gateway.exe" in source
+    assert "/F /T" in source
