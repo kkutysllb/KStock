@@ -101,7 +101,7 @@ describe("AssistantTurn 澄清渲染", () => {
     expect(screen.getByText("正常回复")).toBeTruthy();
   });
 
-  it("流式正文末尾展示灰白齿轮，完成后隐藏", () => {
+  it("流式正文末尾展示迷你 K 线流动，完成后隐藏", () => {
     const msg: ChatMessage = {
       id: "turn-streaming",
       role: "assistant",
@@ -111,11 +111,11 @@ describe("AssistantTurn 澄清渲染", () => {
     };
     const { container, rerender } = render(<AssistantTurn msg={msg} />);
 
-    expect(container.querySelector("svg.streaming-gear")).toBeTruthy();
-    expect(container.querySelector(".streaming-flywheel")).toBeNull();
+    expect(container.querySelector(".streaming-candles")).toBeTruthy();
+    expect(container.querySelectorAll(".streaming-candles .candle").length).toBe(4);
 
     rerender(<AssistantTurn msg={{ ...msg, status: "done" }} />);
-    expect(container.querySelector("svg.streaming-gear")).toBeNull();
+    expect(container.querySelector(".streaming-candles")).toBeNull();
   });
 
   it("完成后在总状态的分割线下展示正文，而不默认展示工具卡片", () => {

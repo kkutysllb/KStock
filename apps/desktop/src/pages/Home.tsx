@@ -11,7 +11,6 @@ import {
   ArrowLeft,
   Brain,
   Bot,
-  CalendarRange,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -39,7 +38,6 @@ import {
   Sparkles,
   Square,
   Trash2,
-  TrendingUp,
   Upload,
   UsersRound,
   Zap,
@@ -200,68 +198,6 @@ async function openExternalUrl(url: string) {
   await desktopOpenExternalUrl(url);
 }
 
-
-
-// ── 研究场景：点击填入简洁研究请求，编排由提示词模板驱动 ──
-// 编排指令（委派流程/命令模板/共振背离规则）在 config/lead_soul.md →
-// QILIN_HOME/SOUL.md 提示词模板中，注入 Lead Agent 系统提示，不进用户消息。
-interface ResearchScene {
-  id: string;
-  title: string;
-  description: string;
-  prompt: string;
-}
-
-const researchScenes: ResearchScene[] = [
-  {
-    id: "index-futures-daily",
-    title: "股指期货专题分析 · 日度",
-    description: "期指 × 期权 × 市场环境三层次联动，四品种方向矩阵与共振/背离标注",
-    prompt: "请做一份股指期货专题分析（日度）",
-  },
-  {
-    id: "index-futures-weekly",
-    title: "股指期货专题分析 · 周度",
-    description: "ISO 自然周聚合：周涨跌幅/周均基差/周均 PCR 与 IV，周度联动信号",
-    prompt: "请做一份股指期货专题分析（周度）",
-  },
-  {
-    id: "option-etf-daily",
-    title: "期权ETF专题分析 · 日度",
-    description: "7 大期权 ETF × 期权 × 市场环境三层次联动，方向矩阵与共振/背离标注",
-    prompt: "请做一份期权ETF专题分析（日度）",
-  },
-  {
-    id: "option-etf-weekly",
-    title: "期权ETF专题分析 · 周度",
-    description: "ISO 自然周聚合：周涨跌幅/周均成交额/份额净申赎，周度资金与情绪信号",
-    prompt: "请做一份期权ETF专题分析（周度）",
-  },
-  {
-    id: "market-linkage-daily",
-    title: "市场联动分析 · 日度",
-    description: "8 维资金与情绪联动：主力/北向/两融/基差/PCR 与 IV/ETF 份额/Shibor/龙虎榜",
-    prompt: "请做一份市场联动分析（日度）",
-  },
-  {
-    id: "market-linkage-weekly",
-    title: "市场联动分析 · 周度",
-    description: "ISO 自然周聚合长窗口：中期资金趋势与综合联动评分",
-    prompt: "请做一份市场联动分析（周度）",
-  },
-  {
-    id: "cb-daily",
-    title: "可转债全景分析 · 日度",
-    description: "问财 16 大看板模块 × 估值与双低策略 × 条款事件，全市场温度与个券挖掘",
-    prompt: "请做一份可转债全景分析（日度）",
-  },
-  {
-    id: "cb-weekly",
-    title: "可转债全景分析 · 周度",
-    description: "ISO 自然周聚合：中证转债指数/估值全景/双低策略池/综合研判（0-100 分）",
-    prompt: "请做一份可转债全景分析（周度）",
-  },
-];
 
 const landingCandles = [
   { left: 2, top: 56, height: 11, delay: -0.2, direction: "up" },
@@ -2028,31 +1964,6 @@ function WorkspaceShell({
                   <p className="eyebrow">Research Desk <span>01</span></p>
                   <h1>把一个问题，变成一份<br /><em>可验证的研究结论。</em></h1>
                   <h4>从行情、财报到行业脉络，KStock 会整理证据、过程与风险，最后交付清晰的研究看板。</h4>
-                </div>
-                <div className="research-scenes">
-                  <div className="scene-section-head">
-                    <span className="scene-section-title">研究场景</span>
-                    <span className="scene-section-hint">点击填入研究请求，编排由提示词模板驱动</span>
-                  </div>
-                  <div className="scene-grid">
-                    {researchScenes.map((scene) => (
-                      <button
-                        key={scene.id}
-                        type="button"
-                        className="scene-card"
-                        onClick={() => onDraftChange(scene.prompt)}
-                      >
-                        <span className="scene-icon" aria-hidden="true">
-                          {scene.id.endsWith("weekly") ? <CalendarRange size={16} /> : <TrendingUp size={16} />}
-                        </span>
-                        <span className="scene-text">
-                          <strong>{scene.title}</strong>
-                          <em>{scene.description}</em>
-                        </span>
-                        <ChevronRight size={15} aria-hidden="true" />
-                      </button>
-                    ))}
-                  </div>
                 </div>
               </div>
             }

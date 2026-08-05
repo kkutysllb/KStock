@@ -1,9 +1,9 @@
 // assistant turn 整合：Claude/ChatGPT 风格无气泡布局。
 // 从上到下：阶段徽章（无工具调用时）→ ReasoningBlock → SubagentGroup[] →
 // 工具活动摘要 → 正文 text（markdown 源文本）→ error。
-// 流式时正文末尾显示旋转齿轮；空 turn 流式中显示 pending 占位。
+// 流式时正文末尾显示迷你 K 线流动（4 根蜡烛错相位脉冲）；空 turn 流式中显示 pending 占位。
 
-import { AlertTriangle, Cog } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import type { ChatMessage, HumanInputPayload } from "../lib/sessionStore";
 import { Markdown } from "../lib/markdown";
 import { StageBadge } from "./StageBadge";
@@ -123,7 +123,14 @@ export function AssistantTurn({
           msg.text && (
             <div className="turn-text">
               <Markdown>{msg.text}</Markdown>
-              {streaming && <Cog size={14} className="streaming-gear" aria-hidden="true" />}
+              {streaming && (
+                <span className="streaming-candles" aria-hidden="true">
+                  <span className="candle" />
+                  <span className="candle" />
+                  <span className="candle" />
+                  <span className="candle" />
+                </span>
+              )}
             </div>
           )
         )}
