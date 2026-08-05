@@ -355,24 +355,40 @@ export function Home() {
   }, []);
 
   // 启动时探测 gateway 会话与系统初始化状态。
+  // gateway 冷启动需数秒（PyInstaller 引导 + 导入重依赖），探测失败时后台
+  // 自动重试（约 30 秒），避免首屏误报「无法连接本地引擎」/ 首启不出现
+  // 管理员初始化流程；UI 仍按 AUTH_BOOT_TIMEOUT_MS 尽快展示，不阻塞。
   useEffect(() => {
     let cancelled = false;
     let settled = false;
+    let attempts = 0;
     const timeoutId = window.setTimeout(() => {
       if (cancelled || settled) return;
       setAuthReady(true);
     }, AUTH_BOOT_TIMEOUT_MS);
-    Promise.all([
-      tryGetCurrentUser().catch(() => null),
-      getSetupStatus().catch(() => null),
-    ]).then(([user, setup]) => {
-      if (cancelled) return;
-      settled = true;
-      window.clearTimeout(timeoutId);
-      if (user) setCurrentUser(user);
-      if (setup) setSetupStatus(setup);
-      setAuthReady(true);
-    });
+    const probe = () => {
+      if (cancelled || settled) return;
+      attempts += 1;
+      Promise.all([
+        tryGetCurrentUser().catch(() => null),
+        getSetupStatus().catch(() => null),
+      ]).then(([user, setup]) => {
+        if (cancelled) return;
+        if (user || setup) {
+          settled = true;
+          window.clearTimeout(timeoutId);
+          if (user) setCurrentUser(user);
+          if (setup) setSetupStatus(setup);
+          setAuthReady(true);
+          return;
+        }
+        // gateway 尚未就绪（冷启动竞态），继续后台探测。
+        if (attempts < 20) {
+          window.setTimeout(probe, 1_500);
+        }
+      });
+    };
+    probe();
     return () => {
       cancelled = true;
       window.clearTimeout(timeoutId);
@@ -1443,38 +1459,50 @@ function AuthPage({
     }
     setSubmitting(true);
     setError(null);
-    try {
+    // 登录/注册动作（登录成功后补一次 /me 拿账户信息）。
+    const performAuth = async (): Promise<AuthUser> => {
       if (isLogin) {
-        // 登录响应只含 token 有效期，补一次 /me 拿到账户信息。
         await gatewayLogin(trimmedEmail, password, rememberMe);
         const user = await tryGetCurrentUser();
         if (!user) {
-          setError("登录成功但无法读取账户信息，请重试");
-          return;
+          throw new Error("登录成功但无法读取账户信息，请重试");
         }
-        onComplete(user);
-      } else if (isAdminBootstrap) {
-        // 首启：创建管理员账户（system_role=admin）。
-        const user = await gatewayInitializeAdmin({
-          email: trimmedEmail,
-          password,
-          remember_me: rememberMe,
-        });
-        onComplete(user);
-      } else {
-        // 普通注册：system_role=user。
-        const user = await gatewayRegister({
-          email: trimmedEmail,
-          password,
-          remember_me: rememberMe,
-        });
-        onComplete(user);
+        return user;
       }
+      if (isAdminBootstrap) {
+        return gatewayInitializeAdmin({
+          email: trimmedEmail,
+          password,
+          remember_me: rememberMe,
+        });
+      }
+      return gatewayRegister({
+        email: trimmedEmail,
+        password,
+        remember_me: rememberMe,
+      });
+    };
+    try {
+      onComplete(await performAuth());
     } catch (err) {
+      let finalErr: unknown = err;
+      // gateway 冷启动竞态兜底：网络错误等待 1.5 秒后重试一次
+      // （Windows 冷启动可能比前端 boot 探测更慢），仍失败才提示用户。
+      if (isAuthApiError(finalErr) && finalErr.code === "network_error") {
+        await new Promise((resolve) => setTimeout(resolve, 1_500));
+        try {
+          onComplete(await performAuth());
+          return;
+        } catch (retryErr) {
+          finalErr = retryErr;
+        }
+      }
       setError(
-        isAuthApiError(err)
-          ? err.message
-          : "操作失败，请稍后重试",
+        isAuthApiError(finalErr)
+          ? finalErr.message
+          : finalErr instanceof Error && finalErr.message
+            ? finalErr.message
+            : "操作失败，请稍后重试",
       );
     } finally {
       setSubmitting(false);
