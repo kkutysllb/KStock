@@ -127,7 +127,9 @@ describe("prepareEditedBranch", () => {
           calls.push(`prepare:${threadId}:${humanId}:${text}`);
           return preparedWithFiles;
         },
-        deleteThread: async () => calls.push("delete")
+        deleteThread: async () => {
+          calls.push("delete");
+        }
       }
     });
     expect(calls).toEqual(["branch:ai-final", "prepare:branch-1:human-1:新问题"]);
