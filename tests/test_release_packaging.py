@@ -348,6 +348,33 @@ def test_tauri_starts_gateway_directly_in_serve_mode_without_stdin():
     assert "CREATE_NO_WINDOW" in source
 
 
+def test_tauri_passes_the_single_gateway_endpoint_to_the_child_process():
+    source = Path("apps/desktop/src-tauri/src/gateway.rs").read_text(encoding="utf-8")
+
+    assert '.env("GATEWAY_HOST", "localhost")' in source
+    assert '.env("GATEWAY_PORT", GATEWAY_PORT.to_string())' in source
+
+
+def test_gateway_bundle_removes_stale_product_output_before_pyinstaller():
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    build_index = script.index("pyinstaller scripts/kstock-gateway.spec")
+    cleanup_index = script.index('rm -rf "dist/kstock-gateway"')
+    assert cleanup_index < build_index
+
+
+def test_gateway_server_exports_endpoint_before_lazy_app_creation():
+    source = Path("scripts/run_gateway.py").read_text(encoding="utf-8")
+
+    port_index = source.index('port = int(os.environ.get("GATEWAY_PORT", "18001"))')
+    app_index = source.index("app = sys.modules[__name__].app", port_index)
+    assert 'os.environ.setdefault("GATEWAY_HOST", host)' in source
+    assert 'os.environ.setdefault("GATEWAY_PORT", str(port))' in source
+    assert source.index('os.environ.setdefault("GATEWAY_HOST", host)', port_index) < app_index
+    assert source.index('os.environ.setdefault("GATEWAY_PORT", str(port))', port_index) < app_index
+    assert "KStock gateway mode: single-process uvicorn" in source
+
+
 def test_tauri_registers_gateway_restart_command():
     gateway = Path("apps/desktop/src-tauri/src/gateway.rs").read_text(encoding="utf-8")
     main = Path("apps/desktop/src-tauri/src/main.rs").read_text(encoding="utf-8")

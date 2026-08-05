@@ -105,6 +105,10 @@ impl GatewayProcess {
     let mut cmd = Command::new(&exe);
     cmd
       .arg("--serve")
+      // 强制桌面端和 bundled Python/vendor 配置使用同一端点；不能依赖
+      // Windows 用户环境中可能残留的 GATEWAY_PORT/GATEWAY_HOST。
+      .env("GATEWAY_HOST", "localhost")
+      .env("GATEWAY_PORT", GATEWAY_PORT.to_string())
       .env("KSTOCK_APP_DATA_DIR", app_data_dir)
       .stdin(Stdio::null())
       .stdout(Stdio::from(log_file))

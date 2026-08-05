@@ -842,6 +842,11 @@ def _run_server() -> None:
 
     host = os.environ.get("GATEWAY_HOST", "localhost")
     port = int(os.environ.get("GATEWAY_PORT", "18001"))
+    # vendor 的 lifespan 会在惰性创建 app 时读取这两个变量。显式回写
+    # 最终绑定值，避免 vendor 默认日志仍显示旧的 8001 端口。
+    os.environ.setdefault("GATEWAY_HOST", host)
+    os.environ.setdefault("GATEWAY_PORT", str(port))
+    print(f"KStock gateway mode: single-process uvicorn on {host}:{port}", flush=True)
     # 经模块属性访问触发 __getattr__ 惰性创建（__main__ 与包导入均适用）
     app = sys.modules[__name__].app
     uvicorn.run(app, host=host, port=port)

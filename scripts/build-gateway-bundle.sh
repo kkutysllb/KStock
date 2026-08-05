@@ -67,6 +67,11 @@ case "$STANDALONE_PY" in
 esac
 echo "==> 内置 Python 运行时: $STANDALONE_PY"
 
+# PyInstaller 的 --clean 只清理分析缓存，不保证删除旧的 onedir 文件。
+# 先移除产品目录，避免旧版 supervisor 可执行文件或残留 DLL 被 Tauri
+# 继续复制进 Windows 安装包。
+rm -rf "dist/kstock-gateway"
+rm -rf "build/kstock-gateway"
 echo "==> PyInstaller 构建 gateway（dist/kstock-gateway/）"
 uv run --python "$STANDALONE_PY" pyinstaller scripts/kstock-gateway.spec --noconfirm --clean
 # speech_recognition 的 flac-mac 是上游 wheel 自带的旧 macOS SDK 可执行文件，
