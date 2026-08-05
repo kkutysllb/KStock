@@ -932,6 +932,16 @@ if __name__ == "__main__":
 
     multiprocessing.freeze_support()
 
+    # windowed exe（spec console=False）下 sys.stdout/stderr 可能为 None，
+    # 后续 print 会抽 AttributeError；统一兑底到 devnull，保证 supervisor 与
+    # worker 在任何启动场景（双击 / cmd / Tauri 拉起）均不会因缺标准流而崩溃。
+    # Tauri 拉起时 Rust 已将 stdout/stderr 重定向到 desktop-gateway.log，
+    # 此处兑底不会影响日志输出。
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8", errors="replace")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8", errors="replace")
+
     # 打包态下把内置 Python 运行时接入 PATH（supervisor 与 server 子进程都继承）。
     _setup_bundled_python_env()
 
