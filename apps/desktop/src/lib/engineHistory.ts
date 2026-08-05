@@ -134,6 +134,12 @@ function mergeAssistantTurns(target: ChatMessage, incoming: ChatMessage): void {
   if (incoming.status === "needs_input" || hasHumanInputToolCall(target.toolCalls)) {
     target.status = "needs_input";
   }
+  if (incoming.engineMessageIds?.length) {
+    target.engineMessageIds = [...new Set([
+      ...(target.engineMessageIds ?? []),
+      ...incoming.engineMessageIds
+    ])];
+  }
 }
 
 // ── 字段提取辅助 ────────────────────────────────────────────────────
@@ -247,6 +253,7 @@ function buildAssistantTurn(
     role: "assistant",
     createdAt: ensureTimestamp(row, msg),
     status: errorText ? "error" : "done",
+    ...(typeof msg.id === "string" && msg.id ? { engineMessageIds: [msg.id] } : {}),
     ...(typeof row.run_id === "string" && row.run_id ? { runId: row.run_id } : {}),
     ...(text ? { text } : {}),
     ...(reasoning ? { reasoning } : {}),

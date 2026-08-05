@@ -135,6 +135,10 @@ function reduceAiMessage(
   const next: AssistantTurnState = { ...state };
 
   const ak = msg.additional_kwargs as Record<string, unknown> | undefined;
+  const engineId = typeof msg.id === "string" && msg.id ? msg.id : undefined;
+  if (engineId && !next.engineMessageIds?.includes(engineId)) {
+    next.engineMessageIds = [...(next.engineMessageIds ?? []), engineId];
+  }
 
   // qilin_error_fallback：引擎把 provider error 包装成 ai message，
   // 不作为正文累积，标记为 error 让 UI 用错误样式呈现。

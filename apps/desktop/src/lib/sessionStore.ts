@@ -117,6 +117,8 @@ export interface ChatMessage {
   skills?: string[];
   /** 该 assistant turn 对应的引擎 run id。 */
   runId?: string;
+  /** 同一 assistant turn 内所有可用于分支的引擎消息 ID。 */
+  engineMessageIds?: string[];
   /** pipeline_stage（前端推断兜底）。 */
   stage?: string;
   status?: TurnStatus;
@@ -167,9 +169,9 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function createMessage(role: ChatRole, content: string, model?: string): ChatMessage {
+function createMessage(role: ChatRole, content: string, model?: string, id?: string): ChatMessage {
   return {
-    id: crypto.randomUUID(),
+    id: id || crypto.randomUUID(),
     role,
     createdAt: nowIso(),
     content,
@@ -251,9 +253,10 @@ export function appendMessageToSession(
   session: ChatSession,
   role: ChatRole,
   content: string,
-  model?: string
+  model?: string,
+  messageId?: string
 ): ChatSession {
-  const nextMessages = [...session.messages, createMessage(role, content, model)];
+  const nextMessages = [...session.messages, createMessage(role, content, model, messageId)];
   const nextTitle = session.messages.length === 0 && role === "user" ? content.slice(0, 18) : session.title;
   return {
     ...session,

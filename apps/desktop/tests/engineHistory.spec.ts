@@ -261,6 +261,15 @@ describe("engineMessagesToChatMessages", () => {
     expect(out[1].toolCalls?.map((tool) => tool.id)).toEqual(["tc1", "tc2"]);
     expect(out[1].text).toBe("两家公司数据已整理完成。");
   });
+
+  it("同一 run 合并 assistant 消息时保留全部引擎消息 id", () => {
+    const out = engineMessagesToChatMessages([
+      { type: "human", id: "human-1", content: "问题", run_id: "run-1" },
+      { type: "ai", id: "ai-tool", content: "处理中", run_id: "run-1" },
+      { type: "ai", id: "ai-final", content: "完成", run_id: "run-1" }
+    ]);
+    expect(out[1].engineMessageIds).toEqual(["ai-tool", "ai-final"]);
+  });
 });
 
 // ── 事件行格式（引擎 GET /api/threads/{tid}/messages 真实返回） ────────

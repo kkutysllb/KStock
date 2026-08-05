@@ -77,6 +77,15 @@ describe("完整流式序列集成：reasoning → tool_call → result → 正�
   });
 });
 
+describe("assistant engine message identity", () => {
+  it("流式 assistant 帧按首次出现顺序去重引擎消息 id", () => {
+    let state = reduceFrame(initialTurn(), frame("messages", aiMsg({ id: "ai-1", content: "A" })), 1);
+    state = reduceFrame(state, frame("messages", aiMsg({ id: "ai-1", content: "B" })), 2);
+    state = reduceFrame(state, frame("messages", aiMsg({ id: "ai-2", content: "C" })), 3);
+    expect(state.engineMessageIds).toEqual(["ai-1", "ai-2"]);
+  });
+});
+
 // ── messages 事件分支 ────────────────────────────────────────────────
 
 describe("messages 事件", () => {
