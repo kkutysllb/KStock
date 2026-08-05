@@ -37,6 +37,12 @@ interface ChatFeedProps {
   onAtBottomChange?: (atBottom: boolean) => void;
   /** ask_clarification 选项被选中并点“回复并确认”时回调（透传给 AssistantTurn）。 */
   onClarifyPick?: (text: string, question?: string) => void;
+  /** 可编辑的 user message IDs，由 Home 根据已完成 assistant turn 计算。 */
+  editableUserMessageIds?: ReadonlySet<string>;
+  /** 当前有 run 或分支准备时锁定编辑入口。 */
+  editDisabled?: boolean;
+  /** 编辑提交回调；业务层负责创建分支并重新生成。 */
+  onEditResend?: (messageId: string, replacementText: string) => Promise<void>;
 }
 
 const STICK_THRESHOLD_PX = 80;
@@ -52,6 +58,9 @@ export const ChatFeed = forwardRef<ChatFeedHandle, ChatFeedProps>(
     emptySlot,
     onAtBottomChange,
     onClarifyPick,
+    editableUserMessageIds,
+    editDisabled = false,
+    onEditResend,
   }, ref) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const stickToBottom = useRef(true);
@@ -113,7 +122,13 @@ export const ChatFeed = forwardRef<ChatFeedHandle, ChatFeedProps>(
         <div className="chat-feed-inner">
           {messages.map((m) =>
             m.role === "user" ? (
-              <UserBubble key={m.id} msg={m} />
+              <UserBubble
+                key={m.id}
+                msg={m}
+                canEdit={editableUserMessageIds?.has(m.id) ?? false}
+                editDisabled={editDisabled}
+                onEditResend={onEditResend}
+              />
             ) : (
               <AssistantTurn
                 key={m.id}
