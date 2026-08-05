@@ -890,7 +890,13 @@ def _run_supervisor() -> None:
     attempt = 0
     while not stop.is_set():
         print(f"[supervisor] 启动 gateway 子进程（第 {attempt + 1} 次）…", flush=True)
-        proc = subprocess.Popen(cmd, env=env)
+        # Windows：supervisor 以 CREATE_NO_WINDOW 启动（无控制台）时，再 spawn
+        # 控制台子进程会额外弹出一个可见 cmd 窗口，显式加 CREATE_NO_WINDOW 隐藏。
+        proc = subprocess.Popen(
+            cmd,
+            env=env,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
         while not stop.is_set():
             try:
                 code = proc.wait(timeout=1)

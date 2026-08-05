@@ -106,6 +106,15 @@ impl GatewayProcess {
       use std::os::unix::process::CommandExt;
       cmd.process_group(0);
     }
+    #[cfg(windows)]
+    {
+      // GUI 宿主 spawn 控制台子进程（PyInstaller console=True）时系统会默认
+      // 弹出可见 cmd 黑窗口：CREATE_NO_WINDOW 让控制台创建但不可见，
+      // 日志仍通过 stdout/stderr 重定向到文件，不受影响。
+      use std::os::windows::process::CommandExt;
+      const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+      cmd.creation_flags(CREATE_NO_WINDOW);
+    }
     let child = cmd
       .spawn()
       .map_err(|err| format!("启动内置 gateway 失败：{err}"))?;
