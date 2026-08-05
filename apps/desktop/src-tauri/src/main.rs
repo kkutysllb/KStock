@@ -382,7 +382,7 @@ fn main() {
     .plugin(tauri_plugin_process::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
     .setup(|app| {
-      // 自动拉起内置 gateway（打包态；开发态若端口已有实例则直接复用）
+      // 自动拉起内置 gateway（开发态和打包态统一由 Tauri 托管）。
       let gateway = app.state::<gateway::GatewayProcess>();
       if let Err(err) = gateway.ensure_started(app.handle()) {
         eprintln!("[gateway] 自动启动失败（开发模式可忽略）: {err}");
@@ -419,6 +419,7 @@ fn main() {
     .invoke_handler(tauri::generate_handler![
       gateway::gateway_start,
       gateway::gateway_stop,
+      gateway::gateway_restart,
       gateway::gateway_status,
       gateway::app_data_dir,
       open_external_url,
@@ -427,7 +428,7 @@ fn main() {
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
     .run(|app_handle: &tauri::AppHandle, event| {
-      // 应用退出时联动终止内置 gateway（含 supervisor 子进程树）
+      // 应用退出时联动终止内置 gateway 进程树。
       if let tauri::RunEvent::Exit = event {
         let gateway = app_handle.state::<gateway::GatewayProcess>();
         if let Err(err) = gateway.stop() {

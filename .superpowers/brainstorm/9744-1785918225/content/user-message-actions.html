@@ -1,0 +1,84 @@
+<style>
+  .comparison-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:20px; }
+  .design-card { border:1px solid #30353b; border-radius:8px; background:#15171a; overflow:hidden; cursor:pointer; transition:border-color .15s, transform .15s; }
+  .design-card:hover { border-color:#69727d; transform:translateY(-1px); }
+  .design-card.selected { border-color:#aeb5be; box-shadow:0 0 0 1px #aeb5be; }
+  .preview { min-height:310px; padding:28px 22px; background:#181a1e; }
+  .conversation { display:flex; flex-direction:column; gap:18px; }
+  .assistant-copy { width:80%; color:#d9dde2; font-size:13px; line-height:1.65; }
+  .user-wrap { align-self:flex-end; display:flex; flex-direction:column; align-items:flex-end; max-width:76%; }
+  .user-bubble-demo { padding:10px 14px; border-radius:14px; background:linear-gradient(135deg,#1f3a34,#1a2e29); color:#e8f5f0; font-size:13px; line-height:1.6; }
+  .actions { display:flex; gap:3px; margin-top:5px; color:#9aa1aa; }
+  .icon-btn { display:grid; place-items:center; width:27px; height:27px; border:0; border-radius:5px; background:transparent; color:inherit; font-size:14px; }
+  .icon-btn:hover { background:#272a2f; color:#f0f2f4; }
+  .edit-box { width:100%; min-width:280px; padding:11px; border:1px solid #4e565f; border-radius:8px; background:#1e2226; }
+  .edit-box textarea { width:100%; min-height:68px; resize:none; border:0; outline:0; background:transparent; color:#edf0f2; font:13px/1.55 inherit; }
+  .edit-actions { display:flex; justify-content:flex-end; gap:7px; margin-top:8px; }
+  .mini-btn { padding:5px 10px; border:1px solid #3a4047; border-radius:5px; background:#24282d; color:#c8cdd3; font-size:11px; }
+  .mini-btn.primary { border-color:#728078; background:#d9dedb; color:#171a18; }
+  .hover-wrap { position:relative; padding-bottom:12px; }
+  .floating-actions { position:absolute; right:8px; bottom:-9px; display:flex; gap:2px; padding:2px; border:1px solid #353a40; border-radius:6px; background:#202328; box-shadow:0 5px 16px rgba(0,0,0,.35); color:#aeb4bc; }
+  .composer { margin-top:36px; padding:10px 12px; border:1px solid #505861; border-radius:8px; background:#202328; color:#eef0f2; font-size:13px; }
+  .composer-footer { display:flex; justify-content:space-between; align-items:center; margin-top:8px; color:#838b94; font-size:10px; }
+  .send-dot { width:24px; height:24px; display:grid; place-items:center; border-radius:6px; background:#d9dedb; color:#181b19; }
+  .card-copy { padding:15px 16px 17px; border-top:1px solid #2b2f34; }
+  .card-copy h3 { margin:0 0 5px; color:#f0f2f3; font-size:14px; }
+  .card-copy p { margin:0; color:#969da6; font-size:12px; line-height:1.55; }
+  .tag { display:inline-block; margin-bottom:9px; color:#c8cdd3; font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
+  @media (max-width:800px){ .comparison-grid{grid-template-columns:1fr;} }
+</style>
+
+<h2>用户消息操作区放在哪里？</h2>
+<p class="subtitle">两种方案都使用编辑与复制图标；点击卡片选择你偏好的交互。</p>
+
+<div class="comparison-grid cards">
+  <div class="design-card card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="preview card-image">
+      <div class="conversation">
+        <div class="user-wrap">
+          <div class="user-bubble-demo">分析贵州茅台最近一季财报，并对比行业均值。</div>
+          <div class="actions" aria-label="消息操作">
+            <button class="icon-btn" title="编辑">✎</button>
+            <button class="icon-btn" title="复制">⧉</button>
+          </div>
+        </div>
+        <div class="assistant-copy">我会先读取最新财务数据，再完成盈利能力和估值对比。</div>
+        <div class="user-wrap">
+          <div class="edit-box">
+            <textarea>把对比范围改成白酒行业前三家公司。</textarea>
+            <div class="edit-actions"><button class="mini-btn">取消</button><button class="mini-btn primary">重新发送</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-copy card-body">
+      <span class="tag">方案 A · 推荐</span>
+      <h3>气泡下方常驻，原位编辑</h3>
+      <p>按钮稳定可发现；编辑上下文明确，确认后直接从这条消息重新发送。</p>
+    </div>
+  </div>
+
+  <div class="design-card card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="preview card-image">
+      <div class="conversation">
+        <div class="user-wrap hover-wrap">
+          <div class="user-bubble-demo">分析贵州茅台最近一季财报，并对比行业均值。</div>
+          <div class="floating-actions" aria-label="消息操作">
+            <button class="icon-btn" title="编辑">✎</button>
+            <button class="icon-btn" title="复制">⧉</button>
+          </div>
+        </div>
+        <div class="assistant-copy">我会先读取最新财务数据，再完成盈利能力和估值对比。</div>
+        <div class="composer">
+          把对比范围改成白酒行业前三家公司。
+          <div class="composer-footer"><span>正在编辑历史消息</span><span class="send-dot">↑</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-copy card-body">
+      <span class="tag">方案 B</span>
+      <h3>悬浮操作条，回到底部编辑</h3>
+      <p>气泡更干净，但按钮较难发现；编辑时视线会离开原消息。</p>
+    </div>
+  </div>
+</div>

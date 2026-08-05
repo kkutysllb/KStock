@@ -1,10 +1,9 @@
-// ── gateway 进程控制 API 客户端（对接 /api/v1/kstock/restart）──
+// ── gateway 进程控制客户端（对接 Tauri gateway_restart command）──
 //
-// gateway 是独立 uvicorn 进程，重启依赖 supervisor 模式（见
-// scripts/run_gateway.py 的 _run_supervisor）。本模块提供 restart 请求 +
-// 健康轮询恢复探测（gateway 重启后端口短暂不可用，需轮询 /health 感知恢复）。
+// gateway 的生命周期由 Tauri/Rust 独占管理。纯浏览器 dev:web 没有 Tauri
+// 宿主，仍可手工启动 gateway，但不能从页面重启它。
 
-import { GATEWAY_URL, readCsrfToken } from "./gatewayUrl";
+import { GATEWAY_URL } from "./gatewayUrl";
 
 /** gateway 进程控制错误（归一化）。 */
 export interface GatewayControlApiError {
@@ -12,66 +11,41 @@ export interface GatewayControlApiError {
   status: number;
 }
 
-/** restart 响应。supervised=false 表示当前非 supervisor 模式（不会真的重启）。 */
+/** restart 响应。supervised 字段保留以兼容设置页现有调用方。 */
 export interface RestartResult {
   message: string;
   supervised: boolean;
 }
 
 /**
- * 请求 gateway 重启。
- *
- * 后端在 supervisor 模式下会延迟 0.5s 后以 RESTART_EXIT_CODE 退出，supervisor
- * 检测到后自动重启子进程；非 supervisor 模式返回 503 提示手动重启。
+ * 请求 Tauri 宿主重启 gateway。
  */
 export async function restartGateway(): Promise<RestartResult> {
-  const headers = new Headers({ "Content-Type": "application/json" });
-  const csrf = readCsrfToken();
-  if (csrf) headers.set("X-CSRF-Token", csrf);
+  const win = window as Window & { __TAURI_INTERNALS__?: unknown; __TAURI__?: unknown };
+  if (!win.__TAURI_INTERNALS__ && !win.__TAURI__) {
+    throw { message: "当前运行环境没有 Tauri 宿主，请手动重启 gateway", status: 0 } satisfies GatewayControlApiError;
+  }
 
-  let response: Response;
   try {
-    response = await fetch(`${GATEWAY_URL}/api/v1/kstock/restart`, {
-      method: "POST",
-      headers,
-      credentials: "include",
-    });
-  } catch {
-    // fetch 抛错通常是进程已退出（端口不可达）——对重启场景反而是预期信号。
-    // 等待恢复轮询会感知新进程上线，这里不阻断流程。
-    throw { message: "后端进程未响应，将等待恢复", status: 0 } satisfies GatewayControlApiError;
+    const { invoke } = await import("@tauri-apps/api/core");
+    const message = await invoke<string>("gateway_restart");
+    return { message, supervised: false };
+  } catch (error) {
+    if (isGatewayControlApiError(error)) throw error;
+    const message =
+      typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : "重启 gateway 失败";
+    throw { message, status: 0 } satisfies GatewayControlApiError;
   }
-
-  const text = await response.text();
-  let body: unknown = null;
-  if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = { detail: text };
-    }
-  }
-
-  if (!response.ok) {
-    const detail = (body as { detail?: unknown } | null)?.detail;
-    let message: string;
-    if (typeof detail === "string") {
-      message = detail;
-    } else if (detail && typeof detail === "object") {
-      message = String((detail as Record<string, unknown>).message ?? "重启失败");
-    } else {
-      message = "重启失败，请稍后重试";
-    }
-    throw { message, status: response.status } satisfies GatewayControlApiError;
-  }
-  return body as RestartResult;
 }
 
 /**
  * 轮询 gateway ``/health`` 直到恢复或超时。
  *
- * gateway 重启后端口短暂不可用（旧进程退出 → supervisor 重启子进程 → 新进程
- * listen），前端用固定间隔轮询 ``/health``（CSRF 豁免、无需认证）感知恢复。
+ * gateway 重启后端口短暂不可用，前端用固定间隔轮询 ``/health`` 感知恢复。
  *
  * @param timeoutMs 总超时（默认 20s）
  * @param onProbe   每次探测回调（用于 UI 显示「等待恢复…第 N 次」）

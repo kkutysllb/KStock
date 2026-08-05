@@ -10,7 +10,7 @@
 
 打包态资源布局（与 run_gateway.py 的 REPO_ROOT = sys._MEIPASS 对应）：
     kstock-gateway/
-      kstock-gateway(.exe)      # 可执行文件（supervisor 模式）
+      kstock-gateway(.exe)      # 可执行文件（单层 uvicorn server）
       vendor/skills/            # 内置技能包（runtime.yaml 的 skills.path 指向这里）
       config/                   # qilin.config.yaml / lead_soul.md 模板
       _internal/                # Python 运行时 + 全部依赖

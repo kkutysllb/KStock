@@ -12,8 +12,8 @@ use tauri::{AppHandle, Manager, State};
 ///
 /// 发布包在 ``Resources/gateway/`` 内置自包含的 gateway 可执行目录
 /// （PyInstaller onedir：Python 运行时 + 全部依赖 + 技能包 + 配置模板）。
-/// 桌面端启动时自动拉起 gateway（supervisor 模式，监听 18001），
-/// 退出时联动终止，实现开箱即用。
+/// 桌面端启动时自动拉起唯一的 gateway server child（监听 18001），
+/// 退出或重启时联动终止，实现开箱即用。
 pub struct GatewayProcess {
   child: Mutex<Option<Child>>,
 }
@@ -22,7 +22,11 @@ pub struct GatewayProcess {
 const GATEWAY_PORT: u16 = 18001;
 
 fn port_alive(port: u16) -> bool {
-  TcpStream::connect(("127.0.0.1", port)).is_ok()
+  // Python 默认绑定 localhost；Windows 上可能优先解析为 IPv6 ::1。
+  // 同时探测 localhost、IPv4 和 IPv6，避免把已就绪的 gateway 判成超时。
+  TcpStream::connect(("localhost", port)).is_ok()
+    || TcpStream::connect(("127.0.0.1", port)).is_ok()
+    || TcpStream::connect(("::1", port)).is_ok()
 }
 
 impl GatewayProcess {
@@ -57,7 +61,7 @@ impl GatewayProcess {
       .map_err(|err| format!("无法定位用户目录：{err}"))
   }
 
-  fn gateway_log_file(app: &AppHandle) -> Result<std::fs::File, String> {
+  fn gateway_log_file(app: &AppHandle) -> Result<(std::fs::File, PathBuf), String> {
     let logs_dir = Self::app_data_dir(app)?.join("logs");
     fs::create_dir_all(&logs_dir).map_err(|err| format!("无法创建 gateway 日志目录：{err}"))?;
     let log_path = logs_dir.join("desktop-gateway.log");
@@ -67,70 +71,92 @@ impl GatewayProcess {
       .open(&log_path)
       .map_err(|err| format!("无法打开 gateway 启动日志 {}：{err}", log_path.display()))?;
     let _ = writeln!(file, "\n=== starting bundled gateway ===");
-    Ok(file)
+    Ok((file, log_path))
   }
 
-  /// 确保 gateway 在运行：
-  /// - 端口已有实例（历史残留 / 手动启动）→ 直接采用，不重复拉起；
-  /// - 无实例 → 启动资源目录内的 gateway 可执行文件并等待端口就绪。
+  /// 启动当前 Rust 实例托管的唯一 gateway server child。
   pub fn ensure_started(&self, app: &AppHandle) -> Result<String, String> {
-    if port_alive(GATEWAY_PORT) {
-      return Ok("已连接（gateway 实例已在运行）".to_string());
-    }
-
     let mut guard = self.child.lock().unwrap();
     if let Some(child) = guard.as_mut() {
-      if child
+      match child
         .try_wait()
         .map_err(|err| format!("检查 gateway 进程失败：{err}"))?
-        .is_none()
       {
-        return Ok("gateway 正在启动中…".to_string());
+        None if port_alive(GATEWAY_PORT) => return Ok("gateway 已启动".to_string()),
+        None => return Ok("gateway 正在启动中…".to_string()),
+        Some(_) => {
+          guard.take();
+        }
       }
+    }
+
+    if port_alive(GATEWAY_PORT) {
+      return Err(format!(
+        "gateway 端口 {GATEWAY_PORT} 已被非托管进程占用；请先结束该进程后重试"
+      ));
     }
 
     let exe = Self::gateway_executable(app)?;
     let app_data_dir = Self::app_data_dir(app)?;
-    let log_file = Self::gateway_log_file(app)?;
+    let (log_file, log_path) = Self::gateway_log_file(app)?;
     let stderr_file = log_file
       .try_clone()
       .map_err(|err| format!("无法复制 gateway 日志句柄：{err}"))?;
     let mut cmd = Command::new(&exe);
     cmd
+      .arg("--serve")
       .env("KSTOCK_APP_DATA_DIR", app_data_dir)
+      .stdin(Stdio::null())
       .stdout(Stdio::from(log_file))
       .stderr(Stdio::from(stderr_file));
     #[cfg(unix)]
     {
-      // 新建进程组：退出时 kill(-pid) 可整树终止（supervisor + uvicorn 子进程）
+      // 新建进程组：退出时 kill(-pid) 可整树终止。
       use std::os::unix::process::CommandExt;
       cmd.process_group(0);
     }
     #[cfg(windows)]
     {
-      // GUI 宿主 spawn 控制台子进程（PyInstaller console=True）时系统会默认
-      // 弹出可见 cmd 黑窗口：CREATE_NO_WINDOW 让控制台创建但不可见，
-      // 日志仍通过 stdout/stderr 重定向到文件，不受影响。
+      // 即使旧产物仍是 console 子系统，也不能继承/创建可见终端窗口。
       use std::os::windows::process::CommandExt;
       const CREATE_NO_WINDOW: u32 = 0x0800_0000;
       cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    let child = cmd
+    let mut child = cmd
       .spawn()
       .map_err(|err| format!("启动内置 gateway 失败：{err}"))?;
-    *guard = Some(child);
 
-    // 等待端口就绪（最长约 20 秒；首次启动需初始化 SQLite + 迁移）
+    // 等待端口就绪（最长约 20 秒；首次启动需初始化 SQLite + 迁移）。
     for _ in 0..40 {
+      if let Some(status) = child
+        .try_wait()
+        .map_err(|err| format!("检查 gateway 进程失败：{err}"))?
+      {
+        return Err(format!(
+          "gateway 在监听端口前退出（{status}）；请查看日志：{}",
+          log_path.display()
+        ));
+      }
       if port_alive(GATEWAY_PORT) {
+        *guard = Some(child);
         return Ok("gateway 已启动".to_string());
       }
       std::thread::sleep(Duration::from_millis(500));
     }
-    Ok("gateway 进程已拉起，等待端口就绪…".to_string())
+    *guard = Some(child);
+    Err(format!(
+      "gateway 启动超时，端口 {GATEWAY_PORT} 未就绪；请查看日志：{}",
+      log_path.display()
+    ))
   }
 
-  /// 终止 gateway（含其 supervisor 子进程树）。
+  /// 重启 gateway server child。
+  pub fn restart(&self, app: &AppHandle) -> Result<String, String> {
+    self.stop()?;
+    self.ensure_started(app)
+  }
+
+  /// 终止 gateway 进程树。
   pub fn stop(&self) -> Result<(), String> {
     let mut guard = self.child.lock().unwrap();
     if let Some(mut child) = guard.take() {
@@ -171,7 +197,7 @@ pub struct GatewayStatus {
   pub child_alive: bool,
 }
 
-/// 终止整个进程树（supervisor 收到 SIGTERM 后会自动终止其 uvicorn 子进程）。
+/// 终止整个进程树。
 fn kill_process_tree(pid: u32) {
   #[cfg(unix)]
   {
@@ -198,6 +224,14 @@ pub fn gateway_start(app: AppHandle, state: State<'_, GatewayProcess>) -> Result
 #[tauri::command]
 pub fn gateway_stop(state: State<'_, GatewayProcess>) -> Result<(), String> {
   state.stop()
+}
+
+#[tauri::command]
+pub fn gateway_restart(
+  app: AppHandle,
+  state: State<'_, GatewayProcess>,
+) -> Result<String, String> {
+  state.restart(&app)
 }
 
 #[tauri::command]

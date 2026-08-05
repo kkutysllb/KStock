@@ -254,7 +254,7 @@ def test_user_writes_config_then_restart_backend_preserves_it(tmp_path, monkeypa
     """模拟「用户改配置 → 点重启后端」的完整时序，验证配置不丢。
 
     场景对应：用户在设置页改了 memory 段，然后点「重启后端」让变更生效。
-    重启后端 = supervisor 重启子进程 = 子进程重新执行 create_app() →
+    重启后端 = Tauri 终止并重新启动 gateway = 重新执行 create_app() →
     _generate_runtime_config()。本测试用连续两次调用模拟这个时序。
     """
     from scripts.kstock_models import _atomic_write_yaml
@@ -279,7 +279,7 @@ def test_user_writes_config_then_restart_backend_preserves_it(tmp_path, monkeypa
     cfg["models"] = [{"name": "production-model", "use": "openai", "model": "gpt-4"}]
     _atomic_write_yaml(runtime_cfg, cfg)
 
-    # 3. 用户点「重启后端」→ supervisor 重启子进程 → 子进程走 create_app()
+    # 3. 用户点「重启后端」→ Tauri 重启 gateway → gateway 重新走 create_app()
     #    → _ensure_data_space() → _generate_runtime_config()
     _generate_runtime_config(runtime_cfg, qilin_data_dir, REPO_ROOT)
 

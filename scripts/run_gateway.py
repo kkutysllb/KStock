@@ -792,8 +792,7 @@ def create_app():
         "KStock gateway 开发日志已启用 → %s", DEV_LOGS_DIR
     )
 
-    # KStock 自有的路由层（vendor 引擎只读，以下路由提供 KStock CRUD / 控制）
-    from scripts.kstock_gateway_control import router as kstock_gateway_control_router
+    # KStock 自有的路由层（vendor 引擎只读，以下路由提供 KStock CRUD）
     from scripts.kstock_models import router as kstock_models_router
     from scripts.kstock_data_sources import router as kstock_data_sources_router
     from scripts.kstock_runtime_config import router as kstock_runtime_config_router
@@ -809,7 +808,6 @@ def create_app():
     app.include_router(kstock_general_settings_router)
     app.include_router(kstock_reports_router)
     app.include_router(kstock_news_router)
-    app.include_router(kstock_gateway_control_router)
     return app
 
 
@@ -833,7 +831,7 @@ def __getattr__(name: str) -> Any:
 
 
 def _run_server() -> None:
-    """启动 uvicorn server（由 supervisor 作为子进程启动）。
+    """启动唯一的 uvicorn server 进程。
 
     绑定 localhost（而非 127.0.0.1）：与前端 Vite dev (localhost:1420) 同属
     localhost registrable domain，浏览器将 access_token cookie 视为 same-site，
@@ -849,83 +847,6 @@ def _run_server() -> None:
     uvicorn.run(app, host=host, port=port)
 
 
-def _run_supervisor() -> None:
-    """supervisor 模式：启动并监控子进程，子进程以 RESTART_EXIT_CODE 退出时自动重启。
-
-    桌面端设置页的「重启后端」按钮通过 ``/api/v1/kstock/restart`` 端点让子进程
-    以 ``RESTART_EXIT_CODE`` 退出，supervisor 检测到后自动重启干净的子进程——
-    无需重启整个桌面端即可让配置变更（数据库后端切换、secrets 更新等）完全生效。
-
-    模块级 ``app = create_app()`` 仍会执行（幂等：建目录 / 清日志 / 加载 secrets
-    均无副作用），但 supervisor 本身不调用 uvicorn，只管理子进程生命周期。
-
-    收到 SIGTERM/SIGINT（桌面端宿主退出时联动下发）会先终止子进程再退出，
-    避免 uvicorn 子进程孤儿化继续占用 18001 端口。
-    """
-    import signal
-    import subprocess
-    import time as _time
-
-    from scripts.kstock_gateway_control import RESTART_EXIT_CODE, SUPERVISOR_PID_ENV
-
-    env = os.environ.copy()
-    env[SUPERVISOR_PID_ENV] = str(os.getpid())
-    if getattr(sys, "frozen", False):
-        # PyInstaller 打包态：sys.executable 即打包后的 gateway 可执行文件，
-        # argv[1] 仅作占位（子进程只检查 ``--serve in sys.argv``）。
-        cmd = [sys.executable, "--serve"]
-    else:
-        cmd = [sys.executable, str(Path(__file__).resolve()), "--serve"]
-
-    stop = threading.Event()
-
-    def _on_signal(_signum, _frame) -> None:
-        stop.set()
-
-    signal.signal(signal.SIGTERM, _on_signal)
-    if hasattr(signal, "SIGINT"):
-        signal.signal(signal.SIGINT, _on_signal)
-
-    proc: subprocess.Popen | None = None
-    attempt = 0
-    while not stop.is_set():
-        print(f"[supervisor] 启动 gateway 子进程（第 {attempt + 1} 次）…", flush=True)
-        # Windows：supervisor 以 CREATE_NO_WINDOW 启动（无控制台）时，再 spawn
-        # 控制台子进程会额外弹出一个可见 cmd 窗口，显式加 CREATE_NO_WINDOW 隐藏。
-        proc = subprocess.Popen(
-            cmd,
-            env=env,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        while not stop.is_set():
-            try:
-                code = proc.wait(timeout=1)
-                break
-            except subprocess.TimeoutExpired:
-                continue
-        if stop.is_set():
-            break
-        if code == RESTART_EXIT_CODE:  # type: ignore[possibly-undefined]
-            attempt += 1
-            print(
-                f"[supervisor] 子进程请求重启（exit {code}），1 秒后重新启动…",
-                flush=True,
-            )
-            _time.sleep(1)
-            continue
-        print(f"[supervisor] 子进程退出（exit {code}），supervisor 结束。", flush=True)
-        sys.exit(code)
-
-    if proc is not None and proc.poll() is None:
-        print("[supervisor] 收到退出信号，终止 gateway 子进程…", flush=True)
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-    print("[supervisor] 已退出。", flush=True)
-
-
 if __name__ == "__main__":
     # PyInstaller 多进程/多线程安全入口（打包态下必要，源码模式无副作用）
     import multiprocessing
@@ -933,8 +854,8 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
 
     # windowed exe（spec console=False）下 sys.stdout/stderr 可能为 None，
-    # 后续 print 会抽 AttributeError；统一兑底到 devnull，保证 supervisor 与
-    # worker 在任何启动场景（双击 / cmd / Tauri 拉起）均不会因缺标准流而崩溃。
+    # 后续 print 会抽 AttributeError；统一兑底到 devnull，保证 gateway 在
+    # 任何启动场景（双击 / cmd / Tauri 拉起）均不会因缺标准流而崩溃。
     # Tauri 拉起时 Rust 已将 stdout/stderr 重定向到 desktop-gateway.log，
     # 此处兑底不会影响日志输出。
     if sys.stdout is None:
@@ -942,12 +863,6 @@ if __name__ == "__main__":
     if sys.stderr is None:
         sys.stderr = open(os.devnull, "w", encoding="utf-8", errors="replace")
 
-    # 打包态下把内置 Python 运行时接入 PATH（supervisor 与 server 子进程都继承）。
+    # 打包态下把内置 Python 运行时接入 PATH。
     _setup_bundled_python_env()
-
-    if "--serve" in sys.argv:
-        # server 模式：真正的 uvicorn 进程，由 supervisor 启动。
-        _run_server()
-    else:
-        # 默认 supervisor 模式：管理子进程生命周期，支持「重启后端」。
-        _run_supervisor()
+    _run_server()

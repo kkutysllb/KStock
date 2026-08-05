@@ -324,7 +324,8 @@ def test_tauri_gateway_startup_preserves_gateway_stderr_in_user_logs():
     source = Path("apps/desktop/src-tauri/src/gateway.rs").read_text(encoding="utf-8")
 
     assert "desktop-gateway.log" in source
-    assert "Stdio::null()" not in source
+    assert ".stdout(Stdio::from(log_file))" in source
+    assert ".stderr(Stdio::from(stderr_file))" in source
 
 
 def test_nsis_preinstall_stops_gateway_before_windows_installer_copy():
@@ -337,3 +338,27 @@ def test_nsis_preinstall_stops_gateway_before_windows_installer_copy():
     assert "NSIS_HOOK_PREINSTALL" in source
     assert "kstock-gateway.exe" in source
     assert "/F /T" in source
+
+
+def test_tauri_starts_gateway_directly_in_serve_mode_without_stdin():
+    source = Path("apps/desktop/src-tauri/src/gateway.rs").read_text(encoding="utf-8")
+
+    assert '.arg("--serve")' in source
+    assert ".stdin(Stdio::null())" in source
+    assert "CREATE_NO_WINDOW" in source
+
+
+def test_tauri_registers_gateway_restart_command():
+    gateway = Path("apps/desktop/src-tauri/src/gateway.rs").read_text(encoding="utf-8")
+    main = Path("apps/desktop/src-tauri/src/main.rs").read_text(encoding="utf-8")
+
+    assert "pub fn gateway_restart(" in gateway
+    assert "gateway::gateway_restart" in main
+
+
+def test_packaged_gateway_has_no_python_supervisor_layer():
+    source = Path("scripts/run_gateway.py").read_text(encoding="utf-8")
+
+    assert "def _run_supervisor" not in source
+    assert "KSTOCK_SUPERVISOR_PID" not in source
+    assert "kstock_gateway_control" not in source
