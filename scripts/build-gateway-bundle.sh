@@ -97,8 +97,9 @@ esac
 # 'uvicorn'"。此处读取 PYZ 归档 toc，逐个验证关键包的顶层模块存在。
 INTERNAL_DIR="dist/kstock-gateway/_internal"
 # Windows PyInstaller 产物是 kstock-gateway.exe，其他平台无后缀。
+# 用 Python 内部检测（os.path.isfile），避免 bash `[ ! -f ] && ...` 在
+# Windows Git Bash + set -e 下的语义歧义。
 GATEWAY_BIN="dist/kstock-gateway/kstock-gateway"
-[ ! -f "$GATEWAY_BIN" ] && GATEWAY_BIN="${GATEWAY_BIN}.exe"
 if [ ! -d "$INTERNAL_DIR" ]; then
   echo "!! ERROR: $INTERNAL_DIR 不存在 —— PyInstaller 构建可能失败" >&2
   exit 1
@@ -109,6 +110,12 @@ import os, sys, tempfile
 from PyInstaller.archive.readers import CArchiveReader, ZlibArchiveReader
 
 exe = sys.argv[1]
+# 跨平台兼容：Windows 产物带 .exe 后缀，此处自动探测
+if not os.path.isfile(exe) and os.path.isfile(exe + '.exe'):
+    exe = exe + '.exe'
+if not os.path.isfile(exe):
+    print(f"!! FATAL: gateway 可执行文件不存在: {exe}", file=sys.stderr)
+    sys.exit(1)
 ca = CArchiveReader(exe)
 if 'PYZ.pyz' not in ca.toc:
     print("!! FATAL: 可执行文件 CArchive 中无 PYZ.pyz 归档", file=sys.stderr)
