@@ -2590,9 +2590,16 @@ button.context-file-row:hover {
 }
 
 /* user 气泡：右对齐 */
-.user-bubble {
+.user-message {
   align-self: flex-end;
   max-width: 70%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.user-bubble {
   padding: 10px 14px;
   border-radius: 14px;
   background: linear-gradient(135deg, #1f3a34, #1a2e29);
@@ -2604,6 +2611,103 @@ button.context-file-row:hover {
 .user-bubble p {
   margin: 0;
   white-space: pre-wrap;
+}
+
+.user-message-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 24px;
+  padding-right: 2px;
+}
+
+.user-message-action,
+.user-message-editor-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #9ca8a4;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.user-message-action:hover:not(:disabled),
+.user-message-action:focus-visible,
+.user-message-editor-button:hover:not(:disabled),
+.user-message-editor-button:focus-visible {
+  background: rgba(198, 211, 205, 0.12);
+  color: #d6dfdc;
+  outline: none;
+}
+
+.user-message-action:disabled,
+.user-message-editor-button:disabled {
+  color: #5f6c67;
+  cursor: not-allowed;
+}
+
+.user-message-editor {
+  width: min(640px, 100%);
+  padding: 10px;
+  border: 1px solid rgba(157, 178, 168, 0.35);
+  border-radius: 8px;
+  background: #1a2e29;
+}
+
+.user-message-editor textarea {
+  display: block;
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid rgba(157, 178, 168, 0.3);
+  border-radius: 6px;
+  background: #10211d;
+  color: #e8f5f0;
+  font: inherit;
+  line-height: 1.55;
+  box-sizing: border-box;
+}
+
+.user-message-editor textarea:focus {
+  border-color: #8bb5a5;
+  outline: 2px solid rgba(139, 181, 165, 0.2);
+  outline-offset: 1px;
+}
+
+.user-message-editor-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.user-message-editor-submit {
+  background: #9bc8b5;
+  color: #10211d;
+}
+
+.user-message-editor-submit:hover:not(:disabled),
+.user-message-editor-submit:focus-visible {
+  background: #b8dccb;
+  color: #10211d;
+}
+
+.user-message-error {
+  max-width: 100%;
+  margin: 0;
+  color: #f1a8a8;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: right;
 }
 
 /* assistant turn：正文直接贴合消息列，不使用头像占位 */
