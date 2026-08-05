@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cancelRun,
+  createThreadBranch,
   deleteUpload,
   ensureThread,
   fetchThreadMessages,
   getUploadLimits,
   listThreads,
   listUploads,
+  prepareEditRegenerate,
   runContextFromModel,
   streamRun,
   uploadFiles,
@@ -79,6 +81,85 @@ describe("ensureThread", () => {
       makeMockResponse({ ok: false, status: 500, json: { detail: "boom" } })
     );
     await expect(ensureThread()).rejects.toThrow(/创建 thread 失败（500）：boom/);
+  });
+});
+
+describe("thread branching and edit regeneration", () => {
+  it("创建 thread 分支并返回新 thread id", async () => {
+    fetchMock.mockResolvedValue(makeMockResponse({
+      json: {
+        thread_id: "branch-1",
+        parent_thread_id: "thr-1",
+        parent_checkpoint_id: "cp-1",
+        branched_from_message_id: "ai-final",
+        workspace_clone_mode: "skipped_historical_turn",
+        history_seed_mode: "seeded"
+      }
+    }));
+
+    const result = await createThreadBranch("thr-1", {
+      message_id: "ai-final",
+      message_ids: ["ai-tool", "ai-final"],
+      title: "分析任务（编辑）"
+    });
+
+    expect(result.thread_id).toBe("branch-1");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://localhost:18001/api/threads/thr-1/branches");
+    expect(init.method).toBe("POST");
+    expect(init.headers["X-CSRF-Token"]).toBe("test-csrf-abc");
+    expect(JSON.parse(init.body)).toEqual({
+      message_id: "ai-final",
+      message_ids: ["ai-tool", "ai-final"],
+      title: "分析任务（编辑）"
+    });
+  });
+
+  it("准备编辑重跑并映射 checkpoint 与 metadata", async () => {
+    const response = {
+      input: {
+        messages: [{
+          type: "human",
+          id: "human-replacement",
+          content: [{ type: "text", text: "修改后的问题" }],
+          additional_kwargs: { files: [{ filename: "old.pdf" }] }
+        }]
+      },
+      checkpoint: { checkpoint_ns: "", checkpoint_id: "cp-base" },
+      metadata: { replay_kind: "edit", regenerate_from_run_id: "run-old" },
+      target_run_id: "run-old",
+      replacement_human_message_id: "human-replacement",
+      source_message_ids: ["human-old", "ai-final"]
+    };
+    fetchMock.mockResolvedValue(makeMockResponse({ json: response }));
+
+    await expect(
+      prepareEditRegenerate("branch-1", "human-old", "修改后的问题")
+    ).resolves.toEqual(response);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://localhost:18001/api/threads/branch-1/runs/edit-regenerate/prepare");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({
+      human_message_id: "human-old",
+      replacement_text: "修改后的问题"
+    });
+  });
+
+  it("branch 与 edit prepare 的非 2xx 响应抛出 detail", async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeMockResponse({ ok: false, status: 409, json: { detail: "cannot branch" } })
+    );
+    await expect(createThreadBranch("thr-1", {
+      message_id: "ai-final",
+      message_ids: ["ai-final"]
+    })).rejects.toThrow(/cannot branch/);
+
+    fetchMock.mockResolvedValueOnce(
+      makeMockResponse({ ok: false, status: 409, json: { detail: "cannot edit" } })
+    );
+    await expect(
+      prepareEditRegenerate("branch-1", "human-1", "新问题")
+    ).rejects.toThrow(/cannot edit/);
   });
 });
 
@@ -167,6 +248,19 @@ describe("streamRun", () => {
     expect(body.context).toEqual({ model_name: "deepseek-chat", thinking_enabled: true });
     expect(body.config).toEqual({ recursion_limit: 1000 });
     expect(body.stream_mode).toEqual(["values", "messages-tuple", "custom"]);
+  });
+
+  it("streamRun 透传 checkpoint 与 metadata", async () => {
+    const opts = {
+      ...makeRunOpts(),
+      checkpoint: { checkpoint_ns: "", checkpoint_id: "cp-base" },
+      metadata: { replay_kind: "edit" }
+    };
+    fetchMock.mockResolvedValue(streamResponse(["event: end\ndata: null\n\n"]));
+    await streamRun(opts);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.checkpoint).toEqual(opts.checkpoint);
+    expect(body.metadata).toEqual(opts.metadata);
   });
 
   it("请求头带 CSRF 与 Accept: text/event-stream，路径含 threadId", async () => {

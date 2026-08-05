@@ -46,6 +46,49 @@ export interface UploadedFileRef {
   markdown_artifact_url?: string;
 }
 
+export interface ThreadBranchRequest {
+  message_id: string;
+  message_ids: string[];
+  title?: string;
+}
+
+export interface ThreadBranchResponse {
+  thread_id: string;
+  parent_thread_id: string;
+  parent_checkpoint_id: string;
+  branched_from_message_id: string;
+  workspace_clone_mode: string;
+  history_seed_mode: string;
+}
+
+export interface RunCheckpoint {
+  checkpoint_ns: string;
+  checkpoint_id: string;
+  checkpoint_map?: Record<string, unknown>;
+}
+
+export interface RunInputMessage {
+  role?: "user";
+  type?: "human";
+  id?: string;
+  content: string | Array<{ type: "text"; text: string }>;
+  additional_kwargs?: Record<string, unknown>;
+}
+
+export interface RunInput {
+  messages: RunInputMessage[];
+  title?: string;
+}
+
+export interface EditRegeneratePrepareResponse {
+  input: RunInput;
+  checkpoint: RunCheckpoint;
+  metadata: Record<string, unknown>;
+  target_run_id: string;
+  replacement_human_message_id: string;
+  source_message_ids: string[];
+}
+
 export interface WorkspaceChangeFile {
   path: string;
   root?: string;
@@ -91,15 +134,10 @@ export interface StreamRunHandlers {
 
 export interface StreamRunOptions {
   threadId: string;
-  input: {
-    messages: Array<{
-      role: "user";
-      content: string;
-      /** 本轮上传的附件描述符；由 UploadsMiddleware 注入 <current_uploads> 块。 */
-      additional_kwargs?: { files?: UploadedFileRef[] };
-    }>;
-  };
+  input: RunInput;
   context: RunContext;
+  checkpoint?: RunCheckpoint;
+  metadata?: Record<string, unknown>;
   /**
    * 透传给 RunCreateRequest.config 的图运行参数；未提供时默认
    * { recursion_limit: 1000 }（引擎默认 100、runtime 上限 1000，
@@ -126,6 +164,47 @@ export async function ensureThread(): Promise<string> {
     throw new Error("创建 thread 失败：响应缺少 thread_id");
   }
   return data.thread_id;
+}
+
+/** 从已完成 assistant turn 创建一个新的 main-thread 分支。 */
+export async function createThreadBranch(
+  threadId: string,
+  body: ThreadBranchRequest
+): Promise<ThreadBranchResponse> {
+  const resp = await fetch(`${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/branches`, {
+    method: "POST",
+    credentials: "include",
+    headers: jsonHeaders(),
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    throw await toError("创建会话分支失败", resp);
+  }
+  return (await resp.json()) as ThreadBranchResponse;
+}
+
+/** 准备在指定 user turn 上执行后端原生 edit-regenerate。 */
+export async function prepareEditRegenerate(
+  threadId: string,
+  humanMessageId: string,
+  replacementText: string
+): Promise<EditRegeneratePrepareResponse> {
+  const resp = await fetch(
+    `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/runs/edit-regenerate/prepare`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: jsonHeaders(),
+      body: JSON.stringify({
+        human_message_id: humanMessageId,
+        replacement_text: replacementText
+      })
+    }
+  );
+  if (!resp.ok) {
+    throw await toError("准备编辑重发失败", resp);
+  }
+  return (await resp.json()) as EditRegeneratePrepareResponse;
 }
 
 /**
@@ -172,6 +251,8 @@ export async function streamRun(opts: StreamRunOptions): Promise<void> {
       body: JSON.stringify({
         input,
         context,
+        ...(opts.checkpoint ? { checkpoint: opts.checkpoint } : {}),
+        ...(opts.metadata ? { metadata: opts.metadata } : {}),
         config: { recursion_limit: 1000, ...(opts.config ?? {}) },
         stream_mode: ["values", "messages-tuple", "custom"]
       }),
