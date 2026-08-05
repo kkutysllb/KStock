@@ -1,5 +1,5 @@
 {
-  "name": "@kstock/desktop",
+  "name": "kstock-desktop",
   "private": true,
   "version": "0.1.0",
   "description": "KStock — A股量化分析 Super Agent 桌面端",

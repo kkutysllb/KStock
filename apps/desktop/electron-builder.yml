@@ -73,10 +73,6 @@ nsis:
 linux:
   icon: build/icons
   category: Finance
-  # package.json name 是 "@kstock/desktop"（npm scope 包名），其中的 /
-  # 会被 fpm 当成目录分隔符，导致 deb/rpm 输出路径
-  # release/@kstock/... 不存在而失败。显式指定 packageName 覆盖。
-  packageName: kstock
   target:
     - deb
     - rpm
