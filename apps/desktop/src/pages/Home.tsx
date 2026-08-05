@@ -79,6 +79,7 @@ import { GATEWAY_URL } from "../lib/gatewayUrl";
 import {
   cancelRun,
   artifactUrl,
+  createThreadBranch,
   deleteThread,
   deleteUpload,
   ensureThread,
@@ -87,12 +88,21 @@ import {
   listThreads,
   listUploads,
   runContextFromModel,
+  prepareEditRegenerate,
   streamRun,
+  type RunCheckpoint,
+  type RunInput,
   uploadFiles,
   type ReasoningMode,
   type UploadedFileRef,
   type WorkspaceChangeFile,
 } from "../lib/turnsClient";
+import {
+  buildEditedBranchSession,
+  editableUserMessageIds,
+  prepareEditedBranch,
+  selectEditModel
+} from "../lib/editResend";
 import { engineMessagesToChatMessages } from "../lib/engineHistory";
 import { initialTurn, reduceFrame } from "../lib/turnReducer";
 import { inferStage } from "../lib/stageInferrer";
@@ -615,6 +625,10 @@ export function Home() {
     () => sessions.find((session) => session.id === activeSessionId) ?? sessions[0],
     [activeSessionId, sessions]
   );
+  const editableUserMessageIdSet = useMemo(
+    () => editableUserMessageIds(activeSession?.messages ?? []),
+    [activeSession?.messages]
+  );
 
   // 线程上传目录是后端用户数据空间的事实来源；切换任务时重新读取，避免把
   // 上一个任务的文件误显示到当前面板。
@@ -856,103 +870,49 @@ export function Home() {
     setConfirmError(null);
   };
 
-  // 发送消息：append user → ensureThread → append streaming turn → streamRun。
-  // reducer 状态在闭包外维护（setSessions 异步，不能依赖最新 state 读回 turn）。
-  const handleSend = async (modelName: string) => {
-    await sendText(draft, modelName);
+  type StreamIntoSessionOptions = {
+    sessionId: string;
+    threadId: string;
+    model: ModelConfig;
+    input: RunInput;
+    checkpoint?: RunCheckpoint;
+    metadata?: Record<string, unknown>;
   };
 
-  // 发送任意文本（主输入框 / 澄清确认对话框共用）：内容来自调用方显式传入。
-  const sendText = async (input: string, modelName: string) => {
-    const text = input.trim();
-    if (!text || !modelName || streamingId) {
-      return;
-    }
-    if (!sessionsLoaded) {
-      localSessionBeforeHistoryLoadedRef.current = true;
-      localSessionBeforeHistoryLoadedIdRef.current = activeSession?.id ?? null;
-    }
-    // 捕快照：发送前保存待发附件（随后清空 pendingAttachments）
-    const filesToSend = pendingAttachments.length > 0 ? [...pendingAttachments] : undefined;
-    // 无 activeSession（首次进入空台）时自动创建一个，再继续发送。
-    let session = activeSession;
-    if (!session) {
-      session = createSession(text.slice(0, 18));
-      if (!sessionsLoaded) {
-        localSessionBeforeHistoryLoadedIdRef.current = session.id;
-      }
-      setSessions((current) => [session!, ...current]);
-      setActiveSessionId(session.id);
-    }
-    const model = models.find((m) => m.name === modelName);
-    if (!model) {
-      return;
-    }
-
-    if (!generalPreferences.keep_draft_after_send) setDraft("");
-    if (!generalPreferences.keep_attachments_after_send) setPendingAttachments([]);
-
-    // 1. append user message
-    setSessions((current) =>
-      current.map((s) => (s.id === session.id ? appendMessageToSession(s, "user", text, modelName) : s))
-    );
-
-    // 2. ensure thread（首次发消息时创建引擎 thread 并绑定）
-    let threadId = session.threadId;
-    if (!threadId) {
-      try {
-        threadId = await ensureThread();
-        if (currentUser) {
-          localStorage.setItem(`kstock.lastSession.${currentUser.id}`, threadId);
-        }
-        setSessions((current) =>
-          current.map((s) => (s.id === session.id ? bindThreadId(s, threadId!) : s))
-        );
-      } catch (err) {
-        const errTurn = createAssistantTurn(modelName);
-        errTurn.status = "error";
-        errTurn.error = `创建会话失败：${err instanceof Error ? err.message : String(err)}`;
-        setSessions((current) =>
-          current.map((s) => (s.id === session.id ? appendTurnToSession(s, errTurn) : s))
-        );
-        return;
-      }
-    }
-
-    // 3. append 空 streaming assistant turn
-    const turn = createAssistantTurn(modelName);
+  const streamIntoSession = async ({
+    sessionId,
+    threadId,
+    model,
+    input,
+    checkpoint,
+    metadata
+  }: StreamIntoSessionOptions) => {
+    const turn = createAssistantTurn(model.name);
     setStreamingId(turn.id);
     setSessions((current) =>
-      current.map((s) => (s.id === session.id ? appendTurnToSession(s, turn) : s))
+      current.map((session) => (session.id === sessionId ? appendTurnToSession(session, turn) : session))
     );
 
-    // 4. streamRun：逐帧 reduceFrame + inferStage 回写 turn
     const controller = new AbortController();
     abortRef.current = controller;
     let turnState = initialTurn();
-
     const patchTurn = () =>
       setSessions((current) =>
-        current.map((s) => (s.id === session.id ? updateMessageInSession(s, turn.id, turnState) : s))
+        current.map((session) =>
+          session.id === sessionId ? updateMessageInSession(session, turn.id, turnState) : session
+        )
       );
 
     try {
       await streamRun({
         threadId,
-        input: {
-          messages: [
-            {
-              role: "user",
-              content: text,
-              ...(filesToSend ? { additional_kwargs: { files: filesToSend } } : {})
-            }
-          ]
-        },
+        input,
+        checkpoint,
+        metadata,
         context: runContextFromModel(model, reasoningMode),
         signal: controller.signal,
         handlers: {
           onRunId: (runId) => {
-            // 捕获 run_id 供 handleStop 显式 cancel；幂等赋值（重连场景安全）。
             activeRunRef.current = { threadId, runId };
             turnState = { ...turnState, runId };
             patchTurn();
@@ -975,6 +935,121 @@ export function Home() {
       stoppingRef.current = false;
       setStreamingId((id) => (id === turn.id ? null : id));
     }
+  };
+
+  // 发送消息：append user → ensureThread → shared stream runner。
+  const handleSend = async (modelName: string) => {
+    await sendText(draft, modelName);
+  };
+
+  // 发送任意文本（主输入框 / 澄清确认对话框共用）：内容来自调用方显式传入。
+  const sendText = async (input: string, modelName: string) => {
+    const text = input.trim();
+    if (!text || !modelName || streamingId) return;
+    if (!sessionsLoaded) {
+      localSessionBeforeHistoryLoadedRef.current = true;
+      localSessionBeforeHistoryLoadedIdRef.current = activeSession?.id ?? null;
+    }
+    const filesToSend = pendingAttachments.length > 0 ? [...pendingAttachments] : undefined;
+    let session = activeSession;
+    if (!session) {
+      session = createSession(text.slice(0, 18));
+      if (!sessionsLoaded) localSessionBeforeHistoryLoadedIdRef.current = session.id;
+      setSessions((current) => [session!, ...current]);
+      setActiveSessionId(session.id);
+    }
+    const model = models.find((candidate) => candidate.name === modelName);
+    if (!model) return;
+
+    if (!generalPreferences.keep_draft_after_send) setDraft("");
+    if (!generalPreferences.keep_attachments_after_send) setPendingAttachments([]);
+
+    const humanMessageId = crypto.randomUUID();
+    setSessions((current) =>
+      current.map((currentSession) =>
+        currentSession.id === session!.id
+          ? appendMessageToSession(currentSession, "user", text, modelName, humanMessageId)
+          : currentSession
+      )
+    );
+
+    let threadId = session.threadId;
+    if (!threadId) {
+      try {
+        threadId = await ensureThread();
+        if (currentUser) localStorage.setItem(`kstock.lastSession.${currentUser.id}`, threadId);
+        setSessions((current) =>
+          current.map((currentSession) =>
+            currentSession.id === session!.id ? bindThreadId(currentSession, threadId!) : currentSession
+          )
+        );
+      } catch (err) {
+        const errTurn = createAssistantTurn(modelName);
+        errTurn.status = "error";
+        errTurn.error = `创建会话失败：${err instanceof Error ? err.message : String(err)}`;
+        setSessions((current) =>
+          current.map((currentSession) =>
+            currentSession.id === session!.id ? appendTurnToSession(currentSession, errTurn) : currentSession
+          )
+        );
+        return;
+      }
+    }
+
+    await streamIntoSession({
+      sessionId: session.id,
+      threadId,
+      model,
+      input: {
+        messages: [{
+          role: "user",
+          id: humanMessageId,
+          content: text,
+          ...(filesToSend ? { additional_kwargs: { files: filesToSend } } : {})
+        }]
+      }
+    });
+  };
+
+  const handleEditResend = async (messageId: string, replacementText: string) => {
+    const source = activeSession;
+    if (!source?.threadId || streamingId) throw new Error("当前任务暂时无法编辑重发");
+    const modelName = selectEditModel(
+      source.messages.find((message) => message.id === messageId),
+      models.map((model) => model.name),
+      activeModel
+    );
+    const model = models.find((candidate) => candidate.name === modelName);
+    if (!model) throw new Error("没有可用模型，无法重新发送");
+
+    const result = await prepareEditedBranch({
+      sourceSession: source,
+      userMessageId: messageId,
+      replacementText,
+      api: {
+        createBranch: createThreadBranch,
+        prepareEdit: prepareEditRegenerate,
+        deleteThread
+      }
+    });
+    const branchSession = buildEditedBranchSession(
+      source,
+      result.target.userIndex,
+      result.branch.thread_id,
+      result.prepared.replacement_human_message_id,
+      replacementText.trim(),
+      model.name
+    );
+    setSessions((current) => [branchSession, ...current]);
+    setActiveSessionId(branchSession.id);
+    await streamIntoSession({
+      sessionId: branchSession.id,
+      threadId: result.branch.thread_id,
+      model,
+      input: result.prepared.input,
+      checkpoint: result.prepared.checkpoint,
+      metadata: result.prepared.metadata
+    });
   };
 
   // 停止生成：立即响应 UI + 异步 cancel 后端 run + abort SSE 断流兼兜底。
@@ -1137,6 +1212,8 @@ export function Home() {
       modelsLoading={modelsLoading}
       sessionsLoaded={sessionsLoaded}
       streamingId={streamingId}
+      editableUserMessageIds={editableUserMessageIdSet}
+      onEditResend={handleEditResend}
       onModelChange={handleModelChange}
       onReasoningModeChange={handleReasoningModeChange}
       onDraftChange={setDraft}
@@ -1630,6 +1707,8 @@ function WorkspaceShell({
   modelsLoading,
   sessionsLoaded,
   streamingId,
+  editableUserMessageIds,
+  onEditResend,
   onModelChange,
   onReasoningModeChange,
   onDraftChange,
@@ -1672,6 +1751,8 @@ function WorkspaceShell({
   modelsLoading: boolean;
   sessionsLoaded: boolean;
   streamingId: string | null;
+  editableUserMessageIds: ReadonlySet<string>;
+  onEditResend: (messageId: string, replacementText: string) => Promise<void>;
   onModelChange: (name: string) => void;
   onReasoningModeChange: (mode: ReasoningMode) => void;
   onDraftChange: (draft: string) => void;
@@ -1957,6 +2038,9 @@ function WorkspaceShell({
             showStage={generalPreferences.show_stage}
             showReasoning={generalPreferences.show_reasoning}
             showToolCalls={generalPreferences.show_tool_calls}
+            editableUserMessageIds={editableUserMessageIds}
+            editDisabled={Boolean(streamingId)}
+            onEditResend={onEditResend}
             onAtBottomChange={setFeedAtBottom}
             onClarifyPick={onClarifyPick}
             emptySlot={

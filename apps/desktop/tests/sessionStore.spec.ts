@@ -36,6 +36,12 @@ describe("sessionStore turn-based 模型", () => {
     expect(session.messages[0].id).toBe("human-1");
   });
 
+  it("预生成的 user message id 在序列化往返后保持不变", () => {
+    const session = appendMessageToSession(createSession(), "user", "问题", "model-a", "human-1");
+    const restored = JSON.parse(JSON.stringify(session)) as typeof session;
+    expect(restored.messages[0]).toMatchObject({ id: "human-1", content: "问题", model: "model-a" });
+  });
+
   it("appendTurnToSession 追加已构造的 assistant turn", () => {
     const session = createSession("测试");
     const turn = createAssistantTurn();
