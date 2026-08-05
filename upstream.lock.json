@@ -4,12 +4,12 @@
     "QiLin": {
       "path": "/Users/libing/kk_Projects/QiLin",
       "branch": "main",
-      "commit": "012a0758b6f818e15070f07f5417aa2cc9818160"
+      "commit": "b412cfb9fb768490c4c45e9bebed4856ab256939"
     },
     "KSkills": {
       "path": "/Users/libing/kk_Projects/KSkills",
       "branch": "main",
-      "commit": "e48e5326bcf6c8f6f0c191837a31182fedfa142b"
+      "commit": "cb7589ee1f65f3c965d99d157513cfca44d28af4"
     }
   },
   "skills_manifest": "vendor/skills/approved-skills.json"
