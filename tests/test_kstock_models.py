@@ -62,10 +62,13 @@ def test_load_runtime_models_returns_list(tmp_path, monkeypatch):
 
 
 def test_save_runtime_models_atomic_and_backup(tmp_path, monkeypatch):
-    """save 后 runtime.yaml 含新模型，生成备份，原 mtime 不等于新 mtime。"""
+    """save 后 runtime.yaml 含新模型，生成备份。
+
+    原子写入（``_atomic_write_yaml`` = tmp + ``os.replace``）由实现保证，
+    此处验证可观测契约：内容正确 + backup 文件生成。不断言 mtime 变化
+    ——CI runner（ext4）在高负载下两次写可能落同一 mtime tick（精度到
+    ~100ns），导致 flaky 失败（见 2026-08-06 v0.1.1 ubuntu CI）。"""
     _setup_data_root(tmp_path, monkeypatch, models_yaml="models: []\n")
-    config_path = _runtime_config_path_under(tmp_path)
-    old_mtime = config_path.stat().st_mtime
 
     new_models = [
         {"name": "glm", "use": "x:Y", "model": "glm-5", "api_key": "$KSTOCK_MODEL_GLM_KEY"}
@@ -74,7 +77,6 @@ def test_save_runtime_models_atomic_and_backup(tmp_path, monkeypatch):
 
     reloaded = load_runtime_models()
     assert reloaded == new_models
-    assert config_path.stat().st_mtime != old_mtime
     backups = list((tmp_path / "backups").glob("qilin.runtime.yaml.*"))
     assert len(backups) == 1
 
