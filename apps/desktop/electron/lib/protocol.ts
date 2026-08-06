@@ -11,7 +11,7 @@
 import { app, net, protocol } from "electron";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { extname, join, normalize } from "node:path";
+import { extname, join, posix } from "node:path";
 import { ensureCsrfHeader } from "./csrf-bridge";
 import { GATEWAY_PORT } from "./gateway";
 import { logMain } from "./logger";
@@ -178,12 +178,30 @@ function stripCookieDomain(setCookie: string): string {
     .join("; ");
 }
 
+/**
+ * 计算 URL pathname 对应的安全相对路径。
+ *
+ * 用 ``posix.normalize`` 而非默认的 ``path.normalize``：URL pathname 统一用
+ * POSIX 分隔符（``/``），而 Windows 下 ``node:path.normalize`` 会把 ``/``
+ * 转成 ``\``，导致后续 ``\`` 检查误伤所有子目录请求（Windows 黑屏根因：
+ * ``/assets/index.js`` → ``assets\index.js`` → 含 ``\`` → 403 → JS 全被拒）。
+ *
+ * 返回 ``null`` 表示请求被路径穿越检查拒绝。
+ */
+export function safeStaticRelative(pathname: string): string | null {
+  const relative = posix.normalize(pathname.replace(/^\/+/, ""));
+  if (relative.includes("\\") || relative.startsWith("..")) {
+    return null;
+  }
+  return relative;
+}
+
 /** 静态资源服务：读 dist/ 下文件，缺失时回退 index.html（SPA 路由）。 */
 async function serveStatic(pathname: string): Promise<Response> {
   const dist = frontendDist();
-  // 防止路径穿越。
-  const relative = normalize(pathname.replace(/^\/+/, ""));
-  if (relative.startsWith("..") || relative.includes("\\")) {
+  const relative = safeStaticRelative(pathname);
+  if (relative === null) {
+    logMain(`serveStatic 403: pathname=${pathname}`);
     return new Response("Forbidden", { status: 403 });
   }
 
