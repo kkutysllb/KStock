@@ -18,7 +18,7 @@
 from pathlib import Path
 import os
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_all
 
 repo_root = Path(SPECPATH).resolve().parent  # spec 位于 <仓库>/scripts/，仓库根是上一级
 print(f"[kstock-gateway.spec] repo_root = {repo_root}")
@@ -26,7 +26,25 @@ codesign_identity = os.environ.get("APPLE_SIGNING_IDENTITY") or None
 if codesign_identity:
     print("[kstock-gateway.spec] using APPLE_SIGNING_IDENTITY for PyInstaller macOS signing")
 
-datas = [
+datas = []
+binaries = []
+
+# mini-racer（akshare 依赖，执行反爬虫 JS）：PyInstaller 默认只收集 .py，
+# 但 mini_racer 的核心是 py_mini_racer/mini_racer.dll（Windows）/
+# .dylib（macOS）native 库。缺失会令 finance_data_search 等工具在打包版
+# 抛 "Native library or dependency not available at ...mini_racer.dll"。
+# collect_all 收集 datas + binaries + hiddenimports 三件套。
+for pkg in ("mini_racer", "py_mini_racer"):
+    try:
+        d, b, h = collect_all(pkg)
+        datas += d
+        binaries += b
+        # hiddenimports 累加到 Analysis 的 hiddenimports 参数
+        _mini_racer_hiddenimports = h
+    except Exception:
+        pass
+
+datas += [
     (str(repo_root / "vendor" / "skills"), "vendor/skills"),
     (str(repo_root / "config" / "qilin.config.yaml"), "config"),
     (str(repo_root / "config" / "lead_soul.md"), "config"),
@@ -39,10 +57,12 @@ datas = [
     *collect_data_files("akshare"),
 ]
 
+_mini_racer_hiddenimports = globals().get("_mini_racer_hiddenimports", [])
+
 a = Analysis(
     [str(repo_root / "scripts" / "run_gateway.py")],
     pathex=[str(repo_root)],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     # 引擎按 runtime.yaml 的 tools 配置运行时动态 import 的工具模块：
     # 静态 import 链看不到它们，必须显式声明才能随包分发。runtime-config
@@ -53,6 +73,10 @@ a = Analysis(
         "scripts.kstock_tools.akshare_data_tool",
         "scripts.kstock_tools.akshare_news_tool",
         "scripts.kstock_tools.report_dashboard_tool",
+        # Windows 兼容垫片：run_gateway 入口 import，必须随包分发。
+        "scripts.kstock_subprocess_patch",
+        "scripts.kstock_windows_shims",
+        *_mini_racer_hiddenimports,
     ],
     hookspath=[],
     hooksconfig={},

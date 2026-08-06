@@ -67,6 +67,7 @@ from typing import Any
 # 此 monkeypatch 在 Windows 上全局注入 CREATE_NO_WINDOW flag，覆盖 vendor /
 # 技能 / sandbox / 工具脚本里全部 subprocess 调用。Unix 下 no-op。
 from scripts.kstock_subprocess_patch import apply_subprocess_no_window_patch
+from scripts.kstock_windows_shims import apply_windows_bash_cwd_prefix_shim
 
 apply_subprocess_no_window_patch()
 
@@ -646,6 +647,20 @@ def _install_secrets_injection() -> None:
 _SOUL_TEMPLATE = REPO_ROOT / "config" / "lead_soul.md"
 
 
+def _apply_windows_sandbox_shims() -> None:
+    """应用 Windows 下 sandbox 兼容垫片。
+
+    修正 vendor/qilin 在 Windows 的两处上游 bug：
+    1. ``_apply_cwd_prefix`` 无条件注入 ``cd <workspace> && <command>`` 前缀，
+       PowerShell 5.1 不认 ``&&`` 导致所有 bash 工具命令解析失败。
+    2. （后续如有更多 Windows shim 在此追加）
+
+    必须在 create_app 阶段调用（此时 qilin.sandbox.tools 已 import），
+    Unix 下完全 no-op。
+    """
+    apply_windows_bash_cwd_prefix_shim()
+
+
 def _patch_aiosqlite_busy_timeout() -> None:
     """统一 aiosqlite 连接的 SQLite 写锁等待超时为 30 秒。
 
@@ -702,6 +717,7 @@ def create_app():
     """应用工厂：先打垫片、初始化用户数据空间、配 CORS，再构造 QiLin gateway。"""
     _patch_aiosqlite_busy_timeout()
     _apply_vendor_extensions_config_compat_shim()
+    _apply_windows_sandbox_shims()
     paths = _ensure_data_space()
     # ── 开发日志：先清空网关负责的两个文件（覆写模式，不残留上次运行）──
     from scripts.kstock_dev_logs import (
