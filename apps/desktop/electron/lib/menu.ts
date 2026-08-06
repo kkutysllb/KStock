@@ -2,19 +2,12 @@
  * 中文化系统菜单 + 托盘（对齐原 ``src-tauri/src/main.rs`` 的 build_app_menu / build_tray）。
  */
 
-import {
-  app,
-  BrowserWindow,
-  Menu,
-  MenuItemConstructorOptions,
-  nativeImage,
-  shell,
-  Tray,
-} from "electron";
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, nativeImage, shell, Tray } from "electron";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { appDataDirectory } from "./gateway";
 import { adjustZoom, resetZoom, sendMenuCommand } from "./window";
+import { logMain } from "./logger";
 
 let tray: Tray | null = null;
 
@@ -154,7 +147,11 @@ export function buildAppMenu(): Menu {
 /** 托盘图标与菜单。 */
 export function buildTray(): void {
   const icon = createTrayImage();
-  if (!icon || icon.isEmpty()) return;
+  if (!icon || icon.isEmpty()) {
+    // createTrayImage 内部已记录候选路径 / found 列表。此处仅写结论信号。
+    logMain(`托盘未创建：iconFound=${Boolean(icon)} isEmpty=${icon?.isEmpty() ?? false}`);
+    return;
+  }
 
   tray = new Tray(icon);
   tray.setToolTip("KStock 量化助手");
@@ -168,6 +165,7 @@ export function buildTray(): void {
       { label: "退出", click: () => app.quit() },
     ]),
   );
+  logMain("托盘已创建");
 }
 
 /**
@@ -193,13 +191,22 @@ function createTrayImage(): Electron.NativeImage | null {
         join(app.getAppPath(), "build", "icon.png"),
       ];
   const iconPath = candidates.find((p) => existsSync(p));
-  if (!iconPath) return null;
+  if (!iconPath) {
+    // 打包态 build/ 未打入 asar 会走到这里（electron-builder.yml files 漏 build/）。
+    const found = candidates.filter((p) => existsSync(p));
+    logMain(
+      `createTrayImage 无可用图标：appPath=${app.getAppPath()} ` +
+        `candidates=${JSON.stringify(candidates)} found=${JSON.stringify(found)}`,
+    );
+    return null;
+  }
 
   const size = darwin ? { width: 22, height: 22 } : { width: 32, height: 32 };
   const icon = nativeImage.createFromPath(iconPath).resize(size);
   // macOS：tray.png 是黑色透明线条（设计为 template image），标记后
   // 系统自动适配深色/浅色菜单栏。
   if (darwin) icon.setTemplateImage(true);
+  logMain(`托盘图标加载：${iconPath} size=${JSON.stringify(size)} isEmpty=${icon.isEmpty()}`);
   return icon;
 }
 
