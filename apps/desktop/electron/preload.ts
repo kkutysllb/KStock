@@ -68,4 +68,17 @@ const api = {
 
 contextBridge.exposeInMainWorld("kstockDesktop", api);
 
+// 捕获渲染层未处理异常转发到主进程日志，定位打包态黑屏（JS 执行但
+// React 未 mount / import 顶层报错等）。sandbox 下 ipcRenderer.send 可用。
+window.addEventListener("error", (event) => {
+  const detail = `${event.message} @ ${event.filename}:${event.lineno}:${event.colno}`;
+  ipcRenderer.send(IPC.rendererError, { kind: "error", detail });
+});
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason instanceof Error
+    ? `${event.reason.name}: ${event.reason.message}`
+    : String(event.reason);
+  ipcRenderer.send(IPC.rendererError, { kind: "unhandledrejection", detail: reason });
+});
+
 export type DesktopBridgeApi = typeof api;

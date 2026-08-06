@@ -78,6 +78,13 @@ export function createMainWindow(): BrowserWindow {
     logMain("渲染进程 did-finish-load");
   });
 
+  // 捕获渲染层所有 console 输出（含未捕获异常，Chromium 会以 error level 打入 console）。
+  // 这是定位打包态黑屏的决定性诊断手段——main 进程可看到 React 抛出的具体错误。
+  window.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    const levelName = ["verbose", "info", "warning", "error"][level] ?? String(level);
+    logMain(`renderer[${levelName}]: ${message} (${sourceId}:${line})`);
+  });
+
   // 外部链接（http/https）在系统浏览器打开，其余链接在窗口内导航。
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) {
@@ -101,6 +108,11 @@ export function createMainWindow(): BrowserWindow {
 
 /** 注册窗口控制 IPC handler。 */
 export function registerWindowIpc(): void {
+  // 渲染进程未捕获异常转发（preload 注册的全局 error/unhandledrejection 捕获器）。
+  ipcMain.on(IPC.rendererError, (_event, payload: { kind: string; detail: string }) => {
+    logMain(`renderer ${payload.kind}: ${payload.detail}`);
+  });
+
   ipcMain.handle(IPC.windowToggleMaximize, () => {
     const win = mainWindow;
     if (!win) return;

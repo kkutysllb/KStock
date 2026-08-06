@@ -26,6 +26,8 @@ export const IPC = {
   updateDownload: "update:download",
   updateInstall: "update:install",
   updateProgress: "update:progress",
+  // 渲染进程未捕获异常转发（preload 全局 error/unhandledrejection 捕获）
+  rendererError: "renderer:error",
 } as const;
 
 export type MenuCommand =
