@@ -11,6 +11,7 @@
 import { app, net, protocol } from "electron";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
+import { ensureCsrfHeader } from "./csrf-bridge";
 import { GATEWAY_PORT } from "./gateway";
 
 /** gateway 反向代理的路径前缀。前端 ``GATEWAY_URL`` prod 取 ``app://localhost/gateway``。 */
@@ -98,6 +99,9 @@ async function proxyGateway(request: Request, target: string): Promise<Response>
     forwardHeaders.append(key, value);
   });
   forwardHeaders.set("origin", `http://localhost:${GATEWAY_PORT}`);
+  // 渲染进程 app:// origin 读不到 gateway 的 csrf_token cookie（跨 scheme 隔离），
+  // 代理层从主进程 session cookie jar 读取并注入 X-CSRF-Token header。
+  await ensureCsrfHeader(forwardHeaders, GATEWAY_PORT);
 
   const init: RequestInit & { duplex?: "half" } = {
     method: request.method,
