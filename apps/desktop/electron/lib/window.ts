@@ -10,6 +10,7 @@ import {
 } from "electron";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { logMain } from "./logger";
 import { IPC } from "./ipc-channels";
 
 let mainWindow: BrowserWindow | null = null;
@@ -53,7 +54,29 @@ export function createMainWindow(): BrowserWindow {
     },
   });
 
-  window.once("ready-to-show", () => window.show());
+  window.once("ready-to-show", () => {
+    logMain("窗口 ready-to-show");
+    window.show();
+  });
+
+  // ready-to-show 超时兜底：若加载卡住（协议异常 / 静态资源缺失），2s 后
+  // 强制显示窗口，让用户能看到错误而非以为应用未启动。
+  setTimeout(() => {
+    if (!window.isDestroyed() && !window.isVisible()) {
+      logMain("ready-to-show 超时（2s），强制显示窗口");
+      window.show();
+    }
+  }, 2000);
+
+  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+    logMain(`did-fail-load: code=${errorCode} desc=${errorDescription} url=${validatedURL}`);
+  });
+  window.webContents.on("render-process-gone", (_event, details) => {
+    logMain(`render-process-gone: reason=${details.reason} exitCode=${details.exitCode}`);
+  });
+  window.webContents.on("did-finish-load", () => {
+    logMain("渲染进程 did-finish-load");
+  });
 
   // 外部链接（http/https）在系统浏览器打开，其余链接在窗口内导航。
   window.webContents.setWindowOpenHandler(({ url }) => {

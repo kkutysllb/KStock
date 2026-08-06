@@ -9,10 +9,12 @@
  */
 
 import { app, net, protocol } from "electron";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { ensureCsrfHeader } from "./csrf-bridge";
 import { GATEWAY_PORT } from "./gateway";
+import { logMain } from "./logger";
 
 /** gateway 反向代理的路径前缀。前端 ``GATEWAY_URL`` prod 取 ``app://localhost/gateway``。 */
 const GATEWAY_PREFIX = "/gateway";
@@ -204,6 +206,9 @@ async function serveStatic(pathname: string): Promise<Response> {
         headers: { "content-type": "text/html; charset=utf-8" },
       });
     } catch {
+      // index.html 也读不到：dist 未正确打入 asar 或 frontendDist() 路径错误。
+      // 记录关键诊断信息，帮助定位打包态黑屏/空白问题（Windows 尤其需要）。
+      logMain(`serveStatic 404: path=${filePath} dist=${dist} distExists=${existsSync(dist)}`);
       return new Response("Not Found", { status: 404 });
     }
   }

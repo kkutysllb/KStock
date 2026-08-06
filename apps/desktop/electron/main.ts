@@ -32,7 +32,18 @@ import {
   getMainWindow,
   registerWindowIpc,
 } from "./lib/window";
+import { logMain } from "./lib/logger";
 import { IPC } from "./lib/ipc-channels";
+
+// Windows GPU 硬件加速在部分显卡驱动 / 远程桌面（RDP）/ 虚拟机下会导致
+// 渲染黑屏（窗口显示但内容空白，Chromium GPU 进程崩溃）。金融桌面应用
+// 无 3D / 视频负载，禁用 GPU 加速改用软件渲染兜底，稳定优先于性能。
+// macOS / Linux 不受此问题影响，保留硬件加速。
+if (process.platform === "win32") {
+  app.disableHardwareAcceleration();
+}
+
+logMain(`启动：platform=${process.platform} version=${app.getVersion()} packaged=${app.isPackaged}`);
 
 // 必须在 app.ready 之前注册 privileged scheme。
 registerPrivilegedScheme();
@@ -65,15 +76,17 @@ if (!app.requestSingleInstanceLock()) {
 
     // 自动拉起内置 gateway（开发态和打包态统一由主进程托管）。
     try {
-      await gateway.ensureStarted();
+      const started = await gateway.ensureStarted();
+      logMain(`gateway: ${started}`);
     } catch (err) {
-      console.error("[gateway] 自动启动失败（开发模式可忽略）:", err);
+      logMain(`gateway 启动失败: ${err instanceof Error ? err.message : String(err)}`);
     }
     // 注册安装前 gateway 终止回调：更新安装时先同步 kill gateway，
     // 避免 .exe 占用 / 端口冲突导致安装失败。
     setGatewayShutdownHandler(() => gateway.killAndWait());
 
     Menu.setApplicationMenu(buildAppMenu());
+    logMain("ready：创建主窗口");
     createMainWindow();
     buildTray();
 
