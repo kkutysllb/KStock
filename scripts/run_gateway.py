@@ -61,6 +61,15 @@ import threading
 from pathlib import Path
 from typing import Any
 
+# Windows 子进程无窗口补丁：必须在所有可能 spawn 子进程的业务 import 之前
+# 调用。gateway.exe 是 windowed（无 console），Python 的 subprocess.Popen
+# spawn 子进程时 Windows 会为新进程创建可见 console 窗口（cmd 一闪而逝）。
+# 此 monkeypatch 在 Windows 上全局注入 CREATE_NO_WINDOW flag，覆盖 vendor /
+# 技能 / sandbox / 工具脚本里全部 subprocess 调用。Unix 下 no-op。
+from scripts.kstock_subprocess_patch import apply_subprocess_no_window_patch
+
+apply_subprocess_no_window_patch()
+
 # 源码模式下仓库根是脚本上两级目录；PyInstaller 打包后（onedir），资源根是
 # 可执行目录本身（sys._MEIPASS 即目录），其中包含 vendor/、config/ 模板与
 # scripts 包，语义与仓库根一致。
