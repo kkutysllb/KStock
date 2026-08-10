@@ -1,7 +1,7 @@
 ---
 name: industry-analysis
 description: A股行业六维一体深度分析引擎——结构层（产业链上中下游拆解）+数据层（行业估值/财务/盈利排名）+框架层（五模块产业链解读）+研究层（券商研报）+资讯层（实时财经资讯）+宏观框架层（全球宏观周期定位），开箱即用的跨平台技能包。
-version: 2.0.1
+version: 2.0.2
 author: kk-quant
 license: MIT
 category: finance
@@ -34,7 +34,7 @@ permissions:
     - IWENCAI_API_KEY
 
 requires:
-  packages: ["pandas", "pydantic", "pywencai"]
+  packages: ["pandas", "pydantic"]
   bins: ["python3"]
   env: ["IWENCAI_API_KEY"]
 
@@ -53,7 +53,7 @@ inputs:
 metadata:
   openclaw:
     emoji: "🏭"
-    version: "2.0.1"
+    version: "2.0.2"
     author: "kk-quant"
     category: "finance"
     tags:
@@ -70,7 +70,7 @@ metadata:
     install:
       - id: pip-deps
         kind: pip
-        package: "pywencai pandas pydantic"
+        package: "pandas pydantic"
         python: python3
         label: "Install Python dependencies"
 
@@ -101,7 +101,7 @@ cd /mnt/skills/public/industry-analysis/scripts && python3 industry-query-cli.py
 
 本技能包提供完整的行业深度分析能力，整合六大核心维度：
 
-1. **结构层** — 产业链上中下游拆解、核心公司识别（pywencai 实时数据）
+1. **结构层** — 产业链上中下游拆解、核心公司识别（问财实时数据）
 2. **数据层** — 行业估值排名、财务指标、盈利数据、板块行情（问财 API）
 3. **框架层** — 五模块产业链解读框架（顶层评估→驱动→本质→产业链→风险）
 4. **研究层** — 券商研报搜索（机构评级、目标价、投资逻辑）
@@ -112,7 +112,7 @@ cd /mnt/skills/public/industry-analysis/scripts && python3 industry-query-cli.py
 
 ### 产业链分析脚本（`scripts/analyze_industry.py`）
 
-基于 pywencai 实时获取产业链数据，支持：
+基于同花顺问财实时获取产业链数据（网关 CLI 主数据源，pywencai 可选），支持：
 
 ```bash
 # 标准分析
@@ -232,21 +232,21 @@ python3 scripts/industry-query-cli.py --query "新能源板块行情"
 ## Python 依赖
 
 ```
-pywencai>=0.12.0
 pandas>=2.0.0
 pydantic>=2.0.0
+# pywencai 可选（增强数据源），非必需：主数据源为问财网关 CLI（纯标准库，无需额外安装）
 ```
 
 ## 数据来源标注
 
-- 产业链数据标注「数据来源于同花顺i问财（pywencai）」
+- 产业链数据标注「数据来源于同花顺i问财（问财网关）」
 - 行业估值/财务数据标注「数据来源于同花顺问财」
 - 研报数据标注来源机构
 - 资讯数据标注「数据来源于同花顺问财」
 
 ## 注意事项
 
-1. analyze_industry.py 依赖 pywencai 库，需单独安装
+1. analyze_industry.py 主数据源为问财网关 CLI（industry-query-cli.py，IWENCAI_API_KEY，无需额外安装）；pywencai 仅为可选增强，缺失自动降级，勿因提示去 pip install
 2. 行业分析需结合宏观周期阶段，不同周期下同一行业投资逻辑可能截然不同
 3. 资讯层建议至少查询行业动态+政策两条，覆盖基本面和技术面
 4. 分析结果仅供参考，不构成投资建议

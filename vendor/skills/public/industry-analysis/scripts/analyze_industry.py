@@ -3,13 +3,13 @@
 """
 行业产业链综合分析命令行工具
 
-基于同花顺i问财（pywencai）实时获取产业链数据，覆盖维度：
+基于同花顺i问财实时获取产业链数据（问财网关 CLI 主数据源），覆盖维度：
   - 行业概览：概念股数量、市值分布、行业归属
   - 产业链结构：上中下游环节拆解、核心公司
   - 财务分析：营收、净利润增长、估值水平
   - 风险提示：估值、政策、市场风险
 
-数据来源：同花顺i问财（pywencai）
+数据来源：同花顺i问财（问财网关）
 
 用法:
     python scripts/analyze_industry.py "商业航天"
@@ -40,11 +40,11 @@ if _project_root not in sys.path:
 
 
 # ======================================================================
-#  问财数据层 - 通过 pywencai 实时查询
+#  问财数据层 - 问财网关 CLI 优先，pywencai 可选
 # ======================================================================
 
 class WencaiDataLayer:
-    """问财数据层 - 通过 pywencai 调用同花顺i问财获取产业链数据
+    """问财数据层 - 同花顺i问财数据获取（网关 CLI 主，pywencai 可选）
 
     依赖已安装技能：
     - hithink-industry-query: 问财行业数据查询（CLI），用于产业链推断
@@ -52,6 +52,9 @@ class WencaiDataLayer:
     """
 
     def __init__(self):
+        # 主数据源是问财网关 CLI（industry-query-cli.py，IWENCAI_API_KEY，
+        # 纯标准库无需额外依赖）；pywencai 仅为可选增强，缺失不影响运行，
+        # 因此不提示安装（避免误导 Agent 去 pip install 而放弃主路径）。
         try:
             import pywencai
             self.pywencai = pywencai
@@ -59,7 +62,6 @@ class WencaiDataLayer:
         except ImportError:
             self.pywencai = None
             self.available = False
-            print("  ⚠️ pywencai 未安装，请执行: pip install pywencai", file=sys.stderr)
 
     def query(self, query_str: str, query_type: str = 'stock') -> Optional[pd.DataFrame]:
         """统一查询入口：优先网关 CLI（IWENCAI_API_KEY，稳定），pywencai 降级兜底。
@@ -143,7 +145,7 @@ class WencaiDataLayer:
     def get_chain_structure(self, industry_name: str) -> dict:
         chain = {"upstream": [], "midstream": [], "downstream": []}
 
-        # 层1: 通过 pywencai 查询产业链各环节（原有逻辑）
+        # 层1: 通过统一 query() 查询产业链各环节
         for stage, key in [("上游", "upstream"), ("中游", "midstream"), ("下游", "downstream")]:
             df = self.query(f"{industry_name}概念 产业链{stage}")
             if df is None or df.empty:
@@ -209,7 +211,7 @@ class WencaiDataLayer:
         return chain
 
     def _infer_chain_from_industry(self, industry_name: str) -> dict:
-        """最终回退：通过 pywencai 概念股数据推断产业链
+        """最终回退：通过概念股数据推断产业链
 
         优先使用 hithink-industry-query 自然语言查询获取子行业位置，
         仅在 hithink 不可用时将未匹配的子行业归入下游（诚实标记"位置待定"）。
@@ -529,7 +531,7 @@ def main():
     print("\n---\n")
     print("*⚠️ 免责声明：以上分析仅供参考，不构成投资建议。市场有风险，投资需谨慎。*")
     print("\n---\n")
-    print(f"**数据来源：同花顺i问财（pywencai）**")
+    print(f"**数据来源：同花顺i问财（问财网关）**")
 
     if args.save:
         sys.stdout = old_stdout; content = captured.getvalue()

@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.2] - 2026-08-10
+
+### Fixed
+- 消除 pywencai 误导：`__init__` 不再提示「请执行 pip install pywencai」（此前 Agent
+  看到该提示误判技能不可用，去 pip install 失败后放弃主路径）；
+  `requires.packages` 与 `metadata.install` 移除 pywencai（沙箱预装依赖不再尝试
+  安装它）；SKILL.md/脚本 docstring 统一说明主数据源为问财网关 CLI（纯标准库，
+  无需额外安装），pywencai 仅为可选增强。
+- 验证：模拟无 pywencai 环境运行 `analyze_industry.py "光通信" --depth brief --json`
+  成功（100 只概念股、行业分布、产业链结构齐全）。
+
 ## [2.0.1] - 2026-08-10
 
 ### Fixed
