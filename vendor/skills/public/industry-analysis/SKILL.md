@@ -1,7 +1,7 @@
 ---
 name: industry-analysis
 description: A股行业六维一体深度分析引擎——结构层（产业链上中下游拆解）+数据层（行业估值/财务/盈利排名）+框架层（五模块产业链解读）+研究层（券商研报）+资讯层（实时财经资讯）+宏观框架层（全球宏观周期定位），开箱即用的跨平台技能包。
-version: 2.0.0
+version: 2.0.1
 author: kk-quant
 license: MIT
 category: finance
@@ -53,7 +53,7 @@ inputs:
 metadata:
   openclaw:
     emoji: "🏭"
-    version: "2.0.0"
+    version: "2.0.1"
     author: "kk-quant"
     category: "finance"
     tags:

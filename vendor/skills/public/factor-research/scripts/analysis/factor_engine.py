@@ -138,11 +138,13 @@ def quantile_backtest(factor_df, return_df, n_groups=5):
     }
 
 
-def factor_combination(factor_dfs, method="equal_weight"):
+def factor_combination(factor_dfs, method="equal_weight", weights=None):
     """
     多因子组合
     method: equal_weight / ic_weight / orthogonal
     factor_dfs: list of DataFrames (same shape)
+    weights: ic_weight 时必传——各因子 IC 加权系数（list 与 factor_dfs 对齐，
+             或 dict {因子名: 权重}）；等权/正交化时可选。
     """
     if not factor_dfs:
         return {"error": "无因子数据"}
@@ -156,8 +158,19 @@ def factor_combination(factor_dfs, method="equal_weight"):
     if method == "equal_weight":
         composite = sum(z_factors) / len(z_factors)
     elif method == "ic_weight":
-        # 假设权重已外部提供
-        composite = sum(z_factors) / len(z_factors)
+        # 显式 IC 加权：权重缺失时回退等权并给出提示
+        if weights is None:
+            w = [1.0 / len(z_factors)] * len(z_factors)
+        elif isinstance(weights, (list, tuple)):
+            w = list(weights)
+        else:  # dict：按 index 取值，缺省等权
+            w = [weights.get(i, 1.0 / len(z_factors)) for i in range(len(z_factors))]
+        if len(w) != len(z_factors):
+            return {"error": f"IC 权重数量 {len(w)} 与因子数量 {len(z_factors)} 不一致"}
+        total_w = sum(w)
+        if total_w <= 0:
+            return {"error": "IC 权重和必须大于 0"}
+        composite = sum(z_factors[i] * (w[i] / total_w) for i in range(len(z_factors)))
     elif method == "orthogonal":
         # Schmidt 正交化
         ortho = [z_factors[0]]

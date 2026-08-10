@@ -1,7 +1,7 @@
 ---
 name: factor-research
 description: 量化因子研究公共技能包——整合因子方法论、IC/IR分析引擎、分层回测、基本面筛选、多因子选股和小盘成长股挖掘，覆盖因子定义→有效性检验→组合构建→选股应用全链路，开箱即用的跨平台技能包。
-version: 1.0.0
+version: 1.1.0
 author: kk-quant
 license: Apache-2.0
 category: finance
@@ -18,11 +18,13 @@ capabilities:
   - id: fundamental-filter
     description: "基本面因子筛选：PE/PB/ROE 多条件过滤"
   - id: multifactor-screening
-    description: "六因子选股框架：价值/动量/质量/低波动/规模/成长"
+    description: "六因子选股框架：价值/动量/质量/低波动/规模/成长（multifactor.py，1.1.0 已脚本化）"
   - id: small-cap-growth
-    description: "小盘成长股挖掘：20-200亿市值高成长公司筛选"
+    description: "小盘成长挖掘：20-200亿市值 + 营收CAGR>20% 硬门槛 + 成长质量评分0-100 + 星级评级（small_cap_growth.py，1.1.0 已脚本化）"
   - id: factor-timing
-    description: "因子择时：经济周期映射 + 因子拥挤度评估"
+    description: "因子择时：经济周期因子权重映射 + 拥挤度/IC衰减检测（factor_timing.py，1.1.0 已脚本化）"
+  - id: panel-builder
+    description: "因子面板构造：行情/财务 → 因子矩阵与前瞻收益矩阵，防前视偏差（builder.py，1.1.0 新增）"
 
 permissions:
   network: false
@@ -42,7 +44,7 @@ inputs:
 metadata:
   openclaw:
     emoji: "🔬"
-    version: "1.0.0"
+    version: "1.1.0"
     author: "kk-quant"
     category: "finance"
     tags:
@@ -104,6 +106,51 @@ python3 scripts/cli.py filter \
   --pe-max 20 --pb-max 3 --roe-min 8
 ```
 
+### CLI — 因子面板构造（1.1.0，防前视偏差）
+
+```bash
+# 行情面板 → 动量/波动率/下行偏差/换手率/规模/β 子指标 + 前瞻收益矩阵
+python3 scripts/cli.py build \
+  --close close.csv --benchmark hs300.csv --period 20 --outdir ./panels
+```
+
+收益矩阵约定：`收益 = close[t+N]/close[t] - 1`（因子 t 日对齐 t+N 持有收益），
+禁止用 t 日收益（前视偏差）。
+
+### CLI — 六因子选股（1.1.0）
+
+```bash
+# 子指标面板目录（文件名=子指标名）→ 六因子得分 + 综合得分 TopN
+python3 scripts/cli.py multifactor \
+  --panels-dir ./panels --top-n 20 [--weights-json '{"value":0.2,...}']
+```
+
+### CLI — 因子择时（1.1.0）
+
+```bash
+# 指定经济周期，或由宏观三要素自动判定
+python3 scripts/cli.py timing --cycle recovery_early
+python3 scripts/cli.py timing --gdp-trend 0.8 --inflation 0.2 --interest-trend -0.1
+```
+
+cycle: `recovery_early / expansion_mid / expansion_late / downturn / trough_rebound`
+
+### CLI — 小盘成长挖掘（1.1.0）
+
+```bash
+# 特征 CSV（index=code，列 total_mv_yi / revenue_cagr3_pct 等）→ 硬门槛 + 质量评分 + 星级
+python3 scripts/cli.py smallcap --input features.csv --top-n 20
+```
+
+### CLI — 多因子组合（1.1.0 支持显式 IC 权重）
+
+```bash
+python3 scripts/cli.py combine \
+  --factor-csv f1.csv f2.csv f3.csv \
+  --method equal_weight|ic_weight|orthogonal \
+  [--weights-json '[0.2,0.5,0.3]'] [--output composite.csv]
+```
+
 ### Python — 因子引擎直接调用
 
 ```python
@@ -116,7 +163,7 @@ summary = ic_summary(ic_df)
 bt = quantile_backtest(factor_df, return_df, n_groups=5)
 ```
 
-### Python — 多因子组合
+### Python — 多因子组合（ic_weight 需显式 weights）
 
 ```python
 from factor_engine import factor_combination
@@ -124,11 +171,17 @@ from factor_engine import factor_combination
 # 等权组合
 composite = factor_combination([value_f, momentum_f, quality_f], method='equal_weight')
 
-# IC 加权
-composite = factor_combination([value_f, momentum_f], method='ic_weight')
+# IC 加权（1.1.0：必须传 weights，不再静默退化为等权）
+composite = factor_combination([value_f, momentum_f], method='ic_weight', weights=[0.7, 0.3])
 
 # 正交化
 composite = factor_combination([value_f, momentum_f], method='orthogonal')
+```
+
+### 测试（1.1.0）
+
+```bash
+cd scripts && python3 -m pytest tests/ -v   # 28 项：六因子/择时/小盘/构造/CLI 全子命令
 ```
 
 ## IC/IR 判断标准

@@ -189,7 +189,7 @@
    - `python3 run_value_investment.py --json`、`python3 run_growth_stock.py --json`、`python3 run_high_dividend.py --json`；
    - 缠论背驰：`python3 run_chan_stock_selector.py --json`（可加 `--pool hs300`）；
    - 其他策略按用户指定：`run_momentum_breakthrough.py` / `run_technical_breakthrough.py` / `run_oversold_rebound.py` / `run_limit_up_leader.py` / `run_fund_flow_tracking.py`；
-   可选：a-stock-screener 问财补充筛选（`read_file` 阅读 `/mnt/skills/public/a-stock-screener/SKILL.md`），或 factor-research 因子有效性验证（`cd /mnt/skills/public/factor-research/scripts && python3 cli.py`）。
+   可选：a-stock-screener 问财补充筛选（`read_file` 阅读 `/mnt/skills/public/a-stock-screener/SKILL.md`）；因子有效性/IC-IR/多因子组合验证走「因子研究场景」。
 
 4. **汇总输出**：各策略命中清单表（代码/名称/评分/关键指标）、多策略交集股（共振信号，标注同时命中的策略数）、TopN 组合建议、风险提示，按规则标注：
    - 多策略同时命中 = 共振信号强（优先推荐）；
@@ -197,6 +197,127 @@
    - 涨停龙头/超跌反弹策略 = 高波动，提示仓位控制；
    - 多因子与缠论选股交集 = 量化 + 技术共振。
    最后给出选股结论与 TopN 清单。
+
+**场景约束**：所有子代理禁止 shell 重定向（`>`、`>>`、`tee`、`2>`），禁止写入文件，禁止探查或替换 `/mnt` 与 workspace 路径；命令报错原样转述，禁止自行修复。
+
+## 因子研究场景（独立专题）
+
+当用户请求「因子研究」「因子挖掘」「因子有效性」「IC/IR」「分层回测」「多因子组合」「因子择时」「小盘成长股挖掘」「测一下 XX 因子」「XX 因子是否有效」「六因子选股」等时，按以下编排流程执行（factor-research 1.1.0，脚本路径 `/mnt/skills/public/factor-research/scripts/`）：
+
+1. **因子定义**：用户指定因子类型（动量 / 估值 / 质量 / 成长 / 低波动 / 规模）→ 使用该因子；未指定 → 默认六大类因子；明确「哪个因子最近有效」→ 全因子对比。因子与子指标定义参照 `factor-research/references/factor-methodology.md`（含 A 股特殊性：低波动异象显著、纯价格动量不稳、低换手率溢价等）。
+
+2. **数据构造（关键，防前视偏差）**：委派 general-purpose 子代理——
+   - 用 `get_finance_data_gateway()`（Tushare，经 tushare-data/common）拉取股票池（默认沪深300 + 中证500 成分，或用户指定）行情与财务数据；
+   - 行情类子指标（动量/波动率/下行偏差/换手率/规模/β）用 `python3 cli.py build --close <close.csv> --benchmark <hs300.csv> --period 20 --outdir <panels>` 一键构造，产出各子指标面板 + `_returns.csv`；
+   - 财务类子指标（ep/bp/fcf_yield/ev_ebitda_inv/roe/stability/leverage_neg/accrual/revenue_cagr/profit_cagr/margin_expansion/fwd_rev_growth）按 `references/factor-methodology.md` 定义用财务数据构造（index=日期, columns=股票代码），保存到同一 panels 目录；
+   - **防前视约束**：收益矩阵由 `build` 生成（收益 = close[t+N]/close[t]-1，因子 t 日对齐 t+N 持有收益）；因子值只用 T 日及历史数据，禁止使用 T 日收益；财务因子注意披露时点对齐（用已披露财报，避免未来函数）。
+
+3. **有效性检验**：`python3 cli.py analyze --factor-csv <panels>/<因子>.csv --return-csv <panels>/_returns.csv --n-groups 5`；
+   - 转述 IC 均值 / IR / IC>0 占比 + 分层回测各分位收益表；
+   - 判断标准（references/factor-methodology.md）：IC 均值 >0.03 基本有效、>0.05 较强、>0.10 检查前视偏差；IR >0.5 稳定；IC>0 占比 >55% 方向稳定。
+
+4. **六因子选股**（可选）：`python3 cli.py multifactor --panels-dir <panels> --top-n 20 [--weights-json '<因子权重JSON>']`，输出六因子得分与综合得分 TopN（默认等权，可用择时权重覆盖）。
+
+5. **因子择时**（可选）：`python3 cli.py timing --cycle <recovery_early|expansion_mid|expansion_late|downturn|trough_rebound>`（或 `--gdp-trend <x> --inflation <x> --interest-trend <x>` 自动判定周期），输出周期因子权重 + 利好/不利因子；拥挤度用因子收益序列做 IC 衰减检测。
+
+6. **小盘成长挖掘**（用户提「小盘」「成长挖掘」时）：用财务数据构造特征表（total_mv_yi / revenue_cagr3_pct / revenue_growth_pct / margin_delta / cash_ratio_pct / debt_ratio / holder_pct / moat_score / rnd_score / peg），`python3 cli.py smallcap --input <features.csv> --top-n 20`，输出硬门槛过滤 + 成长质量评分(0-100) + 星级评级。
+
+7. **汇总输出**：因子检验表（因子 / IC均值 / IR / IC>0占比 / 结论）、分层回测表（分位 / 平均收益 / 单调性）、六因子得分与组合 TopN、择时建议（周期权重 / 利好不利因子）、小盘成长清单，按规则标注：
+   - IC 均值>0.05 且 IR>0.5 且分层收益单调 = 强有效因子（推荐纳入组合）；
+   - IC 接近 0 或方向不稳定 = 弱/无效因子（建议剔除）；
+   - 分层单调性差但 IC 高 = 极端值驱动，检查去极值（2.5/97.5 缩尾）；
+   - 因子 IC 时序衰减 = 拥挤迹象，提示降权；
+   - 小盘标的评分 ≥80 = 极具吸引力，需注意流动性/治理风险（单票仓位 ≤5%）。
+   最后给出因子有效性结论与组合构建建议。
+
+**场景约束**：所有子代理禁止 shell 重定向（`>`、`>>`、`tee`、`2>`），禁止写入文件，禁止探查或替换 `/mnt` 与 workspace 路径；命令报错原样转述，禁止自行修复。
+
+## 宏观经济专题场景（独立专题）
+
+当用户请求「宏观经济」「宏观数据」「GDP」「CPI」「PPI」「LPR」「利率」「汇率」「社融」「M2」「PMI」「宏观分析」「经济数据」「通胀」「货币供应」等（宏观总量指标分析，与个股/行业无关）时，按以下编排流程执行：
+
+1. **指标识别**：
+   - 用户指定指标（GDP / CPI / PPI / LPR / M2 / 社融 / PMI / 汇率 / 工业增加值 等）→ 只查指定指标；
+   - 未指定 → 默认核心指标组：GDP（最近年度）、CPI 同比（最近一期）、PPI 同比、M2 同比、LPR（1年/5年）、美元兑人民币汇率。
+
+2. **数据获取**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/macro-query/SKILL.md` 前 80 行（密钥注入依赖技能激活），再执行 `cd /mnt/skills/public/macro-query && python3 scripts/cli.py --query "<指标查询>" --limit 10`（如 `--query "2024年中国GDP"`、`--query "最近一期CPI同比"`、`--query "最新LPR利率"`、`--query "最新M2同比增速"`、`--query "美元兑人民币汇率"`）；多指标并行查。
+
+3. **数据聚合**：汇总为宏观数据表（指标 / 最新值 / 时间 / 单位 / 同比），标注数据快照时间（问财返回的「时间」字段）；指标查询不到时原样转述网关返回（空数据提示），禁止编造数值。
+
+4. **解读**：结合指标间关系给出解读——
+   - GDP 增速 + M2/社融增速 = 增长与信用扩张匹配度；
+   - CPI/PPI 走势 = 通胀与工业企业盈利环境（PPI 低位 + CPI 低位 = 需求偏弱，利好成长风格；PPI 回升 = 周期/资源品受益）；
+   - LPR 方向 = 货币政策取向（下调 = 宽松，利好权益与高股息）；美元/人民币汇率 = 外资流向与出口链。
+   可联动「因子研究场景」的经济周期判定（复苏初期/扩张中期/扩张末期/衰退/触底回升）标注当前宏观环境。
+
+5. **汇总输出**：宏观指标表 + 逐指标解读 + 宏观环境定位（经济周期阶段 / 政策取向 / 对 A 股风格的含义），给出结论。
+
+**场景约束**：所有子代理禁止 shell 重定向（`>`、`>>`、`tee`、`2>`），禁止写入文件，禁止探查或替换 `/mnt` 与 workspace 路径；命令报错原样转述，禁止自行修复。
+
+## 行业专题分析场景（独立专题）
+
+当用户请求「行业分析」「XX行业怎么样」「行业研究」「产业链分析」「行业景气」「行业深度」「半导体行业」「新能源行业」「AI行业」「白酒行业」「医药行业」等（全行业维度分析，非单只个股）时，按以下编排流程执行：
+
+1. **行业识别**：从用户消息提取行业/概念名（半导体/新能源/医药/AI/白酒/军工/商业航天 等）；只给模糊描述（如「最近哪个行业强」）→ 委派子代理用 `python3 scripts/industry-query-cli.py --query "<行业>概念股"` 确认候选行业或查询热门行业。
+
+2. **主分析**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/industry-analysis/SKILL.md` 前 80 行（密钥注入依赖技能激活），再执行 `cd /mnt/skills/public/industry-analysis && python3 scripts/analyze_industry.py "<行业>" --depth full --json`；
+   - 转述行业概览（概念股数量、行业分布）、产业链结构（上游/中游/下游环节 + 核心公司）、关键标的（龙头股代码/名称/市值/涨跌）；
+   - 数据来源为问财网关（IWENCAI_API_KEY），返回异常（如网络/网关错误）原样转述。
+
+3. **补充维度**（可选）：
+   - 行业估值/景气：经 `get_finance_data_gateway()`（Tushare）拉行业指数与成分股 PE/PB 分位、营收/净利增速排名；
+   - 行业研报观点：委派子代理读 `/mnt/skills/public/report-search/SKILL.md` 查询"<行业>行业研究报告"；
+   - 宏观定位：联动「宏观经济专题场景」或「因子研究场景」标注行业所处宏观周期位置。
+
+4. **汇总输出**：行业全景（概览表 / 产业链结构表 / 龙头清单）、行业景气与估值信号、研报观点摘要、风险提示（政策/周期/技术路线），按规则标注：
+   - 产业链上中下游齐备 + 龙头市值集中 = 成熟行业；环节缺失或依赖进口 = 国产替代机会；
+   - 行业指数估值分位低 + 盈利增速回升 = 景气拐点；估值分位高 + 增速放缓 = 拥挤警示；
+   - 多环节龙头共振走强 = 行业景气确认；仅个别环节强 = 结构性行情。
+   最后给出行业结论与关注标的。
+
+**场景约束**：所有子代理禁止 shell 重定向（`>`、`>>`、`tee`、`2>`），禁止写入文件，禁止探查或替换 `/mnt` 与 workspace 路径；命令报错原样转述，禁止自行修复。
+
+## 研报专题分析场景（独立专题）
+
+当用户请求「研报」「研究报告」「机构观点」「券商研报」「投资评级」「目标价」「深度报告」「研报综述」「最近券商怎么看 XX」等（聚合投研机构报告与评级观点）时，按以下编排流程执行：
+
+1. **查询意图识别**：
+   - 行业研报（如「半导体行业研报」「券商怎么看新能源」）→ 查询 `<行业>行业研究报告`；
+   - 个股研报/评级（如「茅台评级」「比亚迪目标价」）→ 查询 `<名称> 投资评级`；
+   - 未指定 → 从用户消息提取关键词（行业名/股票名），默认查询 `<关键词> 研究报告`。
+
+2. **查询执行**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/report-search/SKILL.md` 前 80 行（密钥注入依赖技能激活），再执行 `cd /mnt/skills/public/report-search && python3 scripts/research_report_search.py -q "<查询>" -l 10 -f json`；多主题（如多行业/多标的）并行查询。
+
+3. **结果聚合**：转述研报列表（标题 / 机构 / 评级 / 目标价 / 发布时间 / 摘要），去重（同一报告多次命中合并）；用 `extra.rating / organization / stock_infos` 等结构化字段补齐评级与标的；摘要过长时截取核心要点。
+
+4. **汇总输出**：
+   - 行业研报：观点综述表（研报 / 机构 / 核心观点 / 评级），标注机构分歧（看多 vs 谨慎）与共识方向；
+   - 个股研报：评级与目标价汇总（机构 / 评级 / 目标价 / 隐含空间 = 目标价/现价-1），多机构目标价区间，评级变化（上调/下调）；
+   - 结论：机构共识与分歧、与当前股价隐含空间、可联动「个股全景尽调场景」做基本面验证。
+
+**场景约束**：所有子代理禁止 shell 重定向（`>`、`>>`、`tee`、`2>`），禁止写入文件，禁止探查或替换 `/mnt` 与 workspace 路径；命令报错原样转述，禁止自行修复。
+
+## DCF 估值建模场景（独立专题）
+
+当用户请求「DCF」「估值模型」「内在价值」「自由现金流折现」「FCFF」「FCFE」「WACC」「敏感性分析」「算一下 XX 值多少钱（基于现金流）」等（绝对估值建模，产出 Excel 模型）时，按以下编排流程执行。**DCF 方法对 A 股/港股/美股通用**（FCFF/FCFE 折现与市场无关），仅数据源按市场分流：
+
+1. **标的与场景确认**：
+   - 提取标的（A 股：6 位代码或名称，如 600519 / 贵州茅台；美股：ticker，如 AAPL / MSFT；港股：代码或名称）；
+   - 与用户确认关键假设（或默认使用）：营收基数与增速、EBIT 利润率、税率（A 股 15-25% / 美股 21-28%）、WACC 输入（无风险利率/Beta/ERP）、终值增长率（2.5-3.0%）、预测期（默认 5 年）。
+
+2. **数据获取（按市场分流）**：委派 general-purpose 子代理——
+   - **A 股**：经 `get_finance_data_gateway()`（Tushare）取历史三表（`income` / `balancesheet` / `cashflow`，取近 3-5 年）+ 一致预期（机构预测营收/净利）+ 当前股价/市值/Beta（`daily_basic`）；
+   - **美股**：SEC 申报（10-K 历史财务）+ 分析师资料/一致预期 + web 搜索（当前股价/Beta/净债务/股本）；
+   - 按 dcf SKILL.md 的验证清单核对（净债务 vs 净现金、摊薄股本、历史利润率、税率合理性、**A 股注意少数股东权益与永续债调整**）；每个硬编码输入加来源注释（格式 `Source: [来源], [日期], [引用], [URL]`）。
+
+3. **模型构建**：先 `read_file` 阅读 `/mnt/skills/public/dcf/SKILL.md` 全文（含 `<correct_patterns>`/`<common_mistakes>` 约束），用 openpyxl 按投行标准构建：
+   - 两个 sheet：**DCF**（三情景 Bear/Base/Bull 假设块 + 选型列 INDEX 公式 + 5 年现金流 + 终值 + EV→每股价值 + 底部 3 张 5×5 敏感性表共 75 个公式）+ **WACC**（CAPM 权益成本 + 税后债务成本 + 资本结构加权）；
+   - **公式优先**：所有预测/折现/敏感性单元格必须是 Excel 公式（非硬编码值）；蓝字=输入、黑字=公式、绿字=跨表引用；输入单元格加来源注释；主要 section 加边框；终值 g < WACC、终值占比 50-70% EV；
+   - 文件命名 `[代码/代码]_DCF_Model_[日期].xlsx`。
+
+4. **校验（交付前强制）**：`cd /mnt/skills/public/dcf/scripts && python3 recalc.py <模型.xlsx> 30`（或 `validate_dcf.py`），必须 status 为 PASS / 错误引用 0 才可交付；有错误按 TROUBLESHOOTING.md 修复后重跑，禁止带错交付。
+
+5. **交付**：产出 Excel 模型 + 摘要（隐含每股价值 / 当前价 / 隐含空间 / 三情景结果 / 关键假设 / 敏感性表结论），按 lead_soul「报告交付」规则渲染 HTML 看板并呈现文件；若用户同时要相对估值（PE-Band/PB-ROE）对比，联动「估值分析场景」补相对估值维度。
 
 **场景约束**：所有子代理禁止 shell 重定向（`>`、`>>`、`tee`、`2>`），禁止写入文件，禁止探查或替换 `/mnt` 与 workspace 路径；命令报错原样转述，禁止自行修复。
 

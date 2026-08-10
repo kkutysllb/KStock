@@ -62,14 +62,23 @@ class WencaiDataLayer:
             print("  ⚠️ pywencai 未安装，请执行: pip install pywencai", file=sys.stderr)
 
     def query(self, query_str: str, query_type: str = 'stock') -> Optional[pd.DataFrame]:
-        if not self.available:
-            return None
-        try:
-            df = self.pywencai.get(query=query_str, query_type=query_type)
-            return df
-        except Exception as e:
-            print(f"  ⚠️ 问财查询失败 [{query_str}]: {e}", file=sys.stderr)
-            return None
+        """统一查询入口：优先网关 CLI（IWENCAI_API_KEY，稳定），pywencai 降级兜底。
+
+        网关 CLI 不受 Node 版本影响（pywencai 依赖 node 脚本，Node 22 的
+        punycode 弃用警告会污染 stdout 导致 JSON 解析失败返回 None）。
+        """
+        # 层1：网关 CLI（industry-query-cli.py，本项目自带，跨 Node 版本稳定）
+        datas = self._query_hithink(query_str, limit=100)
+        if datas:
+            return pd.DataFrame(datas)
+        # 层2：pywencai（若安装且可用）
+        if self.available:
+            try:
+                df = self.pywencai.get(query=query_str, query_type=query_type)
+                return df
+            except Exception as e:
+                print(f"  ⚠️ 问财查询失败 [{query_str}]: {e}", file=sys.stderr)
+        return None
 
     def get_industry_overview(self, industry_name: str) -> dict:
         overview = {"industry_name": industry_name, "total_companies": 0,
@@ -80,10 +89,12 @@ class WencaiDataLayer:
         overview["total_companies"] = len(df.drop_duplicates(subset=['股票代码']))
         cap_cols = [c for c in df.columns if '市值' in c and 'a股' in c.lower()]
         if cap_cols:
-            overview["market_cap_total"] = round(df[cap_cols[0]].sum() / 1e8, 2)
+            overview["market_cap_total"] = round(pd.to_numeric(df[cap_cols[0]], errors="coerce").sum() / 1e8, 2)
         industry_col = [c for c in df.columns if '同花顺行业' in c]
         if industry_col:
-            dist = df[industry_col[0]].value_counts().head(10).to_dict()
+            # 网关返回的行业列为 list（["电子","半导体",...]），需 explode 扁平化
+            flat = df[industry_col[0]].explode().dropna()
+            dist = flat.astype(str).value_counts().head(10).to_dict()
             overview["industry_distribution"] = {str(k): int(v) for k, v in dist.items()}
         return overview
 
@@ -327,8 +338,8 @@ def analyze_industry(industry_name: str, depth: str = "full") -> dict:
               "analysis_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
               "analysis_depth": depth, "data_source": "同花顺i问财"}
     wencai = WencaiDataLayer()
-    if not wencai.available:
-        return {"error": "pywencai 未安装，请执行: pip install pywencai"}
+    if not wencai.available and not os.path.exists(wencai._get_cli_path()):
+        return {"error": "问财数据层不可用（pywencai 未安装且网关 CLI 缺失）"}
     result["overview"] = wencai.get_industry_overview(industry_name)
     result["chain_structure"] = wencai.get_chain_structure(industry_name)
     result["key_stocks"] = wencai.get_key_stocks(industry_name, top_n=15)

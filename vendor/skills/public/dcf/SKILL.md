@@ -1,7 +1,7 @@
 ---
 name: dcf
 description: 用于搭建真实的 DCF 估值模型，获取 SEC 申报和分析师资料中的财务数据，构建现金流预测、WACC 计算和敏感性分析，并输出专业 Excel 模型与摘要。适用于内在价值评估和详细财务建模场景。
-version: 1.0.0
+version: 1.0.1
 author: kk-quant
 license: MIT
 category: finance
@@ -33,7 +33,7 @@ permissions:
 metadata:
   openclaw:
     emoji: "💰"
-    version: "1.0.0"
+    version: "1.0.1"
     author: "kk-quant"
     category: "finance"
     tags:
