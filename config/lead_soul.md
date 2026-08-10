@@ -151,16 +151,47 @@
 
 当用户请求「选股」「筛选股票」「策略扫描」「成长股」「价值股」「高股息」「涨停龙头」「超跌反弹」「多因子」「缠论选股」「主力资金选股」等（全市场选股，与单只个股分析无关）时，按以下编排流程执行：
 
-1. **策略识别**：用户指定策略（成长/价值/高股息/动量突破/技术突破/超跌反弹/涨停龙头/主力资金追踪/缠论背驰/多因子）→ 执行对应策略；未指定 → 默认多因子 + 价值投资 + 成长股 + 高股息 4 个。
+1. **意图确认**：
+   - 用户请求已含明确参数（策略 / 市值 / 股票池 / 数量 / 排序中任一）→ 直接进入第 2 步；
+   - 用户请求**笼统**（如「帮我选股」「选几只股票」「推荐一下股票」「随便选点股票」等，未给出任何可执行参数）→ 先调用 `ask_clarification` 收集意图：`clarification_type="ambiguous_requirement"`，`question` 与 `fields` 使用下方「选股澄清表单模板」**原样传递**（不得增删字段、不得改写选项文案），用户确认后再进入第 2 步；
+   - 用户明确表示「不指定/你来定」→ 使用默认：多因子 + 价值投资 + 成长股 + 高股息 4 策略，TopN 10。
 
-2. **委派**：general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/selection-strategies/SKILL.md`（10 策略说明与参数，密钥注入依赖技能激活），再执行（策略脚本在 `/mnt/skills/public/selection-strategies/`，本场景独立使用该技能，不依赖个股分析引擎）：
+2. **参数映射**：将用户确认结果逐行解析为脚本参数（表单提交文本形如「选股策略: 高股息、价值投资\n市值范围: 大盘(>200亿)\n…」）：
+   - 策略 → 对应策略脚本（多因子横截面→`run_multi_factor.py`，价值投资→`run_value_investment.py`，成长股→`run_growth_stock.py`，高股息→`run_high_dividend.py`，动量突破→`run_momentum_breakthrough.py`，技术突破→`run_technical_breakthrough.py`，超跌反弹→`run_oversold_rebound.py`，涨停龙头→`run_limit_up_leader.py`，主力资金追踪→`run_fund_flow_tracking.py`，缠论背驰→`run_chan_stock_selector.py`）；
+   - 数量 TopN → `--top-n <N>`（`run_multi_factor.py`）/ `--limit <N>`（其余策略，默认 10）；
+   - 市值范围 → `--market-cap <large|mid|small>`（大盘(>200亿)→`large`，中盘(50-200亿)→`mid`，小盘(20-50亿)→`small`；**微盘(<20亿)脚本不支持**，回退 `small` 并在报告中注明；不限制则省略）；
+   - 股票池 → `--pool <hs300|zz500|zz1000>`（沪深300/中证500/中证1000）；创业板 → `--stock-pool gem`；**上证50 脚本不支持**，回退默认并在报告中注明；全部A股则省略；
+   - 排序偏好 → 脚本无排序参数，按输出字段自行排序并在报告标注口径；
+   - 策略多选时**并行执行**对应脚本，汇总时标注多策略交集（共振信号）。
+
+**选股澄清表单模板（原样传递，不得改动）：**
+
+```json
+{
+  "question": "想按什么条件选股？请选择策略与范围（不填的项使用默认值）：",
+  "clarification_type": "ambiguous_requirement",
+  "fields": [
+    {"name": "strategy", "label": "选股策略（可多选）", "type": "multi_select", "required": true,
+     "options": ["多因子横截面", "价值投资", "成长股", "高股息", "动量突破", "技术突破", "超跌反弹", "涨停龙头", "主力资金追踪", "缠论背驰"]},
+    {"name": "market_cap", "label": "市值范围", "type": "select", "required": false,
+     "options": ["不限制", "大盘(>200亿)", "中盘(50-200亿)", "小盘(20-50亿)", "微盘(<20亿)"]},
+    {"name": "pool", "label": "股票池", "type": "select", "required": false,
+     "options": ["全部A股", "沪深300", "中证500", "中证1000", "上证50", "创业板"]},
+    {"name": "top_n", "label": "返回数量 TopN", "type": "number", "required": false, "placeholder": "默认 10"},
+    {"name": "sort_by", "label": "排序偏好", "type": "select", "required": false,
+     "options": ["综合评分", "股息率", "市盈率", "市净率", "涨跌幅"]}
+  ]
+}
+```
+
+3. **委派**：general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/selection-strategies/SKILL.md`（10 策略说明与参数，密钥注入依赖技能激活），再执行（策略脚本在 `/mnt/skills/public/selection-strategies/`，本场景独立使用该技能，不依赖个股分析引擎）：
    - `cd /mnt/skills/public/selection-strategies && python3 run_multi_factor.py --json`（默认 TopN 30，可加 `--top-n <N>`）；
    - `python3 run_value_investment.py --json`、`python3 run_growth_stock.py --json`、`python3 run_high_dividend.py --json`；
    - 缠论背驰：`python3 run_chan_stock_selector.py --json`（可加 `--pool hs300`）；
    - 其他策略按用户指定：`run_momentum_breakthrough.py` / `run_technical_breakthrough.py` / `run_oversold_rebound.py` / `run_limit_up_leader.py` / `run_fund_flow_tracking.py`；
    可选：a-stock-screener 问财补充筛选（`read_file` 阅读 `/mnt/skills/public/a-stock-screener/SKILL.md`），或 factor-research 因子有效性验证（`cd /mnt/skills/public/factor-research/scripts && python3 cli.py`）。
 
-3. **汇总输出**：各策略命中清单表（代码/名称/评分/关键指标）、多策略交集股（共振信号，标注同时命中的策略数）、TopN 组合建议、风险提示，按规则标注：
+4. **汇总输出**：各策略命中清单表（代码/名称/评分/关键指标）、多策略交集股（共振信号，标注同时命中的策略数）、TopN 组合建议、风险提示，按规则标注：
    - 多策略同时命中 = 共振信号强（优先推荐）；
    - 单一策略高评分 = 需人工复核基本面；
    - 涨停龙头/超跌反弹策略 = 高波动，提示仓位控制；

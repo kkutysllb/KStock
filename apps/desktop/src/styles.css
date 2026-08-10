@@ -3226,6 +3226,19 @@ button.context-file-row:hover {
   transition: border-color 0.12s;
 }
 
+/* 自定义 chevron：原生 select 在 macOS/Windows 位置不一致且贴右边缘，
+   用内联 SVG 替代 appearance:none，跨平台一致、距右内边 12px。 */
+.clarification-form-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px 14px;
+}
+
 .clarification-form-input:focus,
 .clarification-form-select:focus,
 .clarification-form-textarea:focus {
@@ -3975,6 +3988,21 @@ button.context-file-row:hover {
   font-size: 14px;
 }
 
+/* 「全部折叠/全部展开」总开关：次级视觉，弱于「新增」主按钮 */
+.memory-collapse-all {
+  background: transparent;
+  border: 1px solid rgba(129, 205, 178, 0.16);
+  color: #9aa7ad;
+}
+.memory-collapse-all:hover {
+  border-color: #56c7a5;
+  color: #70d4b5;
+}
+.memory-collapse-all:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .memory-hint {
   margin-left: auto;
   font-size: 12px;
@@ -4028,6 +4056,33 @@ button.context-file-row:hover {
   align-items: center;
   gap: 8px;
   margin-bottom: 3px;
+  background: transparent;
+  border: 0;
+  padding: 2px 4px 2px 0;
+  margin-left: -4px;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: calc(100% + 4px);
+  color: inherit;
+  transition: background-color 120ms ease;
+}
+.memory-context-label:hover {
+  background: rgba(129, 205, 178, 0.06);
+}
+.memory-context-label:focus-visible {
+  outline: 2px solid rgba(68, 198, 160, 0.55);
+  outline-offset: 2px;
+}
+.memory-context-label svg {
+  flex: 0 0 auto;
+  color: #6b7280;
+  transition: transform 140ms ease;
+}
+.memory-context-list li.is-collapsed {
+  /* 折叠态保留分隔条，让卡片整体节奏不变 */
+  padding-bottom: 0;
 }
 
 .memory-context-label span {
@@ -5102,7 +5157,9 @@ button.context-file-row:hover {
 
 .report-settings .settings-card {
   padding: 16px;
-  width: auto;
+  /* width:100% 而非 auto：CSS grid 容器 width:auto 会收缩到 fit-content,
+     不会撑满父容器，导致卡片比同级 settings-card 窄 80px 左右。 */
+  width: 100%;
   display: grid;
   gap: 10px;
 }
@@ -5258,12 +5315,16 @@ button.context-file-row:hover {
 .report-search input::placeholder { color: #68747c; }
 .report-library-groups { display:grid; gap:28px; }
 .report-date-group { display: grid; gap: 9px; }
-.report-date-heading { min-width: 0; gap: 7px; color: #93a09f; }
-.report-date-heading svg { color: #55cba8; }
+.report-date-heading { min-width: 0; gap: 7px; color: #93a09f; background: transparent; border: 0; padding: 2px 4px 2px 0; margin: 0; cursor: pointer; text-align: left; font: inherit; transition: color 140ms ease; }
+.report-date-heading:hover { color: #cbd4d2; }
+.report-date-heading:hover svg { color: #6dd5b8; }
+.report-date-heading:focus-visible { outline: 2px solid rgba(68,198,160,.55); outline-offset: 4px; border-radius: 4px; }
+.report-date-heading svg { color: #55cba8; transition: transform 140ms ease, color 140ms ease; }
 .report-date-heading h2 { margin: 0; color: #cbd4d2; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .report-date-heading span { color: #69757b; font-size: 10px; }
 .report-date-heading i { height: 1px; flex: 1; margin-left: 4px; background: rgba(129, 205, 178, 0.08); }
-.report-card-grid { display:grid; gap:7px; }
+.report-card-grid { display:grid; gap:7px; transition: opacity 140ms ease; }
+.report-date-group.is-collapsed { gap: 0; }
 .report-library-card { display:grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items:center; gap:12px; min-width: 0; padding:12px 13px; border:1px solid rgba(129,205,178,.1); border-radius:7px; background:rgba(5,20,16,.78); box-shadow:0 8px 20px rgba(0,0,0,.09); transition: border-color 140ms ease, background-color 140ms ease; }
 .report-library-card:hover { border-color:rgba(86,199,165,.26); background:rgba(7,25,20,.88); }
 .report-card-icon { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid rgba(86, 199, 165, 0.16); border-radius: 7px; background: rgba(86, 199, 165, 0.07); color:#56c7a5; }
@@ -5527,7 +5588,7 @@ button.context-file-row:hover {
 .general-settings {
   display: grid;
   gap: 14px;
-  width: min(880px, 100%);
+  width: min(860px, 100%);
   margin: 0 auto;
 }
 
@@ -5914,7 +5975,7 @@ button.context-file-row:hover {
 .runtime-settings {
   display: grid;
   gap: 14px;
-  width: min(880px, 100%);
+  width: min(860px, 100%);
   margin: 0 auto;
 }
 
@@ -6221,7 +6282,7 @@ button.context-file-row:hover {
 .data-sources-settings {
   display: grid;
   gap: 14px;
-  width: min(880px, 100%);
+  width: min(860px, 100%);
   margin: 0 auto;
 }
 

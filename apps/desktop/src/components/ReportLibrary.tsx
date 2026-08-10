@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CalendarDays, ExternalLink, FileText, RefreshCw, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronDown, ChevronRight, ExternalLink, FileText, RefreshCw, Search, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { deleteReport, fetchReportHtml, listReports, type ReportLibraryItem } from "../lib/reportsClient";
 
@@ -12,6 +12,7 @@ export function ReportLibrary({ onBack }: ReportLibraryProps) {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ report: ReportLibraryItem; url: string } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ReportLibraryItem | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const reload = useCallback(async () => {
     setLoading(true); setError(null);
@@ -40,6 +41,14 @@ export function ReportLibrary({ onBack }: ReportLibraryProps) {
   };
 
   const closePreview = () => { if (preview) URL.revokeObjectURL(preview.url); setPreview(null); };
+  const toggleCollapse = useCallback((date: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  }, []);
   const confirmDelete = async () => {
     if (!pendingDelete) return;
     try { await deleteReport(pendingDelete.report_id); setPendingDelete(null); closePreview(); await reload(); }
@@ -83,40 +92,53 @@ export function ReportLibrary({ onBack }: ReportLibraryProps) {
           </div>
         ) : (
           <div className="report-library-groups">
-            {grouped.map(([date, items]) => (
-              <section key={date} className="report-date-group">
-                <div className="report-date-heading">
-                  <CalendarDays size={15} />
-                  <h2>{date}</h2>
-                  <span>{items.length} 份</span>
-                  <i aria-hidden="true" />
-                </div>
-                <div className="report-card-grid">
-                  {items.map((report) => (
-                    <article key={report.report_id} className="report-library-card">
-                      <div className="report-card-icon"><FileText size={17} /></div>
-                      <div className="report-card-copy">
-                        <h3>{report.title}</h3>
-                        <div className="report-card-meta">
-                          <span>{report.symbol || "未标注标的"}</span>
-                          <span>{report.report_type}</span>
-                          <span>{report.period_start || "—"} 至 {report.period_end || "—"}</span>
-                          <span>风险 {report.risk_level || "未标注"}</span>
-                        </div>
-                      </div>
-                      <div className="report-card-actions">
-                        <button type="button" className="subtle-button" onClick={() => void openPreview(report)}>
-                          <ExternalLink size={14} />打开看板
-                        </button>
-                        <button type="button" className="icon-ghost danger" onClick={() => setPendingDelete(report)} aria-label={`删除报告 ${report.title}`} title="删除报告">
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            ))}
+            {grouped.map(([date, items]) => {
+              const isCollapsed = collapsed.has(date);
+              const groupId = `report-group-${date}`;
+              return (
+                <section key={date} className={`report-date-group${isCollapsed ? " is-collapsed" : ""}`}>
+                  <button
+                    type="button"
+                    className="report-date-heading"
+                    onClick={() => toggleCollapse(date)}
+                    aria-expanded={!isCollapsed}
+                    aria-controls={groupId}
+                  >
+                    <CalendarDays size={15} />
+                    <h2>{date}</h2>
+                    <span>{items.length} 份</span>
+                    <i aria-hidden="true" />
+                    {isCollapsed ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+                  </button>
+                  {!isCollapsed && (
+                    <div id={groupId} className="report-card-grid">
+                      {items.map((report) => (
+                        <article key={report.report_id} className="report-library-card">
+                          <div className="report-card-icon"><FileText size={17} /></div>
+                          <div className="report-card-copy">
+                            <h3>{report.title}</h3>
+                            <div className="report-card-meta">
+                              <span>{report.symbol || "未标注标的"}</span>
+                              <span>{report.report_type}</span>
+                              <span>{report.period_start || "—"} 至 {report.period_end || "—"}</span>
+                              <span>风险 {report.risk_level || "未标注"}</span>
+                            </div>
+                          </div>
+                          <div className="report-card-actions">
+                            <button type="button" className="subtle-button" onClick={() => void openPreview(report)}>
+                              <ExternalLink size={14} />打开看板
+                            </button>
+                            <button type="button" className="icon-ghost danger" onClick={() => setPendingDelete(report)} aria-label={`删除报告 ${report.title}`} title="删除报告">
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
           </div>
         )}
       </div>

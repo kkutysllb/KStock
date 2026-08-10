@@ -86,12 +86,21 @@ class NorthboundAnalyzer(BaseAnalyzer):
         # ----------------------------------------------------------------
         latest_net_yi = latest_net / 10000.0
         cum_net_yi = cum_net / 10000.0
+
+        def _to_yi(v: Any) -> Optional[float]:
+            """万元 → 亿元；None / NaN 返回 None（避免 NaN 污染 JSON 序列化）。"""
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                return None
+            return None if pd.isna(fv) else fv / 10000.0
+
         detail = {
             "trade_date": latest["trade_date"].strftime("%Y%m%d"),
             "latest_net": latest_net,
             "latest_net_yi": latest_net_yi,
-            "latest_sh": float(latest[sh_col]) / 10000.0 if sh_col else None,
-            "latest_sz": float(latest[sz_col]) / 10000.0 if sz_col else None,
+            "latest_sh": _to_yi(latest[sh_col]) if sh_col else None,
+            "latest_sz": _to_yi(latest[sz_col]) if sz_col else None,
             "cum_net": cum_net,
             "cum_net_yi": cum_net_yi,
             "net_positive_days": net_positive_days,
@@ -109,9 +118,7 @@ class NorthboundAnalyzer(BaseAnalyzer):
             if len(top):
                 detail["top10"] = top.to_dict("records")
 
-        # 信号评分
-        # latest_net / cum_net are in 百万元 from Tushare moneyflow_hsgt;
-        # convert to 亿元 by /100. NORTH_STRONG_IN/OUT are in 亿.
+        # 信号评分（latest_net_yi / cum_net_yi 已换算为亿元，NORTH_STRONG_IN/OUT 单位亦为亿）
         score = 50
         signals = []
         # latest_net_yi / cum_net_yi already computed above (in 亿元)
@@ -164,9 +171,14 @@ class NorthboundAnalyzer(BaseAnalyzer):
         def _yi_m(v):
             if v is None or pd.isna(v): return "-"
             return f"{float(v) / 10000.0:.1f}亿"
+        # latest_sh / latest_sz 在 analyze() 中已换算为亿元，直接格式化，
+        # 不得再 ÷10000（历史 bug：双重换算导致拆分字段显示 0.0亿）。
+        def _yi(v):
+            if v is None or pd.isna(v): return "-"
+            return f"{float(v):.1f}亿"
         lines.append(f"- 当日北向净额：**{_yi_m(d.get('latest_net', 0))}**")
         if d.get("latest_sh") is not None:
-            lines.append(f"- 沪股通：{_yi_m(d['latest_sh'])} / 深股通：{_yi_m(d['latest_sz'])}")
+            lines.append(f"- 沪股通：{_yi(d['latest_sh'])} / 深股通：{_yi(d.get('latest_sz'))}")
         lines.append(
             f"- {d.get('total_days','-')}日累计：**{_yi_m(d.get('cum_net',0))}** "
             f"（净流入 {d.get('net_positive_days',0)} 天 / 连续 {d.get('streak',0)} 日 {d.get('streak_sign','') }）"

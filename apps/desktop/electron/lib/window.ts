@@ -56,6 +56,8 @@ export function createMainWindow(): BrowserWindow {
 
   window.once("ready-to-show", () => {
     logMain("窗口 ready-to-show");
+    // 启动默认最大化：显示前先最大化，避免先以普通尺寸闪现再放大。
+    window.maximize();
     window.show();
   });
 
@@ -64,6 +66,7 @@ export function createMainWindow(): BrowserWindow {
   setTimeout(() => {
     if (!window.isDestroyed() && !window.isVisible()) {
       logMain("ready-to-show 超时（2s），强制显示窗口");
+      window.maximize();
       window.show();
     }
   }, 2000);

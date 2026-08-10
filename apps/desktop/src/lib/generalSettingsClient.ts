@@ -27,7 +27,7 @@ export const DEFAULT_GENERAL_PREFERENCES: GeneralPreferences = {
   show_tool_calls: true,
   restore_last_session: true,
   create_session_when_empty: false,
-  send_shortcut: "mod_enter",
+  send_shortcut: "enter",
   keep_draft_after_send: false,
   keep_attachments_after_send: false,
 };

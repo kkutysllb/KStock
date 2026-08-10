@@ -1992,12 +1992,18 @@ function WorkspaceShell({
             placeholder="要求 KStock 完成一个投研任务，例如：分析贵州茅台最近一季财报，并生成报告。"
             onChange={(event) => onDraftChange(event.target.value)}
             onKeyDown={(event) => {
-              if (event.nativeEvent.isComposing || !draft.trim()) return;
+              if (event.nativeEvent.isComposing) return;
               const modifier = event.metaKey || event.ctrlKey;
-              const shouldSend = generalPreferences.send_shortcut === "enter"
-                ? event.key === "Enter" && !event.shiftKey
-                : event.key === "Enter" && modifier && !event.shiftKey;
-              if (!shouldSend || streamingId || !activeModel || !sessionsLoaded) return;
+              const sendByEnter = generalPreferences.send_shortcut === "enter";
+              if (sendByEnter) {
+                // Enter 发送；Cmd/Ctrl+Enter（macOS 用 ⌘、Win/Linux 用 Ctrl）或
+                // Shift+Enter 插入换行（不拦截，走 textarea 默认行为）。
+                if (event.key !== "Enter" || modifier || event.shiftKey) return;
+              } else {
+                // mod_enter：Enter 换行；Cmd/Ctrl+Enter 发送。
+                if (event.key !== "Enter" || !modifier || event.shiftKey) return;
+              }
+              if (!draft.trim() || streamingId || !activeModel || !sessionsLoaded) return;
               event.preventDefault();
               onSend(activeModel);
             }}

@@ -8,7 +8,7 @@ description: |
   输出：日度/周度联动报告 + 综合情绪评分 + 一句话市场总结。
 license: MIT
 category: finance
-version: 1.0.0
+version: 1.0.2
 author: kk-quant
 tags:
   - A股
@@ -50,7 +50,7 @@ permissions:
 metadata:
   openclaw:
     emoji: "🔗"
-    version: "1.0.0"
+    version: "1.0.2"
     author: "kk-quant"
     category: "finance"
     tags:
@@ -117,7 +117,7 @@ Python API：`LinkageEngine().run_daily()` / `run_weekly()`，`to_markdown()` / 
 
 - 每维度输出 0-100 评分与偏向（bullish / bearish / neutral），聚合为综合评分、偏多/偏空计数与操作建议；
 - 数据源：Tushare Pro（T+1），可选同花顺问财实时补充（`--iwencai`）；
-- **金额单位**：Tushare hsgt / moneyflow 系列金额均为**万元**（报告已换算为亿元，÷10000）；
+- **金额单位**：Tushare hsgt / moneyflow 系列金额均为**万元**（报告已换算为亿元，÷10000）；北向 detail 的 `latest_sh / latest_sz` 在 `analyze()` 中已换算为**亿元**，`to_markdown` 渲染时直接格式化、禁止再次 ÷10000（1.0.2 已修复历史双重换算 bug）；
 - **缺失必须诚实标注**：某维度数据源无权限或无数据时，报告显示「无数据」及原因，禁止以「中性」掩盖缺失；
 - **期权覆盖**：7 大品种中 6 只为 ETF 期权（SSE/SZSE，标的为 ETF 价格），中证1000 用中金所股指期权（CFFEX，IM，opt_code=OP000852，标的为 000852 指数点位）；BS 反解 ATM IV 时标的价格与行权价必须同量级（ETF 用元、股指期权用点位）。
 - **日/周粒度差异**：daily 报告周期 1-5 日，weekly 拉长窗口至 20-60 日看中期趋势；期指基差每日重算主力合约。

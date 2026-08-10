@@ -139,9 +139,9 @@ export function GeneralSettings({ initialValue, onSaved }: GeneralSettingsProps)
         />
         <SelectField
           label="发送快捷键"
-          hint="Shift + Enter 始终换行"
+          hint="Enter 发送时：Cmd / Ctrl + Enter 或 Shift + Enter 换行；选 Cmd/Ctrl+Enter 发送时：Enter 直接换行"
           value={draft.send_shortcut}
-          options={[{ value: "mod_enter", label: "Cmd / Ctrl + Enter" }, { value: "enter", label: "Enter" }]}
+          options={[{ value: "mod_enter", label: "Cmd / Ctrl + Enter 发送" }, { value: "enter", label: "Enter 发送" }]}
           onChange={(value) => update("send_shortcut", value as GeneralPreferences["send_shortcut"])}
         />
         <ToggleField

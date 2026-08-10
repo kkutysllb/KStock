@@ -31,3 +31,6 @@ results/
 .release-logs/
 # 技能包 vendored Python 构建产物（bdist/lib），不入库
 vendor/**/build/
+
+# WorkBuddy 本地工作数据（记忆/日志），不入库
+.workbuddy/

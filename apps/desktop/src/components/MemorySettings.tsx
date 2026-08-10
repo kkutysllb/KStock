@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Brain, RefreshCw, Trash2, Plus, Pencil, Download, Upload, X } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, FoldHorizontal, RefreshCw, Trash2, Plus, Pencil, Download, Upload, UnfoldHorizontal, X } from "lucide-react";
 import {
   type MemoryConfig,
   type MemoryData,
@@ -46,6 +46,8 @@ export function MemorySettings() {
   const [editingFactId, setEditingFactId] = useState<string | null>(null);
   const [addingFact, setAddingFact] = useState(false);
   const [pendingClear, setPendingClear] = useState(false);
+  // 记忆事实折叠集合（提升到父组件，支持「全部折叠/全部展开」总开关）
+  const [collapsedFacts, setCollapsedFacts] = useState<Set<string>>(new Set());
   const [pendingImport, setPendingImport] = useState<MemoryData | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -353,6 +355,26 @@ export function MemorySettings() {
           <section className="settings-card memory-facts-card" aria-label="记忆事实列表">
             <div className="memory-actions-header">
               <strong>记忆事实</strong>
+              {data.facts.length > 0 && (
+                <button
+                  className="pill-control memory-collapse-all"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    const allCollapsed = data.facts.every((f) => collapsedFacts.has(f.id));
+                    setCollapsedFacts(allCollapsed ? new Set() : new Set(data.facts.map((f) => f.id)));
+                  }}
+                  aria-label="全部折叠或展开记忆事实"
+                >
+                  {data.facts.every((f) => collapsedFacts.has(f.id)) ? <UnfoldHorizontal size={13} /> : <FoldHorizontal size={13} />}
+                  {data.facts.every((f) => collapsedFacts.has(f.id)) ? "全部展开" : "全部折叠"}
+                </button>
+              )}
+              <span className="memory-hint">
+                {data.facts.some((f) => collapsedFacts.has(f.id))
+                  ? `已折叠 ${data.facts.filter((f) => collapsedFacts.has(f.id)).length}/${data.facts.length} 条`
+                  : ""}
+              </span>
               <button
                 className="pill-control"
                 type="button"
@@ -372,6 +394,15 @@ export function MemorySettings() {
                     fact={fact}
                     editing={editingFactId === fact.id}
                     busy={busy}
+                    collapsed={collapsedFacts.has(fact.id)}
+                    onToggleCollapse={() =>
+                      setCollapsedFacts((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(fact.id)) next.delete(fact.id);
+                        else next.add(fact.id);
+                        return next;
+                      })
+                    }
                     onEdit={() => setEditingFactId(fact.id)}
                     onCancelEdit={() => setEditingFactId(null)}
                     onSave={(patch) => handleUpdateFact(fact.id, patch)}
@@ -499,21 +530,58 @@ function ContextSummaryCard({ data }: { data: MemoryData }) {
     return out;
   }, [data]);
 
+  // 每个 section 可折叠，默认全部展开（首次进入即可看到内容）
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleSection = (label: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
+
   if (sections.length === 0) return null;
+
+  const allCollapsed = collapsed.size === sections.length;
 
   return (
     <section className="settings-card memory-context-card" aria-label="上下文摘要">
-      <strong>上下文摘要</strong>
+      <div className="memory-actions-header">
+        <strong>上下文摘要</strong>
+        <button
+          className="pill-control memory-collapse-all"
+          type="button"
+          onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(sections.map((s) => s.label)))}
+          aria-label={allCollapsed ? "全部展开上下文摘要" : "全部折叠上下文摘要"}
+        >
+          {allCollapsed ? <UnfoldHorizontal size={13} /> : <FoldHorizontal size={13} />}
+          {allCollapsed ? "全部展开" : "全部折叠"}
+        </button>
+      </div>
       <ul className="memory-context-list">
-        {sections.map((s) => (
-          <li key={s.label}>
-            <div className="memory-context-label">
-              <span>{s.label}</span>
-              {s.updatedAt && <time>{formatTimestamp(s.updatedAt)}</time>}
-            </div>
-            <p className="memory-context-summary">{s.summary || "（空）"}</p>
-          </li>
-        ))}
+        {sections.map((s) => {
+          const isCollapsed = collapsed.has(s.label);
+          const panelId = `ctx-panel-${s.label}`;
+          return (
+            <li key={s.label} className={isCollapsed ? "is-collapsed" : ""}>
+              <button
+                type="button"
+                className="memory-context-label is-toggle"
+                onClick={() => toggleSection(s.label)}
+                aria-expanded={!isCollapsed}
+                aria-controls={panelId}
+              >
+                {isCollapsed ? <ChevronRight size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}
+                <span>{s.label}</span>
+                {s.updatedAt && <time>{formatTimestamp(s.updatedAt)}</time>}
+              </button>
+              {!isCollapsed && (
+                <p id={panelId} className="memory-context-summary">{s.summary || "（空）"}</p>
+              )}
+            </li>
+          );
+        })}
       </ul>
       {data.lastUpdated && (
         <p className="memory-meta">最后更新：{formatTimestamp(data.lastUpdated)}</p>
@@ -528,6 +596,8 @@ function FactRow({
   fact,
   editing,
   busy,
+  collapsed,
+  onToggleCollapse,
   onEdit,
   onCancelEdit,
   onSave,
@@ -536,6 +606,8 @@ function FactRow({
   fact: MemoryFact;
   editing: boolean;
   busy: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onEdit: () => void;
   onCancelEdit: () => void;
   onSave: (patch: { content?: string; category?: string; confidence?: number }) => Promise<void>;
@@ -556,21 +628,44 @@ function FactRow({
   }
 
   return (
-    <li className="memory-fact-row">
+    <li className={`memory-fact-row${collapsed ? " is-collapsed" : ""}`}>
       <div className="memory-fact-main">
-        <p className="memory-fact-content">{fact.content}</p>
-        <div className="memory-fact-meta">
-          <span className="memory-fact-cat">{fact.category}</span>
-          <span className="memory-fact-conf" title="置信度">
-            置信度 {(fact.confidence * 100).toFixed(0)}%
-          </span>
-          {fact.createdAt && <time>{formatTimestamp(fact.createdAt)}</time>}
-          {fact.source && fact.source !== "unknown" && (
-            <span className="memory-fact-source" title="来源">来源：{fact.source}</span>
-          )}
-        </div>
+        {!collapsed && (
+          <>
+            <p className="memory-fact-content">{fact.content}</p>
+            <div className="memory-fact-meta">
+              <span className="memory-fact-cat">{fact.category}</span>
+              <span className="memory-fact-conf" title="置信度">
+                置信度 {(fact.confidence * 100).toFixed(0)}%
+              </span>
+              {fact.createdAt && <time>{formatTimestamp(fact.createdAt)}</time>}
+              {fact.source && fact.source !== "unknown" && (
+                <span className="memory-fact-source" title="来源">来源：{fact.source}</span>
+              )}
+            </div>
+          </>
+        )}
+        {collapsed && (
+          <div className="memory-fact-meta">
+            <span className="memory-fact-cat">{fact.category}</span>
+            <span className="memory-fact-conf" title="置信度">
+              置信度 {(fact.confidence * 100).toFixed(0)}%
+            </span>
+          </div>
+        )}
       </div>
       <div className="memory-fact-actions">
+        <button
+          className="link-button"
+          type="button"
+          disabled={busy}
+          onClick={onToggleCollapse}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "展开该记忆" : "折叠该记忆"}
+          title={collapsed ? "展开" : "折叠"}
+        >
+          {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+        </button>
         <button
           className="link-button"
           type="button"

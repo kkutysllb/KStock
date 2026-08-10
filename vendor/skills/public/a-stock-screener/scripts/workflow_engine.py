@@ -99,16 +99,24 @@ class ResolveStep(PipelineStep[ScreeningIntent, List[Tuple[Strategy, dict]]]):
         self._registry = registry or get_registry()
 
     def execute(self, intent: ScreeningIntent, context: dict) -> List[Tuple[Strategy, dict]]:
-        # 从 raw_query 尝试匹配策略，优先使用 intent.strategy
-        strategy_id = intent.strategy or intent.custom_strategy or intent.raw_query
-        matched = self._registry.match(strategy_id)
+        # 1) 优先精确匹配意图映射出的策略 ID（如 value_dividend）。
+        # 2) intent.strategy 是意图层的粗粒度语义 ID（value / high_dividend /
+        #    growth / momentum），与注册中心的细粒度策略 ID 不同构——直接用
+        #    它做 match 永远匹配失败（历史 bug：策略退化、打分全 0）。
+        #    失败时回退用原始中文 query 做关键词匹配（策略 tags 为中文）。
+        matched: List[Strategy] = []
+        sid = intent.strategy or intent.custom_strategy or None
+        if sid:
+            exact = self._registry.get(sid)
+            if exact is not None:
+                matched = [exact]
         if not matched:
-            logger.warning(f"No strategy matched for: {strategy_id}")
+            text = intent.raw_query or context.get("query") or ""
+            matched = self._registry.match(text)
+        if not matched:
+            logger.warning(f"No strategy matched for: {text or sid}")
             return []
-        resolved = []
-        for s in matched:
-            resolved.append((s, {}))
-        return resolved
+        return [(s, {}) for s in matched]
 
 
 class FetchStep(PipelineStep[List[Tuple[Strategy, dict]], List[dict]]):

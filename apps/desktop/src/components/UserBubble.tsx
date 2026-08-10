@@ -61,6 +61,14 @@ export function UserBubble({ msg, canEdit = false, editDisabled = false, onEditR
             aria-label="编辑用户消息"
             value={editText}
             onChange={(event) => setEditText(event.target.value)}
+            onKeyDown={(event) => {
+              // Enter 提交；Cmd/Ctrl+Enter 或 Shift+Enter 换行（与主输入框一致）。
+              if (event.nativeEvent.isComposing) return;
+              const modifier = event.metaKey || event.ctrlKey;
+              if (event.key !== "Enter" || modifier || event.shiftKey) return;
+              event.preventDefault();
+              void handleSubmit();
+            }}
             disabled={submitting}
             autoFocus
           />

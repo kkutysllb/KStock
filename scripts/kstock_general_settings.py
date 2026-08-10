@@ -39,7 +39,7 @@ class GeneralPreferences(BaseModel):
     show_tool_calls: bool = True
     restore_last_session: bool = True
     create_session_when_empty: bool = False
-    send_shortcut: Literal["enter", "mod_enter"] = "mod_enter"
+    send_shortcut: Literal["enter", "mod_enter"] = "enter"
     keep_draft_after_send: bool = False
     keep_attachments_after_send: bool = False
 
