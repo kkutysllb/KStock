@@ -3,14 +3,17 @@
 // 工具活动摘要 → 正文 text（markdown 源文本）→ error。
 // 流式时正文末尾显示迷你 K 线流动（4 根蜡烛错相位脉冲）；空 turn 流式中显示 pending 占位。
 
+import { useMemo } from "react";
 import { AlertTriangle } from "lucide-react";
 import type { ChatMessage, HumanInputPayload } from "../lib/sessionStore";
 import { Markdown } from "../lib/markdown";
+import { splitProseByHeading, shouldSplitProse } from "../lib/proseSegments";
 import { StageBadge } from "./StageBadge";
 import { ReasoningBlock } from "./ReasoningBlock";
 import { SubagentGroup } from "./SubagentGroup";
 import { ClarificationCard } from "./ClarificationCard";
 import { ToolActivitySummary } from "./ToolActivitySummary";
+import { ProseSliceView } from "./ProseSliceView";
 
 interface AssistantTurnProps {
   msg: ChatMessage;
@@ -71,6 +74,14 @@ export function AssistantTurn({
     detectClarification(msg);
   const visibleToolCalls =
     msg.toolCalls?.filter((call) => call.name !== "ask_clarification") ?? [];
+
+  // 正文按 H1/H2 切分（仅长报告走分段路径，短消息走单 markdown 原路径）。
+  // 切分在渲染层做（与 KWorks parseMessageSegments 同模式），不动 turnReducer
+  // 的字符串拼接，不动 qilin 流式协议。
+  const proseSlices = useMemo(() => {
+    if (!msg.text || !shouldSplitProse(msg.text)) return null;
+    return splitProseByHeading(msg.text);
+  }, [msg.text]);
   const hasToolActivity = showToolCalls && visibleToolCalls.length > 0;
   const showTurnHeader = (showStage && !hasToolActivity) || msg.status === "compacted";
 
@@ -121,17 +132,30 @@ export function AssistantTurn({
           />
         ) : (
           msg.text && (
-            <div className="turn-text">
-              <Markdown>{msg.text}</Markdown>
-              {streaming && (
-                <span className="streaming-candles" aria-hidden="true">
-                  <span className="candle" />
-                  <span className="candle" />
-                  <span className="candle" />
-                  <span className="candle" />
-                </span>
-              )}
-            </div>
+            proseSlices && proseSlices.length > 1 ? (
+              <div className="turn-text turn-text-segmented">
+                {proseSlices.map((slice, idx) => (
+                  <ProseSliceView
+                    key={idx}
+                    slice={slice}
+                    isLast={idx === proseSlices.length - 1}
+                    streaming={streaming}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="turn-text">
+                <Markdown>{msg.text}</Markdown>
+                {streaming && (
+                  <span className="streaming-candles" aria-hidden="true">
+                    <span className="candle" />
+                    <span className="candle" />
+                    <span className="candle" />
+                    <span className="candle" />
+                  </span>
+                )}
+              </div>
+            )
           )
         )}
 
