@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1] - 2026-08-11
+
+### Fixed
+- `TushareClient.trade_cal` 封装缺 `limit` 参数：`pro.trade_cal(..., limit=N)` 抛
+  TypeError 被吞返回空 DataFrame，导致 selection-strategies 等技能拿不到交易日历。
+  补 `limit: Optional[int] = None` 透传官方接口。
+
+
 ## [1.2.0] - 2026-08-02
 
 ### Fixed

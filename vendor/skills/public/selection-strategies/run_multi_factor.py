@@ -77,18 +77,19 @@ class TushareDataFetcher:
         self.pro = get_finance_data_gateway()
 
     def get_trade_date(self, date_str=None):
-        """获取最近交易日"""
+        """获取最近交易日（T+1 延迟：当日行情次日才入库，取上一交易日）"""
         if date_str:
             return date_str
         cal_df = self.pro.trade_cal(
             exchange="SSE",
             is_open="1",
             end_date=datetime.now().strftime("%Y%m%d"),
-            limit=1,
+            limit=2,
         )
         if cal_df is not None and not cal_df.empty:
             cal_df = cal_df.sort_values("cal_date", ascending=False)
-            return cal_df.iloc[0]["cal_date"]
+            # limit=2 取最近两个交易日，返回较旧的那个（当日数据 T+1 延迟不可用）
+            return cal_df.iloc[1]["cal_date"] if len(cal_df) >= 2 else cal_df.iloc[0]["cal_date"]
         return datetime.now().strftime("%Y%m%d")
 
     def get_stock_list(self, stock_pool="all", market_cap="all"):
@@ -131,26 +132,33 @@ class TushareDataFetcher:
             exchange="SSE", is_open="1",
             end_date=trade_date, limit=lookback + 10,
         )
-        if cal_df is None or cal_df.empty:
+        start_date = None
+        if cal_df is not None and not cal_df.empty:
+            cal_df = cal_df.sort_values("cal_date", ascending=True)
+            start_date = cal_df.iloc[max(0, len(cal_df) - lookback - 1)]["cal_date"]
+        else:
+            # 防御：交易日历缺失/异常时按自然日向前推算（如 30 交易日 ≈ 45 自然日）
+            from datetime import datetime, timedelta
+            try:
+                td_dt = datetime.strptime(str(trade_date), "%Y%m%d")
+                start_date = (td_dt - timedelta(days=int(lookback * 1.5) + 10)).strftime("%Y%m%d")
+            except Exception:
+                start_date = None
+        if start_date is None:
             return daily_df, pd.DataFrame()
-        cal_df = cal_df.sort_values("cal_date", ascending=True)
-        start_date = cal_df.iloc[max(0, len(cal_df) - lookback - 1)]["cal_date"]
 
-        # 分批获取历史行情
+        # 分批获取历史行情：按交易日批量拉取（每次 1 个交易日覆盖全部股票，
+        # 共 lookback 次调用），而非逐股 5538 次调用（易限流且慢 ~180 倍）。
         hist_frames = []
-        codes_list = list(ts_codes)
-        batch_size = 50
-        for i in range(0, len(codes_list), batch_size):
-            batch = codes_list[i : i + batch_size]
-            for code in batch:
+        if cal_df is not None and not cal_df.empty:
+            trade_days = [str(d) for d in cal_df.sort_values("cal_date", ascending=True)["cal_date"]]
+            for day in trade_days:
                 try:
-                    h = self.pro.daily(
-                        ts_code=code,
-                        start_date=start_date,
-                        end_date=trade_date,
-                    )
+                    h = self.pro.daily(trade_date=day)
                     if h is not None and not h.empty:
-                        hist_frames.append(h)
+                        hit = h[h["ts_code"].isin(ts_codes)]
+                        if not hit.empty:
+                            hist_frames.append(hit)
                 except Exception:
                     pass
 

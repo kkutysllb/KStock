@@ -1,7 +1,7 @@
 ---
 name: common
 description: kk_Skills 公共库——金融数据网关（FinanceDataGateway）+ iWencai/Tushare 统一客户端 + 金融分析格式化工具集；分析技能必须通过 get_finance_data_gateway() 访问 Tushare，禁止直接 import tushare
-version: 1.1.0
+version: 1.1.1
 author: kk-quant
 license: MIT
 category: finance
@@ -38,7 +38,7 @@ required-secrets:
 metadata:
   openclaw:
     emoji: "🧩"
-    version: "1.1.0"
+    version: "1.1.1"
     author: "kk-quant"
     category: "library"
     tags:

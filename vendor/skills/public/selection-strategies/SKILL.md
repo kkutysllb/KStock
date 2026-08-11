@@ -1,7 +1,7 @@
 ---
 name: selection-strategies
 description: A股多策略选股运行框架，提供10种经典选股策略的CLI运行脚本，涵盖成长股、价值投资、高股息、动量突破、技术突破、超跌反弹、涨停龙头、主力资金追踪、缠论背驰选股与多因子横截面。每种策略独立运行、可配置参数，支持市值/股票池过滤与结果导出。
-version: 1.0.0
+version: 1.0.1
 author: kk-quant
 license: MIT
 category: finance

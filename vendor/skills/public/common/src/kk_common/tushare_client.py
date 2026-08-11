@@ -167,7 +167,8 @@ class TushareClient:
     def trade_cal(self, exchange: str = 'SSE',
                   start_date: Optional[str] = None,
                   end_date: Optional[str] = None,
-                  is_open: Optional[str] = None) -> pd.DataFrame:
+                  is_open: Optional[str] = None,
+                  limit: Optional[int] = None) -> pd.DataFrame:
         """
         获取交易日历
 
@@ -176,6 +177,8 @@ class TushareClient:
             start_date: 开始日期
             end_date: 结束日期
             is_open: 是否交易 (1=是, 0=否)
+            limit: 返回行数限制（与官方接口一致；此前缺失导致
+                   pro.trade_cal(..., limit=N) 抛 TypeError 返回空）
 
         Returns:
             交易日历 DataFrame
@@ -186,7 +189,8 @@ class TushareClient:
                 exchange=exchange,
                 start_date=start_date,
                 end_date=end_date,
-                is_open=is_open
+                is_open=is_open,
+                limit=limit
             )
             return _to_dataframe(df)
         except Exception as e:
