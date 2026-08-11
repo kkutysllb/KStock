@@ -1497,7 +1497,7 @@ wheels = [
 
 [[package]]
 name = "kstock"
-version = "1.0.3"
+version = "1.0.4"
 source = { virtual = "." }
 dependencies = [
     { name = "akshare" },
@@ -2735,11 +2735,11 @@ wheels = [
 
 [[package]]
 name = "packaging"
-version = "26.2"
+version = "26.3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d7/f1/e7a6dd94a8d4a5626c03e4e99c87f241ba9e350cd9e6d75123f992427270/packaging-26.2.tar.gz", hash = "sha256:ff452ff5a3e828ce110190feff1178bb1f2ea2281fa2075aadb987c2fb221661", size = 228134 }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz", hash = "sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79", size = 313412 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl", hash = "sha256:5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e", size = 100195 },
+    { url = "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl", hash = "sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c", size = 129956 },
 ]
 
 [[package]]
@@ -3316,16 +3316,18 @@ wheels = [
 
 [[package]]
 name = "qilin"
-version = "1.0.0"
+version = "2.0.0"
 source = { editable = "vendor/qilin" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-sandbox" },
     { name = "aiosqlite" },
     { name = "alembic" },
+    { name = "anthropic" },
     { name = "croniter" },
     { name = "cryptography" },
     { name = "ddgs" },
+    { name = "defusedxml" },
     { name = "dotenv" },
     { name = "duckdb" },
     { name = "e2b-code-interpreter" },
@@ -3350,6 +3352,8 @@ dependencies = [
     { name = "langgraph-sdk" },
     { name = "markdownify" },
     { name = "markitdown", extra = ["all", "xlsx"] },
+    { name = "mcp" },
+    { name = "packaging" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "readabilipy" },
@@ -3364,15 +3368,22 @@ requires-dist = [
     { name = "agent-sandbox", specifier = ">=0.0.30" },
     { name = "aiosqlite", specifier = ">=0.19" },
     { name = "alembic", specifier = ">=1.13" },
+    { name = "anthropic", specifier = ">=0.120.2" },
     { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.29" },
+    { name = "bcrypt", marker = "extra == 'gateway'", specifier = ">=5.0.0" },
     { name = "boxlite", marker = "extra == 'boxlite'", specifier = ">=0.9.7" },
     { name = "croniter", specifier = ">=6.0.0" },
     { name = "cryptography", specifier = ">=48.0.1" },
     { name = "ddgs", specifier = ">=9.10.0" },
+    { name = "defusedxml", specifier = ">=0.7.1" },
+    { name = "dingtalk-stream", marker = "extra == 'channels'", specifier = ">=0.24.3" },
+    { name = "discord-py", marker = "extra == 'channels'", specifier = ">=2.7.1" },
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "duckdb", specifier = ">=1.4.4" },
     { name = "e2b-code-interpreter", specifier = ">=2.8.0" },
+    { name = "email-validator", marker = "extra == 'gateway'", specifier = ">=2.3.0" },
     { name = "exa-py", specifier = ">=1.0.0" },
+    { name = "fastapi", marker = "extra == 'gateway'", specifier = ">=0.141.1" },
     { name = "firecrawl-py", specifier = ">=1.15.0" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "jieba", marker = "extra == 'memory-zh'", specifier = ">=0.42.1" },
@@ -3392,24 +3403,33 @@ requires-dist = [
     { name = "langgraph-cli", specifier = ">=0.4.24" },
     { name = "langgraph-runtime-inmem", specifier = ">=0.28.0" },
     { name = "langgraph-sdk", specifier = ">=0.1.51" },
+    { name = "lark-oapi", marker = "extra == 'channels'", specifier = ">=1.7.2" },
+    { name = "markdown-to-mrkdwn", marker = "extra == 'channels'", specifier = ">=0.3.3" },
     { name = "markdownify", specifier = ">=1.2.2" },
     { name = "markitdown", extras = ["all", "xlsx"], specifier = ">=0.0.1a2" },
+    { name = "mcp", specifier = ">=1.29.0" },
     { name = "monocle-apptrace", marker = "extra == 'monocle'", specifier = ">=0.8.8" },
+    { name = "packaging", specifier = ">=26.3" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.40" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.3.3" },
     { name = "psycopg-pool", marker = "extra == 'postgres'", specifier = ">=3.3.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
+    { name = "pyjwt", marker = "extra == 'gateway'", specifier = ">=2.13.0" },
     { name = "pymupdf4llm", marker = "extra == 'pymupdf'", specifier = ">=0.0.17" },
+    { name = "python-multipart", marker = "extra == 'gateway'", specifier = ">=0.0.32" },
+    { name = "python-telegram-bot", marker = "extra == 'channels'", specifier = ">=22.8" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "readabilipy", specifier = ">=0.3.0" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0.0" },
+    { name = "slack-sdk", marker = "extra == 'channels'", specifier = ">=3.43.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3.0" },
     { name = "tavily-python", specifier = ">=0.7.17" },
     { name = "tenki-sandbox", marker = "extra == 'tenki'", specifier = ">=0.4.0" },
     { name = "textual", marker = "extra == 'tui'", specifier = ">=0.80" },
     { name = "tiktoken", specifier = ">=0.8.0" },
+    { name = "uvicorn", marker = "extra == 'gateway'", specifier = ">=0.52.1" },
 ]
-provides-extras = ["tui", "groundroute", "ollama", "postgres", "redis", "pymupdf", "boxlite", "tenki", "monocle", "browser", "memory-zh"]
+provides-extras = ["tui", "groundroute", "ollama", "gateway", "channels", "postgres", "redis", "pymupdf", "boxlite", "tenki", "monocle", "browser", "memory-zh"]
 
 [[package]]
 name = "readabilipy"
