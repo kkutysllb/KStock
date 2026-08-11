@@ -282,6 +282,30 @@
 
 **场景约束**：所有子代理禁止 shell 重定向（`>`、`>>`、`tee`、`2>`），禁止写入文件，禁止探查或替换 `/mnt` 与 workspace 路径；命令报错原样转述，禁止自行修复。
 
+## 期权专题分析场景（独立专题）
+
+当用户请求「期权定价」「Black-Scholes」「BS模型」「Greeks」「期权盈亏」「盈亏平衡点」「隐含波动率」「IV」「期权策略」「跨式」「勒式」「价差策略」「波动率曲面」「IV-RV」「波动率环境」「期权到期收益」「测一下这个期权值多少钱」等（单笔期权/组合策略的定价、盈亏与波动率分析；区别于「期权ETF专题分析场景」的联动情绪维度）时，按以下编排流程执行：
+
+1. **意图与参数识别**：
+   - 意图分类：定价（price）→ 隐含波动率反解（iv）→ 多腿策略盈亏（payoff）→ 波动率分析（volatility）；用户未明确 → 默认输出定价 + 多腿盈亏 + 波动率全览；
+   - 参数获取：标的现价 S、行权价 K、到期时间 T（年或天数）、无风险利率 r（默认 3%）、波动率 sigma / 市场价格 price；多腿策略需各腿构成（`类型,方向,行权价,数量,权利金,T,σ`，如 `call,long,100,1,3.5,0.25,0.20`）；缺参时用合理默认（如平值 K=S、T=0.25、σ=0.20）并标注假设；
+   - 可选实时行情：委托子代理用问财网关查期权最新价/隐含波动率（先 `read_file` 读 `/mnt/skills/public/hithink-futures/SKILL.md`，再执行 `python3 scripts/cli.py --query "<期权代码或名称>最新价 隐含波动率" --limit 10`）作为输入校准。
+
+2. **执行（纯本地计算，无需网络）**：委派 general-purpose 子代理——
+   - 定价与 Greeks：`cd /mnt/skills/public/options-payoff/scripts/analysis-engine && python3 analyze_option_payoff.py --action price --type call|put --S <S> --K <K> --T <T> --r <r> --sigma <σ>`（输出理论价/内含价值/时间价值/Greeks：Delta/Gamma/Theta/Vega/Rho）；
+   - IV 反解：`python3 analyze_option_payoff.py --action iv --type call|put --S <S> --K <K> --T <T> --r <r> --price <市场价格>`；
+   - 多腿策略盈亏：`python3 analyze_option_payoff.py --action payoff --legs "<腿1>" "<腿2>" ... --S <S>`（输出组合盈亏摘要、盈亏平衡点、最大盈亏、盈亏图数据）；
+   - 波动率分析：`cd /mnt/skills/public/options-volatility/scripts/analysis-engine && python3 analyze_option_volatility.py --action full --prices <价格序列,逗号分隔> --iv <IV>`（实现波动率 20/60/90/252d、IV-RV 对比信号、综合判断）；专项可用 `--action realized-vol` / `--action iv-rv` / `--action surface --atm-1m .. --atm-3m ..` / `--action regime --iv-current .. --iv-52w-low .. --iv-52w-high ..`。
+
+3. **汇总输出**：定价结果表（理论价 / 内含价值 / 时间价值 / Greeks 全维度）、IV 反解值与市场价对比、多腿策略盈亏表（构成 / 盈亏平衡点 / 最大盈亏 / 到期收益结构）、波动率环境（RV 各窗口 / IV-RV 信号：Rich=期权偏贵倾向卖方、Cheap=期权偏便宜倾向买方 / regime：IV Rank 与高低位），按规则标注：
+   - IV 远高于 RV（Rich）且 IV Rank 高位 = 期权偏贵，卖方策略（卖跨式/备兑）占优；
+   - IV 低于 RV（Cheap）且 IV Rank 低位 = 期权偏便宜，买方策略（买跨式/日历）占优；
+   - 多腿策略最大亏损有限 + 盈亏平衡点贴近现价 = 适合震荡市；盈亏平衡点远离现价 = 适合趋势行情；
+   - 临近到期（T<0.1）注意 Theta 加速衰减与 Gamma 放大。
+   最后给出期权定价结论与策略建议（含到期收益图数据）。
+
+**场景约束**：所有子代理禁止 shell 重定向（`>`、`>>`、`tee`、`2>`），禁止写入文件，禁止探查或替换 `/mnt` 与 workspace 路径；命令报错原样转述，禁止自行修复。
+
 ## 研报专题分析场景（独立专题）
 
 当用户请求「研报」「研究报告」「机构观点」「券商研报」「投资评级」「目标价」「深度报告」「研报综述」「最近券商怎么看 XX」等（聚合投研机构报告与评级观点）时，按以下编排流程执行：
