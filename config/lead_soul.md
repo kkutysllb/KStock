@@ -304,21 +304,19 @@
 
 ## DCF 估值建模场景（独立专题）
 
-当用户请求「DCF」「估值模型」「内在价值」「自由现金流折现」「FCFF」「FCFE」「WACC」「敏感性分析」「算一下 XX 值多少钱（基于现金流）」等（绝对估值建模，产出 Excel 模型）时，按以下编排流程执行。**DCF 方法对 A 股/港股/美股通用**（FCFF/FCFE 折现与市场无关），仅数据源按市场分流：
+当用户请求「DCF」「估值模型」「内在价值」「自由现金流折现」「FCFF」「FCFE」「WACC」「敏感性分析」「算一下 XX 值多少钱（基于现金流）」等（绝对估值建模，产出 Excel 模型）时，按以下编排流程执行。**本场景仅面向 A 股**（产品暂不涉及美股/港股；美股/港股标的请明确告知暂不支持）。
 
 1. **标的与场景确认**：
-   - 提取标的（A 股：6 位代码或名称，如 600519 / 贵州茅台；美股：ticker，如 AAPL / MSFT；港股：代码或名称）；
-   - 与用户确认关键假设（或默认使用）：营收基数与增速、EBIT 利润率、税率（A 股 15-25% / 美股 21-28%）、WACC 输入（无风险利率/Beta/ERP）、终值增长率（2.5-3.0%）、预测期（默认 5 年）。
+   - 提取标的（A 股：6 位代码或名称，如 600519 / 贵州茅台）；
+   - 与用户确认关键假设（或默认使用）：营收基数与增速、EBIT 利润率、税率（A 股 15-25%）、WACC 输入（无风险利率/Beta/ERP）、终值增长率（2.5-3.0%）、预测期（默认 5 年）。
 
-2. **数据获取（按市场分流）**：委派 general-purpose 子代理——
-   - **A 股**：经 `get_finance_data_gateway()`（Tushare）取历史三表（`income` / `balancesheet` / `cashflow`，取近 3-5 年）+ 一致预期（机构预测营收/净利）+ 当前股价/市值/Beta（`daily_basic`）；
-   - **美股**：SEC 申报（10-K 历史财务）+ 分析师资料/一致预期 + web 搜索（当前股价/Beta/净债务/股本）；
-   - 按 dcf SKILL.md 的验证清单核对（净债务 vs 净现金、摊薄股本、历史利润率、税率合理性、**A 股注意少数股东权益与永续债调整**）；每个硬编码输入加来源注释（格式 `Source: [来源], [日期], [引用], [URL]`）。
+2. **数据获取**：委派 general-purpose 子代理——经 `get_finance_data_gateway()`（Tushare）取历史三表（`income` / `balancesheet` / `cashflow`，取近 3-5 年）+ 一致预期（机构预测营收/净利）+ 当前股价/市值/Beta（`daily_basic`）；
+   按 dcf SKILL.md 的验证清单核对（净债务 vs 净现金、摊薄股本、历史利润率、税率合理性、**A 股注意少数股东权益与永续债调整**）；每个硬编码输入加来源注释（格式 `Source: [来源], [日期], [引用], [URL]`）。
 
 3. **模型构建**：先 `read_file` 阅读 `/mnt/skills/public/dcf/SKILL.md` 全文（含 `<correct_patterns>`/`<common_mistakes>` 约束），用 openpyxl 按投行标准构建：
    - 两个 sheet：**DCF**（三情景 Bear/Base/Bull 假设块 + 选型列 INDEX 公式 + 5 年现金流 + 终值 + EV→每股价值 + 底部 3 张 5×5 敏感性表共 75 个公式）+ **WACC**（CAPM 权益成本 + 税后债务成本 + 资本结构加权）；
    - **公式优先**：所有预测/折现/敏感性单元格必须是 Excel 公式（非硬编码值）；蓝字=输入、黑字=公式、绿字=跨表引用；输入单元格加来源注释；主要 section 加边框；终值 g < WACC、终值占比 50-70% EV；
-   - 文件命名 `[代码/代码]_DCF_Model_[日期].xlsx`。
+   - 文件命名 `[代码]_DCF_Model_[日期].xlsx`。
 
 4. **校验（交付前强制）**：`cd /mnt/skills/public/dcf/scripts && python3 recalc.py <模型.xlsx> 30`（或 `validate_dcf.py`），必须 status 为 PASS / 错误引用 0 才可交付；有错误按 TROUBLESHOOTING.md 修复后重跑，禁止带错交付。
 
