@@ -393,12 +393,13 @@
 
 1. **标的确认**：同「个股全景尽调场景」。
 
-2. **委派**：general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/earnings-forecast/SKILL.md`（SUE/PEAD/预期修正方法论），再执行：
-   - `cd /mnt/skills/public/stock-analysis/scripts/analysis-engine && python3 analyze_stock_earnings_forecast.py --stock <代码> --json`；
-   - `python3 analyze_stock_institute_research.py --stock <代码> --json`（机构一致预期与评级变化）；
-   - 业绩预告：先 `read_file` 阅读 `/mnt/skills/public/event-query/SKILL.md`，再按问财规范查询"<名称>最新业绩预告"。
+2. **委派**：general-purpose 子代理——
+   - **盈利预测/一致预期（主，问财网关，无配额限制）**：先 `read_file` 阅读 `/mnt/skills/public/event-query/SKILL.md`（问财网关用法），再按网关规范查询：`cd /mnt/skills/public/event-query && python3 scripts/cli.py --query "<名称>券商盈利预测" --limit 10`、`--query "<名称>一致预期EPS"`、`--query "<名称>目标价"`（返回预测净利润中值 / 一致预期 EPS / 目标价 / 机构评级）；
+   - **机构调研**：`cd /mnt/skills/public/stock-analysis/scripts/analysis-engine && python3 analyze_stock_institute_research.py --stock <代码> --json`（stk_surv 机构调研记录）；
+   - **盈利预测补充（可选，注意配额）**：`python3 analyze_stock_earnings_forecast.py --stock <代码> --json` —— 该脚本走 Tushare `report_rc`，**配额仅 10 次/天**，超限报错时跳过并转述；部分标的（如贵州茅台）无业绩快报/预测记录返回 0 条属正常，以问财网关结果为准；
+   - **业绩预告**：`python3 scripts/cli.py --query "<名称>最新业绩预告"`（event-query 网关）。
 
-3. **汇总输出**：一致预期表（当年/次年预测 EPS、增速、预测机构数、评级分布）、SUE/PEAD 信号、业绩预告 vs 一致预期对比（超预期/符合/低于）、分析师预期修正方向，按规则标注：
+3. **汇总输出**：一致预期表（当年/次年预测 EPS、净利润中值、增速、预测机构数、评级分布）、目标价与隐含空间（目标价/现价-1）、SUE/PEAD 信号（方法论参照 `/mnt/skills/public/earnings-forecast/SKILL.md`）、业绩预告 vs 一致预期对比（超预期/符合/低于）、分析师预期修正方向，按规则标注：
    - 预告超预期 + SUE 高 + 机构上调 = 预期差共振偏多；
    - 预告低于预期 + 机构下调 = 业绩雷警示；
    - 股价已大涨但预期未上调 = 预期透支背离（利好兑现）；
