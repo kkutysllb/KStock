@@ -15,8 +15,8 @@ interface HeroContent {
   emphasis: string;
   /** 主标题完整文本（用于 emoji 装饰的高亮短语会替换为 {emphasis}） */
   title: string;
-  /** 副标题：场景能力描述 */
-  subtitle: string;
+  /** 副标题：按段落渲染（数组每项一段，渲染为独立 <p>） */
+  subtitle: string[];
   /** 3 个 CTA 建议标签，引导用户提问 */
   ctas: string[];
   /** eyebrow 标签左侧字样 */
@@ -38,7 +38,10 @@ const CONTENT_BY_SLOT: Record<string, HeroContent> = {
   "weekday-premarket": {
     emphasis: "今日的盘前准备。",
     title: "用一份早报，给{emphasis}",
-    subtitle: "9:30 开盘前 1 分钟，行情、隔夜外盘与财经资讯已经整理好——把想跟踪的标的交给我，开盘即可对照。",
+    subtitle: [
+      "9:30 开盘前 1 分钟，行情、隔夜外盘与财经资讯已经整理好。",
+      "把想跟踪的标的交给我，开盘即可对照。",
+    ],
     ctas: [
       "拉一份今日可转债市场温度",
       "复盘美股隔夜对 A 股的影响",
@@ -51,7 +54,10 @@ const CONTENT_BY_SLOT: Record<string, HeroContent> = {
   "weekday-morning": {
     emphasis: "盘中的节奏感。",
     title: "边看行情，边看{emphasis}",
-    subtitle: "盘中最怕错过关键节点。子代理会实时跟踪你关注的板块与个股，把行情异动、行业新闻、研报观点同步整理给你。",
+    subtitle: [
+      "盘中最怕错过关键节点。",
+      "子代理会实时跟踪你关注的板块与个股，把异动与研报观点同步整理给你。",
+    ],
     ctas: [
       "盯盘当前主升板块的资金动向",
       "实时跟踪个股异动原因",
@@ -64,7 +70,10 @@ const CONTENT_BY_SLOT: Record<string, HeroContent> = {
   "weekday-noon": {
     emphasis: "午间的小结。",
     title: "用 15 分钟，做一份{emphasis}",
-    subtitle: "中午休市是整理上午盘的最佳窗口——主线板块、领涨个股、风险信号全部提炼出来，午后开盘心里有数。",
+    subtitle: [
+      "中午休市是整理上午盘的最佳窗口。",
+      "主线板块、领涨个股、风险信号全部提炼出来，午后开盘心里有数。",
+    ],
     ctas: [
       "总结上午盘资金流向与板块轮动",
       "给出午后开盘的策略建议",
@@ -77,7 +86,10 @@ const CONTENT_BY_SLOT: Record<string, HeroContent> = {
   "weekday-post": {
     emphasis: "盘后的研究闭环。",
     title: "15:00 收盘，进入{emphasis}",
-    subtitle: "收盘不等于结束——可转债估值全景、行业周度信号、ETF 份额变化、研报与一致预期，15 分钟内把今天的事实落定。",
+    subtitle: [
+      "收盘不等于结束。",
+      "可转债估值全景、行业信号、ETF 份额、研报与一致预期，15 分钟内把今天的事实落定。",
+    ],
     ctas: [
       "生成今日 A 股可转债全景分析",
       "梳理今日行业板块与资金面",
@@ -90,7 +102,10 @@ const CONTENT_BY_SLOT: Record<string, HeroContent> = {
   "weekday-evening": {
     emphasis: "深度研究的时段。",
     title: "夜深人静，做一份{emphasis}",
-    subtitle: "深度报告从来不是拉个数据能搞定的事——基本面三表、DCF 估值、行业上下游、研报评级与目标价，今晚我陪你跑一遍。",
+    subtitle: [
+      "深度报告从来不是拉个数据能搞定的事。",
+      "基本面三表、DCF 估值、行业上下游、研报与目标价，今晚我陪你跑一遍。",
+    ],
     ctas: [
       "对 XX 公司做 DCF 估值建模",
       "生成 XX 行业产业链深度报告",
@@ -105,7 +120,10 @@ const CONTENT_BY_SLOT: Record<string, HeroContent> = {
   saturday: {
     emphasis: "一周的沉淀。",
     title: "把这一周的研究，{emphasis}",
-    subtitle: "周末是回顾与布局的好时机——一周复盘、月度策略、专题研究、因子回测，所有 KSkills 技能随时待命。",
+    subtitle: [
+      "周末是回顾与布局的好时机。",
+      "周度复盘、月度策略、专题研究、因子回测，所有 KSkills 技能随时待命。",
+    ],
     ctas: [
       "生成本周可转债周度全景报告",
       "做一次多因子选股回测",
@@ -118,7 +136,10 @@ const CONTENT_BY_SLOT: Record<string, HeroContent> = {
   sunday: {
     emphasis: "下周的准备。",
     title: "用一张清单，给{emphasis}",
-    subtitle: "周日晚上梳理清楚——可转债周报、期权 IV 走势、北向资金动向、周一开盘的预案，让下周第一天的决策更稳。",
+    subtitle: [
+      "周日晚上梳理清楚。",
+      "可转债周报、期权 IV、北向资金、周一开盘的预案，让下周第一天的决策更稳。",
+    ],
     ctas: [
       "生成可转债下周策略清单",
       "分析当前期权隐含波动率",
@@ -133,7 +154,10 @@ const CONTENT_BY_SLOT: Record<string, HeroContent> = {
   holiday: {
     emphasis: "假日的专题研究。",
     title: "用一段整块时间，做一份{emphasis}",
-    subtitle: "假期适合啃硬骨头——完整 DCF、产业链梳理、可转债周度、宏观深度、策略回测。今天的研究，明天可以少踩一个坑。",
+    subtitle: [
+      "假期适合啃硬骨头。",
+      "完整 DCF、产业链梳理、可转债周度、宏观深度、策略回测，今天的研究明天可以少踩一个坑。",
+    ],
     ctas: [
       "对一只股票做完整的 DCF 估值",
       "梳理一个行业的产业链上下游",
@@ -220,7 +244,11 @@ export function WelcomeHero({ isHoliday = false }: WelcomeHeroProps) {
           <span className="eyebrow-index">{content.index}</span>
         </p>
         <h1>{renderTitleWithEmphasis(content.title, content.emphasis)}</h1>
-        <h4>{content.subtitle}</h4>
+        <div className="welcome-subtitle">
+          {content.subtitle.map((line, idx) => (
+            <p key={idx}>{line}</p>
+          ))}
+        </div>
         <ul className="welcome-ctas" aria-label="推荐提问">
           {content.ctas.map((text, idx) => (
             <li key={idx}>
