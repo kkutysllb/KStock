@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from langchain.agents import create_agent
 from langchain.tools import BaseTool
-from langchain_core.callbacks.base import BaseCallbackManager
+from langchain_core.callbacks.base import BaseCallbackHandler, BaseCallbackManager
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import var_child_runnable_config
@@ -380,6 +380,7 @@ def _copy_isolated_subagent_context() -> Context:
         return context
 
     callbacks = inherited_config.get("callbacks")
+    isolated_callbacks: BaseCallbackManager | list[BaseCallbackHandler] | None = None
     if isinstance(callbacks, BaseCallbackManager):
         isolated_callbacks = callbacks.copy()
         isolated_callbacks.handlers = [handler for handler in callbacks.handlers if not getattr(handler, "qilin_loop_bound", False)]
@@ -389,7 +390,7 @@ def _copy_isolated_subagent_context() -> Context:
     elif getattr(callbacks, "qilin_loop_bound", False):
         isolated_callbacks = None
     else:
-        isolated_callbacks = callbacks
+        isolated_callbacks = None
 
     isolated_config = inherited_config.copy()
     if isolated_callbacks:
@@ -560,7 +561,9 @@ class SubagentExecutor:
             self.model_name = resolve_subagent_model_name(self.config, self.parent_model, app_config=app_config)
         model = create_chat_model(name=self.model_name, thinking_enabled=False, app_config=app_config, attach_tracing=False)
 
-        from qilin.agents.middlewares.tool_error_handling_middleware import build_subagent_runtime_middlewares
+        from qilin.agents.middlewares.tool_error_handling_middleware import (
+            build_subagent_runtime_middlewares,
+        )
 
         # Reuse shared middleware composition with lead agent. ``agent_name``
         # lets the builder resolve the per-agent token_budget override.
@@ -573,7 +576,7 @@ class SubagentExecutor:
                 deferred_setup,
                 top_k=app_config.tool_search.auto_promote_top_k,
             )
-        middleware_kwargs = {
+        middleware_kwargs: dict[str, Any] = {
             "app_config": app_config,
             "model_name": self.model_name,
             "lazy_init": True,
@@ -673,7 +676,11 @@ class SubagentExecutor:
         # Lazy import: see the TYPE_CHECKING note at the top of this module -
         # importing tool_search runs tools/builtins/__init__, which would
         # re-enter this package during its own initialization.
-        from qilin.tools.builtins.tool_search import assemble_deferred_tools, get_deferred_tools_prompt_section, get_mcp_routing_hints_prompt_section
+        from qilin.tools.builtins.tool_search import (
+            assemble_deferred_tools,
+            get_deferred_tools_prompt_section,
+            get_mcp_routing_hints_prompt_section,
+        )
 
         # Skills are discoverable metadata until explicitly slash-activated or
         # loaded through read_file. Their allowed-tools declarations are applied
@@ -683,7 +690,10 @@ class SubagentExecutor:
 
         resolved_app_config = self.app_config or get_app_config()
 
-        from qilin.skills.describe import build_skill_search_setup, get_skill_index_prompt_section
+        from qilin.skills.describe import (
+            build_skill_search_setup,
+            get_skill_index_prompt_section,
+        )
 
         skill_setup = build_skill_search_setup(
             skills,
@@ -852,7 +862,11 @@ class SubagentExecutor:
             # attach_tracing=False on the model avoids double-counted traces.
             tracing_callbacks = build_tracing_callbacks()
             if tracing_callbacks:
-                existing_callbacks = list(run_config.get("callbacks") or [])
+                raw_callbacks = run_config.get("callbacks") or []
+                if isinstance(raw_callbacks, list):
+                    existing_callbacks = raw_callbacks
+                else:
+                    existing_callbacks = list(raw_callbacks.handlers)
                 run_config["callbacks"] = [*existing_callbacks, *tracing_callbacks]
 
             # Normalize subagent name for tracing so it matches the lead-agent
@@ -928,7 +942,6 @@ class SubagentExecutor:
             # astream，即从 0 重新计数（等价「自动清零重计」）。健康长任务
             # 借此不中断；疑似死循环由 _can_extend_turn_budget 的三重安全阀
             # 封住（次数封顶 / 零进展 / 重复动作），最终仍被外层恢复逻辑截停。
-            final_state = None
             extensions_used = 0
             baseline_message_id: str | None = None
             while True:
@@ -1076,7 +1089,7 @@ class SubagentExecutor:
 
     def _can_extend_turn_budget(
         self,
-        ai_messages: list[dict[str, Any]],
+        ai_messages: list[Any],
         baseline_message_id: str | None,
         extensions_used: int,
     ) -> bool:
@@ -1084,22 +1097,24 @@ class SubagentExecutor:
 
         三重安全阀（任一命中即拒绝续跑，交给外层恢复逻辑截停）：
         1. 次数封顶：``max_turn_extensions``（0 = 完全禁用续跑，保持旧行为）；
-        2. 零进展：本轮未产出任何新消息（末条消息 id 与轮开始时相同）；
+        2. 零进展：距上次续跑消息数未增加（同一状态反复触限）；
         3. 重复动作：最后两条 AI 消息携带完全相同的 ``tool_calls`` —— 模型在
            同一位置重复同一动作是典型死循环信号（如反复调用同一工具同一参数）。
         """
-        if self.config.max_turn_extensions <= 0:
+        max_ext = getattr(self.config, "max_turn_extensions", 0)
+        if max_ext <= 0:
             return False
-        if extensions_used >= self.config.max_turn_extensions:
+        if extensions_used >= max_ext:
             return False
-        if not ai_messages:
-            return False
-        if baseline_message_id is not None and ai_messages[-1].get("id") == baseline_message_id:
-            return False
-        assistant_turns = [m for m in ai_messages if m.get("role") == "assistant"]
-        if len(assistant_turns) >= 2:
-            prev_calls = assistant_turns[-2].get("tool_calls")
-            last_calls = assistant_turns[-1].get("tool_calls")
+        # 零进展：上一次续跑时的最后一条消息 id 与当前相同 → 没有新消息产生
+        if baseline_message_id is not None and ai_messages:
+            last_id = getattr(ai_messages[-1], "id", None) or ai_messages[-1].get("id")
+            if last_id == baseline_message_id:
+                return False
+        # 重复动作：最后两条 AI 消息 tool_calls 完全相同
+        if len(ai_messages) >= 2:
+            prev_calls = getattr(ai_messages[-2], "tool_calls", None)
+            last_calls = getattr(ai_messages[-1], "tool_calls", None)
             if prev_calls and last_calls and prev_calls == last_calls:
                 return False
         return True

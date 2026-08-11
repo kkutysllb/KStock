@@ -15,7 +15,7 @@
 # ============================================================================
 # Bump this number when the config schema changes.
 # Run `make config-upgrade` to merge new fields into your local config.yaml.
-config_version: 31
+config_version: 32
 
 # ============================================================================
 # Logging
@@ -69,22 +69,20 @@ token_usage:
 # ============================================================================
 # Prevents runaway API costs by enforcing hard token limits per run.
 # When warn_threshold is crossed, the agent receives an in-context warning.
-# When hard_stop_threshold is crossed, the budget may auto-extend (clear and
-# recount from zero, mirroring max_turn_extensions for recursion_limit) when
-# max_budget_extensions > 0 and the safety valves allow it (count ceiling /
-# no progress / repeated identical tool calls). Otherwise tool_calls are
-# stripped and the agent is forced to produce a final answer immediately.
+# When hard_stop_threshold is crossed, tool_calls are stripped and the agent
+# is forced to produce a final answer immediately.
 token_budget:
   enabled: false                # Set to true to activate budget enforcement
   max_tokens: 200000            # Total token limit (input + output) per run
-  # Budget auto-extension count (clear-and-recount). 0 disables the extension
-  # entirely (legacy hard-stop behaviour). Healthy long runs are let through;
-  # suspected dead loops are still capped by the safety valves.
-  max_budget_extensions: 2
+  max_budget_extensions: 2      # 预算耗尽后清零重计续跑次数（0 = 禁用，硬停）
   max_input_tokens: null        # Optional separate input-only limit
   max_output_tokens: null       # Optional separate output-only limit
   warn_threshold: 0.8           # Warn at 80% of the budget
   hard_stop_threshold: 1.0      # Force stop at 100% of the budget
+  # per_agent:                  # 多 agent 模式的 per-agent 配额 override
+  #   coder:
+  #     enabled: true
+  #     max_tokens: 50000       # 未列出的 agent 回退到全局限制
 
 # ============================================================================
 # Recursion Limit — Hard ceiling for a client-supplied run recursion_limit
@@ -1172,6 +1170,52 @@ safety_finish_reason:
   #       error_codes: [336003, 17, 18]
 
 # ============================================================================
+# Guardrails (pre-tool-call authorization)
+# ============================================================================
+# Every tool call passes through the configured provider before execution.
+# fail_closed: block tool calls if the provider errors (default: true).
+guardrails:
+  enabled: false
+  fail_closed: true
+  # passport: /path/to/passport.json    # OAP passport path or hosted agent ID
+  # provider:
+  #   use: qilin.guardrails.builtin:AllowlistProvider
+  #   config:
+  #     allowed_tools: [web_search, read_file]
+
+# ============================================================================
+# Tool Progress Tracking
+# ============================================================================
+# Tracks repeated tool problems per thread and injects assessment hints into
+# model requests when a task stalls.
+tool_progress:
+  enabled: false
+  stagnation_threshold: 3
+  warn_escalation_count: 2
+  inject_assessment: true
+  jaccard_similarity_threshold: 0.8
+  min_word_count_for_similarity: 10
+  exempt_tools: [ask_clarification, write_todos, present_files, task]
+  max_tracked_threads: 100
+
+# ============================================================================
+# Channel Connections (browser-connectable IM channels)
+# ============================================================================
+# Lets users bind their own IM channel accounts (Slack/Telegram/Discord/
+# Feishu/DingTalk/WeChat/WeCom) to a QiLin account through the gateway UI.
+# require_bound_identity: users must bind an account before chatting.
+channel_connections:
+  enabled: false
+  require_bound_identity: true
+  slack: {enabled: false}
+  telegram: {enabled: false, bot_username: ""}
+  discord: {enabled: false}
+  feishu: {enabled: false}
+  dingtalk: {enabled: false}
+  wechat: {enabled: false}
+  wecom: {enabled: false}
+
+# ============================================================================
 # Sandbox Configuration
 # ============================================================================
 # Choose between local sandbox (direct execution) or Docker-based AIO sandbox
@@ -1431,13 +1475,9 @@ sandbox:
 #   # UI can tell a budget-capped completion from a clean one. The 2,000,000
 #   # default is a generous ceiling — lower it to tighten cost controls. A
 #   # per-agent `token_budget` override (see `agents:` below) wins over this.
-#   # `max_budget_extensions` (default 2) lets a subagent reset its counter and
-#   # continue when it hits the ceiling, gated by the same safety valves as the
-#   # lead agent; 0 keeps the legacy hard-stop behaviour.
 #   # token_budget:
 #   #   enabled: true
 #   #   max_tokens: 2000000
-#   #   max_budget_extensions: 2
 #   #   warn_threshold: 0.7     # log a warning once this fraction of the budget is spent
 #
 #   # Optional per-agent overrides (applies to both built-in and custom agents)
@@ -1800,6 +1840,56 @@ agents_api:
   enabled: false
 
 # ============================================================================
+# Extensions (MCP servers + skills state)
+# ============================================================================
+# Unified config for MCP servers and skill states. When this block is absent,
+# extensions_config.json (or legacy mcp_config.json) is the source of truth.
+# MCP servers use the official ``transport`` field; ``type`` is accepted as an
+# alias (type wins when both are present).
+extensions:
+  middlewares: []        # AgentMiddleware class paths ('module:ClassName')
+  mcpServers: {}         # name -> server config (stdio/sse/http)
+  skills: {}             # name -> {enabled: true|false}
+  # Example stdio server:
+  # mcpServers:
+  #   my-fs:
+  #     transport: stdio
+  #     command: npx
+  #     args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+
+# ============================================================================
+# ACP Agents (Agent Client Protocol)
+# ============================================================================
+# ACP-compatible agents launched as subprocesses and exposed as tools.
+# env values starting with $ are resolved from host environment variables.
+acp_agents: {}
+# Example:
+# acp_agents:
+#   research:
+#     command: npx
+#     args: ["-y", "@example/acp-research-agent"]
+#     description: Deep-research assistant (ACP protocol)
+#     auto_approve_permissions: false
+#     timeout_seconds: 1800
+
+# ============================================================================
+# Subagents
+# ============================================================================
+# Default runtime limits for built-in subagents, plus per-agent overrides and
+# user-defined subagent types. max_total_per_run is a hard backstop against
+# repeated legal-sized task batches (valid range: 1-50).
+subagents:
+  timeout_seconds: 1800       # 30 minutes; custom agents use their own value
+  # max_turns: null           # optional default max-turn override for all subagents
+  max_total_per_run: 6
+  token_budget:
+    enabled: true
+    max_tokens: 2000000       # 1M when subagent summarization is enabled
+    warn_threshold: 0.7
+  agents: {}                  # per-agent overrides (timeout/model/skills/budget)
+  custom_agents: {}           # user-defined subagent types
+
+# ============================================================================
 # Skill Self-Evolution Configuration
 # ============================================================================
 # Allow the agent to autonomously create and improve skills in skills/custom/.
@@ -1930,6 +2020,19 @@ database:
   sqlite_dir: .qilin/data
 
 # ============================================================================
+# Checkpointer (LangGraph state persistence)
+# ============================================================================
+# Where per-thread LangGraph state (checkpoints) is stored. Absent = in-memory
+# only (state lost on restart).
+#
+# type: memory   -- in-process only (lost on restart)
+# type: sqlite   -- local file (requires langgraph-checkpoint-sqlite)
+# type: postgres -- shared PostgreSQL persistence (qilin[postgres])
+checkpointer:
+  type: sqlite
+  connection_string: .qilin/checkpoints.db
+
+# ============================================================================
 # Inbound webhook dedupe storage (cross-pod redelivery dedup — issue #4120)
 # ============================================================================
 # Where the ChannelManager records inbound webhook dedupe state.
@@ -1951,6 +2054,8 @@ database:
 #
 # dedupe_storage:
 #   backend: auto
+dedupe_storage:
+  backend: auto
 
   # Recycle app ORM PostgreSQL connections before the environment's idle cutoff.
   pool_recycle: 300
@@ -1991,6 +2096,19 @@ run_events:
   backend: memory
   max_trace_content: 10240
   track_token_usage: true
+
+# ============================================================================
+# Stream Bridge
+# ============================================================================
+# Connects agent workers to SSE endpoints.
+# type: memory -- in-process event log (single-process only, default)
+# type: redis -- Redis Streams for multi-worker Docker deployments
+stream_bridge:
+  type: memory
+  queue_maxsize: 256
+  stream_ttl_seconds: 86400
+  recovered_stream_cleanup_delay_seconds: 60.0
+  # redis_url: redis://localhost:6379/0   # required for the redis bridge
 
 # ============================================================================
 # Agent Storage Configuration
@@ -2307,6 +2425,29 @@ run_ownership:
 # every authenticated user has access to all resources.
 # See RFC: https://github.com/bytedance/qilin/issues/4063
 #
+# ---------------------------------------------------------------------------
+# orchestration: 多智能体编排模式（v2.0.0）
+#   mode: single（默认，v1.0.0 行为：lead agent + task_tool 委派）
+#         multi（Orchestrator 图编排，workers 注册参与编排的子代理）
+# ---------------------------------------------------------------------------
+orchestration:
+  # 运行形态（切换需重启：图结构在 make_lead_agent 构建时定型）：
+  #   single（默认，v1.0.0 行为）：lead agent + task_tool 委派
+  #   multi（v2.0.0）：OrchestratorGraph 编排，workers 注册参与编排的子代理
+  mode: single          # single | multi
+  max_concurrency: 3    # multi 模式下并行执行上限
+  # workers:            # multi 模式必须至少配置一个 worker
+  #   - name: coder
+  #     description: 编写代码的 worker
+  #     system_prompt: You are a coding worker.
+  #     tools: [read_file, bash]        # None = 继承全部工具
+  #     disallowed_tools: [task]        # 默认禁 task，防止嵌套委派
+  #     skills: []                      # 空 = 禁用技能；省略 = 全部可用
+  #     model: inherit                  # inherit | 显式模型名
+  #     role: worker                    # worker | peer（对等协作模式）
+  #     max_turns: 80
+  #     timeout_seconds: 900
+
 # authorization:
 #   enabled: true
 #   fail_closed: true            # block on provider error / unresolved identity
@@ -2340,11 +2481,11 @@ authorization:
 # - Reducing resource exhaustion from retry loops
 # - Gracefully degrading when LLM services are unavailable
 
-# circuit_breaker:
-#   # Number of consecutive failures before opening the circuit (default: 5)
-#   failure_threshold: 5
-#   # Time in seconds before attempting to recover (default: 60)
-#   recovery_timeout_sec: 60
+circuit_breaker:
+  # Number of consecutive failures before opening the circuit (default: 5)
+  failure_threshold: 5
+  # Time in seconds before attempting to recover (default: 60)
+  recovery_timeout_sec: 60
 
 # ============================================================================
 # LLM Call Concurrency Configuration
@@ -2375,19 +2516,19 @@ authorization:
 # lowered cap could keep admitting queued waiters, or a stale config snapshot
 # constructed after a fresher one could restore a higher cap).
 
-# llm_call:
-#   # Max concurrently in-flight LLM calls across the whole process (default: 0 = disabled)
-#   max_concurrent_calls: 0
-#   # Max LLM call attempts for retriable transient errors, 1 = no retry (default: 3)
-#   retry_max_attempts: 3
-#   # Base delay (ms) for the decorrelated-jitter retry backoff (default: 1000)
-#   retry_base_delay_ms: 1000
-#   # Hard cap (ms) on any single retry backoff delay (default: 8000)
-#   retry_cap_delay_ms: 8000
-#   # Backoff base (ms) used ONLY for burst-rate (limit_burst_rate) 429s - higher
-#   # than retry_base_delay_ms so the single burst retry lands after the throttle
-#   # window subsides. Ignored when the provider sends Retry-After (default: 5000)
-#   burst_retry_base_delay_ms: 5000
+llm_call:
+  # Max concurrently in-flight LLM calls across the whole process (default: 0 = disabled)
+  max_concurrent_calls: 0
+  # Max LLM call attempts for retriable transient errors, 1 = no retry (default: 3)
+  retry_max_attempts: 3
+  # Base delay (ms) for the decorrelated-jitter retry backoff (default: 1000)
+  retry_base_delay_ms: 1000
+  # Hard cap (ms) on any single retry backoff delay (default: 8000)
+  retry_cap_delay_ms: 8000
+  # Backoff base (ms) used ONLY for burst-rate (limit_burst_rate) 429s - higher
+  # than retry_base_delay_ms so the single burst retry lands after the throttle
+  # window subsides. Ignored when the provider sends Retry-After (default: 5000)
+  burst_retry_base_delay_ms: 5000
 
 # ============================================================================
 # SSO / OIDC Authentication (optional)
@@ -2421,37 +2562,37 @@ authorization:
 # The first admin account is always created through /initialize regardless of this
 # setting, so turning it off cannot lock you out of a fresh install.
 
-# auth:
-#   local:
-#     allow_registration: false
-#
-#   oidc:
-#     enabled: true
-#     # Base URL of the frontend, used for redirects after SSO callback.
-#     # In production behind a reverse proxy, set this to the public frontend URL
-#     # (e.g. https://qilin.example.com). In development, leave unset.
-#     # frontend_base_url: http://localhost:3000
-#     providers:
-#       keycloak:
-#         display_name: Keycloak
-#         issuer: https://keycloak.example.com/realms/qilin
-#         client_id: qilin
-#         client_secret: $KEYCLOAK_CLIENT_SECRET
-#         # Optional: explicitly set the callback URL.
-#         # redirect_uri: https://qilin.example.com/api/v1/auth/callback/keycloak
-#         scopes:
-#           - openid
-#           - email
-#           - profile
-#         token_endpoint_auth_method: client_secret_post
-#
-#         # User provisioning settings (safe defaults shown below):
-#         auto_create_users: true          # Auto-create QiLin account on first SSO login
-#         require_verified_email: true     # Reject SSO logins without verified email
-#         # allowed_email_domains:          # Restrict to specific email domains
-#         #   - example.com
-#         admin_emails: []                 # Auto-grant admin role to these emails
-#
-#         # Security features (enabled by default):
-#         pkce_enabled: true               # PKCE (S256) for authorization code flow
-#         nonce_enabled: true              # Nonce validation in ID tokens
+auth:
+  local:
+    allow_registration: true
+  oidc:
+    enabled: false
+    providers: {}
+    # Base URL of the frontend, used for redirects after SSO callback.
+    # In production behind a reverse proxy, set this to the public frontend URL
+    # (e.g. https://qilin.example.com). In development, leave unset.
+    # frontend_base_url: http://localhost:3000
+    # providers:
+    #   keycloak:
+    #     display_name: Keycloak
+    #     issuer: https://keycloak.example.com/realms/qilin
+    #     client_id: qilin
+    #     client_secret: $KEYCLOAK_CLIENT_SECRET
+    #     # Optional: explicitly set the callback URL.
+    #     # redirect_uri: https://qilin.example.com/api/v1/auth/callback/keycloak
+    #     scopes:
+    #       - openid
+    #       - email
+    #       - profile
+    #     token_endpoint_auth_method: client_secret_post
+    #
+    #     # User provisioning settings (safe defaults shown below):
+    #     auto_create_users: true          # Auto-create QiLin account on first SSO login
+    #     require_verified_email: true     # Reject SSO logins without verified email
+    #     # allowed_email_domains:          # Restrict to specific email domains
+    #     #   - example.com
+    #     admin_emails: []                 # Auto-grant admin role to these emails
+    #
+    #     # Security features (enabled by default):
+    #     pkce_enabled: true               # PKCE (S256) for authorization code flow
+    #     nonce_enabled: true              # Nonce validation in ID tokens

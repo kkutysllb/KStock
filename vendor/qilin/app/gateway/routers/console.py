@@ -89,10 +89,10 @@ class ConsoleUsageDay(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     runs: int = 0
+    cost: float = Field(default=0.0, description="Estimated spend for the day across priced runs")
     completed_tasks: int = Field(default=0, description="Successful tasks completed during the day")
     api_calls: int = Field(default=0, description="LLM API calls recorded during the day")
     cache_read_tokens: int = Field(default=0, description="Prompt-cache-hit input tokens during the day")
-    cost: float = Field(default=0.0, description="Estimated spend for the day across priced runs")
 
 
 class ConsoleUsageModelBreakdown(BaseModel):
@@ -112,14 +112,14 @@ class ConsoleUsageResponse(BaseModel):
     by_model: dict[str, ConsoleUsageModelBreakdown]
     total_tokens: int
     total_runs: int
+    total_cost: float | None = Field(default=None, description="Estimated spend for the window; null when no pricing is configured")
+    currency: str | None = Field(default=None, description="Display currency taken from the first configured pricing entry")
     completed_tasks: int = Field(default=0, description="Successful tasks completed in the window")
     api_calls: int = Field(default=0, description="LLM API calls recorded in the window")
     input_tokens: int = Field(default=0, description="Input tokens consumed in the window")
     output_tokens: int = Field(default=0, description="Output tokens generated in the window")
     cache_read_tokens: int = Field(default=0, description="Prompt-cache-hit input tokens in the window")
     cache_hit_rate: float = Field(default=0.0, description="Cache-read tokens divided by input tokens, in percent")
-    total_cost: float | None = Field(default=None, description="Estimated spend for the window; null when no pricing is configured")
-    currency: str | None = Field(default=None, description="Display currency taken from the first configured pricing entry")
 
 
 # ---------------------------------------------------------------------------
@@ -463,12 +463,13 @@ async def console_usage(
     by_model: dict[str, ConsoleUsageModelBreakdown] = {}
     total_tokens = 0
     total_runs = 0
+    total_cost = 0.0 if pricing else None
+    # Window-level aggregates for cache hit rate and task/api counts.
     completed_tasks = 0
     api_calls = 0
     total_input_tokens = 0
     total_output_tokens = 0
     total_cache_read_tokens = 0
-    total_cost = 0.0 if pricing else None
     for row in rows:
         created = _as_utc(row.created_at)
         if created is None:
@@ -492,15 +493,6 @@ async def console_usage(
         total_input_tokens += row.total_input_tokens or 0
         total_output_tokens += row.total_output_tokens or 0
 
-        usage_map = row.token_usage_by_model or {}
-        run_cache_read_tokens = 0
-        if isinstance(usage_map, dict):
-            for usage in usage_map.values():
-                if isinstance(usage, dict):
-                    run_cache_read_tokens += int(usage.get("cache_read_tokens") or 0)
-        bucket.cache_read_tokens += run_cache_read_tokens
-        total_cache_read_tokens += run_cache_read_tokens
-
         run_cost = _run_cost(
             pricing,
             model_name=row.model_name,
@@ -512,6 +504,8 @@ async def console_usage(
             bucket.cost = round(bucket.cost + run_cost, 6)
             total_cost = round(total_cost + run_cost, 6)
 
+        usage_map = row.token_usage_by_model or {}
+        run_cache_read_tokens = 0
         if isinstance(usage_map, dict) and usage_map:
             for model, usage in usage_map.items():
                 entry = by_model.setdefault(model, ConsoleUsageModelBreakdown())
@@ -521,6 +515,7 @@ async def console_usage(
                 entry.tokens += int(usage.get("total_tokens", 0) or 0)
                 entry.input_tokens += int(usage.get("input_tokens") or 0)
                 entry.cache_read_tokens += int(usage.get("cache_read_tokens") or 0)
+                run_cache_read_tokens += int(usage.get("cache_read_tokens") or 0)
                 price = _lookup_pricing(pricing, model)
                 if price is not None:
                     model_cost = _token_cost(int(usage.get("input_tokens") or 0), int(usage.get("output_tokens") or 0), price, int(usage.get("cache_read_tokens") or 0))
@@ -532,18 +527,20 @@ async def console_usage(
             entry.runs += 1
             if run_cost is not None:
                 entry.cost = round((entry.cost or 0.0) + run_cost, 6)
+        bucket.cache_read_tokens += run_cache_read_tokens
+        total_cache_read_tokens += run_cache_read_tokens
 
     return ConsoleUsageResponse(
         days=list(day_buckets.values()),
         by_model=by_model,
         total_tokens=total_tokens,
         total_runs=total_runs,
+        total_cost=total_cost,
+        currency=_pricing_currency(pricing),
         completed_tasks=completed_tasks,
         api_calls=api_calls,
         input_tokens=total_input_tokens,
         output_tokens=total_output_tokens,
         cache_read_tokens=total_cache_read_tokens,
         cache_hit_rate=round((total_cache_read_tokens / total_input_tokens) * 100, 1) if total_input_tokens else 0.0,
-        total_cost=total_cost,
-        currency=_pricing_currency(pricing),
     )

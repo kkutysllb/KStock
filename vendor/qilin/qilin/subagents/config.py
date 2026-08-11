@@ -25,6 +25,10 @@ class SubagentConfig:
         max_turns: Maximum agent turns before stopping. Built-in agents use the
             value set here (general-purpose=150, bash=60) unless the global
             ``subagents.max_turns`` is set.
+        timeout_seconds: Bare fallback execution-time cap. For built-in agents the
+            effective limit is the global ``subagents.timeout_seconds`` (default
+            1800 = 30 min), layered on by the registry; this 900 only applies
+            when no differing global value exists.
         max_turn_extensions: Safety-net auto-extension count. When the run hits
             ``max_turns`` (GraphRecursionError), the executor may resume once
             more with a doubled recursion limit instead of truncating — LangGraph
@@ -32,10 +36,6 @@ class SubagentConfig:
             the extension entirely (legacy truncate behaviour). Dead loops are
             still stopped by the progress checks in the executor, so this only
             helps healthy long-running tasks.
-        timeout_seconds: Bare fallback execution-time cap. For built-in agents the
-            effective limit is the global ``subagents.timeout_seconds`` (default
-            1800 = 30 min), layered on by the registry; this 900 only applies
-            when no differing global value exists.
     """
 
     name: str
@@ -46,8 +46,8 @@ class SubagentConfig:
     skills: list[str] | None = None
     model: str = "inherit"
     max_turns: int = 50
-    max_turn_extensions: int = 2
     timeout_seconds: int = 900
+    max_turn_extensions: int = 2
 
 
 def _default_model_name(app_config: "AppConfig") -> str:
