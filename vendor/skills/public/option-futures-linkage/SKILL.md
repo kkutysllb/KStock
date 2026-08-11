@@ -1,7 +1,7 @@
 ---
 name: option-futures-linkage
 description: 期指期权联动分析引擎——以沪深300/上证50/中证500/中证1000四大期指为轴，联动其对应期权（SSE 300ETF/50ETF/500ETF期权 + CFFEX MO中证1000股指期权）的认沽认购（成交量/持仓量PCR）、波动率（ATM IV/加权IV，BS反解）、IV斜率（认沽/认购端回归、Risk Reversal）、认沽认购IV差等期权维度与期指趋势/基差/持仓维度做5维联动信号分析（共振/背离），输出日粒度/周粒度双粒度联动报告与分品种评分。
-version: 1.0.0
+version: 1.1.0
 author: kk-quant
 license: MIT
 category: finance
@@ -32,7 +32,8 @@ permissions:
     - TUSHARE_TOKEN
 
 requires:
-  packages: ["pandas", "numpy", "scipy"]
+  packages: ["pandas", "numpy"]
+  optionalPackages: ["scipy"]
   bins: ["python3"]
   env: ["TUSHARE_TOKEN"]
 required-secrets:
@@ -47,7 +48,7 @@ inputs:
 metadata:
   openclaw:
     emoji: "🔗"
-    version: "1.0.0"
+    version: "1.1.0"
     author: "kk-quant"
     category: "finance"
     tags:
@@ -69,6 +70,12 @@ metadata:
         package: "tushare pandas numpy scipy pydantic"
         python: python3
         label: "Install Python dependencies"
+      - id: pip-optional-scipy
+        kind: pip
+        package: "scipy"
+        python: python3
+        optional: true
+        label: "Optional: scipy for higher-precision IV inversion (auto-fallback to pure-Python Newton-Raphson if absent)"
       - id: setup-env
         kind: manual
         instructions: "请配置环境变量 TUSHARE_TOKEN（Tushare Pro API密钥）"

@@ -31,9 +31,26 @@ import pandas as pd
 try:
     from scipy.stats import norm
     from scipy.optimize import brentq
+    _HAS_SCIPY = True
 except Exception:
-    # 无 scipy 时降级：仅输出基于价格的粗略估计（IV 用近似公式）
+    # 无 scipy 时使用纯 Python 降级（近似正态 CDF + Newton-Raphson 反解），
+    # 保证 IV 反解在沙箱/受限环境仍可用（精度略低但方向与量级正确）。
     norm = None
+    _HAS_SCIPY = False
+
+
+def _norm_cdf(x: float) -> float:
+    """标准正态 CDF 近似（Abramowitz & Stegun 26.2.17，误差 < 1e-7）。"""
+    x = float(x)
+    t = 1.0 / (1.0 + 0.2316419 * abs(x))
+    d = 0.3989422804014327 * math.exp(-0.5 * x * x)
+    p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))))
+    return 1.0 - p if x > 0 else p
+
+
+def _norm_pdf(x: float) -> float:
+    """标准正态 PDF。"""
+    return 0.3989422804014327 * math.exp(-0.5 * x * x)
 
 # 金融数据网关初始化（走 kk_common，不直接 import tushare）
 try:
@@ -86,14 +103,15 @@ def _pct(val):
 # ======================================================================
 
 def bs_price(S: float, K: float, T: float, r: float, sigma: float, is_call: bool) -> float:
-    """欧式期权 BS 定价"""
+    """欧式期权 BS 定价（有 scipy 用 scipy.norm，否则用近似 CDF）"""
     if sigma <= 0 or T <= 0 or S <= 0:
         return 0.0
     d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
     d2 = d1 - sigma * math.sqrt(T)
+    cdf = norm.cdf if _HAS_SCIPY else _norm_cdf
     if is_call:
-        return S * norm.cdf(d1) - K * math.exp(-r * T) * norm.cdf(d2)
-    return K * math.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+        return S * cdf(d1) - K * math.exp(-r * T) * cdf(d2)
+    return K * math.exp(-r * T) * cdf(-d2) - S * cdf(-d1)
 
 
 def _is_call(cp) -> bool:
@@ -104,16 +122,41 @@ def _is_call(cp) -> bool:
 
 def implied_vol(S: float, K: float, T: float, price: float, is_call: bool,
                 r: float = RISK_FREE_RATE) -> Optional[float]:
-    """用 brentq 反解隐含波动率；无解返回 None"""
-    if norm is None or S <= 0 or K <= 0 or T <= 0 or price <= 0:
+    """反解隐含波动率；无解返回 None
+
+    有 scipy 用 brentq；无 scipy 用 Newton-Raphson 迭代（vega 作导数），
+    两者共用 bs_price（近似 CDF），保证沙箱环境 IV 反解可用。
+    """
+    if S <= 0 or K <= 0 or T <= 0 or price <= 0:
         return None
     # 内在价值检查：价格必须高于内在价值
     intrinsic = max(S - K, 0) if is_call else max(K - S, 0)
     if price <= intrinsic + 1e-9:
         return None
+    if _HAS_SCIPY:
+        try:
+            return brentq(lambda s: bs_price(S, K, T, r, s, is_call) - price,
+                          1e-4, 5.0, xtol=1e-6, maxiter=100)
+        except Exception:
+            return None
+    # 无 scipy：Newton-Raphson 反解（初值取 Brenner-Subrahmanyam 近似）
     try:
-        return brentq(lambda s: bs_price(S, K, T, r, s, is_call) - price,
-                      1e-4, 5.0, xtol=1e-6, maxiter=100)
+        sigma = math.sqrt(2.0 * abs(math.log(S / K) + r * T) / T) if K > 0 else 0.2
+        sigma = min(max(sigma, 0.05), 2.0)
+        for _ in range(100):
+            d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
+            p = bs_price(S, K, T, r, sigma, is_call)
+            f = p - price
+            if abs(f) < 1e-6:
+                break
+            vega = S * _norm_pdf(d1) * math.sqrt(T)
+            if vega < 1e-10:
+                return None
+            new_sigma = sigma - f / vega
+            if new_sigma <= 1e-4 or new_sigma > 5.0:
+                return None
+            sigma = new_sigma
+        return sigma if 0 < sigma < 5.0 else None
     except Exception:
         return None
 
