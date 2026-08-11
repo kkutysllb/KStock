@@ -1344,13 +1344,35 @@ body.sidebar-resizing {
 }
 
 .workspace-empty {
-  width: min(920px, 100%);
-  margin-inline: auto;
+  /* 与 composer-dock（900px）视觉对齐：760px 容器居中，保证标题/正文/CTA 都对齐到输入框宽度内 */
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
   padding: 52px 0 150px;
+  position: relative;
+}
+
+/* KStock 大水印：fixed 全屏背景，不抢戏 */
+.workspace-empty::before {
+  content: "KStock";
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  font-family: "Inter", "SF Pro Display", "PingFang SC", system-ui, sans-serif;
+  font-weight: 800;
+  font-size: clamp(180px, 22vw, 320px);
+  letter-spacing: -0.04em;
+  color: rgba(86, 199, 165, 0.045);
+  user-select: none;
+  z-index: 0;
+  line-height: 1;
 }
 
 .welcome-heading {
-  max-width: 760px;
+  position: relative;
+  z-index: 1;
 }
 
 .welcome-heading .eyebrow {
@@ -1364,36 +1386,77 @@ body.sidebar-resizing {
   color: #737d88;
   font-size: 10px;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.welcome-heading .eyebrow .eyebrow-index {
+  color: #56c7a5;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
-.workspace-empty h1 {
+.welcome-heading h1 {
   max-width: 760px;
   margin: 0;
   color: #f1f3f5;
-  font-size: clamp(28px, 3vw, 42px);
+  font-size: clamp(26px, 2.8vw, 40px);
   font-weight: 650;
   letter-spacing: -0.02em;
-  line-height: 1.16;
+  line-height: 1.18;
 }
 
-.workspace-empty h1 em {
+.welcome-heading h1 em {
   color: #56c7a5;
   font-style: normal;
 }
 
-.workspace-empty > p {
-  max-width: 720px;
-  margin: 14px 0 0;
-  color: #a9afb8;
+.welcome-heading h4 {
+  max-width: 660px;
+  margin: 18px 0 0;
+  color: #8f98a3;
   font-size: 13px;
-  line-height: 1.7;
+  font-weight: 400;
+  line-height: 1.75;
 }
 
-.welcome-heading > p:last-child {
-  max-width: 580px;
-  margin-top: 18px;
-  color: #8f98a3;
+.welcome-ctas {
+  list-style: none;
+  margin: 28px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.welcome-ctas li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #a9afb8;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 14px 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.welcome-ctas li:hover {
+  background: rgba(86, 199, 165, 0.08);
+  border-color: rgba(86, 199, 165, 0.32);
+  color: #f1f3f5;
+  transform: translateX(2px);
+}
+
+.welcome-ctas .cta-bullet {
+  color: #56c7a5;
+  font-size: 14px;
+  line-height: 1.5;
+  flex-shrink: 0;
 }
 
 .chat-message {
