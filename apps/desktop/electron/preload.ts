@@ -48,21 +48,15 @@ const api = {
     return ipcRenderer.invoke(IPC.updateCheck);
   },
 
-  updateDownload(
-    onProgress?: (p: { downloaded: number; total: number }) => void,
-  ): Promise<void> {
-    if (onProgress) {
-      const handler = (
-        _event: unknown,
-        payload: { downloaded: number; total: number },
-      ) => onProgress(payload);
-      ipcRenderer.on(IPC.updateProgress, handler);
-    }
-    return ipcRenderer.invoke(IPC.updateDownload, Boolean(onProgress));
-  },
-
   updateInstall(): Promise<void> {
     return ipcRenderer.invoke(IPC.updateInstall);
+  },
+
+  onUpdateReady(cb: (info: { version: string }) => void): () => void {
+    const handler = (_event: unknown, payload: { version: string }) =>
+      cb(payload);
+    ipcRenderer.on(IPC.updateReady, handler);
+    return () => ipcRenderer.off(IPC.updateReady, handler);
   },
 };
 

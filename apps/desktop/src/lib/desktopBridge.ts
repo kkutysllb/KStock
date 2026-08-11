@@ -32,10 +32,9 @@ export interface DesktopBridgeApi {
     bytes: Uint8Array,
   ): Promise<{ saved: boolean; path?: string }>;
   updateCheck(): Promise<{ available: boolean; version: string } | null>;
-  updateDownload(
-    onProgress?: (p: { downloaded: number; total: number }) => void,
-  ): Promise<void>;
   updateInstall(): Promise<void>;
+  /** 订阅主进程的"更新已下载就绪"事件（主进程主动推送）。 */
+  onUpdateReady(cb: (info: { version: string }) => void): () => void;
 }
 
 declare global {
