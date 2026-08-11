@@ -270,4 +270,62 @@ describe("ClarificationCard", () => {
     fireEvent.click(btn);
     expect(onPick).toHaveBeenCalledWith("按 2026-W31 完整复核");
   });
+
+  // 兜底：Agent 可能把 Python repr(dict) / JSON.stringify 的字面量字符串塞进
+  // options，前端必须解析出 label 而不是显示 "{'label': '...'}" 这类语法。
+  it("form multi_select tolerates Python repr(dict) literal in options", () => {
+    const payload: HumanInputPayload = {
+      kind: "human_input_request",
+      source: "ask_clarification",
+      request_id: "req-repr",
+      clarification_type: "ambiguous_requirement",
+      question: "请确认「六因子选股」的具体因子组合",
+      input_mode: "form",
+      // Agent 误生成的字面量（Python repr 风格 + JSON.stringify 风格各一条）
+      fields: [
+        {
+          name: "strategy",
+          label: "选股策略（可多选）",
+          type: "multi_select",
+          required: true,
+          options: [
+            "{'label': '价值/成长/动量/波动率/质量/SIZE（去掉反转）'}",
+            "{'label': '动量/反转/波动率/SIZE/估值/质量（去掉成长）'}",
+            '{"label": "六类策略综合：价值+成长+高股息+动量+质量+反转"}',
+            '{"label": "你来定方案：常见六因子等权"}',
+          ] as unknown as string[],
+        },
+      ],
+    };
+    render(<ClarificationCard payload={payload} onPick={onPick} />);
+    expect(screen.getByText("价值/成长/动量/波动率/质量/SIZE（去掉反转）")).toBeTruthy();
+    expect(screen.getByText("动量/反转/波动率/SIZE/估值/质量（去掉成长）")).toBeTruthy();
+    expect(screen.getByText("六类策略综合：价值+成长+高股息+动量+质量+反转")).toBeTruthy();
+    expect(screen.getByText("你来定方案：常见六因子等权")).toBeTruthy();
+    // 确保不再渲染 "{'label': ...}" 字面量
+    expect(screen.queryByText(/^\{.*label.*\}$/)).toBeNull();
+  });
+
+  it("form select tolerates JSON-wrapped dict literal", () => {
+    const payload: HumanInputPayload = {
+      kind: "human_input_request",
+      source: "ask_clarification",
+      request_id: "req-json",
+      clarification_type: "ambiguous_requirement",
+      question: "市值范围",
+      input_mode: "form",
+      fields: [
+        {
+          name: "market_cap",
+          label: "市值范围",
+          type: "select",
+          required: false,
+          options: ['{"label": "大盘(>200亿)"}', '{"label": "小盘(20-50亿)"}'] as unknown as string[],
+        },
+      ],
+    };
+    render(<ClarificationCard payload={payload} onPick={onPick} />);
+    expect(screen.getByText("大盘(>200亿)")).toBeTruthy();
+    expect(screen.getByText("小盘(20-50亿)")).toBeTruthy();
+  });
 });

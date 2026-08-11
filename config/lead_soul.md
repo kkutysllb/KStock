@@ -183,6 +183,8 @@
   ]
 }
 ```
+> **注意：options 必须是字符串数组**（或 `{label, value}` 对象数组），**禁止把"描述性句子"或 Python `repr(dict)` 形式的字符串塞进 options**——前端会把整段文本当选项渲染，导致显示 `{'label': '...'}` 这类语法字面量。每个 option 应是简短的、可点击的策略名/范围名（如"高股息"），不是解释长文本。
+```
 
 3. **委派**：general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/selection-strategies/SKILL.md`（10 策略说明与参数，密钥注入依赖技能激活），再执行（策略脚本在 `/mnt/skills/public/selection-strategies/`，本场景独立使用该技能，不依赖个股分析引擎）：
    - `cd /mnt/skills/public/selection-strategies && python3 run_multi_factor.py --json`（默认 TopN 30，可加 `--top-n <N>`）；

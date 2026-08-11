@@ -31,6 +31,38 @@ type NormalizedOption = {
 };
 
 function normalizeOption(option: unknown, index: number): NormalizedOption {
+  // 兜底：Agent 生成澄清表单时可能把 Python dict 用 repr() / JSON.stringify
+  // 塞进 options（形如 "{'label': '...'}"），前端若按普通字符串渲染会原样
+  // 显示语法字面量。这里尝试解析后再走常规逻辑。
+  if (typeof option === "string") {
+    const trimmed = option.trim();
+    if (
+      trimmed.length > 0 &&
+      (trimmed.startsWith("{") || trimmed.startsWith("[")) &&
+      (trimmed.endsWith("}") || trimmed.endsWith("]"))
+    ) {
+      try {
+        // 兼容 Python repr（单引号）→ JSON（双引号）
+        const asJson = /^\{'\w/.test(trimmed) ? trimmed.replace(/'/g, '"') : trimmed;
+        const parsed = JSON.parse(asJson);
+        if (typeof parsed === "string") {
+          return { key: `${index}:${parsed}`, label: parsed, value: parsed };
+        }
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return normalizeOption(parsed[0], index);
+        }
+        if (parsed && typeof parsed === "object") {
+          option = parsed; // 走到下面的 object 分支
+        }
+      } catch {
+        /* fall through to plain string */
+      }
+    }
+    if (typeof option === "string") {
+      const value = option;
+      return { key: `${index}:${value}`, label: value, value };
+    }
+  }
   if (typeof option === "string" || typeof option === "number" || typeof option === "boolean") {
     const value = String(option);
     return { key: `${index}:${value}`, label: value, value };
