@@ -394,7 +394,15 @@ describe("listThreads", () => {
     expect(init.credentials).toBe("include");
     expect(init.headers["X-CSRF-Token"]).toBe("test-csrf-abc");
     const body = JSON.parse(init.body as string);
-    expect(body).toEqual({ limit: 50, offset: 0 });
+    expect(body).toEqual({ limit: 50, offset: 0, include_archived: false });
+  });
+
+  it("传 includeArchived:true 时 body 带 include_archived:true（拉「已归档」桶）", async () => {
+    fetchMock.mockResolvedValue(makeMockResponse({ json: [] }));
+    await listThreads(500, { includeArchived: true });
+    const init = fetchMock.mock.calls[0][1];
+    const body = JSON.parse(init.body as string);
+    expect(body.include_archived).toBe(true);
   });
 
   it("HTTP 非 2xx 时返回空数组（不抛错，不打断启动流程）", async () => {

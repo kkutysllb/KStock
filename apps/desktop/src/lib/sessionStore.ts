@@ -133,6 +133,20 @@ export interface ChatSession {
   title: string;
   createdAt: string;
   updatedAt: string;
+  /**
+   * 原始 ISO 时间戳（用于历史任务按时间分桶计算）。
+   *
+   * ``updatedAt`` 是格式化后的本地展示字符串（MM-DD HH:mm，无年份），
+   * 无法可靠反解析回时间戳。分桶需要绝对时间差，因此额外保留 ISO 原值。
+   * 本地新建会话用 ``new Date().toISOString()``；从后端恢复时用 thread.updated_at。
+   */
+  updatedAtIso: string;
+  /**
+   * 引擎 thread metadata 快照（qilin_pinned / qilin_archived 等）。
+   * 本地新建会话为空对象；从 listThreads 恢复时从 thread.metadata 填入。
+   * ``qilin_archived === true`` 的会话被分到「已归档」桶。
+   */
+  metadata: Record<string, unknown>;
   /** 引擎 thread id（首次发消息时 POST /api/threads 创建并绑定）。 */
   threadId?: string;
   messages: ChatMessage[];
@@ -197,6 +211,8 @@ export function createSession(title = "新研究会话"): ChatSession {
     title,
     createdAt: nowIso(),
     updatedAt: nowLabel(),
+    updatedAtIso: nowIso(),
+    metadata: {},
     messages: [],
     reportMarkdown: "",
     activeSkills: [...DEFAULT_ACTIVE_SKILLS]
@@ -218,16 +234,20 @@ export function threadToSession(thread: {
   created_at?: string;
   updated_at?: string;
   values?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }): ChatSession {
   const titleRaw = thread.values?.title;
   const title = typeof titleRaw === "string" && titleRaw.trim()
     ? titleRaw.slice(0, 40)
     : "历史任务";
+  const updatedAtIso = thread.updated_at || thread.created_at || nowIso();
   return {
     id: crypto.randomUUID(),
     title,
     createdAt: thread.created_at || nowIso(),
     updatedAt: formatUpdatedAt(thread.updated_at),
+    updatedAtIso,
+    metadata: { ...(thread.metadata || {}) },
     threadId: thread.thread_id,
     messages: [],
     reportMarkdown: "",
@@ -262,6 +282,7 @@ export function appendMessageToSession(
     ...session,
     title: nextTitle,
     updatedAt: nowLabel(),
+    updatedAtIso: nowIso(),
     messages: nextMessages
   };
 }
@@ -271,6 +292,7 @@ export function appendTurnToSession(session: ChatSession, message: ChatMessage):
   return {
     ...session,
     updatedAt: nowLabel(),
+    updatedAtIso: nowIso(),
     messages: [...session.messages, message]
   };
 }
@@ -299,6 +321,7 @@ export function updateMessageInSession(
   return {
     ...session,
     updatedAt: nowLabel(),
+    updatedAtIso: nowIso(),
     messages: session.messages.map((m) => (m.id === messageId ? { ...m, ...patch } : m))
   };
 }

@@ -233,6 +233,33 @@ export async function deleteThread(threadId: string): Promise<void> {
 }
 
 /**
+ * 标记 / 取消标记一个 thread 为「已归档」。
+ *
+ * 后端：PATCH /api/threads/{id}，body ``{ metadata: { qilin_archived: bool } }``。
+ * 单键 PATCH 被后端 ``_is_pin_metadata_patch`` 识别为 bookkeeping，不会 bump
+ * ``updated_at``（归档不是对话活动，不应抹掉会话在时间倒序表里的位置）。
+ *
+ * 调用后需在本地从 sessions 移除该 session（归档项不占用主列表），
+ * 并追加到 archivedSessions 状态。
+ */
+export async function archiveThread(threadId: string, archived: boolean): Promise<void> {
+  const resp = await fetch(`${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ metadata: { qilin_archived: archived } })
+  });
+  if (!resp.ok) {
+    throw await toError(archived ? "归档 thread 失败" : "取消归档 thread 失败", resp);
+  }
+  try {
+    await resp.text();
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
  * 发起流式 run，逐帧回调 handlers.onFrame，直至 event:end 或流结束。
  * 遇 event:error / HTTP 非 2xx / 网络错误调 handlers.onError。
  * signal abort 时静默终止（不报错）。
@@ -355,22 +382,34 @@ export interface ThreadSummary {
   created_at: string;
   updated_at: string;
   values: Record<string, unknown>;
+  /** 后端维护的 thread metadata（qilin_pinned / qilin_archived 等）。 */
+  metadata: Record<string, unknown>;
 }
 
 /**
  * 列出当前用户的全部历史 thread。
  *
  * 后端：POST /api/threads/search，需登录（根据 cookie 里 user 自动过滤）。
- * 返回按 updated_at 倒序（后端默认行为）的 thread 列表；未登录或无 thread 返回空数组。
+ * 返回按 updated_at 倾倒库（后端默认行为）的 thread 列表；未登录或无 thread 返回空数组。
+ *
+ * 默认不包含已归档的 thread（后端 ``include_archived=false``）。需在「已归档」
+ * 桶展示归档任务时传 ``{ includeArchived: true }``。
  */
-export async function listThreads(limit = 100): Promise<ThreadSummary[]> {
+export async function listThreads(
+  limit = 100,
+  options: { includeArchived?: boolean } = {}
+): Promise<ThreadSummary[]> {
   let resp: Response;
   try {
     resp = await fetch(`${GATEWAY_URL}/api/threads/search`, {
       method: "POST",
       credentials: "include",
       headers: jsonHeaders(),
-      body: JSON.stringify({ limit, offset: 0 })
+      body: JSON.stringify({
+        limit,
+        offset: 0,
+        include_archived: options.includeArchived === true
+      })
     });
   } catch {
     return [];

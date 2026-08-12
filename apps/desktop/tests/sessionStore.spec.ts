@@ -117,10 +117,37 @@ describe("sessionStore turn-based 模型", () => {
     expect(session.title).toBe("茅台财报分析");
     // 侧边栏需区分同一天内的会话：updatedAt 为 MM-DD HH:mm（含具体时间）
     expect(session.updatedAt).toMatch(/^\d{2}\/\d{2} \d{2}:\d{2}$/);
+    // updatedAtIso 保留原始 ISO（历史分桶计算用，不能用 updatedAt 反解析）
+    expect(session.updatedAtIso).toBe("2026-07-31T12:00:00.000Z");
+    // metadata 默认空对象（未传时不报错，不 undefined）
+    expect(session.metadata).toEqual({});
     // 历史会话消息懒加载（切回后首次发消息或点进会话才拉取），初始为空
     expect(session.messages).toEqual([]);
     expect(session.activeSkills.length).toBeGreaterThan(0);
     expect(session.reportMarkdown).toBe("");
+  });
+
+  it("threadToSession 保留后端 metadata（qilin_archived 等）", () => {
+    const session = threadToSession({
+      thread_id: "thread-meta-1",
+      updated_at: "2026-07-31T12:00:00.000Z",
+      values: { title: "已归档任务" },
+      metadata: { qilin_archived: true, qilin_pinned: false, custom_tag: "x" }
+    });
+    expect(session.metadata).toEqual({
+      qilin_archived: true,
+      qilin_pinned: false,
+      custom_tag: "x"
+    });
+  });
+
+  it("threadToSession updated_at 缺失时 updatedAtIso 回退 created_at", () => {
+    const session = threadToSession({
+      thread_id: "thread-fallback",
+      created_at: "2026-07-30T00:00:00.000Z",
+      values: {}
+    });
+    expect(session.updatedAtIso).toBe("2026-07-30T00:00:00.000Z");
   });
 
   it("threadToSession 无 title 时回退占位文案", () => {

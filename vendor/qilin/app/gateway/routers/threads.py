@@ -45,7 +45,10 @@ from app.gateway.utils import sanitize_log_param
 from qilin.agents.thread_state import THREAD_STATE_REDUCER_FIELDS
 from qilin.config.paths import Paths, get_paths
 from qilin.config.summarization_config import ContextSize
-from qilin.persistence.thread_meta import THREAD_PINNED_METADATA_KEY
+from qilin.persistence.thread_meta import (
+    THREAD_ARCHIVED_METADATA_KEY,
+    THREAD_PINNED_METADATA_KEY,
+)
 from qilin.runtime import serialize_channel_values_for_api
 from qilin.runtime.checkpoint_mode import (
     CheckpointModeMismatchError,
@@ -126,8 +129,22 @@ def _strip_reserved_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _is_pin_metadata_patch(metadata: dict[str, Any]) -> bool:
-    """Return True for the narrow pin/unpin PATCH shape."""
-    return set(metadata) == {THREAD_PINNED_METADATA_KEY} and isinstance(metadata.get(THREAD_PINNED_METADATA_KEY), bool)
+    """Return True for PATCH shapes that must not bump ``updated_at``.
+
+    Covers two single-key metadata patches that are bookkeeping rather than
+    conversation activity:
+    - pin/unpin: ``{qilin_pinned: bool}``
+    - archive/unarchive: ``{qilin_archived: bool}``
+
+    Any other metadata change (e.g. title rename mixed with metadata) still
+    goes through the default ``touch=True`` path.
+    """
+    if not metadata or len(metadata) != 1:
+        return False
+    key, value = next(iter(metadata.items()))
+    if key not in (THREAD_PINNED_METADATA_KEY, THREAD_ARCHIVED_METADATA_KEY):
+        return False
+    return isinstance(value, bool)
 
 
 def _message_id(message: Any) -> str | None:
@@ -391,6 +408,14 @@ class ThreadSearchRequest(BaseModel):
     limit: int = Field(default=100, ge=1, le=1000, description="Maximum results")
     offset: int = Field(default=0, ge=0, description="Pagination offset")
     status: str | None = Field(default=None, description="Filter by thread status")
+    include_archived: bool = Field(
+        default=False,
+        description=(
+            "When False (default), threads with ``metadata.qilin_archived == true`` "
+            "are filtered out of the response. Set True to surface archived threads "
+            "(e.g. for the \"已归档\" bucket in the history sidebar)."
+        ),
+    )
 
     @field_validator("metadata")
     @classmethod
@@ -952,6 +977,11 @@ async def search_threads(body: ThreadSearchRequest, request: Request) -> list[Th
 
     Delegates to the configured ThreadMetaStore implementation
     (SQL-backed for sqlite/postgres, Store-backed for memory mode).
+
+    Archive filtering is applied in the router rather than the store layer so
+    that both SQL and memory backends share the same behavior without each
+    having to implement a ``key != value`` JSON predicate (the store-level
+    ``metadata`` filter is exact-match only).
     """
     from app.gateway.deps import get_thread_store
     from qilin.persistence.thread_meta import InvalidMetadataFilterError
@@ -966,6 +996,13 @@ async def search_threads(body: ThreadSearchRequest, request: Request) -> list[Th
         )
     except InvalidMetadataFilterError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not body.include_archived:
+        rows = [
+            r for r in rows
+            if not _is_thread_archived(r.get("metadata"))
+        ]
+
     return [
         ThreadResponse(
             thread_id=r["thread_id"],
@@ -981,6 +1018,11 @@ async def search_threads(body: ThreadSearchRequest, request: Request) -> list[Th
         )
         for r in rows
     ]
+
+
+def _is_thread_archived(metadata: Any) -> bool:
+    """Return True if a thread metadata payload marks the thread as archived."""
+    return isinstance(metadata, dict) and metadata.get(THREAD_ARCHIVED_METADATA_KEY) is True
 
 
 @router.patch("/{thread_id}", response_model=ThreadResponse)

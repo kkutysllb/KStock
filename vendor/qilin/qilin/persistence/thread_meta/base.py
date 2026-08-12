@@ -24,6 +24,14 @@ from qilin.runtime.user_context import AUTO, _AutoSentinel
 # ``frontend/tests/e2e/utils/mock-api.ts``.
 THREAD_PINNED_METADATA_KEY = "qilin_pinned"
 
+# Soft-delete / archive marker. Threads with this flag set are excluded
+# from the default ``/threads/search`` response and surfaced only when
+# the client explicitly requests ``include_archived=True``. Like pin,
+# toggling archive is not conversation activity and must not bump
+# ``updated_at`` (see ``_is_pin_metadata_patch`` in the gateway router).
+# Keep in sync with the desktop client ``turnsClient.ts``.
+THREAD_ARCHIVED_METADATA_KEY = "qilin_archived"
+
 
 class InvalidMetadataFilterError(ValueError):
     """Raised when all client-supplied metadata filter keys are rejected."""

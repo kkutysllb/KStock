@@ -1157,6 +1157,108 @@ body.sidebar-resizing {
   color: #6b7280;
 }
 
+/* ── 历史任务多级折叠（桶） ── */
+.session-bucket {
+  display: grid;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+/* 桶标题（比总开关更轻量，缩进一项区分层级） */
+.side-bucket-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  margin: 0;
+  padding: 3px 14px 3px 18px;
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+
+.side-bucket-header:hover {
+  color: #a9afb8;
+}
+
+.side-bucket-header .chevron-expanded {
+  transform: rotate(90deg);
+  transition: transform 0.12s ease;
+}
+
+.side-bucket-header > svg {
+  transition: transform 0.12s ease;
+}
+
+.session-bucket-list {
+  display: grid;
+  gap: 2px;
+}
+
+/* 桶内行可能同时有多个动作按钮（归档 + 删除 / 取消归档 + 删除）。
+  * 保持原有的 session-row-delete 绝对定位 hover 显隐，新增 session-row-icon
+  * 复用同一套样式（不同 hover 色）。默认隐藏，hover 容器才出现。 */
+.session-row-icon {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #8f96a0;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.session-row:hover .session-row-icon,
+.session-row:focus-within .session-row-icon {
+  opacity: 1;
+}
+
+.session-row-icon:hover {
+  color: #d9dde3;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.session-row-icon:disabled,
+.session-row.busy .session-row-icon {
+  cursor: progress;
+  opacity: 0.5;
+}
+
+/* 按钮位置规则（避免重叠）：
+  * 单按钮行（仅删除）：right:6px（在基础 .session-row-delete 里定义）
+  * 两按钮行：archive 在 right:30px，delete 在 right:6px
+  * 归档桶行（取消归档 + 删除）：unarchive 在 right:6px，delete 左移到 right:30px
+  *
+  * :has 选择器在 Chromium 105+ 支持（Tauri/Electron 现代版本都没问题）。
+  * 若需要兼容旧 webview，可改用 className。当前方案以可读性优先。 */
+.session-row-icon[aria-label^="取消归档"] {
+  right: 6px;
+}
+.session-row-icon[aria-label^="归档"] {
+  right: 30px;
+}
+.session-row:has(.session-row-icon[aria-label^="取消归档"]) .session-row-delete {
+  right: 30px;
+}
+
+/* busy 状态下行整体「执行中」反馈 */
+.session-row.busy {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
 .sidebar-footer {
   display: grid;
   gap: 2px;

@@ -8,6 +8,7 @@ import {
 } from "../lib/desktopBridge";
 import {
   Activity,
+  Archive,
   ArrowLeft,
   Brain,
   Bot,
@@ -32,6 +33,7 @@ import {
   PanelRight,
   Paperclip,
   Plus,
+  RotateCcw,
   Search,
   Send,
   Settings,
@@ -81,6 +83,7 @@ import {
 } from "../lib/sessionStore";
 import { GATEWAY_URL } from "../lib/gatewayUrl";
 import {
+  archiveThread,
   cancelRun,
   artifactUrl,
   createThreadBranch,
@@ -98,9 +101,16 @@ import {
   type RunInput,
   uploadFiles,
   type ReasoningMode,
+  type ThreadSummary,
   type UploadedFileRef,
   type WorkspaceChangeFile,
 } from "../lib/turnsClient";
+import {
+  DEFAULT_COLLAPSED_BUCKETS,
+  groupSessionsByBucket,
+  selectStaleSessions,
+  type HistoryBucket,
+} from "../lib/historyGrouping";
 import {
   buildEditedBranchSession,
   editableUserMessageIds,
@@ -284,6 +294,18 @@ export function Home() {
   const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [deleteDeleting, setDeleteDeleting] = useState(false);
+  // 历史任务按时间分桶后的折叠状态：DEFAULT_COLLAPSED_BUCKETS 是「3 天以外」初始折叠。
+  // 会话内记忆（重启后重置）——符合「启动时默认只展开3天以内」的设计。
+  const [collapsedBuckets, setCollapsedBuckets] = useState<Set<HistoryBucket>>(
+    () => new Set(DEFAULT_COLLAPSED_BUCKETS)
+  );
+  // 已归档任务：单独拉取（listThreads 默认不返回归档项），只在 sidebar 的
+  // 「已归档」桶展开时呈现。归档项不占用主列表。
+  const [archivedSessions, setArchivedSessions] = useState<ChatSession[]>([]);
+  // 归档/取消归档操作防重复点击。
+  const [archiveBusySessionIds, setArchiveBusySessionIds] = useState<Set<string>>(new Set());
+  // 自动归档扫描节流：同一次会话内只跑一次，避免每次 sessions 变化都重复 PATCH。
+  const autoArchiveDoneRef = useRef(false);
 
   const handleWorkspaceSidebarResize = useCallback((width: number) => {
     setWorkspaceSidebarWidth(width);
@@ -396,12 +418,18 @@ export function Home() {
   // 修复「预置假会话重启后重复出现」的 bug：以前用 createSeedSessions() 硬编码
   // 两个假会话作为初始 state，用户删除后重启又会重新生成；现在改为从后端加载
   // 真实 thread，无 thread 时显示空态。
+  //
+  // 同时执行自动归档：拉回的非归档 thread 中 > 30 天的批量 PATCH 为 archived，
+  // 从主列表移除；并拉取所有已归档 thread 填充「已归档」桶。自动归档只在每次
+  // 登录后跳一次（autoArchiveDoneRef 节流，避免 sessions 变化时重复跳）。
   useEffect(() => {
     if (!currentUser || !generalPreferencesLoaded) {
       if (!currentUser) {
         setSessions([]);
+        setArchivedSessions([]);
         setActiveSessionId("");
         setSessionsLoaded(true);
+        autoArchiveDoneRef.current = false;
       }
       return;
     }
@@ -409,7 +437,7 @@ export function Home() {
     (async () => {
       const threads = await listThreads(100);
       if (cancelled) return;
-      const restored = threads.map(threadToSession);
+      let restored = threads.map(threadToSession);
       const lastSessionId = generalPreferences.restore_last_session
         ? localStorage.getItem(`kstock.lastSession.${currentUser.id}`)
         : null;
@@ -438,6 +466,73 @@ export function Home() {
         setSessionsLoaded(true);
         return;
       }
+      // 自动归档：> 30 天且未归档的 thread 批量 PATCH 为 archived。
+      // 不做后台定时（避免长驻进程），用户每天首次启动触发一次清理足够。
+      if (!autoArchiveDoneRef.current) {
+        const stale = selectStaleSessions(restored);
+        if (stale.length > 0) {
+          // 并发限流 5，避免一次几十个 PATCH 把 gateway 打抱。
+          const CONCURRENCY = 5;
+          const threadIdToSession = new Map(stale.map((s) => [s.threadId, s]));
+          const threadIds = Array.from(threadIdToSession.keys()).filter((id): id is string => Boolean(id));
+          for (let i = 0; i < threadIds.length; i += CONCURRENCY) {
+            const batch = threadIds.slice(i, i + CONCURRENCY);
+            await Promise.all(
+              batch.map(async (tid) => {
+                try {
+                  await archiveThread(tid, true);
+                  return tid;
+                } catch {
+                  // 单个失败不影响其他——该 thread 仍留在主列表。
+                  return null;
+                }
+              })
+            ).then((results) => {
+              const archivedIds = new Set(
+                results.filter((r): r is string => r !== null)
+              );
+              if (archivedIds.size > 0) {
+                // 把成功归档的 session 从 restored 移除，同时加入 archivedSessions。
+                const moved: ChatSession[] = [];
+                restored = restored.filter((s) => {
+                  if (s.threadId && archivedIds.has(s.threadId)) {
+                    moved.push({ ...s, metadata: { ...s.metadata, qilin_archived: true } });
+                    return false;
+                  }
+                  return true;
+                });
+                if (moved.length > 0) {
+                  setArchivedSessions((prev) => [...moved, ...prev]);
+                }
+              }
+            });
+            if (cancelled) return;
+          }
+        }
+        autoArchiveDoneRef.current = true;
+      }
+      // 拉取已归档 thread（包含刚刚被自动归档的 + 历史已归档的）。
+      // 调大 limit 以涵盖长期累积的归档项。
+      if (!cancelled) {
+        try {
+          const archivedThreads = await listThreads(500, { includeArchived: true });
+          if (!cancelled) {
+            // 过滤掉已被自动归档流程纳入的 thread，避免重复（双源合并去重）。
+            const existingIds = new Set(restored.map((s) => s.threadId));
+            const freshArchived = archivedThreads
+              .filter((t) => !existingIds.has(t.thread_id))
+              .map(threadToSession);
+            setArchivedSessions((prev) => {
+              const seen = new Set(freshArchived.map((s) => s.threadId));
+              const kept = prev.filter((s) => !seen.has(s.threadId));
+              return [...freshArchived, ...kept];
+            });
+          }
+        } catch {
+          // 归档桶拉取失败不影响主流程，静默忽略。
+        }
+      }
+      if (cancelled) return;
       if (restored.length === 0 && generalPreferences.create_session_when_empty) {
         const fresh = createSession("新研究会话");
         setSessions([fresh]);
@@ -737,22 +832,96 @@ export function Home() {
   // 删除历史任务：点击删除按钮只打开确认对话框，不立即执行。
   // 同步清理后端用户数据空间下整个 thread 目录（workspace/uploads/outputs/
   // 中间文件 + checkpoints + thread_meta）。
+  // 同时检索 sessions + archivedSessions，让「已归档」桶里的删除按钮也能用。
   const handleRequestDeleteSession = (sessionId: string) => {
-    const target = sessions.find((s) => s.id === sessionId);
+    const target = sessions.find((s) => s.id === sessionId)
+      ?? archivedSessions.find((s) => s.id === sessionId);
     if (!target) return;
     setConfirmError(null);
     setPendingDeleteSessionId(sessionId);
+  };
+
+  // 归档一个任务：调后端 PATCH 后从 sessions 移除并加入 archivedSessions 顶部。
+  // 本地新建无 threadId 的 session 不支持归档（只能删除）——调用方已保证有 threadId。
+  // busy 状态防护避免连点发出多次 PATCH。
+  const handleArchiveSession = async (sessionId: string) => {
+    const target = sessions.find((s) => s.id === sessionId);
+    if (!target || !target.threadId) return;
+    if (archiveBusySessionIds.has(sessionId)) return;
+    setArchiveBusySessionIds((prev) => new Set(prev).add(sessionId));
+    try {
+      await archiveThread(target.threadId, true);
+      setSessions((current) => current.filter((s) => s.id !== sessionId));
+      // 如果归档的是当前 active，切换到首个剩余会话（保持与删除一致的体验）。
+      setActiveSessionId((current) => {
+        if (current !== sessionId) return current;
+        const nextFirst = sessions.find((s) => s.id !== sessionId);
+        return nextFirst?.id ?? "";
+      });
+      setArchivedSessions((prev) => [
+        { ...target, metadata: { ...target.metadata, qilin_archived: true } },
+        ...prev.filter((s) => s.threadId !== target.threadId),
+      ]);
+    } catch {
+      // 失败静默：不做 toast（避免主侧边栏的轻量交互被提示打断）。后端不可达时
+      // 不改变本地状态，避免与后端不一致。
+    } finally {
+      setArchiveBusySessionIds((prev) => {
+        const next = new Set(prev);
+        next.delete(sessionId);
+        return next;
+      });
+    }
+  };
+
+  // 取消归档：把任务从 archivedSessions 拉回主列表。重新走后端 PATCH + 本地状态同步。
+  const handleUnarchiveSession = async (sessionId: string) => {
+    const target = archivedSessions.find((s) => s.id === sessionId);
+    if (!target || !target.threadId) return;
+    if (archiveBusySessionIds.has(sessionId)) return;
+    setArchiveBusySessionIds((prev) => new Set(prev).add(sessionId));
+    try {
+      await archiveThread(target.threadId, false);
+      setArchivedSessions((current) => current.filter((s) => s.id !== sessionId));
+      setSessions((prev) => [
+        { ...target, metadata: { ...target.metadata, qilin_archived: false } },
+        ...prev.filter((s) => s.threadId !== target.threadId),
+      ]);
+    } catch {
+      // 静默失败，保持状态一致。
+    } finally {
+      setArchiveBusySessionIds((prev) => {
+        const next = new Set(prev);
+        next.delete(sessionId);
+        return next;
+      });
+    }
+  };
+
+  // 切换某个历史任务桶的折叠状态（会话内记忆，重启重置）。
+  const handleToggleBucket = (bucket: HistoryBucket) => {
+    setCollapsedBuckets((prev) => {
+      const next = new Set(prev);
+      if (next.has(bucket)) {
+        next.delete(bucket);
+      } else {
+        next.add(bucket);
+      }
+      return next;
+    });
   };
 
   // 用户在确认对话框点「确认」后执行真正删除。
   const handleConfirmDeleteSession = async () => {
     const sessionId = pendingDeleteSessionId;
     if (!sessionId || deleteDeleting) return;
-    const target = sessions.find((s) => s.id === sessionId);
+    const target = sessions.find((s) => s.id === sessionId)
+      ?? archivedSessions.find((s) => s.id === sessionId);
     if (!target) {
       setPendingDeleteSessionId(null);
       return;
     }
+    const isArchivedTarget = !sessions.some((s) => s.id === sessionId);
     setDeleteDeleting(true);
     // 1. 调用后端删除 thread（best-effort，后端不可达也允许前端清理）。
     if (target.threadId) {
@@ -767,16 +936,21 @@ export function Home() {
         return;
       }
     }
-    // 2. 前端移除该 session。若删的是当前 active，切换到首个剩余会话。
-    setSessions((current) => {
-      const next = current.filter((s) => s.id !== sessionId);
-      if (sessionId === activeSessionId) {
-        setActiveSessionId(next[0]?.id ?? "");
-        // 删除的是当前任务：其待发附件一并清空（线程文件已随 thread 目录删除）。
-        setPendingAttachments([]);
-      }
-      return next;
-    });
+    // 2. 前端移除该 session。归档 session 从 archivedSessions 删，否则从 sessions 删。
+    // 若删的是当前 active，切换到首个剩余会话。
+    if (isArchivedTarget) {
+      setArchivedSessions((current) => current.filter((s) => s.id !== sessionId));
+    } else {
+      setSessions((current) => {
+        const next = current.filter((s) => s.id !== sessionId);
+        if (sessionId === activeSessionId) {
+          setActiveSessionId(next[0]?.id ?? "");
+          // 删除的是当前任务：其待发附件一并清空（线程文件已随 thread 目录删除）。
+          setPendingAttachments([]);
+        }
+        return next;
+      });
+    }
     setDeleteDeleting(false);
     setConfirmError(null);
     setPendingDeleteSessionId(null);
@@ -1120,9 +1294,12 @@ export function Home() {
       draft={draft}
       rightPanelOpen={rightPanelOpen}
       sessions={sessions}
+      archivedSessions={archivedSessions}
       sidebarCollapsed={sidebarCollapsed}
       sidebarWidth={workspaceSidebarWidth}
       historyCollapsed={generalPreferences.history_collapsed}
+      collapsedBuckets={collapsedBuckets}
+      archiveBusySessionIds={archiveBusySessionIds}
       generalPreferences={generalPreferences}
       models={models}
       activeModel={activeModel}
@@ -1146,6 +1323,9 @@ export function Home() {
       onOpenReports={() => setView("reports")}
       onSelectSession={handleSelectSession}
       onDeleteSession={handleRequestDeleteSession}
+      onArchiveSession={handleArchiveSession}
+      onUnarchiveSession={handleUnarchiveSession}
+      onToggleBucket={handleToggleBucket}
       onSend={handleSend}
       onStop={handleStop}
       pendingAttachments={pendingAttachments}
@@ -1614,9 +1794,12 @@ function WorkspaceShell({
   draft,
   rightPanelOpen,
   sessions,
+  archivedSessions,
   sidebarCollapsed,
   sidebarWidth,
   historyCollapsed,
+  collapsedBuckets,
+  archiveBusySessionIds,
   generalPreferences,
   models,
   activeModel,
@@ -1637,6 +1820,9 @@ function WorkspaceShell({
   onOpenSettings,
   onSelectSession,
   onDeleteSession,
+  onArchiveSession,
+  onUnarchiveSession,
+  onToggleBucket,
   onSend,
   onStop,
   pendingAttachments,
@@ -1658,9 +1844,15 @@ function WorkspaceShell({
   draft: string;
   rightPanelOpen: boolean;
   sessions: ChatSession[];
+  /** 「已归档」桶任务（从后端 includeArchived=true 拉取 + 本地刚归档的）。 */
+  archivedSessions: ChatSession[];
   sidebarCollapsed: boolean;
   sidebarWidth: number;
   historyCollapsed: boolean;
+  /** 各历史桶的折叠态（会话内记忆，重启重置）。 */
+  collapsedBuckets: Set<HistoryBucket>;
+  /** 正在归档/取消归档中的 session id（防护重复点击）。 */
+  archiveBusySessionIds: ReadonlySet<string>;
   generalPreferences: GeneralPreferences;
   models: ModelConfig[];
   activeModel: string;
@@ -1682,6 +1874,9 @@ function WorkspaceShell({
   onOpenSettings: () => void;
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
+  onArchiveSession: (sessionId: string) => void;
+  onUnarchiveSession: (sessionId: string) => void;
+  onToggleBucket: (bucket: HistoryBucket) => void;
   onSend: (model: string) => void;
   onStop: () => void;
   pendingAttachments: UploadedFileRef[];
@@ -1819,7 +2014,7 @@ function WorkspaceShell({
               onClick={onToggleHistory}
             >
               <span className="side-section-label">历史任务</span>
-              <span className="side-section-count">{sessions.length}</span>
+              <span className="side-section-count">{sessions.length + archivedSessions.length}</span>
               <ChevronRight
                 size={13}
                 className={!historyCollapsed ? "chevron-expanded" : ""}
@@ -1828,36 +2023,21 @@ function WorkspaceShell({
             </button>
             {!historyCollapsed && (
               <div className="session-strip">
-                {sessions.length === 0 ? (
+                {sessions.length === 0 && archivedSessions.length === 0 ? (
                   <p className="session-empty">暂无历史任务</p>
                 ) : (
-                  sessions.map((session) => (
-                    <div
-                      key={session.id}
-                      className={`session-row ${session.id === activeSession?.id ? "active" : ""}`}
-                    >
-                      <button
-                        className="session-row-main"
-                        type="button"
-                        onClick={() => onSelectSession(session.id)}
-                      >
-                        <strong title={session.title}>{session.title}</strong>
-                        <span className="session-meta">
-                          <Clock size={11} />
-                          {session.updatedAt}
-                        </span>
-                      </button>
-                      <button
-                        className="session-row-delete"
-                        type="button"
-                        aria-label={`删除任务 ${session.title}`}
-                        title="删除任务"
-                        onClick={() => onDeleteSession(session.id)}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))
+                  <HistoryBucketList
+                    sessions={sessions}
+                    archivedSessions={archivedSessions}
+                    activeSessionId={activeSession?.id}
+                    collapsedBuckets={collapsedBuckets}
+                    archiveBusySessionIds={archiveBusySessionIds}
+                    onSelectSession={onSelectSession}
+                    onDeleteSession={onDeleteSession}
+                    onArchiveSession={onArchiveSession}
+                    onUnarchiveSession={onUnarchiveSession}
+                    onToggleBucket={onToggleBucket}
+                  />
                 )}
               </div>
             )}
@@ -2152,6 +2332,216 @@ function WorkspaceShell({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * 历史任务多级折叠列表：按时间桶分组建。默认只展开「今天 + 3 天内」，
+ * 其他桶需用户手动展开。「已归档」桶单独靠 archivedSessions 驱动，
+ * 与时间桶互斥。
+ */
+function HistoryBucketList({
+  sessions,
+  archivedSessions,
+  activeSessionId,
+  collapsedBuckets,
+  archiveBusySessionIds,
+  onSelectSession,
+  onDeleteSession,
+  onArchiveSession,
+  onUnarchiveSession,
+  onToggleBucket,
+}: {
+  sessions: ChatSession[];
+  archivedSessions: ChatSession[];
+  activeSessionId: string | undefined;
+  collapsedBuckets: Set<HistoryBucket>;
+  archiveBusySessionIds: ReadonlySet<string>;
+  onSelectSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string) => void;
+  onArchiveSession: (sessionId: string) => void;
+  onUnarchiveSession: (sessionId: string) => void;
+  onToggleBucket: (bucket: HistoryBucket) => void;
+}) {
+  // 时间桶：sessions 里不是已归档的全部按 updatedAtIso 分桶。
+  const nonArchived = sessions;
+  const buckets = groupSessionsByBucket(nonArchived);
+  const hasArchived = archivedSessions.length > 0;
+
+  return (
+    <>
+      {buckets.map((group) => (
+        <BucketBlock
+          key={group.bucket}
+          bucket={group.bucket}
+          label={group.label}
+          sessions={group.sessions}
+          collapsed={collapsedBuckets.has(group.bucket)}
+          activeSessionId={activeSessionId}
+          archiveBusySessionIds={archiveBusySessionIds}
+          onSelectSession={onSelectSession}
+          onDeleteSession={onDeleteSession}
+          onArchiveSession={onArchiveSession}
+          onToggleBucket={onToggleBucket}
+        />
+      ))}
+      {hasArchived && (
+        <BucketBlock
+          bucket="archived"
+          label="已归档"
+          sessions={archivedSessions}
+          collapsed={collapsedBuckets.has("archived")}
+          activeSessionId={activeSessionId}
+          archiveBusySessionIds={archiveBusySessionIds}
+          onSelectSession={onSelectSession}
+          onDeleteSession={onDeleteSession}
+          onArchiveSession={onArchiveSession}
+          onUnarchiveSession={onUnarchiveSession}
+          onToggleBucket={onToggleBucket}
+        />
+      )}
+    </>
+  );
+}
+
+/** 单个历史任务桶的折叠区块。 */
+function BucketBlock({
+  bucket,
+  label,
+  sessions,
+  collapsed,
+  activeSessionId,
+  archiveBusySessionIds,
+  onSelectSession,
+  onDeleteSession,
+  onArchiveSession,
+  onUnarchiveSession,
+  onToggleBucket,
+}: {
+  bucket: HistoryBucket;
+  label: string;
+  sessions: ChatSession[];
+  collapsed: boolean;
+  activeSessionId: string | undefined;
+  archiveBusySessionIds: ReadonlySet<string>;
+  onSelectSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string) => void;
+  onArchiveSession: (sessionId: string) => void;
+  onUnarchiveSession?: (sessionId: string) => void;
+  onToggleBucket: (bucket: HistoryBucket) => void;
+}) {
+  return (
+    <div className="session-bucket">
+      <button
+        type="button"
+        className="side-bucket-header"
+        aria-expanded={!collapsed}
+        onClick={() => onToggleBucket(bucket)}
+      >
+        <ChevronRight
+          size={11}
+          className={!collapsed ? "chevron-expanded" : ""}
+          aria-hidden="true"
+        />
+        <span className="side-section-label">{label}</span>
+        <span className="side-section-count">{sessions.length}</span>
+      </button>
+      {!collapsed && (
+        <div className="session-bucket-list">
+          {sessions.map((session) => (
+            <SessionRow
+              key={session.id}
+              session={session}
+              active={session.id === activeSessionId}
+              bucket={bucket}
+              busy={archiveBusySessionIds.has(session.id)}
+              onSelectSession={onSelectSession}
+              onDeleteSession={onDeleteSession}
+              onArchiveSession={onArchiveSession}
+              onUnarchiveSession={onUnarchiveSession}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 单个历史任务行。根据桶上下文展示不同动作：
+ * - 归档桶：取消归档（调回主列表） + 删除
+ * - 其他桶：归档（需 threadId） + 删除
+ * 本地新建无 threadId 的 session 只能删除，不能归档。
+ */
+function SessionRow({
+  session,
+  active,
+  bucket,
+  busy,
+  onSelectSession,
+  onDeleteSession,
+  onArchiveSession,
+  onUnarchiveSession,
+}: {
+  session: ChatSession;
+  active: boolean;
+  bucket: HistoryBucket;
+  busy: boolean;
+  onSelectSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string) => void;
+  onArchiveSession: (sessionId: string) => void;
+  onUnarchiveSession?: (sessionId: string) => void;
+}) {
+  const canArchive = bucket !== "archived" && Boolean(session.threadId);
+  const canUnarchive = bucket === "archived" && Boolean(session.threadId);
+  return (
+    <div className={`session-row ${active ? "active" : ""} ${busy ? "busy" : ""}`}>
+      <button
+        className="session-row-main"
+        type="button"
+        onClick={() => onSelectSession(session.id)}
+      >
+        <strong title={session.title}>{session.title}</strong>
+        <span className="session-meta">
+          <Clock size={11} />
+          {session.updatedAt}
+        </span>
+      </button>
+      {canArchive && (
+        <button
+          className="session-row-icon"
+          type="button"
+          aria-label={`归档任务 ${session.title}`}
+          title="归档（从主列表移除，可从「已归档」恢复）"
+          disabled={busy}
+          onClick={() => onArchiveSession(session.id)}
+        >
+          <Archive size={12} />
+        </button>
+      )}
+      {canUnarchive && onUnarchiveSession && (
+        <button
+          className="session-row-icon"
+          type="button"
+          aria-label={`取消归档任务 ${session.title}`}
+          title="取消归档（调回主列表）"
+          disabled={busy}
+          onClick={() => onUnarchiveSession(session.id)}
+        >
+          <RotateCcw size={12} />
+        </button>
+      )}
+      <button
+        className="session-row-icon session-row-delete"
+        type="button"
+        aria-label={`删除任务 ${session.title}`}
+        title="删除任务"
+        disabled={busy}
+        onClick={() => onDeleteSession(session.id)}
+      >
+        <Trash2 size={12} />
+      </button>
     </div>
   );
 }
