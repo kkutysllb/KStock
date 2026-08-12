@@ -3,6 +3,7 @@
  */
 
 import {
+  app,
   BrowserWindow,
   ipcMain,
   shell,
@@ -16,8 +17,15 @@ import { IPC } from "./ipc-channels";
 let mainWindow: BrowserWindow | null = null;
 let zoomFactor = 1.0;
 
-/** dev 模式渲染层地址（由 ``VITE_DEV_SERVER_URL`` 注入，缺省指向 Vite dev server）。 */
+/**
+ * dev 模式渲染层地址。
+ *
+ * 仅在 **未打包** 时读取 ``VITE_DEV_SERVER_URL``；打包态强制返回 null，
+ * 确保 App 绝不会回连 dev server（即使环境变量意外泄漏到打包进程）。
+ * ``app.isPackaged`` 是 Electron 运行时的硬性判断，比环境变量可靠。
+ */
 function devServerUrl(): string | null {
+  if (app.isPackaged) return null;
   return process.env.VITE_DEV_SERVER_URL ?? null;
 }
 
