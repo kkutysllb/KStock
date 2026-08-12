@@ -1025,8 +1025,8 @@ body.sidebar-resizing {
   align-items: center;
   gap: 6px;
   width: 100%;
-  margin: 17px 0 6px;
-  padding: 4px 14px;
+  margin: 10px 0 3px;
+  padding: 3px 14px;
   border: 0;
   background: transparent;
   color: #777e88;
@@ -1095,14 +1095,14 @@ body.sidebar-resizing {
 
 .session-row-main {
   display: grid;
-  gap: 5px;
+  gap: 2px;
   flex: 1 1 auto;
   min-width: 0;
   border: 0;
   background: transparent;
   color: #d9dde3;
   text-align: left;
-  padding: 8px 28px 8px 16px;
+  padding: 5px 28px 5px 14px;
   cursor: pointer;
   font: inherit;
 }
@@ -1160,18 +1160,21 @@ body.sidebar-resizing {
 /* ── 历史任务多级折叠（桶） ── */
 .session-bucket {
   display: grid;
-  gap: 3px;
-  margin-top: 4px;
+  gap: 1px;
+  margin-top: 0;
 }
 
-/* 桶标题（比总开关更轻量，缩进一项区分层级） */
+/* 桶标题：与总标题左对齐到 14px，层级靠字号 / 颜色 / chevron 区分，
+   不再靠缩进。注意 label 必须重置 margin——否则继承
+   .side-section-label 的 17px 14px 6px，会把桶标题撑高撑宽
+   （这是紧凑化的关键修复）。 */
 .side-bucket-header {
   display: flex;
   align-items: center;
   gap: 5px;
   width: 100%;
   margin: 0;
-  padding: 3px 14px 3px 18px;
+  padding: 2px 14px;
   border: 0;
   background: transparent;
   color: #6b7280;
@@ -1179,6 +1182,10 @@ body.sidebar-resizing {
   font-weight: 700;
   cursor: pointer;
   text-align: left;
+}
+
+.side-bucket-header .side-section-label {
+  margin: 0;
 }
 
 .side-bucket-header:hover {
@@ -1196,7 +1203,7 @@ body.sidebar-resizing {
 
 .session-bucket-list {
   display: grid;
-  gap: 2px;
+  gap: 1px;
 }
 
 /* 桶内行可能同时有多个动作按钮（归档 + 删除 / 取消归档 + 删除）。
