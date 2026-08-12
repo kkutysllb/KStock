@@ -317,6 +317,19 @@ export function Home() {
     persistSidebarWidth(SETTINGS_SIDEBAR_WIDTH_KEY, width);
   }, []);
 
+  // 任务开始执行时（streamingId 由 null → 非 null）自动展开浮动面板，
+  // 让用户立刻看到任务摘要 / Todo / Subagent 等实时进度。任务执行期间
+  // 用户手动收起不会被重新撑开（streamingId 一直非 null，不触发跃变）；
+  // 任务结束（变回 null）也不自动收起，方便查看结果。下一个任务开始
+  // 才会再次自动展开。
+  const prevStreamingIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevStreamingIdRef.current === null && streamingId !== null) {
+      setRightPanelOpen(true);
+    }
+    prevStreamingIdRef.current = streamingId;
+  }, [streamingId]);
+
   // 启动时探测 gateway 会话与系统初始化状态。
   // gateway 冷启动需数秒（PyInstaller 引导 + 导入重依赖），探测失败时后台
   // 自动重试（约 30 秒），避免首屏误报「无法连接本地引擎」/ 首启不出现
@@ -2223,7 +2236,17 @@ function WorkspaceShell({
         <div className="floating-header">
           <strong>研究上下文</strong>
         </div>
-        <ContextSection icon={Activity} title="任务摘要" count={latestAssistant ? 1 : 0}>
+        <ContextSection icon={Activity} title="任务摘要" count={latestAssistant?.summaryText ? 1 : 0}>
+          {latestAssistant?.summaryText ? (
+            <div className="context-summary-text">{latestAssistant.summaryText}</div>
+          ) : (
+            <ContextEmpty>
+              {latestAssistant ? "当前对话尚未生成摘要（未触发自动压缩）" : "暂无任务"}
+            </ContextEmpty>
+          )}
+        </ContextSection>
+
+        <ContextSection icon={Cpu} title="运行状态" count={latestAssistant ? 1 : 0}>
           <ContextLine icon={Activity} label="任务状态" value={taskStatusLabel(latestAssistant?.status)} />
           <ContextLine icon={Cpu} label="QiLin 引擎" value="已连接" />
           {taskSkills.length > 0 && <ContextLine icon={Sparkles} label="技能" value={`${taskSkills.length} 个`} />}
@@ -2574,10 +2597,36 @@ function ContextSection({
   count: number;
   children: ReactNode;
 }) {
+  // 无内容的 section 默认折叠；有内容默认展开。
+  // 内容从「空」首次变为「非空」时自动展开一次（让用户看到新出现的详情）；
+  // 用户手动收起后保持收起，不会被同值 count 反复撑开。
+  const [collapsed, setCollapsed] = useState(count === 0);
+  const wasEmptyRef = useRef(count === 0);
+  useEffect(() => {
+    if (wasEmptyRef.current && count > 0) {
+      setCollapsed(false);
+      wasEmptyRef.current = false;
+    } else if (count === 0) {
+      wasEmptyRef.current = true;
+    }
+  }, [count]);
   return (
     <section className="context-section">
-      <div className="context-section-heading"><span><Icon size={15} />{title}</span><em>{count}</em></div>
-      {children}
+      <button
+        type="button"
+        className="context-section-heading"
+        aria-expanded={!collapsed}
+        onClick={() => setCollapsed((c) => !c)}
+      >
+        <span><Icon size={15} />{title}</span>
+        <em>{count}</em>
+        <ChevronRight
+          size={13}
+          className={!collapsed ? "chevron-expanded" : ""}
+          aria-hidden="true"
+        />
+      </button>
+      {!collapsed && children}
     </section>
   );
 }

@@ -454,6 +454,11 @@ function reduceValues(
       .filter((name) => name.trim().length > 0);
   }
 
+  // 对话压缩摘要（compaction 时引擎写入 thread state 的 summary_text）
+  if (typeof snap.summary_text === "string" && snap.summary_text.trim()) {
+    next.summaryText = snap.summary_text;
+  }
+
   // compaction 检测：messages 数量收缩（宁漏勿错——不确定时不标注）
   if (Array.isArray(snap.messages)) {
     const prev = next.seenMsgCount ?? 0;

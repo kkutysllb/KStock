@@ -1780,16 +1780,29 @@ body.sidebar-resizing {
   border-bottom: 0;
 }
 
+/* 标题为可点击 button：点击折叠/展开内容。count=0 的 section
+   默认折叠（无内容可看）；有内容默认展开；内容从空→非空会自动
+   展开一次。chevron 在最右指示展开态。 */
 .context-section-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+  width: 100%;
   margin-bottom: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #a9afb8;
+  font: inherit;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-section-heading:hover {
+  color: #c9cfd8;
 }
 
 .context-section-heading span {
@@ -1806,6 +1819,16 @@ body.sidebar-resizing {
   color: #d9dde3;
   font-style: normal;
   text-align: center;
+  margin-left: auto;
+}
+
+.context-section-heading > svg {
+  transition: transform 0.12s ease;
+  color: #6b7280;
+}
+
+.context-section-heading .chevron-expanded {
+  transform: rotate(90deg);
 }
 
 .context-empty {
@@ -1813,6 +1836,19 @@ body.sidebar-resizing {
   color: #7f8994;
   font-size: 11px;
   line-height: 1.5;
+}
+
+/* 引擎生成的对话压缩摘要（summary_text）。纯文本展示，
+   限高滚动避免长摘要撑爆浮动面板。 */
+.context-summary-text {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 2px 0;
+  color: #c2c8d0;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .context-todo-list,

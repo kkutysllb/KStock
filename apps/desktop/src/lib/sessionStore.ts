@@ -115,6 +115,8 @@ export interface ChatMessage {
   todos?: TodoItem[];
   /** 引擎 values 快照的 skill_context（本任务实际读取过的技能名）。 */
   skills?: string[];
+  /** 引擎 values 快照的 summary_text（对话压缩摘要，compaction 时生成）。 */
+  summaryText?: string;
   /** 该 assistant turn 对应的引擎 run id。 */
   runId?: string;
   /** 同一 assistant turn 内所有可用于分支的引擎消息 ID。 */
