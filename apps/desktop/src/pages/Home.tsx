@@ -5,6 +5,7 @@ import {
   isDesktopRuntime,
   onMenuCommand,
   openExternalUrl as desktopOpenExternalUrl,
+  showDesktopNotification,
   toggleWindowMaximize as desktopToggleMaximize,
 } from "../lib/desktopBridge";
 import {
@@ -87,7 +88,6 @@ import { GATEWAY_URL } from "../lib/gatewayUrl";
 import {
   archiveThread,
   cancelRun,
-  artifactUrl,
   createThreadBranch,
   deleteThread,
   deleteUpload,
@@ -122,7 +122,7 @@ import {
 import { engineMessagesToChatMessages } from "../lib/engineHistory";
 import { initialTurn, reduceFrame } from "../lib/turnReducer";
 import { inferStage } from "../lib/stageInferrer";
-import { mergeDeliveryFiles, toAbsoluteUrl, toArtifactRequestPath, type DeliveryFile } from "../lib/deliveryFiles";
+import { mergeDeliveryFiles, resolveArtifactFetchHref, toAbsoluteUrl, type DeliveryFile } from "../lib/deliveryFiles";
 import {
   isGatewayControlApiError,
   restartGateway,
@@ -136,6 +136,11 @@ import { MemorySettings } from "../components/MemorySettings";
 import { WelcomeHero } from "../components/WelcomeHero";
 import { SandboxSettings } from "../components/SandboxSettings";
 import { RuntimeSettings } from "../components/RuntimeSettings";
+import { ScheduledTasksSettings } from "../components/ScheduledTasksSettings";
+import {
+  listScheduledTaskRuns,
+  listScheduledTasks,
+} from "../lib/scheduledTasksClient";
 import { GuardrailsSettings } from "../components/GuardrailsSettings";
 import { SearchSettings } from "../components/SearchSettings";
 import { SubagentsSettings } from "../components/SubagentsSettings";
@@ -563,6 +568,74 @@ export function Home() {
       cancelled = true;
     };
   }, [currentUser, generalPreferencesLoaded]);
+
+  // 定时任务轮询：gateway scheduler 后台执行无推送通道，桌面端每 60s 检查
+  // 各任务最近一次 run 的状态；发现新的终态 run 时发系统通知，并把新生成
+  // 的任务线程合并进侧栏（fresh_thread_per_run 每次产生新 thread）。
+  // 首轮只登记既有 run id 不通知，避免启动时对历史执行补发通知。
+  const seenScheduledRunIdsRef = useRef<Set<string>>(new Set());
+  const scheduledFirstPollRef = useRef(true);
+  useEffect(() => {
+    if (!currentUser) return;
+    let active = true;
+    const mergeNewThreads = async () => {
+      try {
+        const threads = await listThreads(30);
+        if (!active) return;
+        setSessions((current) => {
+          const existingIds = new Set(
+            current.map((session) => session.threadId).filter((id): id is string => Boolean(id)),
+          );
+          const fresh = threads
+            .filter((thread) => !existingIds.has(thread.thread_id))
+            .map(threadToSession);
+          return fresh.length > 0 ? [...fresh, ...current] : current;
+        });
+      } catch {
+        // 侧栏合并失败不影响通知主流程。
+      }
+    };
+    const poll = async () => {
+      try {
+        const tasks = await listScheduledTasks();
+        if (!active || tasks.length === 0) return;
+        for (const task of tasks) {
+          try {
+            const runs = await listScheduledTaskRuns(task.id, 1);
+            const latest = runs[0];
+            if (!latest) continue;
+            if (seenScheduledRunIdsRef.current.has(latest.id)) continue;
+            seenScheduledRunIdsRef.current.add(latest.id);
+            const terminal =
+              latest.status === "success" ||
+              latest.status === "failed" ||
+              latest.status === "interrupted";
+            if (scheduledFirstPollRef.current || !terminal) continue;
+            if (generalPreferences.notify_task_done !== false) {
+              void showDesktopNotification(
+                latest.status === "success" ? "定时任务已完成" : "定时任务执行失败",
+                latest.status === "success"
+                  ? `${task.title} — 报告已生成，可到报告库查看`
+                  : `${task.title} — ${(latest.error ?? "查看任务执行历史").slice(0, 100)}`,
+              );
+            }
+            await mergeNewThreads();
+          } catch {
+            // 单个任务的状态查询失败不影响其他任务。
+          }
+        }
+        scheduledFirstPollRef.current = false;
+      } catch {
+        // scheduled-tasks 接口不可用（旧版 gateway 未启用调度器）时静默跳过。
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [currentUser, generalPreferences.notify_task_done]);
 
   // 切换到历史会话时懒加载消息：session 有 threadId 但 messages 为空时
   // 调 fetchThreadMessages 拉取，转成 ChatMessage[] 写回 session.messages。
@@ -996,6 +1069,7 @@ export function Home() {
     metadata
   }: StreamIntoSessionOptions) => {
     const turn = createAssistantTurn(model.name);
+    const startedAt = Date.now();
     setStreamingId(turn.id);
     setSessions((current) =>
       current.map((session) => (session.id === sessionId ? appendTurnToSession(session, turn) : session))
@@ -1040,7 +1114,31 @@ export function Home() {
     } finally {
       abortRef.current = null;
       activeRunRef.current = null;
+      // 用户主动停止（stoppingRef）不发通知；长任务完成/等待回复（≥15s）、
+      // 失败（≥3s，过滤掉连模型都没建立的瞬时配置错误）提醒一次。
+      // 主进程在窗口聚焦时自动降级不打扰；浏览器预览无桥静默忽略。
+      const wasStopped = stoppingRef.current;
       stoppingRef.current = false;
+      const status = turnState.status;
+      if (
+        !wasStopped &&
+        generalPreferences.notify_task_done !== false &&
+        (status === "error" || status === "done" || status === "needs_input")
+      ) {
+        const elapsed = Date.now() - startedAt;
+        const threshold = status === "error" ? 3_000 : 15_000;
+        if (elapsed >= threshold) {
+          const title =
+            status === "error" ? "任务执行失败"
+            : status === "needs_input" ? "任务等待你的回复"
+            : "任务已完成";
+          const body =
+            status === "error"
+              ? (turnState.error ?? "查看任务详情").slice(0, 160)
+              : (input.title || firstInputText(input)).slice(0, 60);
+          void showDesktopNotification(title, body);
+        }
+      }
       setStreamingId((id) => (id === turn.id ? null : id));
     }
   };
@@ -1945,13 +2043,11 @@ function WorkspaceShell({
   const openArtifact = useCallback(async (href: string, name: string) => {
     const seq = ++openSeqRef.current;
     setArtifactError(null);
-    // markdown 正文体里的交付文件链接是相对路径（如 /mnt/user-data/outputs/x.html），
-    // 直接 fetch 会被页面 origin（dev server）解析 → Vite SPA fallback 返回 index.html
-    // 而非报告内容。必须转成 gateway artifact API URL。
-    const absoluteHref =
-      /^https?:\/\//i.test(href)
-        ? href
-        : artifactUrl(threadIdRef.current ?? "", toArtifactRequestPath(href));
+    // 打包态面板传入 app://localhost/gateway/api/… 绝对地址，dev 态为
+    // http(s):// 绝对地址或引擎输出的相对文件路径（/mnt/user-data/…），
+    // 统一经 resolveArtifactFetchHref 解析：绝对地址直接 fetch，相对路径
+    // 转 gateway artifact API URL（避免被页面 origin 解析成 SPA fallback）。
+    const absoluteHref = resolveArtifactFetchHref(href, threadIdRef.current ?? "");
     try {
       const response = await fetch(absoluteHref, { credentials: "include" });
       if (!response.ok) throw new Error(`加载失败（${response.status}）`);
@@ -2709,6 +2805,15 @@ function subagentStatusLabel(status: NonNullable<ChatMessage["subagents"]>[numbe
   return "已取消";
 }
 
+/** 提取首条用户消息文本，用于通知正文（无标题时的兜底）。 */
+function firstInputText(input: RunInput): string {
+  const first = input.messages?.find((m) => m.role === "user");
+  if (!first) return "查看任务详情";
+  const content = first.content;
+  if (typeof content === "string") return content;
+  return content?.map((part) => part.text).join(" ") || "查看任务详情";
+}
+
 function formatFileSize(size: number): string {
   if (!Number.isFinite(size) || size <= 0) return "0 B";
   if (size < 1024) return `${size} B`;
@@ -2883,6 +2988,8 @@ function SettingsPage({
           <SandboxSettings />
         ) : activeSection.id === "runtime" ? (
           <RuntimeSettings />
+        ) : activeSection.id === "scheduled-tasks" ? (
+          <ScheduledTasksSettings />
         ) : activeSection.id === "guardrails" ? (
           <GuardrailsSettings />
         ) : activeSection.id === "search" ? (

@@ -288,6 +288,12 @@ function McpServerForm({
     [draft, onDraftChange]
   );
 
+  // 环境变量 / Headers 以原始文本为受控源：若直接回显 textToEntries 的解析结果，
+  // 输入中尚未成形（缺少 = / : 分隔符）的行会被丢弃并清空输入框，表现为无法输入。
+  // 解析仅在变更时写入 draft，保存行为不变。
+  const [envText, setEnvText] = useState(() => entriesToText(draft.env));
+  const [headersText, setHeadersText] = useState(() => entriesToText(draft.headers, ": "));
+
   return (
     <div className="mcp-server-form">
       {error && <p className="auth-error" role="alert">{error}</p>}
@@ -410,8 +416,11 @@ function McpServerForm({
               <textarea
                 id="mcp-env"
                 rows={3}
-                value={entriesToText(draft.env)}
-                onChange={(e) => update("env", textToEntries(e.target.value))}
+                value={envText}
+                onChange={(e) => {
+                  setEnvText(e.target.value);
+                  update("env", textToEntries(e.target.value));
+                }}
                 placeholder={"API_KEY=xxx\nROOT=/tmp"}
               />
             </div>
@@ -447,8 +456,11 @@ function McpServerForm({
               <textarea
                 id="mcp-headers"
                 rows={3}
-                value={entriesToText(draft.headers, ": ")}
-                onChange={(e) => update("headers", textToEntries(e.target.value, ": "))}
+                value={headersText}
+                onChange={(e) => {
+                  setHeadersText(e.target.value);
+                  update("headers", textToEntries(e.target.value, ": "));
+                }}
                 placeholder={"Authorization: Bearer token\nX-API-Version: 1"}
               />
             </div>

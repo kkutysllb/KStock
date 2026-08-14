@@ -239,6 +239,64 @@ describe("McpExtensionsCard 切换 enabled", () => {
   });
 });
 
+// ── 环境变量 / Headers 输入 ─────────────────────────────────────────
+
+describe("McpExtensionsCard 环境变量输入", () => {
+  it("输入尚未成形（缺少 =）的行不会被清空", async () => {
+    mockExtModule.getExtensions.mockResolvedValue(emptyConfig);
+    render(<McpExtensionsCard />);
+    await waitFor(() => {
+      expect(screen.getByText("新增 Server")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("新增 Server"));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-server")).toBeInTheDocument();
+    });
+
+    const envTextarea = screen.getByLabelText(/环境变量/) as HTMLTextAreaElement;
+    // 逐字符输入 KEY（还没有 =）：曾因解析-回显循环被整体清空
+    fireEvent.change(envTextarea, { target: { value: "API_KEY" } });
+    expect(envTextarea.value).toBe("API_KEY");
+
+    fireEvent.change(envTextarea, { target: { value: "API_KEY=secret" } });
+    expect(envTextarea.value).toBe("API_KEY=secret");
+  });
+
+  it("保存时环境变量按 KEY=VALUE 解析提交", async () => {
+    mockExtModule.getExtensions.mockResolvedValue(emptyConfig);
+    mockExtModule.createMcpServer.mockResolvedValue({ name: "test", action: "created" });
+    render(<McpExtensionsCard />);
+    await waitFor(() => {
+      expect(screen.getByText("新增 Server")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("新增 Server"));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-server")).toBeInTheDocument();
+    });
+
+    const nameInput = screen.getByPlaceholderText("my-server") as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: "test-server" } });
+
+    const commandInput = screen.getByPlaceholderText("npx") as HTMLInputElement;
+    fireEvent.change(commandInput, { target: { value: "echo" } });
+
+    const envTextarea = screen.getByLabelText(/环境变量/) as HTMLTextAreaElement;
+    fireEvent.change(envTextarea, { target: { value: "API_KEY=secret\n unfinished" } });
+
+    const saveBtn = screen.getAllByRole("button").filter((b) => b.textContent?.includes("保存"))[0];
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockExtModule.createMcpServer).toHaveBeenCalledTimes(1);
+    });
+    const [, config] = mockExtModule.createMcpServer.mock.calls[0];
+    // 未成形行在提交时丢弃，成形行正常解析
+    expect(config.env).toEqual({ API_KEY: "secret" });
+  });
+});
+
 // ── 从模板添加 ────────────────────────────────────────────────────
 
 describe("McpExtensionsCard 从模板添加", () => {

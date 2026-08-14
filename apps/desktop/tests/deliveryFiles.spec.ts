@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   mergeDeliveryFiles,
   normalizeVirtualPath,
+  resolveArtifactFetchHref,
   toArtifactRequestPath,
   type DeliveryFile,
 } from "../src/lib/deliveryFiles";
@@ -28,6 +29,25 @@ describe("toArtifactRequestPath", () => {
 
   it("已带前缀的路径原样保留", () => {
     expect(toArtifactRequestPath("/mnt/user-data/outputs/report.html")).toBe("mnt/user-data/outputs/report.html");
+  });
+});
+
+describe("resolveArtifactFetchHref", () => {
+  it("app:// 绝对地址（打包态面板 url）原样使用，不再二次拼接（回归：打包版点击交付文件 404）", () => {
+    const appUrl = "app://localhost/gateway/api/threads/thread-1/artifacts/mnt/user-data/outputs/report.html";
+    expect(resolveArtifactFetchHref(appUrl, "thread-1")).toBe(appUrl);
+  });
+
+  it("http(s) 绝对地址原样使用", () => {
+    const httpUrl = "http://localhost:18001/api/threads/thread-1/artifacts/mnt/user-data/outputs/report.html";
+    expect(resolveArtifactFetchHref(httpUrl, "thread-1")).toBe(httpUrl);
+  });
+
+  it("相对文件路径转 gateway artifact API URL（保留 mnt/user-data 前缀）", () => {
+    const href = resolveArtifactFetchHref("/mnt/user-data/outputs/report.html", "thread-1");
+    expect(href).toBe(
+      "http://localhost:18001/api/threads/thread-1/artifacts/mnt/user-data/outputs/report.html"
+    );
   });
 });
 

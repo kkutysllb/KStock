@@ -44,6 +44,8 @@ export interface DesktopBridgeApi {
   updateInstall(): Promise<void>;
   /** 订阅主进程的"更新已下载就绪"事件（主进程主动推送）。 */
   onUpdateReady(cb: (info: { version: string }) => void): () => void;
+  /** 弹系统通知；窗口聚焦/系统不支持时主进程自动降级。 */
+  showNotification(title: string, body: string): Promise<{ ok: boolean; reason?: string }>;
 }
 
 declare global {
@@ -101,4 +103,23 @@ export async function openExternalUrl(url: string): Promise<void> {
     }
   }
   window.open(url, "_blank", "noopener,noreferrer");
+}
+
+/**
+ * 弹系统通知（任务完成/失败/定时任务提醒）。
+ *
+ * 无宿主桥（浏览器预览 / vitest）或桥接失败时静默忽略——通知是增强
+ * 提醒，不能因宿主缺失影响主流程。
+ */
+export async function showDesktopNotification(
+  title: string,
+  body: string,
+): Promise<void> {
+  const bridge = getDesktopBridge();
+  if (!bridge?.showNotification) return;
+  try {
+    await bridge.showNotification(title, body);
+  } catch {
+    // 通知失败不影响主流程。
+  }
 }

@@ -38,6 +38,18 @@ export function toArtifactRequestPath(rawPath: string): string {
   return `mnt/user-data/outputs/${trimmed}`;
 }
 
+/** openArtifact 的 fetch 地址解析。
+ *
+ * 绝对 URL（dev 的 http(s)://gateway、打包态的 app://localhost/gateway/…）
+ * 已是成品 artifact API 地址，直接使用；相对路径才是引擎输出的文件路径
+ * （如 /mnt/user-data/outputs/x.html），需转成 gateway artifact API URL。
+ * 回归：此前仅认 http(s)，打包态面板传入 app:// API 地址会被当作相对
+ * 路径二次拼接成 mnt/user-data/outputs/app:/… → 404。 */
+export function resolveArtifactFetchHref(href: string, threadId: string): string {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(href)) return href;
+  return artifactUrl(threadId, toArtifactRequestPath(href));
+}
+
 /** 合并引擎 artifacts（虚拟/真实路径可能并存）与 workspace 变更文件，
  * 按归一化虚拟路径去重：同一文件只保留一条，URL 优先取 artifacts 显式值。 */
 export function mergeDeliveryFiles(
