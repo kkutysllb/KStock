@@ -5663,7 +5663,11 @@ button.context-file-row:hover {
 /* 交付/上传文件预览：全屏覆盖（窗口最大化效果），右上角提供返回任务页面按钮。 */
 .report-preview-overlay { position:fixed; inset:0; z-index:99999; display:grid; background:#030d0b; }
 .report-preview-dialog { width:100%; height:100%; display:flex; flex-direction:column; overflow:hidden; border:0; border-radius:0; background:#04110e; }
-.report-preview-bar { position:relative; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-bottom:1px solid rgba(129,205,178,.12); color:#edf0f2; }
+/* hiddenInset 下窗口顶部原生标题栏默认是拖拽区，会吞掉落在其中的点击；
+   必须显式声明 drag 并给交互子元素打 no-drag（同 .workspace-topbar/.report-library-topbar 模式），
+   左侧 104px 避让 trafficLightPosition {x:13} 的红绿灯。 */
+.report-preview-bar { position:relative; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px 10px 104px; border-bottom:1px solid rgba(129,205,178,.12); color:#edf0f2; -webkit-app-region: drag; }
+.report-preview-bar button, .report-preview-bar a { -webkit-app-region: no-drag; }
 .report-preview-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .report-preview-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .report-preview-actions a { text-decoration:none; }
