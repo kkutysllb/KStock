@@ -165,8 +165,8 @@ type DesktopMenuCommand =
   | "open-reports"
   | "check-update";
 type ArtifactPreview =
-  | { kind: "html"; name: string; href: string; url: string }
-  | { kind: "markdown" | "text"; name: string; href: string; url: string; text: string };
+  | { kind: "html"; name: string; href: string; htmlContent: string }
+  | { kind: "markdown" | "text"; name: string; href: string; text: string };
 type AuthMode = "login" | "register";
 
 const WORKSPACE_SIDEBAR_WIDTH_KEY = "kstock.workspaceSidebarWidth";
@@ -1928,14 +1928,13 @@ function WorkspaceShell({
   const scrollToBottom = () => feedRef.current?.scrollToBottom("smooth");
   // 账户操作默认收起，避免长期占用侧栏底部空间。
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  // 交付/上传文件预览：fetch + blob 应用内预览（导航式打开不带会话 cookie，会触发 401）。
+  // 交付/上传文件预览：fetch + srcdoc 应用内预览（导航式打开不带会话 cookie，会触发 401）。
+  // 使用 iframe srcdoc 而非 blob URL：blob 在 sandbox iframe 中产生 opaque origin，
+  // 导致 module 脚本 CORS 失败、根绝对路径资源无法解析；srcdoc 直接内联 HTML，无此问题。
   const [artifactPreview, setArtifactPreview] = useState<ArtifactPreview | null>(null);
   const [artifactError, setArtifactError] = useState<string | null>(null);
   const [artifactSaving, setArtifactSaving] = useState(false);
-  // 预览 blob URL 追踪：revoke 统一放这里（state updater 保持纯函数，StrictMode 安全）。
-  const previewUrlRef = useRef<string | null>(null);
-  // 打开请求序号：连续/双击链接时丢弃过期请求，关闭预览时使 pending 请求失效，
-  // 避免「点返回后 pending 请求完成又把预览弹出来」的竞态。
+  // 打开请求序号：连续/双击链接时丢弃过期请求，关闭预览时使 pending 请求失效。
   const openSeqRef = useRef(0);
 
   const openArtifact = useCallback(async (href: string, name: string) => {
@@ -1948,20 +1947,14 @@ function WorkspaceShell({
       if (seq !== openSeqRef.current) return; // 已关闭/已被新请求取代，丢弃
       const previewKind = getArtifactPreviewKind(name, blob.type);
       if (previewKind === "html") {
-        // blob iframe 的 base 非层级化：Vite HMR 注入与根绝对路径资源无法解析，
-        // 预览前清洗并把根相对资源回源到文件所在 origin。
+        // srcdoc iframe 仍需清洗：移除 module 脚本（sandbox 下必然失败），
+        // 根绝对路径资源回源到文件所在 origin。
         const text = await readBlobText(blob);
         const cleaned = sanitizePreviewHtml(text, new URL(href, GATEWAY_URL).origin);
-        const url = URL.createObjectURL(new Blob([cleaned], { type: "text/html" }));
-        if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-        previewUrlRef.current = url;
-        setArtifactPreview({ kind: "html", name, href, url });
+        setArtifactPreview({ kind: "html", name, href, htmlContent: cleaned });
       } else if (previewKind === "markdown" || previewKind === "text") {
-        const url = URL.createObjectURL(blob);
         const text = await readBlobText(blob);
-        if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-        previewUrlRef.current = url;
-        setArtifactPreview({ kind: previewKind, name, href, url, text });
+        setArtifactPreview({ kind: previewKind, name, href, text });
       } else {
         const downloadUrl = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
@@ -1980,10 +1973,6 @@ function WorkspaceShell({
 
   const closeArtifactPreview = useCallback(() => {
     openSeqRef.current += 1; // 使所有 pending 的打开请求失效
-    if (previewUrlRef.current) {
-      URL.revokeObjectURL(previewUrlRef.current);
-      previewUrlRef.current = null;
-    }
     setArtifactPreview(null);
   }, []);
 
@@ -2375,7 +2364,7 @@ function WorkspaceShell({
               </div>
             </div>
             {artifactPreview.kind === "html" ? (
-              <iframe title={artifactPreview.name} src={artifactPreview.url} sandbox="allow-scripts" />
+              <iframe title={artifactPreview.name} srcDoc={artifactPreview.htmlContent} sandbox="allow-scripts" />
             ) : (
               <div className="artifact-preview-content">
                 {artifactPreview.kind === "markdown" ? (
