@@ -197,6 +197,78 @@ def test_fix_pandas3_ffill_noop_when_no_bug():
     assert _fix_pandas3_ffill(text) is None
 
 
+VALUATION_MODELS_BUGGY = """#!/usr/bin/env python3
+import os
+
+        df = self.pro.income(
+            fields="ts_code,end_date,report_type,revenue,total_cogs,"
+                   "sell_exp,admin_exp,rd_exp,oper_profit,total_profit,"
+                   "n_income,n_income_attr_p,income_tax,ebit"
+        )
+        df2 = self.pro.balancesheet(
+            fields="ts_code,end_date,report_type,"
+                   "total_assets,total_liab,total_hldr_eqy_exc_min_int,"
+                   "money_cap,total_current_assets,total_current_liab,"
+                   "st_borr,lt_borr,bonds_payable,"
+                   "goodwill,fix_asset_total,cip,inventory,"
+                   "accounts_receiv,total_share"
+        )
+        df3 = self.pro.cashflow(
+            fields="ts_code,end_date,report_type,"
+                   "n_cashflow_act,c_pay_goods_for_sv,"
+                   "c_fr_sale_sg,stot_invest_act,stot_fin_act,"
+                   "c_pay_dist_dpcp_int_exp"
+        )
+        df4 = self.pro.fina_indicator(
+            fields="ts_code,end_date,grossprofit_margin,netprofit_margin,"
+                   "roe,roa,debt_to_assets,eps,dtowequity"
+        )
+        bonds = self._v(bal, "bonds_payable")
+        op = self._v(inc, "oper_profit")
+"""
+
+VALUATION_MODELS_FIXED_MARKERS = (
+    "operate_profit", "total_cur_assets", "total_cur_liab", "bond_payable",
+    "fix_assets_total", "inventories", "c_paid_goods_s", "debt_to_eqt",
+)
+
+VALUATION_MODELS_REMOVED_MARKERS = (
+    "oper_profit", "total_current_assets", "total_current_liab",
+    "bonds_payable", "fix_asset_total", "dtowequity",
+    "c_pay_goods_for_sv", "inventory",
+)
+
+
+def test_fix_ts_field_bug_repairs_valuation_models_field_names():
+    fixed = _fix_ts_field_bug(VALUATION_MODELS_BUGGY)
+    assert fixed is not None
+    for marker in VALUATION_MODELS_FIXED_MARKERS:
+        assert marker in fixed, f"缺少 {marker}"
+    for marker in VALUATION_MODELS_REMOVED_MARKERS:
+        assert marker not in fixed, f"残留 {marker}"
+
+
+def test_fix_ts_field_bug_repairs_upstream_excite_new_order():
+    """上游新结构：excite_income,excite_tax,end_date,ann_date（end_date 居中，
+    头部已有 end_date，须整段删除避免重复列）。"""
+    buggy = (
+        'fields="ts_code,end_date,report_type,revenue,total_cogs,"\n'
+        '                   "excite_income,excite_tax,end_date,ann_date"\n'
+    )
+    fixed = _fix_ts_field_bug(buggy)
+    assert fixed is not None
+    assert "excite_income" not in fixed
+    assert "excite_tax" not in fixed
+    assert 'ann_date"' in fixed
+    assert "end_date,ann_date" not in fixed
+    assert fixed.count("end_date") == 1
+
+
+def test_fix_ts_field_bug_valuation_models_idempotent_after_fix():
+    fixed = _fix_ts_field_bug(VALUATION_MODELS_BUGGY)
+    assert _fix_ts_field_bug(fixed) is None
+
+
 PYWENCAI_HINT_BUGGY = """        try:
             import pywencai
             self.pywencai = pywencai

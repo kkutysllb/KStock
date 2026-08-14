@@ -95,7 +95,7 @@ class ValuationDataFetcher:
             df = self.pro.income(
                 ts_code=ts_code, start_date=start,
                 fields="ts_code,end_date,report_type,revenue,total_cogs,"
-                       "sell_exp,admin_exp,rd_exp,oper_profit,total_profit,"
+                       "sell_exp,admin_exp,rd_exp,operate_profit,total_profit,"
                        "n_income,n_income_attr_p,income_tax,ebit"
             )
             if df is not None and not df.empty:
@@ -111,9 +111,9 @@ class ValuationDataFetcher:
                 ts_code=ts_code, start_date=start,
                 fields="ts_code,end_date,report_type,"
                        "total_assets,total_liab,total_hldr_eqy_exc_min_int,"
-                       "money_cap,total_current_assets,total_current_liab,"
-                       "st_borr,lt_borr,bonds_payable,"
-                       "goodwill,fix_asset_total,cip,inventory,"
+                       "money_cap,total_cur_assets,total_cur_liab,"
+                       "st_borr,lt_borr,bond_payable,"
+                       "goodwill,fix_assets_total,cip,inventories,"
                        "accounts_receiv,total_share"
             )
             if df is not None and not df.empty:
@@ -128,7 +128,7 @@ class ValuationDataFetcher:
             df = self.pro.cashflow(
                 ts_code=ts_code, start_date=start,
                 fields="ts_code,end_date,report_type,"
-                       "n_cashflow_act,c_pay_goods_for_sv,"
+                       "n_cashflow_act,c_paid_goods_s,"
                        "c_fr_sale_sg,stot_invest_act,stot_fin_act,"
                        "c_pay_dist_dpcp_int_exp"
             )
@@ -144,7 +144,7 @@ class ValuationDataFetcher:
             df = self.pro.fina_indicator(
                 ts_code=ts_code, start_date=start,
                 fields="ts_code,end_date,grossprofit_margin,netprofit_margin,"
-                       "roe,roa,debt_to_assets,eps,dtowequity"
+                       "roe,roa,debt_to_assets,eps,debt_to_eqt"
             )
             if df is not None and not df.empty:
                 result["indicators"] = df.sort_values("end_date")
@@ -279,7 +279,7 @@ class DCFModel:
             cash = self._v(bal, "money_cap")
             st_borr = self._v(bal, "st_borr")
             lt_borr = self._v(bal, "lt_borr")
-            bonds = self._v(bal, "bonds_payable")
+            bonds = self._v(bal, "bond_payable")
             net_debt = (st_borr + lt_borr + bonds) - cash
             total_shares = self._v(bal, "total_share")
             if total_shares <= 0:
@@ -603,7 +603,7 @@ class EVEBITDAAnalyzer:
             cash = self._v(bal, "money_cap")
             st = self._v(bal, "st_borr")
             lt = self._v(bal, "lt_borr")
-            bonds = self._v(bal, "bonds_payable")
+            bonds = self._v(bal, "bond_payable")
             net_debt = (st + lt + bonds) - cash
 
         ev = market_cap + net_debt
@@ -612,7 +612,7 @@ class EVEBITDAAnalyzer:
         ebitda = 0
         if income is not None and not income.empty:
             inc = income.sort_values("end_date").iloc[-1]
-            oper_profit = self._v(inc, "oper_profit")
+            oper_profit = self._v(inc, "operate_profit")
             ebitda = oper_profit * 1.1  # 简化
 
         if ebitda <= 0:

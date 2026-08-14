@@ -21,17 +21,20 @@ KStock 对上游技能包的全部本地修复：同步完成后自动重放，�
 2. **np import bug**（analyze_stock_valuation / analyze_stock_margin）：
    脚本使用 ``np.array`` / ``np.percentile`` / ``np.sum`` 但从未
    ``import numpy as np``（NameError 崩溃）。修复：补齐导入。
-3. **Tushare 字段名错误**（analyze_financial_deep，ts bug 修复后的第 2 层）：
-   请求的字段名与官方接口不符（inventory→inventories、fix_asset_total→
-   fix_assets_total、total_current_assets→total_cur_assets、
+3. **Tushare 字段名错误**（analyze_financial_deep / analyze_valuation_models，ts bug
+   修复后的第 2 层）：请求的字段名与官方接口不符（inventory→inventories、
+   fix_asset_total→fix_assets_total、total_current_assets→total_cur_assets、
    total_current_liab→total_cur_liab、bonds_payable→bond_payable、
    undistr_profit→undistr_porfit、oper_profit→operate_profit、
    minority_plr→minority_gain、n_cashflow_fnc_act→n_cash_flows_fnc_act、
-   c_pay goods_for_sv→c_paid_goods_s、dtowequity→debt_to_eqt、
-   eqy_to_debt→eqt_to_debt），无效字段被官方静默忽略 → 返回 DataFrame
-   缺列 → 数据层 KeyError；同时修复 fields 重复字段（end_date×2、bps×2，
-   pandas 3.0 抛 duplicate keys）与移除官方无此字段的 excite_income/
-   excite_tax。
+   c_pay goods_for_sv→c_paid_goods_s（financial_deep 带空格）、
+   c_pay_goods_for_sv→c_paid_goods_s（valuation_models 下划线拼写）、
+   dtowequity→debt_to_eqt、eqy_to_debt→eqt_to_debt），无效字段被官方静默
+   忽略 → 返回 DataFrame 缺列 → financial_deep 数据层 KeyError，
+   valuation_models 因 _v() 容错返回 0 导致估值全 0（更隐蔽）；同时修复
+   fields 重复字段（end_date×2、bps×2，pandas 3.0 抛 duplicate keys）与
+   移除官方无此字段的 excite_income/excite_tax（含上游新结构
+   excite_income,excite_tax,end_date,ann_date 与 deduct_income 两行写法）。
 4. **pandas 3.0 兼容**（analyze_stock_valuation）：``fillna(method='ffill')``
    在 pandas 3.0 已移除（2.1 弃用），抛
    ``TypeError: NDFrame.fillna() got an unexpected keyword argument 'method'``。
@@ -80,12 +83,14 @@ _NP_BUG_SCRIPTS = (
     "public/stock-analysis/scripts/analysis-engine/analyze_stock_margin.py",
 )
 
-# ── Tushare 字段名修复补丁（financial_deep）───────────────────────────────
+# ── Tushare 字段名修复补丁（financial_deep / valuation_models）────────────
 # 上游脚本 fields 中的字段名与官方接口不符，无效字段被官方静默忽略，
-# 返回 DataFrame 缺列 → 后续 KeyError。同时修 fields 重复（pandas 3.0
-# duplicate keys）与空格字段名。幂等检测：已含官方字段名则跳过。
+# 返回 DataFrame 缺列 → KeyError 或（_v 容错）静默全 0。同时修 fields
+# 重复（pandas 3.0 duplicate keys）与空格/下划线拼写。幂等检测：已含
+# 官方字段名则跳过。
 _TS_FIELD_FIX_SCRIPTS = (
     "public/stock-analysis/scripts/analysis-engine/analyze_financial_deep.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_valuation_models.py",
 )
 
 # (旧片段, 新片段) 精确替换对，覆盖 fields 定义与全部列名使用点
@@ -99,7 +104,13 @@ _TS_FIELD_REPLACEMENTS = (
     ("cip,fix_asset_total,total_current_assets,total_current_liab,",
      "cip,fix_assets_total,total_cur_assets,total_cur_liab,"),
     ("st_borr,lt_borr,bonds_payable,", "st_borr,lt_borr,bond_payable,"),
+    # valuation_models 变体：money_cap 开头的独立行（与 cip 行分开）
+    ("money_cap,total_current_assets,total_current_liab,",
+     "money_cap,total_cur_assets,total_cur_liab,"),
     ("undistr_profit,cap_rese,surplus_rese", "undistr_porfit,cap_rese,surplus_rese"),
+    # 上游新结构：excite 后跟 end_date，直接删为 ann_date（头部已有 end_date，
+    # 保留会造成 end_date 重复 → pandas 3.0 duplicate keys）
+    ("excite_income,excite_tax,end_date,ann_date", "ann_date"),
     # cashflow fields
     ("n_cashflow_act,n_cashflow_inv_act,n_cashflow_fnc_act,",
      "n_cashflow_act,n_cashflow_inv_act,n_cash_flows_fnc_act,"),
@@ -112,8 +123,16 @@ _TS_FIELD_REPLACEMENTS = (
     # deduct_income 查询（官方无 excite_income/excite_tax 字段）
     ('report_type,n_income_attr_p,"\n                       "excite_income,excite_tax"',
      'report_type,n_income_attr_p"'),
+    # valuation_models 特有字段顺序（与 financial_deep 不同）与下划线拼写
+    ("goodwill,fix_asset_total,cip,inventory,",
+     "goodwill,fix_assets_total,cip,inventories,"),
+    ("c_pay_goods_for_sv", "c_paid_goods_s"),
+    ("roe,roa,debt_to_assets,eps,dtowequity",
+     "roe,roa,debt_to_assets,eps,debt_to_eqt"),
     # 使用点列名
     ('self._val(latest, "bonds_payable")', 'self._val(latest, "bond_payable")'),
+    ('self._v(bal, "bonds_payable")', 'self._v(bal, "bond_payable")'),
+    ('self._v(inc, "oper_profit")', 'self._v(inc, "operate_profit")'),
     ('balance[["end_date", "inventory"]]', 'balance[["end_date", "inventories"]]'),
     ('merged["inventory"]', 'merged["inventories"]'),
     ('self._val(latest, "fix_asset_total")', 'self._val(latest, "fix_assets_total")'),
@@ -164,8 +183,13 @@ def _fix_np_bug(text: str) -> str | None:
 
 
 def _fix_ts_field_bug(text: str) -> str | None:
-    """修复 Tushare 字段名/重复字段 bug；已修复返回 None（幂等跳过）。"""
-    if "inventories" in text and "c_paid_goods_s" in text:
+    """修复 Tushare 字段名/重复字段 bug；已全部修复返回 None（幂等跳过）。
+
+    幂等检测用「所有替换对均无命中」而非关键字段出现与否——上游可能处于
+    部分修复状态（如 valuation_models 曾手工修过部分字段行），宽松检测会
+    漏掉残留。
+    """
+    if all(old not in text for old, _ in _TS_FIELD_REPLACEMENTS):
         return None
     patched = text
     for old, new in _TS_FIELD_REPLACEMENTS:
