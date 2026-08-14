@@ -50,6 +50,20 @@ sandbox:
   # 需要 bash 执行缠论脚本 / 回测脚本。allow_host_bash=false 会过滤掉
   # bash 工具（tools.get_available_tools 的 _is_host_bash_tool 检查）。
   allow_host_bash: true
+  # 行情数据磁盘缓存：技能脚本在沙箱内经 /mnt/cache/market-data 读写，
+  # 与 gateway 进程（~/.kstock/cache/market-data）同一物理目录，跨任务
+  # 跨线程复用。host_path 的 <data-root> 占位符由 run_gateway 改写为
+  # 绝对路径（LocalSandboxProvider 不展开 ~）。
+  mounts:
+    - host_path: "<data-root>/cache"
+      container_path: /mnt/cache
+      read_only: false
+
+# 定时任务（scheduled-tasks）：桌面端设置页创建周报等周期任务。
+# startup-only 配置（改 yaml 需重启 gateway）；桌面 App 未运行期间错过
+# 的触发会在下次启动后由 claim_due_tasks 补跑（晚跑而非丢弃）。
+scheduler:
+  enabled: true
 
 memory:
   enabled: false

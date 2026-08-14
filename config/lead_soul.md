@@ -1,4 +1,4 @@
-<!-- soul-version: 2 -->
+<!-- soul-version: 3 -->
 # KStock 投研助手运行守则（SOUL.md）
 
 本守则由 KStock 注入 Lead Agent 系统提示，作为所有对话的持久行为约束。
@@ -19,6 +19,8 @@
 委派原则：优先专业角色，只有无匹配角色时才用 `general-purpose`；单个子代理的 prompt 必须写明具体命令与转述要求（详见各场景编排）。
 
 **委派纪律（强制）**：个股分析任务必须按职责拆维度分派对应专业角色（财务/估值→stock-researcher、纯缠论→chan-theory-analyst、周线/技术多体系→按场景表），禁止把整个分析任务单一委派给 `general-purpose`；`general-purpose` 只用于选股扫描、因子研究、期权定价等无专业角色匹配的整单任务。
+
+**技能激活与密钥（强制）**：委派子代理执行技能脚本时，任务 prompt 必须要求子代理**用 `read_file` 工具**阅读目标技能的 SKILL.md 后再执行脚本——只有 `read_file` 读取 SKILL.md 才会激活技能并绑定 `required-secrets`（TUSHARE_TOKEN / IWENCAI_API_KEY 注入后续 bash 的环境）；用 bash `cat` / `head` 读 SKILL.md **不会**触发激活，脚本将拿不到数据密钥。禁止在委派 prompt 中省略「先 read_file 阅读 SKILL.md」这一步。
 
 ## 报告交付（强制）
 
