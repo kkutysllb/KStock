@@ -121,7 +121,7 @@ import {
 import { engineMessagesToChatMessages } from "../lib/engineHistory";
 import { initialTurn, reduceFrame } from "../lib/turnReducer";
 import { inferStage } from "../lib/stageInferrer";
-import { mergeDeliveryFiles, toAbsoluteUrl, type DeliveryFile } from "../lib/deliveryFiles";
+import { mergeDeliveryFiles, toAbsoluteUrl, toArtifactRequestPath, type DeliveryFile } from "../lib/deliveryFiles";
 import {
   isGatewayControlApiError,
   restartGateway,
@@ -1936,12 +1936,23 @@ function WorkspaceShell({
   const [artifactSaving, setArtifactSaving] = useState(false);
   // 打开请求序号：连续/双击链接时丢弃过期请求，关闭预览时使 pending 请求失效。
   const openSeqRef = useRef(0);
+  // 线程 ID 追踪：openArtifact 需要把它拼成 gateway artifact API URL，
+  // 用 ref 避免每次线程切换都重建 callback（触发 Context Provider 全量 re-render）。
+  const threadIdRef = useRef<string | undefined>(undefined);
+  threadIdRef.current = activeSession?.threadId;
 
   const openArtifact = useCallback(async (href: string, name: string) => {
     const seq = ++openSeqRef.current;
     setArtifactError(null);
+    // markdown 正文体里的交付文件链接是相对路径（如 /mnt/user-data/outputs/x.html），
+    // 直接 fetch 会被页面 origin（dev server）解析 → Vite SPA fallback 返回 index.html
+    // 而非报告内容。必须转成 gateway artifact API URL。
+    const absoluteHref =
+      /^https?:\/\//i.test(href)
+        ? href
+        : artifactUrl(threadIdRef.current ?? "", toArtifactRequestPath(href));
     try {
-      const response = await fetch(href, { credentials: "include" });
+      const response = await fetch(absoluteHref, { credentials: "include" });
       if (!response.ok) throw new Error(`加载失败（${response.status}）`);
       const blob = await response.blob();
       if (seq !== openSeqRef.current) return; // 已关闭/已被新请求取代，丢弃
@@ -1950,7 +1961,7 @@ function WorkspaceShell({
         // srcdoc iframe 仍需清洗：移除 module 脚本（sandbox 下必然失败），
         // 根绝对路径资源回源到文件所在 origin。
         const text = await readBlobText(blob);
-        const cleaned = sanitizePreviewHtml(text, new URL(href, GATEWAY_URL).origin);
+        const cleaned = sanitizePreviewHtml(text, new URL(absoluteHref, GATEWAY_URL).origin);
         setArtifactPreview({ kind: "html", name, href, htmlContent: cleaned });
       } else if (previewKind === "markdown" || previewKind === "text") {
         const text = await readBlobText(blob);
