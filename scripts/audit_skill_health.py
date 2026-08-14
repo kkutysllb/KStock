@@ -128,6 +128,8 @@ def verify_fields(combos: list[dict]) -> None:
 
     TS_CODE = "000001.SZ"
     START, END = "20260101", trade_date
+    # stk_mins 要求 'YYYY-MM-DD HH:MM:SS'，YYYYMMDD 格式会静默返回空
+    _dash = f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}"
     default_params = {
         "stock_basic": dict(ts_code=TS_CODE),
         "income": dict(ts_code=TS_CODE, start_date=START, end_date=END),
@@ -141,7 +143,8 @@ def verify_fields(combos: list[dict]) -> None:
         "top10_holders": dict(ts_code=TS_CODE, period="20260331"),
         "top10_floatholders": dict(ts_code=TS_CODE, period="20260331"),
         "stk_holdertrade": dict(ts_code=TS_CODE, start_date=START, end_date=END),
-        "stk_mins": dict(ts_code=TS_CODE, freq="1min", start_date=trade_date, end_date=trade_date),
+        "stk_mins": dict(ts_code=TS_CODE, freq="1min",
+                         start_date=f"{_dash} 09:30:00", end_date=f"{_dash} 15:00:00"),
         "index_weight": dict(index_code="000300.SH", trade_date=trade_date),
         "index_daily": dict(ts_code="000001.SH", start_date=START, end_date=END),
         "opt_basic": dict(exchange="SSE"),
