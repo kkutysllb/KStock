@@ -856,3 +856,64 @@ def test_rewrite_runtime_sqlite_dir_only_touches_legacy_path(monkeypatch, tmp_pa
 
     cfg = yaml.safe_load((config_dir / "qilin.runtime.yaml").read_text(encoding="utf-8"))
     assert cfg["database"]["sqlite_dir"] == str(custom_dir)
+
+
+# ── 沙箱挂载 / scheduler 增量下发 ────────────────────────────────────
+
+
+def test_existing_runtime_gets_sandbox_mounts_and_scheduler(tmp_path):
+    """老用户 sandbox 段无 mounts：重启后增量下发缓存挂载（绝对路径）。
+
+    scheduler 段同理：模板新增的顶层段经「缺段补齐」下发。
+    """
+    import yaml
+
+    from scripts.run_gateway import REPO_ROOT
+
+    runtime_cfg = tmp_path / "config" / "qilin.runtime.yaml"
+    qilin_data_dir = tmp_path / "runtime" / "qilin" / "data"
+    data_root = tmp_path
+
+    runtime_cfg.parent.mkdir(parents=True, exist_ok=True)
+    runtime_cfg.write_text(
+        yaml.safe_dump(
+            {
+                "database": {"backend": "sqlite", "sqlite_dir": str(qilin_data_dir)},
+                # 模拟老用户：sandbox 段已存在但没有 mounts
+                "sandbox": {"use": "qilin.sandbox.local:LocalSandboxProvider", "allow_host_bash": True},
+            },
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+
+    _generate_runtime_config(runtime_cfg, qilin_data_dir, REPO_ROOT, data_root)
+
+    cfg = yaml.safe_load(runtime_cfg.read_text(encoding="utf-8"))
+    mounts = cfg["sandbox"]["mounts"]
+    assert mounts, "sandbox.mounts 应被增量下发"
+    cache_mount = next(m for m in mounts if m["container_path"] == "/mnt/cache")
+    assert cache_mount["host_path"] == str(data_root / "cache")
+    assert cache_mount["read_only"] is False
+    # 用户已有的 sandbox 字段保留
+    assert cfg["sandbox"]["allow_host_bash"] is True
+    # scheduler 段（模板新增顶层段）经缺段补齐下发
+    assert cfg.get("scheduler", {}).get("enabled") is True
+
+
+def test_first_generate_rewrites_mount_host_path(tmp_path):
+    """首次生成：<data-root> 占位符改写为绝对路径。"""
+    import yaml
+
+    from scripts.run_gateway import REPO_ROOT
+
+    runtime_cfg = tmp_path / "config" / "qilin.runtime.yaml"
+    qilin_data_dir = tmp_path / "runtime" / "qilin" / "data"
+    data_root = tmp_path
+
+    _generate_runtime_config(runtime_cfg, qilin_data_dir, REPO_ROOT, data_root)
+
+    cfg = yaml.safe_load(runtime_cfg.read_text(encoding="utf-8"))
+    cache_mount = next(m for m in cfg["sandbox"]["mounts"] if m["container_path"] == "/mnt/cache")
+    assert cache_mount["host_path"] == str(data_root / "cache")
+    assert "<data-root>" not in runtime_cfg.read_text(encoding="utf-8")
