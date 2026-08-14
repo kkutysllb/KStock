@@ -5,7 +5,7 @@
  */
 
 import { contextBridge, ipcRenderer } from "electron";
-import { IPC, type MenuCommand } from "./lib/ipc-channels";
+import { IPC, type MenuCommand, type UpdateCheckResult } from "./lib/ipc-channels";
 
 const api = {
   /** 系统菜单 / 托盘命令（对齐原 listen("kstock://menu")）。返回取消订阅函数。 */
@@ -44,7 +44,7 @@ const api = {
     return ipcRenderer.invoke(IPC.shellSaveArtifact, name, bytes);
   },
 
-  updateCheck(): Promise<{ available: boolean; version: string } | null> {
+  updateCheck(): Promise<UpdateCheckResult> {
     return ipcRenderer.invoke(IPC.updateCheck);
   },
 

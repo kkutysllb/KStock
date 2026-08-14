@@ -19,7 +19,7 @@ export function UpdateButton() {
 
   useEffect(() => {
     const handleCheckUpdate = () => {
-      void check();
+      void check(true);
     };
     window.addEventListener("kstock:check-update", handleCheckUpdate);
     return () => window.removeEventListener("kstock:check-update", handleCheckUpdate);

@@ -36,6 +36,15 @@ export type MenuCommand =
   | "open-reports"
   | "check-update";
 
+/**
+ * 手动检查更新的返回结果，区分「已最新 / 有新版本 / 检查失败」，
+ * 让渲染层能给用户明确反馈（toast），而不是永远静默。
+ */
+export type UpdateCheckResult =
+  | { status: "available"; version: string }
+  | { status: "latest"; version: string }
+  | { status: "error"; message: string };
+
 /** 渲染进程通过 ``window.kstockDesktop`` 暴露的桥接接口契约。 */
 export interface DesktopBridge {
   onMenuCommand(cb: (command: MenuCommand) => void): () => void;
@@ -46,10 +55,10 @@ export interface DesktopBridge {
   appDataDir(): Promise<string>;
   saveArtifact(name: string, bytes: Uint8Array): Promise<{ saved: boolean; path?: string }>;
   /**
-   * 检查是否有新版本。发现新版本时主进程立即后台下载，本方法仅返回版本号
+   * 检查是否有新版本。发现新版本时主进程立即后台下载，本方法仅返回结果
    * 供"手动检查更新"反馈用；下载完成会通过 onUpdateReady 回调推送。
    */
-  updateCheck(): Promise<{ available: boolean; version: string } | null>;
+  updateCheck(): Promise<UpdateCheckResult>;
   /** 下载已完成时调用，退出应用并运行安装器替换文件后重启。 */
   updateInstall(): Promise<void>;
   /** 订阅主进程的"更新已下载就绪"事件（主进程主动推送）。 */

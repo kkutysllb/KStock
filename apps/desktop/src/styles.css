@@ -6928,3 +6928,55 @@ button.context-file-row:hover {
   background: #ff6b6b;
   box-shadow: 0 0 0 2px #0b1f19;
 }
+
+/* 全局轻量 toast（检查更新等即时反馈）：顶部居中，逐条自动消失 */
+.toast-host {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  max-width: min(90vw, 440px);
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  background: #0b1f19;
+  border: 1px solid #1d3a2f;
+  color: #d6ece2;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: toast-in 0.18s ease-out;
+}
+
+.toast-success {
+  border-color: rgba(129, 205, 178, 0.55);
+  color: #81cdb2;
+}
+
+.toast-error {
+  border-color: rgba(255, 107, 107, 0.55);
+  color: #ff8f8f;
+}
+
+.toast-info {
+  border-color: rgba(129, 205, 178, 0.3);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

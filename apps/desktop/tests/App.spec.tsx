@@ -104,7 +104,7 @@ beforeEach(() => {
   );
   desktopBridgeMock.onMenuCommand.mockReset();
   desktopBridgeMock.updateCheck.mockReset();
-  desktopBridgeMock.updateCheck.mockResolvedValue(null);
+  desktopBridgeMock.updateCheck.mockResolvedValue({ status: "latest", version: "1.0.6" });
   desktopBridgeMock.menuCallback = null;
   desktopBridgeMock.onMenuCommand.mockImplementation((cb: (command: string) => void) => {
     desktopBridgeMock.menuCallback = cb;

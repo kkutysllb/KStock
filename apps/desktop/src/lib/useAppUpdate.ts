@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getDesktopBridge, isDesktopRuntime } from "./desktopBridge";
+import { showToast } from "./toast";
 
 /**
  * 应用自动更新状态机（后台静默下载 + 完成后提示安装）。
@@ -39,23 +40,42 @@ export function useAppUpdate() {
     return unsubscribe;
   }, []);
 
-  // 用户手动触发"检查更新"（菜单点击）：仅返回版本号，不等下载。
+  // 用户手动触发"检查更新"（菜单点击）：仅返回结果，不等下载。
   // 下载完成会通过 onUpdateReady 回调推送，UI 自然切换到 ready。
-  const check = useCallback(async () => {
+  // ``notify`` 为 true 时（手动菜单触发）向用户弹 toast 反馈结果；
+  // 启动后的自动检查传 false，保持静默，避免每次启动都弹提示。
+  const check = useCallback(async (notify = false) => {
     setState({ phase: "checking" });
+    if (notify) showToast("正在检查更新…");
     try {
-      const update = isDesktopRuntime()
+      const result = isDesktopRuntime()
         ? await getDesktopBridge()!.updateCheck()
         : null;
-      if (!update) {
+      if (!result) {
+        // 非桌面环境（浏览器预览 / 测试）或旧契约返回 null：静默回到 idle。
         setState({ phase: "idle" });
         return;
       }
-      // 发现新版本：主进程已在后台触发下载，UI 暂时不显示，
-      // 等待 onUpdateReady 推送后再切到 ready 状态。
+      if (result.status === "available") {
+        // 主进程已在后台触发下载，UI 暂时不显示，
+        // 等待 onUpdateReady 推送后再切到 ready 状态。
+        if (notify) {
+          showToast(`发现新版本 v${result.version}，正在后台下载…`, "success");
+        }
+      } else if (result.status === "latest") {
+        if (notify) showToast(`已是最新版本 v${result.version}`);
+      } else {
+        if (notify) showToast(`检查更新失败：${result.message}`, "error");
+      }
       setState({ phase: "idle" });
-    } catch {
-      // 非桌面端环境（浏览器预览 / 测试）或检查失败：静默跳过
+    } catch (err) {
+      // 非桌面端环境（浏览器预览 / 测试）或检查失败：静默回到 idle。
+      if (notify) {
+        showToast(
+          `检查更新失败：${err instanceof Error ? err.message : String(err)}`,
+          "error",
+        );
+      }
       setState({ phase: "idle" });
     }
   }, []);

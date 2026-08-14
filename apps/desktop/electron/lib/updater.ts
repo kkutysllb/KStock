@@ -15,7 +15,8 @@
 
 import { app, ipcMain, type BrowserWindow } from "electron";
 import { autoUpdater } from "electron-updater";
-import { IPC } from "./ipc-channels";
+import { IPC, type UpdateCheckResult } from "./ipc-channels";
+import { logMain } from "./logger";
 import { getMainWindow } from "./window";
 
 /** 安装前终止 gateway 的注册句柄，由 main.ts 在进程初始化后注入。 */
@@ -57,36 +58,66 @@ export function initUpdater(): void {
     repo: "KStock",
   });
 
+  autoUpdater.on("checking-for-update", () => {
+    logMain("[updater] 正在检查更新…");
+  });
+
   autoUpdater.on("error", (error) => {
-    // 静默记录，不打断用户（后台下载失败时用户不会被骚扰）。
-    console.error("[updater]", error);
+    // 落盘记录，不打断用户（后台下载失败时用户不会被骚扰）。
+    logMain(
+      `[updater] 更新出错：${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
+
+  // 已是最新版本（或运行版领先于 feed）：明确记录，不再静默。
+  autoUpdater.on("update-not-available", (info) => {
+    logMain(
+      `[updater] 无可用更新（feed 最新 v${info.version}，当前 v${app.getVersion()}）`,
+    );
   });
 
   // 检测到新版本时记录版本号，渲染进程不主动通知（保持后台静默）。
   autoUpdater.on("update-available", (info) => {
     pendingVersion = info.version || null;
-    console.log(`[updater] 发现新版本 v${pendingVersion}，后台下载中…`);
+    logMain(`[updater] 发现新版本 v${pendingVersion}，后台下载中…`);
   });
 
   // 下载完成：主动推送到渲染进程，此时才让 UI 显示"已就绪"图标。
   autoUpdater.on("update-downloaded", (info) => {
     const version = info.version || pendingVersion || "unknown";
-    console.log(`[updater] 新版本 v${version} 下载完成，通知渲染进程`);
+    logMain(`[updater] 新版本 v${version} 下载完成，通知渲染进程`);
     notifyUpdateReady(getMainWindow(), version);
   });
 
-  // 渲染进程（菜单"检查更新"）触发：返回版本号，但不等下载完成。
-  // 下载完成后由 update-downloaded 事件主动推送。
-  ipcMain.handle(IPC.updateCheck, async () => {
-    if (!app.isPackaged) return null;
+  // 渲染进程（菜单"检查更新"）触发：返回结构化结果（已最新 / 有新版本 /
+  // 检查失败），不等下载完成；下载完成后由 update-downloaded 事件主动推送。
+  ipcMain.handle(IPC.updateCheck, async (): Promise<UpdateCheckResult> => {
+    logMain(
+      `[updater] 收到手动检查更新请求：packaged=${app.isPackaged} ` +
+        `currentVersion=${app.getVersion()}`,
+    );
+    if (!app.isPackaged) {
+      logMain("[updater] 未打包环境，跳过检查更新");
+      return { status: "error", message: "开发模式不支持检查更新" };
+    }
     try {
       const result = await autoUpdater.checkForUpdates();
       const info = result?.updateInfo;
-      if (!info || info.version === app.getVersion()) return null;
+      if (!info) {
+        logMain(`[updater] 检查完成：已是最新版本 v${app.getVersion()}`);
+        return { status: "latest", version: app.getVersion() };
+      }
+      if (info.version === app.getVersion()) {
+        logMain(`[updater] 检查完成：已是最新版本 v${info.version}`);
+        return { status: "latest", version: info.version };
+      }
       pendingVersion = info.version;
-      return { available: true, version: info.version };
-    } catch {
-      return null;
+      logMain(`[updater] 发现新版本 v${info.version}，后台下载中`);
+      return { status: "available", version: info.version };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logMain(`[updater] 检查更新失败：${message}`);
+      return { status: "error", message };
     }
   });
 
@@ -98,7 +129,11 @@ export function initUpdater(): void {
       try {
         await shutdownGateway();
       } catch (err) {
-        console.error("[updater] gateway 终止失败，继续安装:", err);
+        logMain(
+          `[updater] gateway 终止失败，继续安装: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
       }
     }
     // 2. 短延迟让渲染进程完成 IPC 返回与资源释放。
