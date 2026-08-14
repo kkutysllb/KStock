@@ -167,13 +167,16 @@ def _apply_template_path_overrides(
     cfg: dict[str, Any],
     qilin_data_dir: Path,
     repo_root: Path,
+    data_root: Path | None = None,
 ) -> dict[str, Any]:
     """把模板中依赖路径的字段改写为用户数据空间绝对路径（就地修改）。
 
-    三处修正：
+    四处修正：
     - ``database.backend`` = sqlite、``database.sqlite_dir`` = 绝对路径
     - ``run_events.backend`` = db（运行事件进入 SQLite）
     - ``skills.path`` = 仓库内 ``vendor/skills`` 的绝对路径
+    - ``sandbox.mounts`` 宿主路径占位符 → 数据根绝对路径（行情缓存挂载；
+      LocalSandboxProvider 不展开 ``~``，必须落绝对路径）
 
     首启生成与「缺段补齐」共用，保证两条路径产出的段定义一致。
     """
@@ -194,6 +197,21 @@ def _apply_template_path_overrides(
     skills = dict(cfg.get("skills") or {})
     skills_path = skills.get("path") or skills.pop("root", None) or "vendor/skills"
     cfg["skills"] = {**skills, "path": str((repo_root / skills_path).resolve())}
+
+    # 沙箱挂载宿主路径：模板占位符 <data-root> 改写为数据根绝对路径。
+    root = data_root or (
+        qilin_data_dir.parents[2] if len(qilin_data_dir.parents) > 2 else qilin_data_dir.parent
+    )
+    sandbox = dict(cfg.get("sandbox") or {})
+    mounts = sandbox.get("mounts")
+    if isinstance(mounts, list):
+        rewritten = []
+        for mount in mounts:
+            if isinstance(mount, dict) and isinstance(mount.get("host_path"), str):
+                mount = {**mount, "host_path": mount["host_path"].replace("<data-root>", str(root))}
+            rewritten.append(mount)
+        sandbox["mounts"] = rewritten
+        cfg["sandbox"] = sandbox
     return cfg
 
 
@@ -201,6 +219,7 @@ def _generate_runtime_config(
     runtime_config_path: Path,
     qilin_data_dir: Path,
     repo_root: Path,
+    data_root: Path | None = None,
 ) -> None:
     """生成 ``qilin.runtime.yaml``，显式写入用户数据空间的绝对路径。
 
@@ -327,9 +346,23 @@ def _generate_runtime_config(
                 {k: template_cfg[k] for k in missing_keys},
                 qilin_data_dir,
                 repo_root,
+                data_root,
             )
             for key, value in patch.items():
                 existing[key] = value
+            changed = True
+
+        # 7) sandbox.mounts 增量下发：老用户的 sandbox 段（use/allow_host_bash）
+        #    早于挂载能力存在，缺 mounts 时用模板值补齐（宿主路径已按数据根
+        #    改写）。已存在的 mounts 一律保留用户配置。
+        template_sandbox = template_cfg.get("sandbox") or {}
+        existing_sandbox = dict(existing.get("sandbox") or {})
+        if template_sandbox.get("mounts") and not existing_sandbox.get("mounts"):
+            patch = _apply_template_path_overrides(
+                {"sandbox": template_sandbox}, qilin_data_dir, repo_root, data_root
+            )
+            existing_sandbox["mounts"] = patch["sandbox"]["mounts"]
+            existing["sandbox"] = existing_sandbox
             changed = True
 
         if changed:
@@ -339,7 +372,7 @@ def _generate_runtime_config(
 
     # 首次生成：以模板为基础（拷贝，避免就地修改模板 dict）
     cfg = _apply_template_path_overrides(
-        dict(template_cfg), qilin_data_dir, repo_root
+        dict(template_cfg), qilin_data_dir, repo_root, data_root
     )
 
     runtime_config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -449,14 +482,16 @@ def _ensure_data_space() -> dict[str, Path]:
     logs_dir = data_root / "logs"
     product_dir = data_root / "product"
     reports_dir = data_root / "reports"
+    cache_market_data_dir = data_root / "cache" / "market-data"
 
-    # 建立目录结构（见设计文档「目录结构」）
-    for directory in (config_dir, qilin_data_dir, logs_dir, product_dir, reports_dir):
+    # 建立目录结构（见设计文档「目录结构」）；cache/market-data 是行情
+    # 磁盘缓存（kk_common.market_data_cache），沙箱经 /mnt/cache 同源挂载。
+    for directory in (config_dir, qilin_data_dir, logs_dir, product_dir, reports_dir, cache_market_data_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
     # 生成运行时配置（显式写入 database.sqlite_dir 绝对路径）
     runtime_config_path = config_dir / "qilin.runtime.yaml"
-    _generate_runtime_config(runtime_config_path, qilin_data_dir, REPO_ROOT)
+    _generate_runtime_config(runtime_config_path, qilin_data_dir, REPO_ROOT, data_root)
 
     # Lead Agent 运行守则（首次启动写入，已存在保留）
     _ensure_default_soul(runtime_qilin)
