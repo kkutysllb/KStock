@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   getDesktopBridge,
   isDesktopRuntime,
@@ -2358,8 +2359,11 @@ function WorkspaceShell({
           )}
         </ContextSection>
       </aside>
-      {artifactError && <p className="artifact-error" role="alert">{artifactError}</p>}
-      {artifactPreview && (
+      {artifactError && createPortal(
+        <p className="artifact-error" role="alert">{artifactError}</p>,
+        document.body,
+      )}
+      {artifactPreview && createPortal(
         <div className="report-preview-overlay" role="dialog" aria-modal="true" aria-label={artifactPreview.name}>
           <div className="report-preview-dialog">
             <div className="report-preview-bar">
@@ -2386,7 +2390,8 @@ function WorkspaceShell({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
       </div>
     </ArtifactLinkContext.Provider>
