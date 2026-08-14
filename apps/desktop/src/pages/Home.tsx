@@ -150,7 +150,7 @@ import { UpdateButton } from "../components/UpdateButton";
 import { SidebarResizeHandle } from "../components/SidebarResizeHandle";
 import { DataSourcesSettings } from "../components/DataSourcesSettings";
 import { Markdown } from "../lib/markdown";
-import { ArtifactLinkContext } from "../lib/artifactLinks";
+import { ArtifactLinkContext, sanitizePreviewHtml } from "../lib/artifactLinks";
 import {
   DEFAULT_GENERAL_PREFERENCES,
   getGeneralPreferences,
@@ -1939,20 +1939,26 @@ function WorkspaceShell({
       const response = await fetch(href, { credentials: "include" });
       if (!response.ok) throw new Error(`加载失败（${response.status}）`);
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
       const previewKind = getArtifactPreviewKind(name, blob.type);
       if (previewKind === "html") {
+        // blob iframe 的 base 非层级化：Vite HMR 注入与根绝对路径资源无法解析，
+        // 预览前清洗并把根相对资源回源到文件所在 origin。
+        const text = await readBlobText(blob);
+        const cleaned = sanitizePreviewHtml(text, new URL(href, GATEWAY_URL).origin);
+        const url = URL.createObjectURL(new Blob([cleaned], { type: "text/html" }));
         setArtifactPreview((current) => {
           if (current) URL.revokeObjectURL(current.url);
           return { kind: "html", name, href, url };
         });
       } else if (previewKind === "markdown" || previewKind === "text") {
+        const url = URL.createObjectURL(blob);
         const text = await readBlobText(blob);
         setArtifactPreview((current) => {
           if (current) URL.revokeObjectURL(current.url);
           return { kind: previewKind, name, href, url, text };
         });
       } else {
+        const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
         anchor.download = name;

@@ -5,7 +5,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { ArtifactLinkContext, artifactPreviewNameFromHref } from "../src/lib/artifactLinks";
+import { ArtifactLinkContext, artifactPreviewNameFromHref, sanitizePreviewHtml } from "../src/lib/artifactLinks";
 import { Markdown } from "../src/lib/markdown";
 
 vi.mock("../src/lib/gatewayUrl", () => ({
@@ -38,6 +38,48 @@ describe("artifactPreviewNameFromHref", () => {
     expect(artifactPreviewNameFromHref("http://localhost:18001/outputs/chart.png")).toBeNull();
     expect(artifactPreviewNameFromHref("http://localhost:18001/outputs/data.pdf")).toBeNull();
     expect(artifactPreviewNameFromHref("http://localhost:18001/")).toBeNull();
+  });
+});
+
+describe("sanitizePreviewHtml", () => {
+  const ORIGIN = "http://localhost:18001";
+
+  it("移除 Vite HMR 注入脚本（/@vite/client 与内联 @react-refresh）", () => {
+    const html = [
+      "<!doctype html><html><head>",
+      "<script type=\"module\" src=\"/@vite/client\"></script>",
+      "<script type=\"module\">import RefreshRuntime from \"/@react-refresh\"; RefreshRuntime.injectIntoGlobalHook(window)</script>",
+      "<link rel=\"stylesheet\" href=\"/style.css\">",
+      "</head><body>正文</body></html>",
+    ].join("\n");
+    const cleaned = sanitizePreviewHtml(html, ORIGIN);
+    expect(cleaned).not.toContain("/@vite/client");
+    expect(cleaned).not.toContain("@react-refresh");
+    expect(cleaned).toContain("正文");
+  });
+
+  it("根绝对路径资源回源到 baseOrigin，保留协议/协议相对/非路径 URL", () => {
+    const html = [
+      "<link rel=\"stylesheet\" href=\"/style.css\">",
+      "<script src=\"/assets/app.js\"></script>",
+      "<img src=\"//cdn.example.com/logo.png\">",
+      "<a href=\"https://example.com/doc\">外链</a>",
+      "<img src=\"data:image/png;base64,AAAA\">",
+      "<form action=\"/api/upload\"></form>",
+    ].join("\n");
+    const cleaned = sanitizePreviewHtml(html, ORIGIN);
+    expect(cleaned).toContain(`href="${ORIGIN}/style.css"`);
+    expect(cleaned).toContain(`src="${ORIGIN}/assets/app.js"`);
+    expect(cleaned).toContain(`action="${ORIGIN}/api/upload"`);
+    expect(cleaned).toContain('src="//cdn.example.com/logo.png"');
+    expect(cleaned).toContain('href="https://example.com/doc"');
+    expect(cleaned).toContain('src="data:image/png;base64,AAAA"');
+  });
+
+  it("不带斜杠结尾的 baseOrigin 同样正确拼接", () => {
+    expect(sanitizePreviewHtml('<a href="/x.html">x</a>', "http://host:18001/")).toContain(
+      'href="http://host:18001/x.html"'
+    );
   });
 });
 
