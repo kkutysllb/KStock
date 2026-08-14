@@ -13,6 +13,7 @@
 import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { artifactPreviewNameFromHref, useArtifactLinkHandler } from "./artifactLinks";
 
 interface MarkdownProps {
   children: string;
@@ -20,11 +21,33 @@ interface MarkdownProps {
   components?: React.ComponentProps<typeof ReactMarkdown>["components"];
 }
 
+/**
+ * 链接组件：gateway 交付文件链接走应用内预览（点击回调），其余链接保持
+ * `target="_blank"`（Electron 主进程转发到系统浏览器）。
+ */
+function ArtifactAwareLink(props: React.ComponentProps<"a">) {
+  const onArtifactLink = useArtifactLinkHandler();
+  const href = typeof props.href === "string" ? props.href : undefined;
+  const previewName = href ? artifactPreviewNameFromHref(href) : null;
+  if (href && previewName && onArtifactLink) {
+    return (
+      <a
+        {...props}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(event) => {
+          event.preventDefault();
+          onArtifactLink(href, previewName);
+        }}
+      />
+    );
+  }
+  return <a {...props} target="_blank" rel="noopener noreferrer" />;
+}
+
 /** 内部默认渲染组件映射：统一 a 链接行为 + 代码块样式钩子。 */
 const defaultComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
-  a(props) {
-    return <a {...props} target="_blank" rel="noopener noreferrer" />;
-  },
+  a: ArtifactAwareLink,
 };
 
 export const Markdown = memo(function Markdown({ children, components }: MarkdownProps) {

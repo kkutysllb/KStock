@@ -501,7 +501,7 @@ test("交付文件中的 Markdown 和日志在产品内预览并提供下载", a
   const reportBytes = desktopBridgeMock.saveArtifact.mock.calls[0]?.[1] as Uint8Array;
   expect(Buffer.from(reportBytes).toString("utf8")).toBe("# 周报\n\n正文");
 
-  fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+  fireEvent.click(screen.getByRole("button", { name: "返回任务页面" }));
   fireEvent.click(await screen.findByRole("button", { name: /bash-1\.log/ }));
 
   expect(await screen.findByRole("dialog", { name: "bash-1.log" })).toBeVisible();

@@ -150,6 +150,7 @@ import { UpdateButton } from "../components/UpdateButton";
 import { SidebarResizeHandle } from "../components/SidebarResizeHandle";
 import { DataSourcesSettings } from "../components/DataSourcesSettings";
 import { Markdown } from "../lib/markdown";
+import { ArtifactLinkContext } from "../lib/artifactLinks";
 import {
   DEFAULT_GENERAL_PREFERENCES,
   getGeneralPreferences,
@@ -1991,10 +1992,11 @@ function WorkspaceShell({
     }
   }, [artifactPreview, artifactSaving]);
   return (
-    <div
-      className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${rightPanelOpen ? "context-open" : ""} density-${generalPreferences.density} ${generalPreferences.reduce_motion ? "reduce-motion" : ""}`}
-      style={{ "--workspace-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
-    >
+    <ArtifactLinkContext.Provider value={openArtifact}>
+      <div
+        className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${rightPanelOpen ? "context-open" : ""} density-${generalPreferences.density} ${generalPreferences.reduce_motion ? "reduce-motion" : ""}`}
+        style={{ "--workspace-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+      >
       <aside className="codex-sidebar" aria-label="工作区侧边栏">
         <div className="sidebar-title">
           {!sidebarCollapsed && (
@@ -2352,7 +2354,10 @@ function WorkspaceShell({
                 <button className="subtle-button" type="button" onClick={saveArtifactPreview} disabled={artifactSaving}>
                   {artifactSaving ? "保存中…" : "下载"}
                 </button>
-                <button className="subtle-button" type="button" onClick={closeArtifactPreview}>关闭</button>
+                <button className="preview-back-button" type="button" onClick={closeArtifactPreview}>
+                  <ArrowLeft size={14} />
+                  返回任务页面
+                </button>
               </div>
             </div>
             {artifactPreview.kind === "html" ? (
@@ -2369,7 +2374,8 @@ function WorkspaceShell({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ArtifactLinkContext.Provider>
   );
 }
 
