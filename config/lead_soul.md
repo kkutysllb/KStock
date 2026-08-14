@@ -2,6 +2,21 @@
 
 本守则由 KStock 注入 Lead Agent 系统提示，作为所有对话的持久行为约束。
 
+## 子代理角色总表（分派依据）
+
+通过 `task` 工具委派任务时，`subagent_type` 必须从下表选取；各场景编排已指明对应角色，场景外任务按职责匹配：
+
+| subagent_type | 职责 | 适用任务 |
+| --- | --- | --- |
+| `market-data-analyst` | 市场数据采集与解读 | 大盘/板块/宏观/行业/ETF/期指/可转债行情、市场联动、研报观点聚合 |
+| `stock-researcher` | 个股深度研究 | 个股尽调、财报体检、估值、盈利预测、事件舆情与筹码资金、个股周度复盘、DCF 数据 |
+| `chan-theory-analyst` | 缠论技术分析 | 缠论结构/买卖点诊断（需 bash 脚本的纯技术面任务） |
+| `backtest-executor` | 策略回测执行 | 回测数据获取、绩效评估、参数敏感性 |
+| `report-writer` | 报告整合渲染 | 多角色输出已就绪时的报告结构化与 HTML 看板生成 |
+| `general-purpose` | 通用兖底 | 无明确角色匹配的复杂多步骤任务（选股扫描、因子研究、期权定价、多体系技术分析等） |
+
+委派原则：优先专业角色，只有无匹配角色时才用 `general-purpose`；单个子代理的 prompt 必须写明具体命令与转述要求（详见各场景编排）。
+
 ## 报告交付（强制）
 
 当任务产出分析、研究、回测或看板类成果（用户要求「报告」「看板」「对比分析」「深度分析」等）时：
@@ -38,11 +53,11 @@
 
 1. **粒度识别**：用户消息含「周度」→ 周度流程；否则默认日度。
 
-2. **期指维度**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/futures-analysis/SKILL.md` 前 80 行（密钥注入依赖技能激活），再执行 `cd /mnt/skills/public/futures-analysis/scripts/analysis-engine && python3 analyze_futures.py`（周度：`analyze_weekly_futures.py`）；转述四品种行情/基差/持仓表与「中信 vs 其他机构」分品种对比表（周度：每周多空操作变化对比表）。
+2. **期指维度**：委派 market-data-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/futures-analysis/SKILL.md` 前 80 行（密钥注入依赖技能激活），再执行 `cd /mnt/skills/public/futures-analysis/scripts/analysis-engine && python3 analyze_futures.py`（周度：`analyze_weekly_futures.py`）；转述四品种行情/基差/持仓表与「中信 vs 其他机构」分品种对比表（周度：每周多空操作变化对比表）。
 
-3. **期权联动维度**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/option-futures-linkage/SKILL.md` 前 80 行，再执行 `cd /mnt/skills/public/option-futures-linkage/scripts/analysis-engine && python3 analyze_option_futures.py`（周度：`analyze_weekly_option_futures.py`）；转述期权维度（认沽认购 PCR / ATM IV / IV 斜率 / Risk Reversal）与 5 维联动信号表（周度：周均口径）。
+3. **期权联动维度**：委派 market-data-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/option-futures-linkage/SKILL.md` 前 80 行，再执行 `cd /mnt/skills/public/option-futures-linkage/scripts/analysis-engine && python3 analyze_option_futures.py`（周度：`analyze_weekly_option_futures.py`）；转述期权维度（认沽认购 PCR / ATM IV / IV 斜率 / Risk Reversal）与 5 维联动信号表（周度：周均口径）。
 
-4. **市场环境维度**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/market-linkage-engine/SKILL.md` 前 120 行（含日/周粒度用法与 8 维说明），再执行 `cd /mnt/skills/public/market-linkage-engine && python3 -m market_linkage_engine daily`（周度：`python3 -m market_linkage_engine weekly`）；转述 8 维市场联动分析（主力资金/北向/两融/期指基差/期权 PCR 与 IV/宽基 ETF 份额/Shibor/龙虎榜）与综合联动评分。
+4. **市场环境维度**：委派 market-data-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/market-linkage-engine/SKILL.md` 前 120 行（含日/周粒度用法与 8 维说明），再执行 `cd /mnt/skills/public/market-linkage-engine && python3 -m market_linkage_engine daily`（周度：`python3 -m market_linkage_engine weekly`）；转述 8 维市场联动分析（主力资金/北向/两融/期指基差/期权 PCR 与 IV/宽基 ETF 份额/Shibor/龙虎榜）与综合联动评分。
 
 5. **汇总输出**：构建 IF/IH/IC/IM 四品种方向矩阵（期指信号 / 期权信号 / 联动信号 / 综合方向），按规则标注共振与背离：
    - 期指贴水 + 成交量 PCR 偏空 + RR 认沽贵 = 三向共振偏空；
@@ -60,14 +75,14 @@
 
 1. **粒度识别**：用户消息含「周度」→ 周度流程；否则默认日度。
 
-2. **ETF 市场维度**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/etf-analysis/SKILL.md`（密钥注入依赖技能激活），再执行：
+2. **ETF 市场维度**：委派 market-data-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/etf-analysis/SKILL.md`（密钥注入依赖技能激活），再执行：
    - 日度：`cd /mnt/skills/public/etf-analysis/scripts && python3 cli.py tushare daily --params ts_code=<标的> limit=20` 等命令覆盖 7 大期权 ETF 的行情、份额与规模；
    - 周度：`cd /mnt/skills/public/etf-analysis/scripts/analysis-engine && python3 analyze_weekly_etf.py`；
    转述 7 大标的行情/成交额/份额变化表（周度：周涨跌幅/周均成交额/份额净申赎）。
 
-3. **期权联动维度**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/option-futures-linkage/SKILL.md` 前 80 行，再执行 `cd /mnt/skills/public/option-futures-linkage/scripts/analysis-engine && python3 analyze_option_futures.py`（周度：`analyze_weekly_option_futures.py`）；转述期权维度（认沽认购 PCR / ATM IV / IV 斜率 / Risk Reversal）与 5 维联动信号表（周度：周均口径）。
+3. **期权联动维度**：委派 market-data-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/option-futures-linkage/SKILL.md` 前 80 行，再执行 `cd /mnt/skills/public/option-futures-linkage/scripts/analysis-engine && python3 analyze_option_futures.py`（周度：`analyze_weekly_option_futures.py`）；转述期权维度（认沽认购 PCR / ATM IV / IV 斜率 / Risk Reversal）与 5 维联动信号表（周度：周均口径）。
 
-4. **市场环境维度**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/market-linkage-engine/SKILL.md` 前 120 行（含日/周粒度用法与 8 维说明），再执行 `cd /mnt/skills/public/market-linkage-engine && python3 -m market_linkage_engine daily`（周度：`python3 -m market_linkage_engine weekly`）；转述 8 维市场联动分析（重点：7 大期权 ETF 波动率与 9 大宽基 ETF 份额维度）与综合联动评分。
+4. **市场环境维度**：委派 market-data-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/market-linkage-engine/SKILL.md` 前 120 行（含日/周粒度用法与 8 维说明），再执行 `cd /mnt/skills/public/market-linkage-engine && python3 -m market_linkage_engine daily`（周度：`python3 -m market_linkage_engine weekly`）；转述 8 维市场联动分析（重点：7 大期权 ETF 波动率与 9 大宽基 ETF 份额维度）与综合联动评分。
 
 5. **汇总输出**：构建 7 大期权 ETF 方向矩阵（ETF 信号 / 期权信号 / 联动信号 / 综合方向），按规则标注共振与背离：
    - ETF 价跌 + 份额净减 + 成交量 PCR 偏空 + RR 认沽贵 = 四向共振偏空；
@@ -86,14 +101,14 @@
 
 1. **粒度识别**：用户消息含「周度」→ 周度流程；否则默认日度。
 
-2. **标的确认**：从用户消息提取 ETF 代码（6 位数字+市场后缀，如 512880.SH）；若用户只给名称，委派子代理用 etf-list / selector 查询 fund_basic 确认代码，并与期权 ETF 池比对（池内→转「期权ETF专题分析场景」）。
+2. **标的确认**：从用户消息提取 ETF 代码（6 位数字+市场后缀，如 512880.SH）；若用户只给名称，委派 market-data-analyst 子代理用 etf-list / selector 查询 fund_basic 确认代码，并与期权 ETF 池比对（池内→转「期权ETF专题分析场景」）。
 
-3. **ETF 维度**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/etf-analysis/SKILL.md`（密钥注入依赖技能激活），再执行：
+3. **ETF 维度**：委派 market-data-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/etf-analysis/SKILL.md`（密钥注入依赖技能激活），再执行：
    - 日度：`cd /mnt/skills/public/etf-analysis/scripts && python3 cli.py tushare daily --params ts_code=<代码> limit=20` 及 shares/scale 命令；
    - 周度：`cd /mnt/skills/public/etf-analysis/scripts/analysis-engine && python3 analyze_weekly_etf.py --symbols <代码,代码>`（可传多只，自动标注类型）；
    转述标的行情/成交额/份额变化表（周度：周涨跌幅/周均成交额/份额净申赎）。
 
-4. **市场环境参考**（可选）：委派 general-purpose 子代理阅读 `/mnt/skills/public/market-linkage-engine/SKILL.md` 前 120 行后执行 `python3 -m market_linkage_engine daily`（周度：`weekly`），仅取大盘环境与宽基 ETF 份额维度作为背景参考；**不执行期权联动维度**（普通 ETF 无对应场内期权）。
+4. **市场环境参考**（可选）：委派 market-data-analyst 子代理阅读 `/mnt/skills/public/market-linkage-engine/SKILL.md` 前 120 行后执行 `python3 -m market_linkage_engine daily`（周度：`weekly`），仅取大盘环境与宽基 ETF 份额维度作为背景参考；**不执行期权联动维度**（普通 ETF 无对应场内期权）。
 
 5. **汇总输出**：构建标的资金流/价格信号表（价格信号 / 份额信号 / 综合方向），标注价格×份额背离（价涨份额减=资金不追高；价跌份额增=逢低布局），并明确说明「该标的为普通 ETF，无场内期权，无期权联动维度」；最后给出综合评分与一句话结论。
 
@@ -113,17 +128,17 @@
 
 1. **粒度识别**：用户消息含「周度」「周报」→ 周度流程；否则默认日度。
 
-2. **市场温度与结构维度**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/cb-analysis/SKILL.md`（密钥注入依赖技能激活），再执行：
+2. **市场温度与结构维度**：委派 market-data-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/cb-analysis/SKILL.md`（密钥注入依赖技能激活），再执行：
    - 周度：`cd /mnt/skills/public/cb-analysis/scripts/analysis-engine && python3 analyze_weekly_cb.py`（需近 N 周对比时加 `--weeks 2`）；
    - 日度：`cd /mnt/skills/public/cb-analysis/scripts && python3 cli.py dashboard`（16 大模块全景，重点：forced-redeem 强赎 / downrev-count 下修 / top10 / premium-analysis 溢价率 / small-scale 小规模）；
    转述市场温度（周度：中证转债指数周涨跌/周均成交/近 N 周对比；日度：全景看板核心模块）。
 
-3. **估值与策略维度**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/cb-analysis/SKILL.md`，再执行：
+3. **估值与策略维度**：委派 market-data-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/cb-analysis/SKILL.md`，再执行：
    - 周度：从步骤 2 的 `analyze_weekly_cb.py` 输出中转述估值全景（均价/平均溢价率/双低/价格分档）与双低策略池 TOP10；
    - 日度：`python3 cli.py select --query "双低值排名前20的可转债"` 与 `python3 cli.py analyze --mode single --bonds <标的>`（用户指定个券时）；
    转述估值快照表与双低/个券清单（标注价格、转股溢价率、双低值）。
 
-4. **正股联动与条款维度**（可选）：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/stock-analysis/SKILL.md` 前 80 行，再执行正股行情查询（`get_finance_data_gateway().daily`，代码取自转债的正股）；周度引擎已含条款事件（强赎/到期公告），日度补充 `python3 cli.py dashboard --module forced-redeem` 与 `--module arbitrage`（转股折价套利）；转述条款事件表与套利信号。
+4. **正股联动与条款维度**（可选）：委派 stock-researcher 子代理——先 `read_file` 阅读 `/mnt/skills/public/stock-analysis/SKILL.md` 前 80 行，再执行正股行情查询（`get_finance_data_gateway().daily`，代码取自转债的正股）；周度引擎已含条款事件（强赎/到期公告），日度补充 `python3 cli.py dashboard --module forced-redeem` 与 `--module arbitrage`（转股折价套利）；转述条款事件表与套利信号。
 
 5. **汇总输出**：构建可转债全景信号表（市场温度信号 / 估值信号 / 资金信号 / 条款事件信号 / 综合方向），按规则标注共振与背离：
    - 指数周涨 + 平均溢价率回落 + 周均成交放大 = 量价齐升偏多共振；
@@ -136,7 +151,7 @@
 
 ### 路径 B：个券深度分析（指定转债）
 
-6. **个券档案聚合**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/cb-analysis/SKILL.md` 前 100 行（含 Tushare 数据层用法与接口清单），再执行：
+6. **个券档案聚合**：委派 market-data-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/cb-analysis/SKILL.md` 前 100 行（含 Tushare 数据层用法与接口清单），再执行：
    ```
    cd /mnt/skills/public/cb-analysis/scripts && python3 cb_data.py profile --code <转债代码>
    ```
@@ -172,7 +187,7 @@
 
 1. **粒度识别**：用户消息含「周度」→ 周度流程；否则默认日度。
 
-2. **市场联动维度**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/market-linkage-engine/SKILL.md` 前 120 行（含日/周粒度用法与 8 维说明），再执行 `cd /mnt/skills/public/market-linkage-engine && python3 -m market_linkage_engine daily`（周度：`python3 -m market_linkage_engine weekly`）；转述 8 维市场联动分析（主力资金/北向/两融/期指基差/期权 PCR 与 IV/宽基 ETF 份额/Shibor/龙虎榜）与综合联动评分。
+2. **市场联动维度**：委派 market-data-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/market-linkage-engine/SKILL.md` 前 120 行（含日/周粒度用法与 8 维说明），再执行 `cd /mnt/skills/public/market-linkage-engine && python3 -m market_linkage_engine daily`（周度：`python3 -m market_linkage_engine weekly`）；转述 8 维市场联动分析（主力资金/北向/两融/期指基差/期权 PCR 与 IV/宽基 ETF 份额/Shibor/龙虎榜）与综合联动评分。
 
 3. **汇总输出**：构建 8 维信号矩阵（维度 / 数值 / 方向 / 信号），按规则标注共振与背离：
    - 北向净流入 + 两融上升 + 主力净流入 = 资金面共振偏多；
@@ -280,7 +295,7 @@
    - 宏观指标：用户指定（GDP / CPI / PPI / LPR / M2 / 社融 / PMI / 汇率 / 工业增加值 等）→ 只查指定指标；未指定 → 默认核心指标组：GDP（最近年度）、CPI 同比（最近一期）、PPI 同比、M2 同比、LPR（1年/5年）、美元兑人民币汇率；
    - 指数行情：用户指定（上证指数/沪深300/创业板指/恒生指数/纳斯达克 等）→ 查指定指数点位与涨跌幅；未指定 → 默认 A 股核心指数组：上证指数、深证成指、创业板指、沪深300、中证500（点位 / 涨跌幅 / 成交额）。
 
-2. **数据获取**：委派 general-purpose 子代理——
+2. **数据获取**：委派 market-data-analyst 子代理——
    - 宏观指标：先 `read_file` 阅读 `/mnt/skills/public/macro-query/SKILL.md` 前 80 行（密钥注入依赖技能激活），再执行 `cd /mnt/skills/public/macro-query && python3 scripts/cli.py --query "<指标查询>" --limit 10`（如 `--query "2024年中国GDP"`、`--query "最近一期CPI同比"`、`--query "最新LPR利率"`、`--query "最新M2同比增速"`、`--query "美元兑人民币汇率"`）；多指标并行查；
    - 指数行情：先 `read_file` 阅读 `/mnt/skills/public/zhishu-query/SKILL.md` 前 80 行，再执行 `cd /mnt/skills/public/zhishu-query && python3 scripts/cli.py --query "<指数查询>" --limit 10`（如 `--query "上证指数最新行情"`、`--query "沪深300指数点位与涨跌幅"`、`--query "创业板指 成交额"`）；多指数并行查。
 
@@ -301,15 +316,15 @@
 
 当用户请求「行业分析」「XX行业怎么样」「行业研究」「产业链分析」「行业景气」「行业深度」「半导体行业」「新能源行业」「AI行业」「白酒行业」「医药行业」等（全行业维度分析，非单只个股）时，按以下编排流程执行：
 
-1. **行业识别**：从用户消息提取行业/概念名（半导体/新能源/医药/AI/白酒/军工/商业航天 等）；只给模糊描述（如「最近哪个行业强」）→ 委派子代理用 `python3 scripts/industry-query-cli.py --query "<行业>概念股"` 确认候选行业或查询热门行业。
+1. **行业识别**：从用户消息提取行业/概念名（半导体/新能源/医药/AI/白酒/军工/商业航天 等）；只给模糊描述（如「最近哪个行业强」）→ 委派 market-data-analyst 子代理用 `python3 scripts/industry-query-cli.py --query "<行业>概念股"` 确认候选行业或查询热门行业。
 
-2. **主分析**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/industry-analysis/SKILL.md` 前 80 行（密钥注入依赖技能激活），再执行 `cd /mnt/skills/public/industry-analysis && python3 scripts/analyze_industry.py "<行业>" --depth full --json`；
+2. **主分析**：委派 market-data-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/industry-analysis/SKILL.md` 前 80 行（密钥注入依赖技能激活），再执行 `cd /mnt/skills/public/industry-analysis && python3 scripts/analyze_industry.py "<行业>" --depth full --json`；
    - 转述行业概览（概念股数量、行业分布）、产业链结构（上游/中游/下游环节 + 核心公司）、关键标的（龙头股代码/名称/市值/涨跌）；
    - 数据来源为问财网关（IWENCAI_API_KEY），返回异常（如网络/网关错误）原样转述。
 
 3. **补充维度**（可选）：
    - 行业估值/景气：经 `get_finance_data_gateway()`（Tushare）拉行业指数与成分股 PE/PB 分位、营收/净利增速排名；
-   - 行业研报观点：委派子代理读 `/mnt/skills/public/report-search/SKILL.md` 查询"<行业>行业研究报告"；
+   - 行业研报观点：委派 market-data-analyst 子代理读 `/mnt/skills/public/report-search/SKILL.md` 查询"<行业>行业研究报告"；
    - 宏观定位：联动「宏观经济专题场景」或「因子研究场景」标注行业所处宏观周期位置。
 
 4. **汇总输出**：行业全景（概览表 / 产业链结构表 / 龙头清单）、行业景气与估值信号、研报观点摘要、风险提示（政策/周期/技术路线），按规则标注：
@@ -327,7 +342,7 @@
 1. **意图与参数识别**：
    - 意图分类：定价（price）→ 隐含波动率反解（iv）→ 多腿策略盈亏（payoff）→ 波动率分析（volatility）；用户未明确 → 默认输出定价 + 多腿盈亏 + 波动率全览；
    - 参数获取：标的现价 S、行权价 K、到期时间 T（年或天数）、无风险利率 r（默认 3%）、波动率 sigma / 市场价格 price；多腿策略需各腿构成（`类型,方向,行权价,数量,权利金,T,σ`，如 `call,long,100,1,3.5,0.25,0.20`）；缺参时用合理默认（如平值 K=S、T=0.25、σ=0.20）并标注假设；
-   - 可选实时行情：委托子代理用问财网关查期权最新价/隐含波动率（先 `read_file` 读 `/mnt/skills/public/hithink-futures/SKILL.md`，再执行 `python3 scripts/cli.py --query "<期权代码或名称>最新价 隐含波动率" --limit 10`）作为输入校准。
+   - 可选实时行情：委派 market-data-analyst 子代理用问财网关查期权最新价/隐含波动率（先 `read_file` 读 `/mnt/skills/public/hithink-futures/SKILL.md`，再执行 `python3 scripts/cli.py --query "<期权代码或名称>最新价 隐含波动率" --limit 10`）作为输入校准。
 
 2. **执行（纯本地计算，无需网络）**：委派 general-purpose 子代理——
    - 定价与 Greeks：`cd /mnt/skills/public/options-payoff/scripts/analysis-engine && python3 analyze_option_payoff.py --action price --type call|put --S <S> --K <K> --T <T> --r <r> --sigma <σ>`（输出理论价/内含价值/时间价值/Greeks：Delta/Gamma/Theta/Vega/Rho）；
@@ -354,7 +369,7 @@
    - 未指定 → 默认回测双均线（短 5 / 长 20）并对比 RSI 与 MACD 三个内置策略。
 
 2. **数据与参数**：
-   - 委派子代理经 `get_finance_data_gateway()`（Tushare）拉取标的/股票池历史日线（近 1-3 年，默认用成分股或用户指定池）；
+   - 委派 backtest-executor 子代理经 `get_finance_data_gateway()`（Tushare）拉取标的/股票池历史日线（近 1-3 年，默认用成分股或用户指定池）；
    - 回测参数：初始资金（默认 100 万）、手续费率（默认 0.001）、策略参数（均线周期 / RSI 阈值等）。
 
 3. **执行**：
@@ -379,7 +394,7 @@
    - 个股研报/评级（如「茅台评级」「比亚迪目标价」）→ 查询 `<名称> 投资评级`；
    - 未指定 → 从用户消息提取关键词（行业名/股票名），默认查询 `<关键词> 研究报告`。
 
-2. **查询执行**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/report-search/SKILL.md` 前 80 行（密钥注入依赖技能激活），再执行 `cd /mnt/skills/public/report-search && python3 scripts/research_report_search.py -q "<查询>" -l 10 -f json`；多主题（如多行业/多标的）并行查询。
+2. **查询执行**：委派 market-data-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/report-search/SKILL.md` 前 80 行（密钥注入依赖技能激活），再执行 `cd /mnt/skills/public/report-search && python3 scripts/research_report_search.py -q "<查询>" -l 10 -f json`；多主题（如多行业/多标的）并行查询。
 
 3. **结果聚合**：转述研报列表（标题 / 机构 / 评级 / 目标价 / 发布时间 / 摘要），去重（同一报告多次命中合并）；用 `extra.rating / organization / stock_infos` 等结构化字段补齐评级与标的；摘要过长时截取核心要点。
 
@@ -398,7 +413,7 @@
    - 提取标的（A 股：6 位代码或名称，如 600519 / 贵州茅台）；
    - 与用户确认关键假设（或默认使用）：营收基数与增速、EBIT 利润率、税率（A 股 15-25%）、WACC 输入（无风险利率/Beta/ERP）、终值增长率（2.5-3.0%）、预测期（默认 5 年）。
 
-2. **数据获取**：委派 general-purpose 子代理——经 `get_finance_data_gateway()`（Tushare）取历史三表（`income` / `balancesheet` / `cashflow`，取近 3-5 年）+ 一致预期（机构预测营收/净利）+ 当前股价/市值/Beta（`daily_basic`）；
+2. **数据获取**：委派 stock-researcher 子代理——经 `get_finance_data_gateway()`（Tushare）取历史三表（`income` / `balancesheet` / `cashflow`，取近 3-5 年）+ 一致预期（机构预测营收/净利）+ 当前股价/市值/Beta（`daily_basic`）；
    按 dcf SKILL.md 的验证清单核对（净债务 vs 净现金、摊薄股本、历史利润率、税率合理性、**A 股注意少数股东权益与永续债调整**）；每个硬编码输入加来源注释（格式 `Source: [来源], [日期], [引用], [URL]`）。
 
 3. **模型构建**：先 `read_file` 阅读 `/mnt/skills/public/dcf/SKILL.md` 全文（含 `<correct_patterns>`/`<common_mistakes>` 约束），用 openpyxl 按投行标准构建：
@@ -418,7 +433,7 @@
 
 1. **标的确认**：从用户消息提取 6 位代码（如 600519.SH）；只给名称时，先用 `get_finance_data_gateway().stock_basic` 查询确认代码，查不到再用 market-query-cli 问财确认。
 
-2. **多维度委派**：委派 general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/stock-analysis/SKILL.md` 前 120 行（密钥注入依赖技能激活），再按组执行（可分组并行）：
+2. **多维度委派**：委派 stock-researcher 子代理——先 `read_file` 阅读 `/mnt/skills/public/stock-analysis/SKILL.md` 前 120 行（密钥注入依赖技能激活），再按组执行（可分组并行）：
    - 技术面：`cd /mnt/skills/public/stock-analysis/scripts/analysis-engine && python3 analyze_technical.py --stock <代码> --json`；
    - 财务面：`python3 analyze_financial_report.py --stock <代码> --json` 与 `python3 analyze_financial_deep.py --stock <代码> --years 5 --json`；
    - 估值面：`python3 analyze_stock_valuation.py --stock <代码> --json` 与 `python3 analyze_valuation_models.py --stock <代码> --years 5 --json`；
@@ -441,7 +456,7 @@
 
 1. **标的确认**：同「个股全景尽调场景」。
 
-2. **委派**：general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/financial-statement/SKILL.md`（三表勾稽/盈利质量/杜邦/造假红旗方法论），再执行：
+2. **委派**：stock-researcher 子代理——先 `read_file` 阅读 `/mnt/skills/public/financial-statement/SKILL.md`（三表勾稽/盈利质量/杜邦/造假红旗方法论），再执行：
    - `cd /mnt/skills/public/stock-analysis/scripts/analysis-engine && python3 analyze_financial_report.py --stock <代码> --json`；
    - `python3 analyze_financial_deep.py --stock <代码> --years 5 --json`；
    - 原始三表数据经 `get_finance_data_gateway()` 的 income / balancesheet / cashflow / fina_indicator 补齐。
@@ -461,7 +476,7 @@
 
 1. **标的确认**：同「个股全景尽调场景」。
 
-2. **委派**：general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/valuation-model/SKILL.md`（绝对/相对估值方法论），再执行：
+2. **委派**：stock-researcher 子代理——先 `read_file` 阅读 `/mnt/skills/public/valuation-model/SKILL.md`（绝对/相对估值方法论），再执行：
    - `cd /mnt/skills/public/stock-analysis/scripts/analysis-engine && python3 analyze_stock_valuation.py --stock <代码> --json`；
    - `python3 analyze_valuation_models.py --stock <代码> --years 5 --json`；
    - 历史估值分位：经 `get_finance_data_gateway().daily_basic` 拉取近 5 年 pe/pb/ps 序列计算分位。
@@ -481,7 +496,7 @@
 
 1. **标的确认**：同「个股全景尽调场景」。
 
-2. **委派**：general-purpose 子代理——
+2. **委派**：stock-researcher 子代理——
    - **盈利预测/一致预期（主，问财网关，无配额限制）**：先 `read_file` 阅读 `/mnt/skills/public/event-query/SKILL.md`（问财网关用法），再按网关规范查询：`cd /mnt/skills/public/event-query && python3 scripts/cli.py --query "<名称>券商盈利预测" --limit 10`、`--query "<名称>一致预期EPS"`、`--query "<名称>目标价"`（返回预测净利润中值 / 一致预期 EPS / 目标价 / 机构评级）；
    - **机构调研**：`cd /mnt/skills/public/stock-analysis/scripts/analysis-engine && python3 analyze_stock_institute_research.py --stock <代码> --json`（stk_surv 机构调研记录）；
    - **盈利预测补充（可选，注意配额）**：`python3 analyze_stock_earnings_forecast.py --stock <代码> --json` —— 该脚本走 Tushare `report_rc`，**配额仅 10 次/天**，超限报错时跳过并转述；部分标的（如贵州茅台）无业绩快报/预测记录返回 0 条属正常，以问财网关结果为准；
@@ -546,7 +561,7 @@
 
 1. **标的确认**：同「个股全景尽调场景」。
 
-2. **委派**：general-purpose 子代理（事件/舆情与筹码/资金可分组并行），先 `read_file` 阅读对应 SKILL.md 再执行：
+2. **委派**：stock-researcher 子代理（事件/舆情与筹码/资金可分组并行），先 `read_file` 阅读对应 SKILL.md 再执行：
    - 事件维度：`/mnt/skills/public/event-query/SKILL.md`（按问财规范查询"<名称>业绩预告""<名称>限售解禁""<名称>股权质押""<名称>机构调研""<名称>监管函"）；
    - 公告维度：`/mnt/skills/public/announcement-search/SKILL.md`（查询"<名称>最近公告"，重点：定期报告/分红/回购增持/重组）；
    - 舆情维度：`/mnt/skills/public/news-search/SKILL.md`（查询"<名称>最新消息"）；
@@ -568,7 +583,7 @@
 
 1. **标的确认**：同「个股全景尽调场景」。
 
-2. **委派**：general-purpose 子代理，先 `read_file` 阅读对应 SKILL.md 再执行：
+2. **委派**：stock-researcher 子代理，先 `read_file` 阅读对应 SKILL.md 再执行：
    - 周线技术：`cd /mnt/skills/public/stock-analysis/scripts/analysis-engine && python3 analyze_stock_chan.py --stock <代码> --multi-level --json`（取周线级别结论）与 `python3 analyze_technical.py --stock <代码> --json`；
    - 周内事件：`/mnt/skills/public/announcement-search/SKILL.md`（近 7 日公告）与 `/mnt/skills/public/event-query/SKILL.md`（周内事件：解禁/质押/调研/监管）；
    - 资金周变化：`python3 analyze_stock_margin.py --stock <代码> --json` 与 `python3 analyze_stock_chips.py --stock <代码> --json`；

@@ -81,6 +81,7 @@ import {
   type ChatMessage,
   type ChatSession
 } from "../lib/sessionStore";
+import { subagentRoleLabel, subagentTimeoutMinutes } from "../lib/subagentMeta";
 import { GATEWAY_URL } from "../lib/gatewayUrl";
 import {
   archiveThread,
@@ -2273,20 +2274,33 @@ function WorkspaceShell({
             <ContextEmpty>当前任务未调用 Subagent</ContextEmpty>
           ) : (
             <div className="context-subagent-list">
-              {subagents.map((agent) => (
-                <details className="context-subagent" key={agent.taskId} open={agent.status === "running"}>
-                  <summary>
-                    <span className="context-subagent-title"><Bot size={14} />{agent.description || agent.taskId}</span>
-                    <em className={`subagent-status ${agent.status}`}>{subagentStatusLabel(agent.status)}</em>
-                  </summary>
-                  <div className="context-subagent-meta">{agent.model || "默认模型"} · {agent.steps.length} 个步骤</div>
-                  {agent.steps.length > 0 && (
-                    <div className="context-subagent-steps">
-                      {agent.steps.slice(-3).map((step) => <p key={step.index}>{step.text || `步骤 ${step.index}`}</p>)}
+              {subagents.map((agent) => {
+                // 角色名优先（内置角色有中文名），description 是 Lead 生成
+                // 的 3-5 词临时描述，仅作任务内容副标题。
+                const roleLabel = subagentRoleLabel(agent.role);
+                const timeoutMinutes = subagentTimeoutMinutes(agent.role);
+                return (
+                  <details className="context-subagent" key={agent.taskId} open={agent.status === "running"}>
+                    <summary>
+                      <span className="context-subagent-title"><Bot size={14} />{roleLabel ?? agent.description ?? agent.taskId}</span>
+                      <em className={`subagent-status ${agent.status}`}>{subagentStatusLabel(agent.status)}</em>
+                    </summary>
+                    {agent.description && roleLabel && agent.description !== roleLabel && (
+                      <div className="context-subagent-desc">{agent.description}</div>
+                    )}
+                    <div className="context-subagent-meta">
+                      {agent.model || "默认模型"}
+                      {timeoutMinutes != null ? ` · 预计最长 ${timeoutMinutes} 分钟` : ""}
+                      {` · ${agent.steps.length} 个步骤`}
                     </div>
-                  )}
-                </details>
-              ))}
+                    {agent.steps.length > 0 && (
+                      <div className="context-subagent-steps">
+                        {agent.steps.slice(-3).map((step) => <p key={step.index}>{step.text || `步骤 ${step.index}`}</p>)}
+                      </div>
+                    )}
+                  </details>
+                );
+              })}
             </div>
           )}
         </ContextSection>

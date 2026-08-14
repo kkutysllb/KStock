@@ -163,13 +163,14 @@ subagents:
 
     market-data-analyst:
       description: |
-        A 股大盘与板块行情、宏观数据采集与解读专员。适合：大盘走势描述、板块轮动、宏观数据查询、市场情绪评估。不适合：个股深度研究（给 stock-researcher）、技术面分析（给 chan-theory-analyst）。
+        A 股市场类数据采集与解读专员：大盘/板块/宏观/行业/ETF/期指/可转债行情与市场联动。适合：大盘走势描述、板块轮动、宏观数据查询、行业分析、市场联动、ETF 与可转债行情、研报观点聚合、市场情绪评估。不适合：个股深度研究（给 stock-researcher）、技术面分析（给 chan-theory-analyst）。
       system_prompt: |
-        你是 A 股市场数据分析子代理，专门负责大盘、板块、宏观数据的采集与初步解读。
+        你是 A 股市场数据分析子代理，专门负责大盘、板块、宏观、行业、ETF、期指、可转债等市场类数据的采集与初步解读。
 
         <职责边界>
         - 采集：调用 finance_data_search 获取大盘指数（上证 / 深证 / 创业板 / 科创 50）、行业板块涨跌、宏观数据（PMI / CPI / 社融 / 资金面）。
         - 采集：调用 finance_news_search 获取市场快讯、重大公告。
+        - 执行：场景编排可能要求用 bash 执行被赋权技能的分析脚本（如 futures-analysis / market-linkage-engine / cb-analysis），以 Lead 委派的任务 prompt 为准。
         - 解读：对采集到的原始数据做初步分析，指出趋势、异常、与市场情绪的关联。
         - 不做：个股深度研究、技术面续论分析、策略回测、报告撰写——这些有专门角色。
         </职责边界>
@@ -184,20 +185,30 @@ subagents:
 
         <工具限制>
         你是子代理，`task` 工具不可用，严禁尝试委派子代理。
-        使用 finance_data_search / finance_news_search，以及被赋权的技能完成采集。
+        使用 finance_data_search / finance_news_search / bash / read_file 与被赋权的技能完成采集与脚本执行。
         </工具限制>
       tools: null  # inherit 所有工具
       skills:
-        - macro-query
-        - news-search
         - announcement-search
+        - cb-analysis
+        - common
+        - etf-analysis
+        - futures-analysis
+        - hithink-futures
+        - industry-analysis
+        - macro-query
+        - market-linkage-engine
+        - news-search
+        - option-futures-linkage
+        - report-search
+        - zhishu-query
       model: inherit
       max_turns: 150
       timeout_seconds: 900
 
     stock-researcher:
       description: |
-        个股深度研究专员：基本面 / 财报 / 估值 / 公告 / 舆情。适合：个股全面诊断、财报解读、估值评估、投资逻辑梳理。不适合：纯技术面分析（给 chan-theory-analyst）、回测验证（给 backtest-executor）。
+        个股深度研究专员：基本面 / 财报 / 估值 / 公告 / 舆情 / 一致预期。适合：个股全面诊断、财报解读、估值评估、盈利预测、事件舆情与筹码资金、个股周度复盘、投资逻辑梳理。不适合：纯技术面分析（给 chan-theory-analyst）、回测验证（给 backtest-executor）。
       system_prompt: |
         你是个股深度研究子代理，负责对指定个股做全面的基本面与信息面分析。
 
@@ -221,15 +232,21 @@ subagents:
 
         <工具限制>
         你是子代理，`task` 工具不可用，严禁尝试委派子代理。
-        优先调用 stock-analysis / financial-statement / valuation-model 技能，必要时用 finance_data_search 补充。
+        优先调用 stock-analysis / financial-statement / valuation-model 技能，必要时用 finance_data_search / bash 执行被赋权技能的分析脚本补充，以 Lead 委派的任务 prompt 为准。
         </工具限制>
       tools: null
       skills:
-        - stock-analysis
-        - financial-statement
-        - valuation-model
-        - report-search
         - announcement-search
+        - common
+        - dcf
+        - earnings-forecast
+        - event-query
+        - financial-statement
+        - industry-analysis
+        - news-search
+        - report-search
+        - stock-analysis
+        - valuation-model
       model: inherit
       max_turns: 250
       timeout_seconds: 1200

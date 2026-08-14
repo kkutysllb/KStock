@@ -1933,6 +1933,16 @@ body.sidebar-resizing {
 .subagent-status.failed,
 .subagent-status.timed_out { color: #ff9d9d; }
 
+.context-subagent-desc {
+  margin: 0 7px 7px;
+  color: #9da4ae;
+  font-size: 10px;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .context-subagent-meta,
 .context-subagent-steps {
   margin: 0 7px 7px;

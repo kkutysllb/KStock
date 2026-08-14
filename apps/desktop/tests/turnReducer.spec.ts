@@ -543,6 +543,93 @@ describe("custom 事件：task 分组", () => {
     });
   });
 
+  it("task_started 从 task 工具调用 args 提取角色", () => {
+    let s = initialTurn();
+    // 正常时序：Lead 先发起 task 工具调用（tool_call_id === task_id），
+    // task_tool 执行后发出 task_started（事件本身不带 subagent_type）。
+    s = reduceFrame(
+      s,
+      frame("messages", aiMsg({
+        id: "m1",
+        tool_calls: [{
+          id: "t1", name: "task",
+          args: { description: "分析期指行情", prompt: "…", subagent_type: "market-data-analyst" }
+        }]
+      })),
+      1
+    );
+    s = reduceFrame(
+      s,
+      frame("custom", { type: "task_started", task_id: "t1", description: "分析期指行情", model_name: "deepseek" }),
+      2
+    );
+    expect(s.subagents?.[0]).toMatchObject({
+      taskId: "t1", role: "market-data-analyst", description: "分析期指行情"
+    });
+  });
+
+  it("task_started 无匹配 task 工具调用时 role 缺失（回退 description 展示）", () => {
+    const s = reduceFrame(
+      initialTurn(),
+      frame("custom", { type: "task_started", task_id: "t1", description: "搜索新闻" }),
+      1
+    );
+    expect(s.subagents?.[0].role).toBeUndefined();
+    expect(s.subagents?.[0].description).toBe("搜索新闻");
+  });
+
+  it("非 task 工具调用不提取角色", () => {
+    let s = initialTurn();
+    s = reduceFrame(
+      s,
+      frame("messages", aiMsg({
+        id: "m1",
+        tool_calls: [{ id: "t1", name: "read_file", args: { path: "/mnt/skills/x" } }]
+      })),
+      1
+    );
+    s = reduceFrame(s, frame("custom", { type: "task_started", task_id: "t1" }), 2);
+    expect(s.subagents?.[0].role).toBeUndefined();
+  });
+
+  it("task 工具调用后到（异常时序）回填角色", () => {
+    let s = initialTurn();
+    s = reduceFrame(s, frame("custom", { type: "task_started", task_id: "t1" }), 1);
+    expect(s.subagents?.[0].role).toBeUndefined();
+    s = reduceFrame(
+      s,
+      frame("messages", aiMsg({
+        id: "m1",
+        tool_calls: [{ id: "t1", name: "task", args: { subagent_type: "stock-researcher" } }]
+      })),
+      2
+    );
+    expect(s.subagents?.[0].role).toBe("stock-researcher");
+  });
+
+  it("task 工具调用回填仅限缺失 role 的 subagent（不覆盖已有角色）", () => {
+    let s = initialTurn();
+    s = reduceFrame(
+      s,
+      frame("messages", aiMsg({
+        id: "m1",
+        tool_calls: [{ id: "t1", name: "task", args: { subagent_type: "report-writer" } }]
+      })),
+      1
+    );
+    s = reduceFrame(s, frame("custom", { type: "task_started", task_id: "t1" }), 2);
+    // 重发同一 tool_calls（args 相同），role 不应被覆盖
+    s = reduceFrame(
+      s,
+      frame("messages", aiMsg({
+        id: "m1",
+        tool_calls: [{ id: "t1", name: "task", args: { subagent_type: "report-writer" } }]
+      })),
+      3
+    );
+    expect(s.subagents?.[0].role).toBe("report-writer");
+  });
+
   it("task_started 同 task_id 去重（重放）", () => {
     let s = initialTurn();
     s = reduceFrame(s, frame("custom", { type: "task_started", task_id: "t1" }), 1);

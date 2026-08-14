@@ -76,6 +76,10 @@ export interface SubagentStep {
 /** 并行 subagent（引擎 task_tool 产出，按 task_id 分组）。 */
 export interface SubagentTask {
   taskId: string;
+  /** task 工具调用的 subagent_type（内置角色名，如 stock-researcher）。
+   *  由 turnReducer 从 task 工具调用的 args 提取（task_id === tool_call_id）。
+   *  缺失时（旧事件/未知类型）UI 回退显示 description。 */
+  role?: string;
   description?: string;
   model?: string;
   status: "running" | "completed" | "failed" | "cancelled" | "timed_out";

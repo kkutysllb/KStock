@@ -205,6 +205,15 @@ function reduceAiMessage(
       }
     }
     next.timeline = timeline;
+    // task 工具调用到达时回填 subagent 角色（防御 task_started 先于
+    // tool_calls 帧的异常时序；正常时序下 reduceTaskStarted 已提取）。
+    if (next.subagents?.some((s) => !s.role)) {
+      next.subagents = next.subagents.map((sub) => {
+        if (sub.role) return sub;
+        const role = subagentRoleFromTaskCall(next.toolCalls, sub.taskId);
+        return role ? { ...sub, role } : sub;
+      });
+    }
   }
 
   // usage_metadata
@@ -336,6 +345,9 @@ function reduceTaskStarted(
       ...subs,
       {
         taskId,
+        // 角色身份：task 工具调用的 tool_call_id === task_id，从对应调用
+        // 的 args.subagent_type 提取（task_started 事件本身不带该字段）。
+        role: subagentRoleFromTaskCall(state.toolCalls, taskId),
         description: strOr(ev.description),
         model: strOr(ev.model_name),
         status: "running",
@@ -343,6 +355,16 @@ function reduceTaskStarted(
       }
     ]
   };
+}
+
+/** 从 task 工具调用提取 subagent_type（tool_call_id === taskId）。 */
+function subagentRoleFromTaskCall(
+  toolCalls: ToolCall[] | undefined,
+  taskId: string
+): string | undefined {
+  const call = toolCalls?.find((tc) => tc.id === taskId && tc.name === "task");
+  const subagentType = call?.args?.subagent_type;
+  return typeof subagentType === "string" && subagentType ? subagentType : undefined;
 }
 
 function reduceTaskRunning(
