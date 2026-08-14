@@ -6,6 +6,9 @@
  * 输出，渲染层问题（黑屏/加载失败/进程崩溃）无从定位。本模块把主进程
  * 关键事件落盘到 ``~/.kstock/logs/desktop-electron.log``，与 gateway 日志
  * 同目录，便于「打开日志目录」菜单一并查看。
+ *
+ * 覆写语义：每次应用启动首次写入时用 ``w`` 打开（truncate），本次运行
+ * 内再追加；避免跨启动无限追加导致日志文件持续膨胀。
  */
 
 import { appendFileSync, mkdirSync, openSync } from "node:fs";
@@ -22,7 +25,9 @@ function ensureFd(): number {
   if (fd !== null) return fd;
   try {
     mkdirSync(LOG_DIR, { recursive: true });
-    fd = openSync(LOG_PATH, "a");
+    // "w" 首次打开即覆盖写入；fd 缓存后本次进程内后续写为追加，
+    // 实现「每次启动覆盖、本次运行追加」的语义。
+    fd = openSync(LOG_PATH, "w");
   } catch {
     fd = -1;
   }
@@ -32,8 +37,8 @@ function ensureFd(): number {
 /**
  * 写一条主进程日志。同时输出到 stdout（开发态终端可见）。
  *
- * 不做日志轮转（与 gateway 日志策略一致，由用户经「打开日志目录」菜单
- * 手动清理）；``logMain`` 只在关键事件调用，增长缓慢。
+ * 每次应用启动首次写入时覆盖旧日志（见 ``ensureFd``），本次运行内追加，
+ * 因此文件不会跨启动无限增长。
  */
 export function logMain(msg: string): void {
   const handle = ensureFd();
