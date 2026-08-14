@@ -8,6 +8,10 @@
 from pathlib import Path
 
 from scripts.patch_vendor_skills import (
+    _BACKTEST_CLI_FIXES,
+    _BACKTEST_ENGINE_FIXES,
+    _fix_backtest_a_share,
+    _fix_backtest_cli,
     _fix_np_bug,
     _fix_pandas3_ffill,
     _fix_pywencai_hint,
@@ -416,7 +420,12 @@ def test_apply_skill_patches_against_tmp_vendor(tmp_path):
     changed = apply_skill_patches(vendor_root=tmp_path)
 
     assert sorted(changed) == sorted(
-        [f"{rel}/analyze_financial_deep.py", f"{rel}/analyze_stock_valuation.py"]
+        [
+            f"{rel}/analyze_financial_deep.py",
+            f"{rel}/analyze_stock_valuation.py",
+            # 行情缓存模块：规范源码拷贝（对稀疏 tmp vendor 也会创建）
+            "public/common/src/kk_common/market_data_cache.py",
+        ]
     )
     assert "if get_finance_data_gateway and token:" in ts_target.read_text(encoding="utf-8")
     assert "import numpy as np" in np_target.read_text(encoding="utf-8")
@@ -425,8 +434,39 @@ def test_apply_skill_patches_against_tmp_vendor(tmp_path):
     assert apply_skill_patches(vendor_root=tmp_path) == []
 
 
+def test_backtest_a_share_patch_round_trip():
+    """回测引擎 A股规则补丁必须能从上游形态精确重建当前 vendor 文件。
+
+    上游同步会整体覆盖 vendor/skills，本测试保证补丁对 (old→new) 与
+    当前文件严格一致：逆向还原出上游形态 → 重放补丁 → 必须逐字节还原。
+    """
+    vendor_root = Path(__file__).resolve().parent.parent / "vendor" / "skills"
+    cases = (
+        (
+            "public/strategy-research/scripts/analysis/backtest_engine.py",
+            _BACKTEST_ENGINE_FIXES,
+            _fix_backtest_a_share,
+        ),
+        (
+            "public/strategy-research/scripts/cli.py",
+            _BACKTEST_CLI_FIXES,
+            _fix_backtest_cli,
+        ),
+    )
+    for rel_path, fixes, fix_fn in cases:
+        current = (vendor_root / rel_path).read_text(encoding="utf-8")
+        # 幂等：已修复文件不再改动
+        assert fix_fn(current) is None, f"{rel_path} 补丁不幂等"
+        # 逆向还原出上游形态，再应用补丁必须精确重建当前文件
+        upstream_like = current
+        for old, new in fixes:
+            assert new in upstream_like, f"{rel_path} 缺少补丁目标片段"
+            upstream_like = upstream_like.replace(new, old, 1)
+        assert fix_fn(upstream_like) == current, f"{rel_path} 补丁无法精确重建"
+
+
 def test_apply_skill_patches_repaired_vendor_scripts_are_syntactically_valid():
-    """真实 vendor 中 5 个目标脚本补丁后必须保持语法有效。"""
+    """真实 vendor 中目标脚本补丁后必须保持语法有效。"""
     import py_compile
 
     vendor_root = Path(__file__).resolve().parent.parent / "vendor" / "skills"
@@ -438,8 +478,45 @@ def test_apply_skill_patches_repaired_vendor_scripts_are_syntactically_valid():
         "public/stock-analysis/scripts/analysis-engine/analyze_social_media.py",
         "public/stock-analysis/scripts/analysis-engine/analyze_stock_valuation.py",
         "public/stock-analysis/scripts/analysis-engine/analyze_stock_margin.py",
+        "public/strategy-research/scripts/analysis/backtest_engine.py",
+        "public/strategy-research/scripts/cli.py",
     )
     for rel in targets:
         py_compile.compile(str(vendor_root / rel), doraise=True)
     # 幂等
     assert apply_skill_patches(vendor_root=vendor_root) == []
+
+
+def test_market_data_cache_module_matches_canonical_copy():
+    """scripts/patches 规范源码与技能树拷贝必须逐字节一致。
+
+    修改缓存模块时若只改了一份（上游同步会以规范源码覆盖技能树），
+    本测试立即暴露漂移。
+    """
+    from scripts.patch_vendor_skills import _MARKET_DATA_CACHE_MODULE_PATH
+
+    canonical = (
+        Path(__file__).resolve().parent.parent / "scripts" / "patches" / "market_data_cache.py"
+    )
+    vendor_copy = (
+        Path(__file__).resolve().parent.parent / "vendor" / "skills" / _MARKET_DATA_CACHE_MODULE_PATH
+    )
+    assert canonical.exists()
+    assert vendor_copy.exists()
+    assert canonical.read_text(encoding="utf-8") == vendor_copy.read_text(encoding="utf-8")
+
+
+def test_finance_gateway_cache_weave_round_trip():
+    """网关缓存织入补丁必须能从上游形态精确重建当前 vendor 文件。"""
+    from scripts.patch_vendor_skills import _FINANCE_GATEWAY_FIXES, _fix_finance_gateway_cache
+
+    vendor_root = Path(__file__).resolve().parent.parent / "vendor" / "skills"
+    rel = "public/common/src/kk_common/finance_data_gateway.py"
+    current = (vendor_root / rel).read_text(encoding="utf-8")
+    assert _fix_finance_gateway_cache(current) is None
+
+    upstream_like = current
+    for old, new in _FINANCE_GATEWAY_FIXES:
+        assert new in upstream_like
+        upstream_like = upstream_like.replace(new, old, 1)
+    assert _fix_finance_gateway_cache(upstream_like) == current

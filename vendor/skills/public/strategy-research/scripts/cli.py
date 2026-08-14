@@ -53,7 +53,13 @@ def cmd_demo(args):
 
     engine = get_strategy(args.strategy, **strategy_kwargs)
     signals = engine.generate(data_map)
-    result = run_backtest(data_map, signals, initial_cash=args.cash, commission=args.commission)
+    result = run_backtest(
+        data_map, signals,
+        initial_cash=args.cash,
+        commission=args.commission,
+        slippage=args.slippage,
+        enforce_a_share_rules=not args.no_a_share_rules,
+    )
 
     if "error" in result:
         print(json.dumps(result, ensure_ascii=False))
@@ -160,6 +166,9 @@ def main():
     p_demo.add_argument("--overbought", type=float, default=70.0, help="RSI 超买阈值")
     p_demo.add_argument("--cash", type=float, default=1_000_000, help="初始资金")
     p_demo.add_argument("--commission", type=float, default=0.001, help="手续费率")
+    p_demo.add_argument("--slippage", type=float, default=0.0, help="滑点比例（0.001 = 0.1%）")
+    p_demo.add_argument("--no-a-share-rules", action="store_true",
+                        help="关闭A股交易规则（T+1/涨跌停/整手/最低佣金/印花税，回到简化回测）")
 
     # validate 模式
     p_val = sub.add_parser("validate", help="验证策略文件语法")

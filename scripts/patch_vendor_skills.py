@@ -245,6 +245,496 @@ _TAS_ARGS_REPLACEMENTS = (
 )
 
 
+# ── 回测引擎 A股交易规则补丁（strategy-research）──────────────────────────
+# 上游 backtest_engine 自述「简化回测引擎」：无 T+1/涨跌停/停牌/整手/印花税/
+# 最低佣金/滑点建模，回测结果对 A 股不具可信度。本补丁补齐 A 股微观规则，
+# 默认启用（enforce_a_share_rules=True），传 False 可回到上游简化语义。
+_BACKTEST_ENGINE_PATH = "public/strategy-research/scripts/analysis/backtest_engine.py"
+_BACKTEST_CLI_PATH = "public/strategy-research/scripts/cli.py"
+
+_BACKTEST_ENGINE_FIXES = (
+    (
+        '''  - 调仓记录: 信号变化时的买卖明细（调仓前后持仓对比）
+"""
+
+import json
+import os
+from typing import Dict, List, Tuple
+
+import numpy as np
+import pandas as pd
+
+
+def run_backtest(''',
+        '''  - 调仓记录: 信号变化时的买卖明细（调仓前后持仓对比）
+  - A股交易规则: T+1、涨跌停（收盘触板不成交）、停牌/零成交量的信号顺延、
+    整手(100股)交易、佣金最低5元、卖出印花税、过户费、滑点
+"""
+
+import json
+import os
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+
+
+def _board_limit_ratio(code: str) -> float:
+    """按代码板块推断涨跌停幅度。
+
+    创业板(300/301)与科创板(688/689) 20%，北交所(4/8/92 开头) 30%，其余 10%。
+    ST 股票 5% 无法从代码判断，用 limit_ratio_overrides 显式指定。
+    """
+    pure = str(code).split(".")[0]
+    if pure.startswith(("300", "301", "688", "689")):
+        return 0.20
+    if pure.startswith(("4", "8", "92")):
+        return 0.30
+    return 0.10
+
+
+def _limit_prices(prev_close: float, code: str, overrides: Dict[str, float]) -> Tuple[float, float]:
+    """按前收盘计算涨停/跌停价（交易所规则：前收盘×(1±幅度)四舍五入到分）。"""
+    ratio = overrides.get(code) or _board_limit_ratio(code)
+    limit_up = round(prev_close * (1 + ratio), 2)
+    limit_down = round(prev_close * (1 - ratio), 2)
+    return limit_up, limit_down
+
+
+def run_backtest(''',
+    ),
+    (
+        '''    initial_cash: float = 1_000_000,
+    commission: float = 0.001,
+    record_positions: bool = True,
+) -> Dict:
+    """
+    简化回测引擎：根据信号计算策略表现。
+
+    Args:
+        data_map: code -> DataFrame (columns: open, high, low, close, volume)
+        signals: code -> signal Series (value in [-1.0, 1.0])
+        initial_cash: 初始资金
+        commission: 单边手续费率
+        record_positions: 是否记录每日持仓快照
+
+    Returns:
+        dict with metrics, equity curve, trade log, position snapshots, rebalance records
+    """''',
+        '''    initial_cash: float = 1_000_000,
+    commission: float = 0.001,
+    record_positions: bool = True,
+    enforce_a_share_rules: bool = True,
+    stamp_duty: float = 0.0005,
+    transfer_fee: float = 0.00001,
+    min_commission: float = 5.0,
+    slippage: float = 0.0,
+    limit_ratio_overrides: Optional[Dict[str, float]] = None,
+) -> Dict:
+    """
+    回测引擎：根据信号计算策略表现。
+
+    Args:
+        data_map: code -> DataFrame (columns: open, high, low, close, volume)
+        signals: code -> signal Series (value in [-1.0, 1.0])
+        initial_cash: 初始资金
+        commission: 单边佣金率（万2.5 传 0.00025）
+        record_positions: 是否记录每日持仓快照
+        enforce_a_share_rules: 是否执行 A 股交易规则
+            （T+1、涨跌停、停牌顺延、整手、最低佣金、印花税、过户费）。
+            False 时回到简化语义（仅单边佣金率，可负持仓不设限）。
+        stamp_duty: 印花税率，仅卖出收取（2023-08-28 起为 0.0005）
+        transfer_fee: 过户费率，双边收取（0.00001 = 万0.1）
+        min_commission: 单笔最低佣金（元，A股常见为 5 元；0 表示不启用下限）
+        slippage: 滑点比例（0.001 = 买入价上浮 0.1%、卖出价下浮 0.1%）
+        limit_ratio_overrides: 个股涨跌停幅度覆盖（如 ST 股 {"XXX.XX": 0.05}）
+
+    Returns:
+        dict with metrics, equity curve, trade log, position snapshots, rebalance records
+    """''',
+    ),
+    (
+        '''    prev_signals = {c: 0.0 for c in codes}
+    total_commission = 0.0
+''',
+        '''    prev_signals = {c: 0.0 for c in codes}
+    total_commission = 0.0
+    # A股规则状态：last_closes 用于涨跌停基准价；last_buy_date 用于 T+1 判定。
+    # 主循环从第二个交易日开始，首日收盘需预载，否则第二日无涨跌停基准。
+    last_closes: Dict[str, float] = {}
+    last_buy_date: Dict[str, object] = {}
+    limit_overrides: Dict[str, float] = limit_ratio_overrides or {}
+    for c in codes:
+        if not data_map[c].empty:
+            first_close = data_map[c].iloc[0].get("close", np.nan)
+            if pd.notna(first_close):
+                last_closes[c] = float(first_close)
+
+    def _trade_cost(notional: float, is_sell: bool) -> float:
+        """按规则计算单笔交易成本；简化模式下仅单边佣金率。"""
+        if not enforce_a_share_rules:
+            return abs(notional * commission)
+        if notional <= 0:
+            return 0.0
+        cost = notional * commission
+        if min_commission > 0:
+            cost = max(cost, min_commission)
+        cost += notional * transfer_fee
+        if is_sell:
+            cost += notional * stamp_duty
+        return cost
+''',
+    ),
+    (
+        '''            # 限制信号范围
+            sig = max(-1.0, min(1.0, sig))
+
+            # 检测信号变化 → 交易
+            prev_sig = prev_signals.get(code, 0.0)
+            if sig != prev_sig and i > 0:
+                rebalance = {
+                    "date": str(dt.date()),
+                    "code": code,
+                    "signal_before": round(prev_sig, 4),
+                    "signal_after": round(sig, 4),
+                }
+
+                # 平旧仓位
+                if positions[code] != 0:
+                    old_qty = positions[code]
+                    old_cost = cost_basis[code]
+                    close_pnl = old_qty * (close - old_cost)
+                    cost = abs(old_qty * close * commission)
+                    daily_pnl += close_pnl - cost
+                    total_commission += cost
+                    trades.append({
+                        "date": str(dt.date()),
+                        "code": code,
+                        "action": "close" if old_qty > 0 else "cover",
+                        "price": round(close, 4),
+                        "quantity": round(abs(old_qty), 4),
+                        "cost_price": round(old_cost, 4),
+                        "realized_pnl": round(close_pnl - cost, 2),
+                    })
+                    rebalance["action_close"] = {
+                        "direction": "long" if old_qty > 0 else "short",
+                        "quantity": round(abs(old_qty), 4),
+                        "price": round(close, 4),
+                        "realized_pnl": round(close_pnl - cost, 2),
+                    }
+
+                # 开新仓位
+                if sig != 0:
+                    alloc = equity[-1] * abs(sig) / len(codes)
+                    qty = alloc / close * sig
+                    cost = abs(alloc * commission)
+                    daily_pnl -= cost
+                    total_commission += cost
+                    positions[code] = qty
+                    cost_basis[code] = close
+                    trades.append({
+                        "date": str(dt.date()),
+                        "code": code,
+                        "action": "buy" if sig > 0 else "sell",
+                        "price": round(close, 4),
+                        "quantity": round(abs(qty), 4),
+                        "cost_price": round(close, 4),
+                        "realized_pnl": 0.0,
+                    })
+                    rebalance["action_open"] = {
+                        "direction": "long" if sig > 0 else "short",
+                        "quantity": round(abs(qty), 4),
+                        "price": round(close, 4),
+                        "signal_strength": round(abs(sig), 4),
+                    }
+                else:
+                    positions[code] = 0.0
+                    cost_basis[code] = 0.0
+                prev_signals[code] = sig
+                rebalance_records.append(rebalance)
+''',
+        '''            # 限制信号范围
+            sig = max(-1.0, min(1.0, sig))
+
+            # 滑点执行价：买入上浮、卖出下浮（简化模式下即收盘价）
+            buy_price = close * (1 + slippage) if enforce_a_share_rules else close
+            sell_price = close * (1 - slippage) if enforce_a_share_rules else close
+
+            # 检测信号变化 → 交易
+            prev_sig = prev_signals.get(code, 0.0)
+            if sig != prev_sig and i > 0:
+                rebalance = {
+                    "date": str(dt.date()),
+                    "code": code,
+                    "signal_before": round(prev_sig, 4),
+                    "signal_after": round(sig, 4),
+                }
+
+                # ── A股可交易性检查：被阻的调仓整体顺延到下一交易日 ──
+                blocked = None
+                if enforce_a_share_rules:
+                    vol = row.get("volume", np.nan)
+                    if pd.notna(vol) and float(vol) <= 0:
+                        blocked = "suspended_zero_volume"
+                    else:
+                        ref_close = last_closes.get(code)
+                        if ref_close:
+                            limit_up, limit_down = _limit_prices(ref_close, code, limit_overrides)
+                            at_limit_up = close >= limit_up - 1e-6
+                            at_limit_down = close <= limit_down + 1e-6
+                            needs_buy = sig > 0 or positions[code] < 0  # 开多或平空
+                            needs_sell = sig < 0 or positions[code] > 0  # 开空或平多
+                            if needs_buy and at_limit_up:
+                                blocked = "limit_up"
+                            elif needs_sell and at_limit_down:
+                                blocked = "limit_down"
+                            elif positions[code] > 0 and last_buy_date.get(code) == dt:
+                                blocked = "t_plus_1"
+
+                if blocked is not None:
+                    # 不成交、不更新 prev_signals：信号在下一交易日重试。
+                    rebalance["blocked"] = blocked
+                    rebalance_records.append(rebalance)
+                else:
+                    # 平旧仓位
+                    if positions[code] != 0:
+                        old_qty = positions[code]
+                        old_cost = cost_basis[code]
+                        px = sell_price if old_qty > 0 else buy_price
+                        close_pnl = old_qty * (px - old_cost)
+                        cost = _trade_cost(abs(old_qty) * px, is_sell=old_qty > 0)
+                        daily_pnl += close_pnl - cost
+                        total_commission += cost
+                        trades.append({
+                            "date": str(dt.date()),
+                            "code": code,
+                            "action": "close" if old_qty > 0 else "cover",
+                            "price": round(px, 4),
+                            "quantity": round(abs(old_qty), 4),
+                            "cost_price": round(old_cost, 4),
+                            "realized_pnl": round(close_pnl - cost, 2),
+                        })
+                        rebalance["action_close"] = {
+                            "direction": "long" if old_qty > 0 else "short",
+                            "quantity": round(abs(old_qty), 4),
+                            "price": round(px, 4),
+                            "realized_pnl": round(close_pnl - cost, 2),
+                        }
+                        if old_qty > 0:
+                            last_buy_date.pop(code, None)
+
+                    # 开新仓位
+                    open_blocked = False
+                    if sig != 0:
+                        alloc = equity[-1] * abs(sig) / len(codes)
+                        px = buy_price if sig > 0 else sell_price
+                        raw_qty = alloc / px
+                        qty_abs = None
+                        if enforce_a_share_rules:
+                            lots = int(raw_qty // 100)
+                            # 整手交易：不足一手不成交（开仓顺延到下一交易日重试）
+                            qty_abs = lots * 100.0 if lots >= 1 else None
+                        else:
+                            qty_abs = raw_qty
+                        if qty_abs is None:
+                            open_blocked = True
+                            rebalance["blocked"] = "insufficient_for_one_lot"
+                        else:
+                            qty = qty_abs if sig > 0 else -qty_abs
+                            cost = _trade_cost(qty_abs * px, is_sell=sig < 0)
+                            daily_pnl -= cost
+                            total_commission += cost
+                            positions[code] = qty
+                            cost_basis[code] = px
+                            if qty > 0:
+                                last_buy_date[code] = dt
+                            trades.append({
+                                "date": str(dt.date()),
+                                "code": code,
+                                "action": "buy" if sig > 0 else "sell",
+                                "price": round(px, 4),
+                                "quantity": round(qty_abs, 4),
+                                "cost_price": round(px, 4),
+                                "realized_pnl": 0.0,
+                            })
+                            rebalance["action_open"] = {
+                                "direction": "long" if sig > 0 else "short",
+                                "quantity": round(qty_abs, 4),
+                                "price": round(px, 4),
+                                "signal_strength": round(abs(sig), 4),
+                            }
+                    else:
+                        positions[code] = 0.0
+                        cost_basis[code] = 0.0
+                    if not open_blocked:
+                        prev_signals[code] = sig
+                    rebalance_records.append(rebalance)
+''',
+    ),
+    (
+        '''            # 持仓盈亏
+            if positions[code] != 0 and (i > 0):
+                prev_dt = all_dates[i - 1]
+                if prev_dt in data_map[code].index:
+                    prev_close = data_map[code].loc[prev_dt].get("close", close)
+                    daily_pnl += positions[code] * (close - prev_close)
+''',
+        '''            # 持仓盈亏（用该标的上一有效收盘：停牌缺口期间损益正确累计）
+            if positions[code] != 0 and (i > 0):
+                prev_close = last_closes.get(code)
+                if prev_close is not None:
+                    daily_pnl += positions[code] * (close - prev_close)
+
+            if pd.notna(close):
+                last_closes[code] = float(close)
+''',
+    ),
+    (
+        '''    # 计算指标
+    equity_series = pd.Series(equity, index=equity_dates)
+    metrics = _compute_metrics(equity_series, initial_cash, len(trades))
+    metrics["total_commission"] = round(total_commission, 2)
+
+    return {
+        "metrics": metrics,
+''',
+        '''    # 计算指标
+    equity_series = pd.Series(equity, index=equity_dates)
+    metrics = _compute_metrics(equity_series, initial_cash, len(trades))
+    metrics["total_commission"] = round(total_commission, 2)
+
+    a_share_rules_summary = {
+        "enabled": enforce_a_share_rules,
+        "commission_rate": commission,
+        "min_commission": min_commission if enforce_a_share_rules else None,
+        "stamp_duty_sell": stamp_duty if enforce_a_share_rules else None,
+        "transfer_fee": transfer_fee if enforce_a_share_rules else None,
+        "slippage": slippage if enforce_a_share_rules else None,
+        "lot_size": 100 if enforce_a_share_rules else None,
+        "t_plus_1": enforce_a_share_rules,
+        "blocked_rebalances": sum(1 for r in rebalance_records if r.get("blocked")),
+    }
+
+    return {
+        "metrics": metrics,
+        "a_share_rules": a_share_rules_summary,
+''',
+    ),
+)
+
+
+_BACKTEST_CLI_FIXES = (
+    (
+        '''    p_demo.add_argument("--cash", type=float, default=1_000_000, help="初始资金")
+    p_demo.add_argument("--commission", type=float, default=0.001, help="手续费率")
+''',
+        '''    p_demo.add_argument("--cash", type=float, default=1_000_000, help="初始资金")
+    p_demo.add_argument("--commission", type=float, default=0.001, help="手续费率")
+    p_demo.add_argument("--slippage", type=float, default=0.0, help="滑点比例（0.001 = 0.1%）")
+    p_demo.add_argument("--no-a-share-rules", action="store_true",
+                        help="关闭A股交易规则（T+1/涨跌停/整手/最低佣金/印花税，回到简化回测）")
+''',
+    ),
+    (
+        '''    result = run_backtest(data_map, signals, initial_cash=args.cash, commission=args.commission)
+''',
+        '''    result = run_backtest(
+        data_map, signals,
+        initial_cash=args.cash,
+        commission=args.commission,
+        slippage=args.slippage,
+        enforce_a_share_rules=not args.no_a_share_rules,
+    )
+''',
+    ),
+)
+
+
+def _fix_backtest_a_share(text: str) -> str | None:
+    """backtest_engine：补齐 A股交易规则；已修复返回 None（幂等跳过）。
+
+    幂等标记用 _board_limit_ratio（新增的模块级函数）：状态初始化补丁对
+    的 old 文本是 new 文本的前缀，不能靠 old 缺席判断是否已应用。
+    """
+    if "_board_limit_ratio" in text:
+        return None
+    patched = text
+    for old, new in _BACKTEST_ENGINE_FIXES:
+        patched = patched.replace(old, new, 1)
+    if patched == text:
+        return None
+    return patched
+
+
+def _fix_backtest_cli(text: str) -> str | None:
+    """cli.py：demo 回测暴露 A股规则开关；已修复返回 None（幂等跳过）。"""
+    if "--no-a-share-rules" in text:
+        return None
+    patched = text
+    for old, new in _BACKTEST_CLI_FIXES:
+        patched = patched.replace(old, new, 1)
+    if patched == text:
+        return None
+    return patched
+
+
+# ── 行情数据磁盘缓存补丁（common/kk_common）──────────────────────────────
+# 每次任务在线重拉同样的历史行情，重复消耗 Tushare 积分。规范源码保存在
+# scripts/patches/market_data_cache.py（KStock 自有，同步不覆盖），由补丁
+# 脚本拷贝进技能树；FinanceDataGateway.request 织入缓存包装。
+_MARKET_DATA_CACHE_MODULE_PATH = "public/common/src/kk_common/market_data_cache.py"
+_FINANCE_GATEWAY_PATH = "public/common/src/kk_common/finance_data_gateway.py"
+
+_FINANCE_GATEWAY_FIXES = (
+    (
+        "from kk_common.tushare_client import TushareClient, get_tushare_client\n",
+        "from kk_common import market_data_cache\n"
+        "from kk_common.tushare_client import TushareClient, get_tushare_client\n",
+    ),
+    (
+        '''    def request(self, endpoint: str, **kwargs: Any) -> pd.DataFrame:
+        return _as_dataframe(self.adapter.request(endpoint, **kwargs))
+''',
+        '''    def request(self, endpoint: str, **kwargs: Any) -> pd.DataFrame:
+        # KStock patch: 白名单接口过本地磁盘缓存（增量合并，跨任务复用），
+        # 其余接口直连。详见 kk_common.market_data_cache 模块头注释。
+        if market_data_cache.handles(endpoint):
+            return market_data_cache.wrap_request(
+                endpoint, kwargs,
+                lambda p: _as_dataframe(self.adapter.request(endpoint, **p)),
+            )
+        return _as_dataframe(self.adapter.request(endpoint, **kwargs))
+''',
+    ),
+)
+
+
+def _fix_finance_gateway_cache(text: str) -> str | None:
+    """FinanceDataGateway.request 织入磁盘缓存；已修复返回 None（幂等跳过）。"""
+    if "market_data_cache.handles" in text:
+        return None
+    patched = text
+    for old, new in _FINANCE_GATEWAY_FIXES:
+        patched = patched.replace(old, new, 1)
+    if patched == text:
+        return None
+    return patched
+
+
+def _ensure_market_data_cache_module(vendor_root: Path) -> bool:
+    """把规范源码拷贝进技能树（缺失或内容漂移时重写），返回是否发生改动。"""
+    canonical = Path(__file__).resolve().parent / "patches" / "market_data_cache.py"
+    if not canonical.exists():
+        return False
+    target = vendor_root / _MARKET_DATA_CACHE_MODULE_PATH
+    content = canonical.read_text(encoding="utf-8")
+    if target.exists() and target.read_text(encoding="utf-8") == content:
+        return False
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    return True
+
+
 def _patch_file(path: Path, name: str, apply_fn) -> bool:
     """对单个文件应用补丁函数，返回是否发生了改动（补丁后与原文不同）。"""
     text = path.read_text(encoding="utf-8")
@@ -385,6 +875,18 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
         fix_fn = _fix_scipy_soft_bs_model if rel_path.endswith("bs_model.py") else _fix_scipy_soft_tas
         if _patch_file(target, rel_path, fix_fn):
             changed.append(rel_path)
+    for rel_path, fix_fn in (
+        (_BACKTEST_ENGINE_PATH, _fix_backtest_a_share),
+        (_BACKTEST_CLI_PATH, _fix_backtest_cli),
+        (_FINANCE_GATEWAY_PATH, _fix_finance_gateway_cache),
+    ):
+        target = vendor_root / rel_path
+        if not target.exists():
+            continue
+        if _patch_file(target, rel_path, fix_fn):
+            changed.append(rel_path)
+    if _ensure_market_data_cache_module(vendor_root):
+        changed.append(_MARKET_DATA_CACHE_MODULE_PATH)
     return changed
 
 

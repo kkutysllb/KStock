@@ -19,6 +19,7 @@ from typing import Any, Optional, Protocol
 
 import pandas as pd
 
+from kk_common import market_data_cache
 from kk_common.tushare_client import TushareClient, get_tushare_client
 
 
@@ -80,6 +81,13 @@ class FinanceDataGateway:
         self.adapter = adapter or TushareDataAdapter()
 
     def request(self, endpoint: str, **kwargs: Any) -> pd.DataFrame:
+        # KStock patch: 白名单接口过本地磁盘缓存（增量合并，跨任务复用），
+        # 其余接口直连。详见 kk_common.market_data_cache 模块头注释。
+        if market_data_cache.handles(endpoint):
+            return market_data_cache.wrap_request(
+                endpoint, kwargs,
+                lambda p: _as_dataframe(self.adapter.request(endpoint, **p)),
+            )
         return _as_dataframe(self.adapter.request(endpoint, **kwargs))
 
     # ── 股票基础 / 行情 ───────────────────────────────────────────────
