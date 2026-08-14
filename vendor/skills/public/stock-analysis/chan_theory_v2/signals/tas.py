@@ -248,7 +248,10 @@ def tas_macd_bc(freq: str, bars_raw: list, bi_list: list = None,
     recent_macd = np.abs(macd[-window:])
 
     # 检测局部高低点
-    from scipy.signal import argrelextrema
+    try:
+        from scipy.signal import argrelextrema
+    except Exception:
+        argrelextrema = None
     try:
         price_max_idx = argrelextrema(recent_close, np.greater, order=5)[0]
         price_min_idx = argrelextrema(recent_close, np.less, order=5)[0]

@@ -11,6 +11,8 @@ from scripts.patch_vendor_skills import (
     _fix_np_bug,
     _fix_pandas3_ffill,
     _fix_pywencai_hint,
+    _fix_scipy_soft_bs_model,
+    _fix_scipy_soft_tas,
     _fix_ts_bug,
     _fix_ts_field_bug,
     apply_skill_patches,
@@ -225,17 +227,26 @@ import os
         )
         bonds = self._v(bal, "bonds_payable")
         op = self._v(inc, "oper_profit")
+        capex = abs(self._v(cf, "stot_invest_act"))  # 近似
+        df5 = self.pro.daily_basic(
+            ts_code=ts_code,
+            end_date=end_date,
+            limit=fetch_n,
+            fields='ts_code,trade_date,turnover_rate,turnover_rate_f,pe,pe_ttm,pb,total_mv,float_mv'
+        )
 """
 
 VALUATION_MODELS_FIXED_MARKERS = (
     "operate_profit", "total_cur_assets", "total_cur_liab", "bond_payable",
     "fix_assets_total", "inventories", "c_paid_goods_s", "debt_to_eqt",
+    "c_pay_acq_const_fiolta", "circ_mv",
 )
 
 VALUATION_MODELS_REMOVED_MARKERS = (
     "oper_profit", "total_current_assets", "total_current_liab",
     "bonds_payable", "fix_asset_total", "dtowequity",
-    "c_pay_goods_for_sv", "inventory",
+    "c_pay_goods_for_sv", "inventory", "stot_invest_act", "stot_fin_act",
+    "float_mv",
 )
 
 
@@ -299,6 +310,98 @@ def test_fix_pywencai_hint_idempotent_after_fix():
 def test_fix_pywencai_hint_noop_when_no_hint():
     text = "import pywencai\nprint('hi')\n"
     assert _fix_pywencai_hint(text) is None
+
+
+BS_MODEL_BUGGY = """import numpy as np
+from scipy.stats import norm
+from scipy.optimize import brentq
+from typing import Literal
+
+
+def bs_price(S, K, T, r, sigma, option_type, q=0.0):
+    d1 = (np.log(S / K) + (r - q + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+    d2 = d1 - sigma * np.sqrt(T)
+    price = S * np.exp(-q * T) * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+    return float(price)
+
+
+def bs_greeks(S, K, T, r, sigma, option_type, q=0.0):
+    n_prime_d1 = norm.pdf(d1)
+    return n_prime_d1
+
+
+def bs_iv(S, K, T, r, market_price, option_type, q=0.0):
+    try:
+        return float(brentq(
+            lambda v: bs_price(S, K, T, r, v, option_type, q) - market_price,
+            1e-4, 10.0, xtol=1e-6, maxiter=200,
+        ))
+    except ValueError:
+        return np.nan
+"""
+
+
+def test_fix_scipy_soft_bs_model_repairs_hard_import():
+    fixed = _fix_scipy_soft_bs_model(BS_MODEL_BUGGY)
+    assert fixed is not None
+    assert "_HAS_SCIPY" in fixed
+    assert "_norm_cdf(" in fixed and "norm.cdf(" not in fixed
+    assert "_norm_pdf(" in fixed and "norm.pdf(" not in fixed
+    assert "_brentq(" in fixed and "float(brentq(" not in fixed
+    assert "from scipy.stats import norm\n" not in fixed
+    assert "import math\n" in fixed
+
+
+def test_fix_scipy_soft_bs_model_numeric_fallback():
+    """降级路径数值正确性：A&S CDF 近似 + 二分法求根。"""
+    import builtins
+
+    fixed = _fix_scipy_soft_bs_model(BS_MODEL_BUGGY)
+    # 强制屏蔽 scipy，确保执行到纯 Python 降级分支（与 runtime 环境一致）
+    real_import = builtins.__import__
+
+    def _no_scipy(name, *args, **kwargs):
+        if name == "scipy" or name.startswith("scipy."):
+            raise ImportError("scipy disabled for test")
+        return real_import(name, *args, **kwargs)
+
+    builtins.__import__ = _no_scipy
+    try:
+        ns: dict = {}
+        exec(compile(fixed, "bs_model", "exec"), ns)
+    finally:
+        builtins.__import__ = real_import
+    assert ns["_HAS_SCIPY"] is False
+    cdf = ns["_norm_cdf"]
+    assert abs(cdf(0.0) - 0.5) < 1e-7
+    assert abs(cdf(1.96) - 0.975) < 1e-4
+    assert abs(cdf(-1.96) - 0.025) < 1e-4
+    pdf = ns["_norm_pdf"]
+    assert abs(pdf(0.0) - 0.3989422804014327) < 1e-12
+    root = ns["_brentq"](lambda v: v * v - 2.0, 1.0, 2.0, xtol=1e-9, maxiter=200)
+    assert abs(root - 2 ** 0.5) < 1e-6
+
+
+def test_fix_scipy_soft_bs_model_idempotent():
+    fixed = _fix_scipy_soft_bs_model(BS_MODEL_BUGGY)
+    assert _fix_scipy_soft_bs_model(fixed) is None
+
+
+def test_fix_scipy_soft_tas_repairs_function_level_import():
+    buggy = (
+        "    # 检测局部高低点\n"
+        "    from scipy.signal import argrelextrema\n"
+        "    try:\n"
+        "        price_max_idx = argrelextrema(recent_close, np.greater, order=5)[0]\n"
+        "    except Exception:\n"
+        "        return create_single_signal(k1=k1, k2=k2, k3=k3, v1=\"其他\")\n"
+    )
+    fixed = _fix_scipy_soft_tas(buggy)
+    assert fixed is not None
+    assert "try:\n        from scipy.signal import argrelextrema\n" in fixed
+    assert "argrelextrema = None" in fixed
+    assert "except Exception:\n        return create_single_signal" in fixed
+    assert _fix_scipy_soft_tas(fixed) is None
 
 
 def test_apply_skill_patches_against_tmp_vendor(tmp_path):

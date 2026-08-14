@@ -129,7 +129,7 @@ class ValuationDataFetcher:
                 ts_code=ts_code, start_date=start,
                 fields="ts_code,end_date,report_type,"
                        "n_cashflow_act,c_paid_goods_s,"
-                       "c_fr_sale_sg,stot_invest_act,stot_fin_act,"
+                       "c_fr_sale_sg,c_pay_acq_const_fiolta,"
                        "c_pay_dist_dpcp_int_exp"
             )
             if df is not None and not df.empty:
@@ -221,7 +221,7 @@ class DCFModel:
         fcff_list = []
         for _, cf in cashflow_annual.iterrows():
             cfo = self._v(cf, "n_cashflow_act")
-            capex = abs(self._v(cf, "stot_invest_act"))  # 近似
+            capex = abs(self._v(cf, "c_pay_acq_const_fiolta"))  # 购建固定/无形/其他长期资产支付的现金
             fcff_list.append(cfo - capex)
 
         if not fcff_list:

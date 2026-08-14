@@ -9,7 +9,7 @@
     "KSkills": {
       "path": "/Users/libing/kk_Projects/KSkills",
       "branch": "main",
-      "commit": "993473eba8044226fb72ee860112b1c18c9b2423"
+      "commit": "fd01489dc41896e0ccb6016253d8b62f02d2b424"
     }
   },
   "skills_manifest": "vendor/skills/approved-skills.json"

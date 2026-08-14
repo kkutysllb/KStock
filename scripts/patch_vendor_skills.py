@@ -83,7 +83,7 @@ _NP_BUG_SCRIPTS = (
     "public/stock-analysis/scripts/analysis-engine/analyze_stock_margin.py",
 )
 
-# ── Tushare 字段名修复补丁（financial_deep / valuation_models）────────────
+# ── Tushare 字段名修复补丁（financial_deep / valuation_models / technical_analyzer）─
 # 上游脚本 fields 中的字段名与官方接口不符，无效字段被官方静默忽略，
 # 返回 DataFrame 缺列 → KeyError 或（_v 容错）静默全 0。同时修 fields
 # 重复（pandas 3.0 duplicate keys）与空格/下划线拼写。幂等检测：已含
@@ -91,6 +91,7 @@ _NP_BUG_SCRIPTS = (
 _TS_FIELD_FIX_SCRIPTS = (
     "public/stock-analysis/scripts/analysis-engine/analyze_financial_deep.py",
     "public/stock-analysis/scripts/analysis-engine/analyze_valuation_models.py",
+    "public/stock-analysis/scripts/analysis-engine/technical_analyzer.py",
 )
 
 # (旧片段, 新片段) 精确替换对，覆盖 fields 定义与全部列名使用点
@@ -115,6 +116,15 @@ _TS_FIELD_REPLACEMENTS = (
     ("n_cashflow_act,n_cashflow_inv_act,n_cashflow_fnc_act,",
      "n_cashflow_act,n_cashflow_inv_act,n_cash_flows_fnc_act,"),
     ("c_fr_sale_sg,c_pay goods_for_sv", "c_fr_sale_sg,c_paid_goods_s"),
+    # cashflow：stot_* 全部非官方字段（实测官方为 stot_inflows_inv_act /
+    # stot_cash_in_fnc_act / c_pay_acq_const_fiolta）；fields 中 stot_fin_act
+    # 无使用点直接删除，stot_invest_act 用于 FCFF 的 capex 近似 → 换官方
+    # c_pay_acq_const_fiolta（购建固定/无形/其他长期资产支付的现金）
+    ("c_fr_sale_sg,stot_invest_act,stot_fin_act,",
+     "c_fr_sale_sg,c_pay_acq_const_fiolta,"),
+    ('self._v(cf, "stot_invest_act")', 'self._v(cf, "c_pay_acq_const_fiolta")'),
+    # daily_basic：float_mv 非官方字段（官方流通市值为 circ_mv）
+    ("total_mv,float_mv'", "total_mv,circ_mv'"),
     # fina_indicator fields
     ("grossprofit_margin,netprofit_margin,roe,roa,dtowequity,",
      "grossprofit_margin,netprofit_margin,roe,roa,debt_to_eqt,"),
@@ -149,6 +159,89 @@ _PANDAS3_FFILL_SCRIPTS = (
 # ── pywencai 误导提示移除补丁（analyze_industry）──────────────────────────
 _PYWENCAI_HINT_SCRIPTS = (
     "public/industry-analysis/scripts/analyze_industry.py",
+)
+
+# ── scipy 软依赖补丁（bs_model / tas）──────────────────────────────────────
+# runtime 环境（build-gateway-bundle.sh 只装 pandas/tushare/akshare/common）
+# 无 scipy：options-payoff 的 bs_model 顶层硬导入（import 即崩），缠论 tas.py
+# 函数内硬导入 argrelextrema（运行到背驰检测才崩）。与上游 option_futures_
+# analyzer 降级模式一致：A&S 26.2.17 正态 CDF 近似 + 二分法求根。
+_SCIPY_SOFT_SCRIPTS = (
+    "public/options-payoff/scripts/analysis-engine/bs_model.py",
+    "public/stock-analysis/chan_theory_v2/signals/tas.py",
+)
+
+_BS_MODEL_IMPORT_OLD = (
+    "import numpy as np\n"
+    "from scipy.stats import norm\n"
+    "from scipy.optimize import brentq\n"
+    "from typing import Literal"
+)
+_BS_MODEL_IMPORT_NEW = (
+    "import math\n"
+    "import numpy as np\n"
+    "from typing import Literal\n"
+    "\n"
+    "# scipy 软依赖（与 option_futures_analyzer 同模式）：runtime 无 scipy 时\n"
+    "# 降级为纯 Python 实现（A&S 26.2.17 正态近似 + 二分法求根）\n"
+    "try:\n"
+    "    from scipy.stats import norm as _scipy_normal\n"
+    "    from scipy.optimize import brentq as _scipy_brentq\n"
+    "    _HAS_SCIPY = True\n"
+    "except Exception:\n"
+    "    _scipy_normal = None\n"
+    "    _HAS_SCIPY = False\n"
+    "\n"
+    "\n"
+    "def _norm_cdf(x: float) -> float:\n"
+    "    \"\"\"标准正态 CDF；有 scipy 用 scipy，否则 A&S 26.2.17 近似（误差 < 1e-7）。\"\"\"\n"
+    "    if _HAS_SCIPY:\n"
+    "        return _scipy_normal.cdf(x)\n"
+    "    x = float(x)\n"
+    "    t = 1.0 / (1.0 + 0.2316419 * abs(x))\n"
+    "    d = 0.3989422804014327 * math.exp(-0.5 * x * x)\n"
+    "    p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))))\n"
+    "    return 1.0 - p if x > 0 else p\n"
+    "\n"
+    "\n"
+    "def _norm_pdf(x: float) -> float:\n"
+    "    \"\"\"标准正态 PDF。\"\"\"\n"
+    "    if _HAS_SCIPY:\n"
+    "        return _scipy_normal.pdf(x)\n"
+    "    return 0.3989422804014327 * math.exp(-0.5 * x * x)\n"
+    "\n"
+    "\n"
+    "def _brentq(f, a: float, b: float, **kwargs) -> float:\n"
+    "    \"\"\"求根；有 scipy 用 brentq，否则二分法（xtol/maxiter 兼容）。\"\"\"\n"
+    "    if _HAS_SCIPY:\n"
+    "        return _scipy_brentq(f, a, b, **kwargs)\n"
+    "    xtol = kwargs.get(\"xtol\", 1e-8)\n"
+    "    maxiter = kwargs.get(\"maxiter\", 100)\n"
+    "    fa, fb = f(a), f(b)\n"
+    "    if fa * fb > 0:\n"
+    "        raise ValueError(\"f(a) and f(b) must have opposite signs\")\n"
+    "    for _ in range(maxiter):\n"
+    "        mid = (a + b) / 2.0\n"
+    "        fm = f(mid)\n"
+    "        if abs(fm) < xtol or (b - a) / 2.0 < xtol:\n"
+    "            return mid\n"
+    "        if fa * fm <= 0:\n"
+    "            b, fb = mid, fm\n"
+    "        else:\n"
+    "            a, fa = mid, fm\n"
+    "    return (a + b) / 2.0\n"
+)
+
+_BS_MODEL_CALL_REPLACEMENTS = (
+    ("norm.cdf(", "_norm_cdf("),
+    ("norm.pdf(", "_norm_pdf("),
+    ("float(brentq(", "float(_brentq("),
+)
+
+_TAS_ARGS_REPLACEMENTS = (
+    # 用前一行注释锚定，避免 8 空格缩进行包含 4 空格子串导致幂等误判
+    ("    # 检测局部高低点\n    from scipy.signal import argrelextrema\n",
+     "    # 检测局部高低点\n    try:\n        from scipy.signal import argrelextrema\n    except Exception:\n        argrelextrema = None\n"),
 )
 
 
@@ -208,6 +301,36 @@ def _fix_pandas3_ffill(text: str) -> str | None:
     return text.replace("fillna(method='ffill')", "ffill()")
 
 
+def _fix_scipy_soft_bs_model(text: str) -> str | None:
+    """bs_model：scipy 顶层硬导入改为软导入 + 纯 Python 降级；已修复返回 None。"""
+    olds = _BS_MODEL_CALL_REPLACEMENTS + ((_BS_MODEL_IMPORT_OLD, _BS_MODEL_IMPORT_NEW),)
+    if all(old not in text for old, _ in olds):
+        return None
+    patched = text
+    for old, new in _BS_MODEL_CALL_REPLACEMENTS:
+        patched = patched.replace(old, new)
+    patched = patched.replace(_BS_MODEL_IMPORT_OLD, _BS_MODEL_IMPORT_NEW)
+    if patched == text:
+        return None
+    return patched
+
+
+def _fix_scipy_soft_tas(text: str) -> str | None:
+    """tas.py：函数内 argrelextrema 硬导入包 try/except；已修复返回 None。
+
+    降级后 argrelextrema=None，调用抛 TypeError 被既有 except Exception
+    分支捕获，背驰信号降级为「无背驰」（与原始异常路径行为一致）。
+    """
+    if all(old not in text for old, _ in _TAS_ARGS_REPLACEMENTS):
+        return None
+    patched = text
+    for old, new in _TAS_ARGS_REPLACEMENTS:
+        patched = patched.replace(old, new)
+    if patched == text:
+        return None
+    return patched
+
+
 def _fix_pywencai_hint(text: str) -> str | None:
     """移除 pywencai 缺失时的误导安装提示；已修复返回 None（幂等跳过）。"""
     pattern = re.compile(
@@ -254,6 +377,13 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
         if not target.exists():
             continue
         if _patch_file(target, rel_path, _fix_pywencai_hint):
+            changed.append(rel_path)
+    for rel_path in _SCIPY_SOFT_SCRIPTS:
+        target = vendor_root / rel_path
+        if not target.exists():
+            continue
+        fix_fn = _fix_scipy_soft_bs_model if rel_path.endswith("bs_model.py") else _fix_scipy_soft_tas
+        if _patch_file(target, rel_path, fix_fn):
             changed.append(rel_path)
     return changed
 

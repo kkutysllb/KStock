@@ -319,7 +319,7 @@ class TechnicalDataFetcher:
                 ts_code=ts_code,
                 end_date=end_date,
                 limit=fetch_n,
-                fields='ts_code,trade_date,turnover_rate,turnover_rate_f,pe,pe_ttm,pb,total_mv,float_mv'
+                fields='ts_code,trade_date,turnover_rate,turnover_rate_f,pe,pe_ttm,pb,total_mv,circ_mv'
             )
             if df is None or df.empty:
                 return pd.DataFrame()
