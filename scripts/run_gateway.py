@@ -163,6 +163,40 @@ def _resolve_app_data_root() -> Path:
     return Path.home() / ".kstock"
 
 
+def _apply_template_path_overrides(
+    cfg: dict[str, Any],
+    qilin_data_dir: Path,
+    repo_root: Path,
+) -> dict[str, Any]:
+    """把模板中依赖路径的字段改写为用户数据空间绝对路径（就地修改）。
+
+    三处修正：
+    - ``database.backend`` = sqlite、``database.sqlite_dir`` = 绝对路径
+    - ``run_events.backend`` = db（运行事件进入 SQLite）
+    - ``skills.path`` = 仓库内 ``vendor/skills`` 的绝对路径
+
+    首启生成与「缺段补齐」共用，保证两条路径产出的段定义一致。
+    """
+    # ── 持久化层：强制 SQLite 落到用户数据目录的绝对路径 ──────────────
+    database = dict(cfg.get("database") or {})
+    database["backend"] = "sqlite"
+    database["sqlite_dir"] = str(qilin_data_dir)
+    cfg["database"] = database
+
+    # 运行事件进入数据库，与设计文档一致
+    run_events = dict(cfg.get("run_events") or {})
+    run_events["backend"] = "db"
+    cfg["run_events"] = run_events
+
+    # 技能根目录转绝对路径（模板里是相对 ``vendor/skills``）。
+    # 引擎 SkillsConfig 只认 ``path`` 字段（``root`` 会被 Pydantic 静默忽略，
+    # 导致技能目录回退到不存在的项目根 ``skills/``，技能系统整体失效）。
+    skills = dict(cfg.get("skills") or {})
+    skills_path = skills.get("path") or skills.pop("root", None) or "vendor/skills"
+    cfg["skills"] = {**skills, "path": str((repo_root / skills_path).resolve())}
+    return cfg
+
+
 def _generate_runtime_config(
     runtime_config_path: Path,
     qilin_data_dir: Path,
@@ -282,31 +316,31 @@ def _generate_runtime_config(
                     existing["skills"] = existing_skills
                     changed = True
 
+        # 6) 补齐缺失的产品级段（自愈）：用户删除数据目录重建 / 配置被
+        #    部分破坏后，已存在的残缺 runtime.yaml（如只剩 models 段）无法
+        #    靠 1)-5) 的增量合并修复，引擎 Pydantic 校验（如缺 sandbox 段）
+        #    失败导致 gateway 启动即 500。模板中 existing 缺失的顶层段用
+        #    模板值补齐（含路径修正）；已存在的段一律保留用户配置。
+        missing_keys = [k for k in template_cfg if k not in existing]
+        if missing_keys:
+            patch = _apply_template_path_overrides(
+                {k: template_cfg[k] for k in missing_keys},
+                qilin_data_dir,
+                repo_root,
+            )
+            for key, value in patch.items():
+                existing[key] = value
+            changed = True
+
         if changed:
             with runtime_config_path.open("w", encoding="utf-8") as fh:
                 yaml.safe_dump(existing, fh, allow_unicode=True, sort_keys=False)
         return
 
-    # 首次生成：以模板为基础
-    cfg = template_cfg
-
-    # ── 持久化层：强制 SQLite 落到用户数据目录的绝对路径 ──────────────
-    database = dict(cfg.get("database") or {})
-    database["backend"] = "sqlite"
-    database["sqlite_dir"] = str(qilin_data_dir)
-    cfg["database"] = database
-
-    # 运行事件进入数据库，与设计文档一致
-    run_events = dict(cfg.get("run_events") or {})
-    run_events["backend"] = "db"
-    cfg["run_events"] = run_events
-
-    # 技能根目录转绝对路径（模板里是相对 ``vendor/skills``）。
-    # 引擎 SkillsConfig 只认 ``path`` 字段（``root`` 会被 Pydantic 静默忽略，
-    # 导致技能目录回退到不存在的项目根 ``skills/``，技能系统整体失效）。
-    skills = dict(cfg.get("skills") or {})
-    skills_path = skills.get("path") or skills.pop("root", None) or "vendor/skills"
-    cfg["skills"] = {**skills, "path": str((repo_root / skills_path).resolve())}
+    # 首次生成：以模板为基础（拷贝，避免就地修改模板 dict）
+    cfg = _apply_template_path_overrides(
+        dict(template_cfg), qilin_data_dir, repo_root
+    )
 
     runtime_config_path.parent.mkdir(parents=True, exist_ok=True)
     with runtime_config_path.open("w", encoding="utf-8") as fh:
