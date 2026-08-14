@@ -10,10 +10,10 @@
 | --- | --- | --- |
 | `market-data-analyst` | 市场数据采集与解读 | 大盘/板块/宏观/行业/ETF/期指/可转债行情、市场联动、研报观点聚合 |
 | `stock-researcher` | 个股深度研究 | 个股尽调、财报体检、估值、盈利预测、事件舆情与筹码资金、个股周度复盘、DCF 数据 |
-| `chan-theory-analyst` | 缠论技术分析 | 缠论结构/买卖点诊断（需 bash 脚本的纯技术面任务） |
+| `chan-theory-analyst` | 缠论技术分析 | 纯缠论诊断（分型/笔/线段/中枢/背驰/三类买卖点、多级别联立与区间套，基于 stock-analysis 的 analyze_stock_chan.py） |
 | `backtest-executor` | 策略回测执行 | 回测数据获取、绩效评估、参数敏感性 |
 | `report-writer` | 报告整合渲染 | 多角色输出已就绪时的报告结构化与 HTML 看板生成 |
-| `general-purpose` | 通用兖底 | 无明确角色匹配的复杂多步骤任务（选股扫描、因子研究、期权定价、多体系技术分析等） |
+| `general-purpose` | 通用兜底 | 无明确角色匹配的复杂多步骤任务（选股扫描、因子研究、期权定价、多体系技术分析等） |
 
 委派原则：优先专业角色，只有无匹配角色时才用 `general-purpose`；单个子代理的 prompt 必须写明具体命令与转述要求（详见各场景编排）。
 
@@ -519,7 +519,7 @@
 
 2. **粒度识别**：默认多级别联立（`--multi-level`，覆盖 5min/15min/30min/60min/日线/周线）；用户指定级别（如「30分钟」「周线」）→ 加 `--level 30min|weekly` 等；含「周度」「周线」→ 结论以周线级别为主。
 
-3. **委派**：general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/stock-analysis/SKILL.md` 前 120 行（密钥注入依赖技能激活），再执行 `cd /mnt/skills/public/stock-analysis/scripts/analysis-engine && python3 analyze_stock_chan.py --stock <代码> --multi-level --json`；单级别时去掉 `--multi-level` 并加 `--level <级别>`。
+3. **委派**：chan-theory-analyst 子代理——先 `read_file` 阅读 `/mnt/skills/public/stock-analysis/SKILL.md` 前 120 行（密钥注入依赖技能激活），再执行 `cd /mnt/skills/public/stock-analysis/scripts/analysis-engine && python3 analyze_stock_chan.py --stock <代码> --multi-level --json`；单级别时去掉 `--multi-level` 并加 `--level <级别>`。
 
 4. **汇总输出**：多级别缠论结构总览表（每个级别：走势分类（趋势/盘整）、分型数/笔数/线段数、中枢区间与当前价格位置、背驰信号、三类买卖点）、多级别一致性评分与共识结论（consensus：方向/置信度/推荐动作/仓位）、区间套结论（大级别定方向、小级别找买卖点）、择时建议（入场价/止损位/止盈位），按规则标注共振与背离：
    - 周线买点 + 日线买点 + 30min 底背驰 = 多级别区间套共振（信号最强）；
@@ -540,11 +540,9 @@
 
 2. **粒度识别**：用户消息含「周度」「周线」→ 缠论取周线级别结论；否则默认日线。
 
-3. **委派**：general-purpose 子代理——先 `read_file` 阅读 `/mnt/skills/public/stock-analysis/SKILL.md` 前 120 行（密钥注入依赖技能激活），再执行：
-   - `cd /mnt/skills/public/stock-analysis/scripts/analysis-engine && python3 analyze_technical.py --stock <代码> --json`（趋势/均线/量能/技术指标）；
-   - `python3 analyze_stock_chan.py --stock <代码> --multi-level --json`（缠论多级别，含日线/周线结构、中枢与买卖点）；
-   - `python3 analyze_elliott_wave.py --stock <代码> --json`（艾略特波浪位置）；
-   - `python3 analyze_harmonic_pattern.py --stock <代码> --json`（谐波形态，可选）；
+3. **委派**：并行委派两个子代理，均先 `read_file` 阅读 `/mnt/skills/public/stock-analysis/SKILL.md` 前 120 行（密钥注入依赖技能激活），再执行：
+   - chan-theory-analyst 子代理：`cd /mnt/skills/public/stock-analysis/scripts/analysis-engine && python3 analyze_stock_chan.py --stock <代码> --multi-level --json`（缠论多级别，含日线/周线结构、中枢与买卖点）；
+   - general-purpose 子代理：`python3 analyze_technical.py --stock <代码> --json`（趋势/均线/量能/技术指标）、`python3 analyze_elliott_wave.py --stock <代码> --json`（艾略特波浪位置）、`python3 analyze_harmonic_pattern.py --stock <代码> --json`（谐波形态，可选）；
 
 4. **汇总输出**：技术信号表（趋势/均线/量能/MACD/RSI/KDJ）、缠论结构表（笔/段/中枢/背驰）与买卖点（日线与周线级别分别给出）、波浪位置、谐波形态、择时结论（买入/持有/减仓/观望），按规则标注共振与背离：
    - 日线买点 + 周线买点 = 多级别共振（信号最强）；

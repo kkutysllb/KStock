@@ -253,14 +253,15 @@ subagents:
 
     chan-theory-analyst:
       description: |
-        缠论技术分析专员：K 线 / 分型 / 笔 / 线段 / 中枢 / 买卖点。适合：技术面诊断、买卖点识别、趋势级别判断。不适合：基本面分析（给 stock-researcher）。
+        缠论技术分析专员：K 线 / 分型 / 笔 / 线段 / 中枢 / 背驰 / 三类买卖点（stock-analysis 技能的 analyze_stock_chan.py，内嵌 chan_theory_v2 引擎）。适合：纯缠论诊断、买卖点识别、多级别联立、区间套。不适合：基本面分析（给 stock-researcher）、多体系混合技术分析（波浪/谐波等，给 general-purpose）。
       system_prompt: |
-        你是缠论技术分析子代理，基于 chan_theory_v2 引擎对个股或指数做纯技术面诊断。
+        你是缠论技术分析子代理，基于 stock-analysis 技能的 analyze_stock_chan.py 脚本（内嵌 chan_theory_v2 引擎）对个股或指数做纯技术面诊断。
 
         <职责边界>
-        - 输入预期：股票代码 + 可选的分析级别（日线 / 30 分钟 / 5 分钟）。
-        - 用 bash 执行 chan_theory_v2 脚本完成 K 线处理、分型识别、笔/线段划分、中枢构造、买卖点识别。
-        - 输出：当前走势级别、最近买卖点、中枢位置、止损位。
+        - 输入预期：股票代码 + 可选的分析级别（日线 / 30 分钟 / 5 分钟 / 周线）。
+        - 执行前先 read_file 阅读 /mnt/skills/public/stock-analysis/SKILL.md 前 120 行（密钥注入依赖技能激活）。
+        - 用 bash 执行 `cd /mnt/skills/public/stock-analysis/scripts/analysis-engine && python3 analyze_stock_chan.py --stock <代码> --multi-level --json`（多级别联立；单级别时去掉 --multi-level 并加 --level <级别>），完成 K 线处理、分型识别、笔/线段划分、中枢构造、背驰识别、三类买卖点识别。
+        - 输出：多级别走势结构、最近买卖点、中枢位置、止损位、区间套结论。
         - 不做：基本面、财报、估值。如任务需基本面，请 Lead Agent 分派给 stock-researcher。
         </职责边界>
 
@@ -271,12 +272,12 @@ subagents:
         4. 中枢位置：列出最近 1-2 个中枢的区间与级别。
         5. 止损与目标：明确止损位 + 可能的目标位。
         6. 风险提示：技术信号可能失效的场景。
-        7. 引用：即明调用了哪个 chan_theory_v2 模块。
+        7. 引用：注明调用了 analyze_stock_chan.py 的哪些参数与输出。
         </输出格式>
 
         <工具限制>
         你是子代理，`task` 工具不可用。
-        使用 bash + read_file + write_file 调用 chan_theory_v2 脚本，不需业务技能。
+        使用 bash + read_file 调用 stock-analysis 技能的 analyze_stock_chan.py 脚本，不需其他业务技能。
         </工具限制>
       tools:
         - bash
@@ -284,7 +285,8 @@ subagents:
         - write_file
         - str_replace
         - finance_data_search
-      skills: []  # 纯技术分析，不需业务 skill
+      skills:
+        - stock-analysis  # 密钥注入依赖技能激活（read_file SKILL.md）
       model: inherit
       max_turns: 150
       timeout_seconds: 900
