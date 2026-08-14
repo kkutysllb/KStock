@@ -12,6 +12,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  Notification,
   shell,
 } from "electron";
 import { writeFile } from "node:fs/promises";
@@ -131,13 +132,38 @@ function registerGatewayIpc(): void {
   ipcMain.handle(IPC.gatewayAppDataDir, () => appDataDirectory());
 }
 
-/** 注册宿主能力 IPC（打开外链、保存文件）。 */
+/** 注册宿主能力 IPC（打开外链、保存文件、系统通知）。 */
 function registerShellIpc(): void {
   ipcMain.handle(IPC.shellOpenExternal, async (_event, url: string) => {
     if (!/^https?:\/\//i.test(url)) {
       throw new Error("仅允许打开 http(s) 链接");
     }
     await shell.openExternal(url);
+  });
+
+  ipcMain.handle(IPC.showNotification, (_event, title: string, body: string) => {
+    if (!Notification.isSupported()) {
+      return { ok: false, reason: "unsupported" };
+    }
+    // 窗口聚焦时用户正在看应用，弹系统通知只会打扰。
+    const win = getMainWindow();
+    if (win?.isFocused()) {
+      return { ok: false, reason: "focused" };
+    }
+    const notification = new Notification({
+      title: String(title ?? "KStock").slice(0, 120),
+      body: String(body ?? "").slice(0, 200),
+    });
+    notification.on("click", () => {
+      const w = getMainWindow();
+      if (w) {
+        if (w.isMinimized()) w.restore();
+        w.show();
+        w.focus();
+      }
+    });
+    notification.show();
+    return { ok: true };
   });
 
   ipcMain.handle(

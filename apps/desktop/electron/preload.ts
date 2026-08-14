@@ -44,6 +44,13 @@ const api = {
     return ipcRenderer.invoke(IPC.shellSaveArtifact, name, bytes);
   },
 
+  showNotification(
+    title: string,
+    body: string,
+  ): Promise<{ ok: boolean; reason?: string }> {
+    return ipcRenderer.invoke(IPC.showNotification, title, body);
+  },
+
   updateCheck(): Promise<UpdateCheckResult> {
     return ipcRenderer.invoke(IPC.updateCheck);
   },

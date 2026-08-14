@@ -21,6 +21,8 @@ export const IPC = {
   // 宿主能力
   shellOpenExternal: "shell:open-external",
   shellSaveArtifact: "shell:save-artifact",
+  // 系统通知（任务完成/失败提醒；窗口聚焦时主进程自动降级不打扰）
+  showNotification: "ui:show-notification",
   // 自动更新
   updateCheck: "update:check",
   updateInstall: "update:install",
@@ -54,6 +56,11 @@ export interface DesktopBridge {
   gatewayStatus(): Promise<{ port: number; running: boolean; childAlive: boolean }>;
   appDataDir(): Promise<string>;
   saveArtifact(name: string, bytes: Uint8Array): Promise<{ saved: boolean; path?: string }>;
+  /**
+   * 弹系统通知。窗口聚焦时返回 { ok: false, reason: "focused" } 不打扰；
+   * 系统不支持时返回 { ok: false, reason: "unsupported" }。点击通知聚焦主窗口。
+   */
+  showNotification(title: string, body: string): Promise<{ ok: boolean; reason?: string }>;
   /**
    * 检查是否有新版本。发现新版本时主进程立即后台下载，本方法仅返回结果
    * 供"手动检查更新"反馈用；下载完成会通过 onUpdateReady 回调推送。
