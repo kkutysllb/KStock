@@ -116,6 +116,27 @@ def test_pid_exit_completes(runtime: FakeRuntime):
     assert result["done"] is True
 
 
+def test_pid_alive_windows_oserror_is_exit(monkeypatch):
+    """Windows 上 os.kill(pid, 0) 对已退出进程抛 OSError(WinError 87)
+
+    而非 ProcessLookupError；PermissionError 仍视为存活（进程存在但
+    属主不同）。
+    """
+    from scripts.kstock_tools import task_wait_tool
+
+    def fake_kill_win(pid, sig):
+        raise OSError(87, "The parameter is incorrect")
+
+    monkeypatch.setattr(task_wait_tool.os, "kill", fake_kill_win)
+    assert task_wait_tool._pid_alive(99999) is False
+
+    def fake_kill_perm(pid, sig):
+        raise PermissionError(5, "Access denied")
+
+    monkeypatch.setattr(task_wait_tool.os, "kill", fake_kill_perm)
+    assert task_wait_tool._pid_alive(99999) is True
+
+
 def test_done_pattern_requires_log_file(runtime: FakeRuntime):
     result = _invoke(runtime, done_pattern="X")
     assert "error" in result

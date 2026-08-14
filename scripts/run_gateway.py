@@ -199,6 +199,8 @@ def _apply_template_path_overrides(
     cfg["skills"] = {**skills, "path": str((repo_root / skills_path).resolve())}
 
     # 沙箱挂载宿主路径：模板占位符 <data-root> 改写为数据根绝对路径。
+    # Path 归一化：占位符替换会留下模板字面量 ``/cache`` 等混合分隔符
+    # （Windows 上 str(root) 为反斜杠），统一为平台分隔符。
     root = data_root or (
         qilin_data_dir.parents[2] if len(qilin_data_dir.parents) > 2 else qilin_data_dir.parent
     )
@@ -208,7 +210,8 @@ def _apply_template_path_overrides(
         rewritten = []
         for mount in mounts:
             if isinstance(mount, dict) and isinstance(mount.get("host_path"), str):
-                mount = {**mount, "host_path": mount["host_path"].replace("<data-root>", str(root))}
+                host = mount["host_path"].replace("<data-root>", str(root))
+                mount = {**mount, "host_path": str(Path(host))}
             rewritten.append(mount)
         sandbox["mounts"] = rewritten
         cfg["sandbox"] = sandbox

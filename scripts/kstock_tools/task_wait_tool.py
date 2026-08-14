@@ -63,6 +63,10 @@ def _pid_alive(pid: int) -> bool:
         return False
     except PermissionError:
         return True  # 进程存在但属主不同，视为存活
+    except OSError:
+        # Windows：os.kill(pid, 0) 对已退出进程抛 OSError（WinError 87），
+        # 而非 ProcessLookupError，同样视为已退出。
+        return False
 
 
 @tool("wait_for_background_task", parse_docstring=True)
