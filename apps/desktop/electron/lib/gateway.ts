@@ -74,13 +74,20 @@ function gatewayExecutable(): string {
   );
 }
 
+/** gateway 子进程日志 fd 缓存：首次打开时覆盖写入，本次进程内复用。 */
+let gatewayLogFdCache: number | null = null;
+
 function gatewayLogFd(): number {
   const logsDir = join(appDataDirectory(), "logs");
   mkdirSync(logsDir, { recursive: true });
   const logPath = join(logsDir, "desktop-gateway.log");
-  const fd = openSync(logPath, "a");
-  appendFileSync(fd, `\n=== starting bundled gateway ===\n`);
-  return fd;
+  if (gatewayLogFdCache === null) {
+    // "w" 首次打开即覆盖写入；fd 缓存后同一进程内的 gateway 重启继续追加，
+    // 实现「每次启动覆盖、本次运行追加」，避免跨启动日志无限膨胀。
+    gatewayLogFdCache = openSync(logPath, "w");
+  }
+  appendFileSync(gatewayLogFdCache, `\n=== starting bundled gateway ===\n`);
+  return gatewayLogFdCache;
 }
 
 /** 终止整个进程树（SIGTERM，允许 graceful shutdown）。 */
@@ -116,24 +123,6 @@ function forceKill(pid: number): void {
   }
 }
 
-/**
- * 等待端口完全释放（重启场景）。
- *
- * gateway graceful shutdown 需要 1-2s 完成 uvicorn ``Shutting down`` 序列并
- * 释放监听 socket。``stop()`` 后立即 ``spawn`` 新进程，会出现旧进程端口
- * 还没释放、新进程 bind 失败（EADDRINUSE）的竞态。此处轮询直到端口探测
- * 失败或超时，保证后续 spawn 不会撞上残留的旧监听。
- */
-async function waitForPortReleased(port: number, timeoutMs = 5000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    // eslint-disable-next-line no-await-in-loop
-    const alive = await portAlive(port);
-    if (!alive) return;
-    // eslint-disable-next-line no-await-in-loop
-    await sleep(200);
-  }
-}
 
 export interface GatewayStatus {
   port: number;
@@ -217,14 +206,20 @@ export class GatewayProcess {
 
   /** 重启 gateway server child。 */
   async restart(): Promise<string> {
-    this.stop();
-    // 等待旧进程完全退出并释放端口，避免新进程 bind 撞上残留监听
-    // （EADDRINUSE）或端口探测命中正在关闭的旧进程。
-    await waitForPortReleased(GATEWAY_PORT);
+    // killAndWait 保证旧进程彻底退出（SIGTERM + SIGKILL 兜底）并释放
+    // 端口，避免新进程 bind 撞上残留监听（EADDRINUSE）或端口探测命中
+    // 正在关闭的旧进程。
+    await this.killAndWait();
     return this.ensureStarted();
   }
 
-  /** 终止 gateway 进程树。 */
+
+  /** 终止 gateway 进程树（仅发 SIGTERM，无等待、无 SIGKILL 兜底）。
+   *
+   * @deprecated 不要再用：uvicorn graceful shutdown 会等待未断开的 SSE 长
+   * 连接导致进程残留，主进程退出后 detached 子进程成为孤儿进程继续占用
+   * 端口。请用 ``killAndWait()``（SIGTERM + 超时 SIGKILL 兜底）。
+   */
   stop(): void {
     const child = this.child;
     if (child && child.exitCode === null && child.signalCode === null) {

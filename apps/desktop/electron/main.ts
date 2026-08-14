@@ -99,10 +99,24 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== "darwin") app.quit();
   });
 
-  // 应用退出时联动终止内置 gateway 进程树（fire-and-forget，
-  // 靠 OS 回收；安装重启路径走 killAndWait 同步等待）。
-  app.on("before-quit", () => {
-    gateway.stop();
+  // 应用退出时联动终止内置 gateway 进程树。
+  // 仅发 SIGTERM 不够：uvicorn graceful shutdown 会等待未断开的 SSE 长连接，
+  // 且 gateway 子进程 detached（独立进程组），主进程退出后成为孤儿进程
+  // 继续占用 18001 端口（macOS 无类似 Windows Job Object 的进程回收机制）。
+  // 因此退出时 preventDefault 一次：先销毁窗口断开 SSE，再同步等待
+  // killAndWait（SIGTERM + 5s 超时 SIGKILL 兜底）完成后真正退出。
+  let gatewayShutdownDone = false;
+  app.on("before-quit", (event) => {
+    if (gatewayShutdownDone) return;
+    event.preventDefault();
+    for (const win of BrowserWindow.getAllWindows()) win.destroy();
+    gateway
+      .killAndWait(5000)
+      .catch(() => {})
+      .finally(() => {
+        gatewayShutdownDone = true;
+        app.quit();
+      });
   });
 }
 
@@ -111,7 +125,7 @@ const gateway = new GatewayProcess();
 /** 注册 gateway 进程管理 IPC。 */
 function registerGatewayIpc(): void {
   ipcMain.handle(IPC.gatewayStart, async () => gateway.ensureStarted());
-  ipcMain.handle(IPC.gatewayStop, () => gateway.stop());
+  ipcMain.handle(IPC.gatewayStop, () => gateway.killAndWait());
   ipcMain.handle(IPC.gatewayRestart, async () => gateway.restart());
   ipcMain.handle(IPC.gatewayStatus, async () => gateway.status());
   ipcMain.handle(IPC.gatewayAppDataDir, () => appDataDirectory());
