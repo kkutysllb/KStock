@@ -348,6 +348,8 @@ def run_backtest(''',
         enforce_a_share_rules: 是否执行 A 股交易规则
             （T+1、涨跌停、停牌顺延、整手、最低佣金、印花税、过户费）。
             False 时回到简化语义（仅单边佣金率，可负持仓不设限）。
+        资金分配：开仓按「当日非零信号数」等分可用权益（|sig| 缩放强度），
+            top-K 稀疏组合满仓；全部同向的密集信号与旧 len(codes) 语义一致。
         stamp_duty: 印花税率，仅卖出收取（2023-08-28 起为 0.0005）
         transfer_fee: 过户费率，双边收取（0.00001 = 万0.1）
         min_commission: 单笔最低佣金（元，A股常见为 5 元；0 表示不启用下限）
@@ -391,7 +393,23 @@ def run_backtest(''',
 ''',
     ),
     (
-        '''            # 限制信号范围
+        '''    for i, dt in enumerate(all_dates[1:], 1):
+        daily_pnl = 0.0
+        daily_rebalance_actions = []  # 当日调仓动作
+
+        for code in codes:
+            if dt not in data_map[code].index:
+                continue
+            row = data_map[code].loc[dt]
+            close = row.get("close", np.nan)
+            if pd.isna(close):
+                continue
+
+            sig = 0.0
+            if code in signals and dt in signals[code].index:
+                sig = float(signals[code].loc[dt])
+
+            # 限制信号范围
             sig = max(-1.0, min(1.0, sig))
 
             # 检测信号变化 → 交易
@@ -458,7 +476,33 @@ def run_backtest(''',
                 prev_signals[code] = sig
                 rebalance_records.append(rebalance)
 ''',
-        '''            # 限制信号范围
+        '''    for i, dt in enumerate(all_dates[1:], 1):
+        daily_pnl = 0.0
+        daily_rebalance_actions = []  # 当日调仓动作
+        # 当日活跃信号数：开仓资金按活跃标的等分（修复 top-K 稀疏组合
+        # 只用 |sig|/全宇宙 比例资金的问题——500 只池选 10 只旧公式只投
+        # 2% 资金）。全部同向的密集信号下 active==len(codes)，与旧语义一致。
+        active_count = 0
+        for code in codes:
+            sig_now = 0.0
+            if code in signals and dt in signals[code].index:
+                sig_now = float(signals[code].loc[dt])
+            if sig_now != 0:
+                active_count += 1
+
+        for code in codes:
+            if dt not in data_map[code].index:
+                continue
+            row = data_map[code].loc[dt]
+            close = row.get("close", np.nan)
+            if pd.isna(close):
+                continue
+
+            sig = 0.0
+            if code in signals and dt in signals[code].index:
+                sig = float(signals[code].loc[dt])
+
+            # 限制信号范围
             sig = max(-1.0, min(1.0, sig))
 
             # 滑点执行价：买入上浮、卖出下浮（简化模式下即收盘价）
@@ -531,7 +575,7 @@ def run_backtest(''',
                     # 开新仓位
                     open_blocked = False
                     if sig != 0:
-                        alloc = equity[-1] * abs(sig) / len(codes)
+                        alloc = equity[-1] * abs(sig) / max(1, active_count)
                         px = buy_price if sig > 0 else sell_price
                         raw_qty = alloc / px
                         qty_abs = None
@@ -769,6 +813,24 @@ def _fix_finance_gateway_cache(text: str) -> str | None:
     return patched
 
 
+def _ensure_skill_script_from_canonical(vendor_root: Path, rel_path: str) -> bool:
+    """把 scripts/patches/<basename> 的规范源码同步到技能树（缺失/漂移时重写）。"""
+    canonical = Path(__file__).resolve().parent / "patches" / Path(rel_path).name
+    if not canonical.exists():
+        return False
+    target = vendor_root / rel_path
+    content = canonical.read_text(encoding="utf-8")
+    if target.exists() and target.read_text(encoding="utf-8") == content:
+        return False
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    return True
+
+
+_PARAM_SWEEP_PATH = "public/strategy-research/scripts/analysis/param_sweep.py"
+_WALK_FORWARD_PATH = "public/strategy-research/scripts/analysis/walk_forward.py"
+
+
 def _ensure_market_data_cache_module(vendor_root: Path) -> bool:
     """把规范源码拷贝进技能树（缺失或内容漂移时重写），返回是否发生改动。"""
     canonical = Path(__file__).resolve().parent / "patches" / "market_data_cache.py"
@@ -936,6 +998,9 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
             changed.append(rel_path)
     if _ensure_market_data_cache_module(vendor_root):
         changed.append(_MARKET_DATA_CACHE_MODULE_PATH)
+    for rel_path in (_PARAM_SWEEP_PATH, _WALK_FORWARD_PATH):
+        if _ensure_skill_script_from_canonical(vendor_root, rel_path):
+            changed.append(rel_path)
     return changed
 
 

@@ -426,8 +426,10 @@ def test_apply_skill_patches_against_tmp_vendor(tmp_path):
         [
             f"{rel}/analyze_financial_deep.py",
             f"{rel}/analyze_stock_valuation.py",
-            # 行情缓存模块：规范源码拷贝（对稀疏 tmp vendor 也会创建）
+            # 规范源码拷贝类补丁（对稀疏 tmp vendor 也会创建）
             "public/common/src/kk_common/market_data_cache.py",
+            "public/strategy-research/scripts/analysis/param_sweep.py",
+            "public/strategy-research/scripts/analysis/walk_forward.py",
         ]
     )
     assert "if get_finance_data_gateway and token:" in ts_target.read_text(encoding="utf-8")
@@ -554,12 +556,13 @@ def test_tushare_client_soft_import_round_trip():
     py_compile.compile(str(vendor_root / rel), doraise=True)
 
 
-def test_market_data_cache_imports_without_tushare():
+def test_market_data_cache_imports_without_tushare(tmp_path):
     """无 tushare 环境（CI）下缓存模块导入链不崩（子进程隔离验证）。
 
     进程内模拟受 kk_common 包缓存干扰（其他测试已真实导入 tushare），
     子进程从零导入可精确复现 CI 的 uv sync 干净环境。
     """
+    import os
     import subprocess
     import textwrap
 
@@ -598,6 +601,22 @@ def test_market_data_cache_imports_without_tushare():
         capture_output=True,
         text=True,
         timeout=60,
+        # handles() 需要可用缓存目录：CI 无 ~/.kstock，注入确定路径
+        env={**os.environ, "KSTOCK_MARKET_DATA_CACHE_DIR": str(tmp_path / "market-data")},
     )
     assert result.returncode == 0, result.stderr
     assert "OK" in result.stdout
+
+
+def test_strategy_analysis_scripts_match_canonical_copies():
+    """param_sweep / walk_forward 的规范源码与技能树拷贝逐字节一致。"""
+    from scripts.patch_vendor_skills import _PARAM_SWEEP_PATH, _WALK_FORWARD_PATH
+
+    vendor_root = Path(__file__).resolve().parent.parent / "vendor" / "skills"
+    for rel in (_PARAM_SWEEP_PATH, _WALK_FORWARD_PATH):
+        canonical = (
+            Path(__file__).resolve().parent.parent / "scripts" / "patches" / Path(rel).name
+        )
+        vendor_copy = vendor_root / rel
+        assert canonical.exists() and vendor_copy.exists()
+        assert canonical.read_text(encoding="utf-8") == vendor_copy.read_text(encoding="utf-8")

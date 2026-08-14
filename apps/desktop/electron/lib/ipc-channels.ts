@@ -36,6 +36,7 @@ export type MenuCommand =
   | "new-task"
   | "open-settings"
   | "open-reports"
+  | "open-strategies"
   | "check-update";
 
 /**

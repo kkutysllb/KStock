@@ -379,6 +379,26 @@ class StrategyStore:
         item["metrics"] = json.loads(item.pop("metrics_json"))
         return item
 
+    def get_run_equity(self, user_id: str, strategy_id: str, run_id: str) -> dict[str, Any]:
+        """读取某次回测运行的净值曲线（对比视图叠加用）。"""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM backtest_runs WHERE user_id = ? AND strategy_id = ? AND run_id = ?",
+                (user_id, strategy_id, run_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"回测运行不存在：{run_id}")
+        if not row["equity_path"]:
+            raise ValueError("该运行未存净值曲线（record_run 时未提供 equity）")
+        equity_file = self.strategies_root / row["equity_path"]
+        return {
+            "run_id": run_id,
+            "version": row["version"],
+            "data_start": row["data_start"],
+            "data_end": row["data_end"],
+            "equity": json.loads(equity_file.read_text(encoding="utf-8")),
+        }
+
     def compare_runs(self, user_id: str, strategy_id: str, run_ids: list[str]) -> dict[str, Any]:
         """按 run_id 集合对比：对齐指标并标注口径（数据区间/规则）是否一致。"""
         rows: list[dict[str, Any]] = []
@@ -531,6 +551,16 @@ def record_run(request: Request, strategy_id: str, body: BacktestRunRequest):
 @router.get("/strategies/{strategy_id}/runs")
 def list_runs(request: Request, strategy_id: str, version: int | None = None):
     return _store(request).list_runs(_user(), strategy_id, version)
+
+
+@router.get("/strategies/{strategy_id}/runs/{run_id}/equity")
+def get_run_equity(request: Request, strategy_id: str, run_id: str):
+    try:
+        return _store(request).get_run_equity(_user(), strategy_id, run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/strategies/{strategy_id}/compare")

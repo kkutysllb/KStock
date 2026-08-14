@@ -120,7 +120,7 @@ export const ChatFeed = forwardRef<ChatFeedHandle, ChatFeedProps>(
     return (
       <div className="chat-feed" ref={scrollRef} onScroll={handleScroll}>
         <div className="chat-feed-inner">
-          {messages.map((m) =>
+          {messages.map((m, index) =>
             m.role === "user" ? (
               <UserBubble
                 key={m.id}
@@ -138,6 +138,9 @@ export const ChatFeed = forwardRef<ChatFeedHandle, ChatFeedProps>(
                 showReasoning={showReasoning}
                 showToolCalls={showToolCalls}
                 onClarifyPick={onClarifyPick}
+                nextUserContent={
+                  messages.slice(index + 1).find((later) => later.role === "user")?.content ?? null
+                }
               />
             )
           )}

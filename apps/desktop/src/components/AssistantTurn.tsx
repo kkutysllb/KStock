@@ -15,7 +15,7 @@ import { ReasoningBlock } from "./ReasoningBlock";
 import { SubagentGroup } from "./SubagentGroup";
 import { ClarificationCard } from "./ClarificationCard";
 import { ToolActivitySummary } from "./ToolActivitySummary";
-import { ToolCard } from "./ToolCard";
+import { ToolRunGroup } from "./ToolRunGroup";
 import { ProseSliceView } from "./ProseSliceView";
 
 interface AssistantTurnProps {
@@ -26,6 +26,11 @@ interface AssistantTurnProps {
   showToolCalls?: boolean;
   /** ask_clarification 选项被选中并点“回复并确认”时回调，参数为拼接文本 + 澄清问题（父级弹出确认输入框）。 */
   onClarifyPick?: (text: string, question?: string) => void;
+  /**
+   * 该 turn 之后的第一条用户消息正文：作为澄清卡的回复文本，
+   * 使已回答的 ask_clarification 卡片回显用户当时的选择。
+   */
+  nextUserContent?: string | null;
 }
 
 /**
@@ -110,6 +115,7 @@ export function AssistantTurn({
   showReasoning = true,
   showToolCalls = true,
   onClarifyPick,
+  nextUserContent,
 }: AssistantTurnProps) {
   const streaming = isStreaming ?? msg.status === "streaming";
 
@@ -159,8 +165,17 @@ export function AssistantTurn({
     const candlesAt = lastTextPos === timeline.length - 1 ? lastTextPos : -1;
     const items: ReactNode[] = [];
     let clarified = false;
+    // 连续工具调用统一包成折叠组（默认收起，不打断正文阅读）——单个也包，
+    // 保持视觉与交互一致；正文分段与澄清卡会截断累积。
+    let toolRun: typeof visibleToolCalls = [];
+    const flushToolRun = (keyIndex: number) => {
+      if (toolRun.length === 0) return;
+      items.push(<ToolRunGroup key={`tl-rungroup-${keyIndex}`} calls={toolRun} />);
+      toolRun = [];
+    };
     timeline.forEach((segment, i) => {
       if (segment.kind === "text") {
+        flushToolRun(i);
         // 交互式澄清：隐藏引擎 fallback 正文（编号列表与卡片重复）。
         if (interactiveClarification) return;
         const segmentText = msg.textSegments?.[segment.index];
@@ -179,26 +194,30 @@ export function AssistantTurn({
       if (!call) return;
       if (call.name === "ask_clarification") {
         // 澄清卡渲染在该工具调用的执行位置（而非所有文本之后）。
+        flushToolRun(i);
         if (interactiveClarification && clarifyPayload && !clarified) {
           clarified = true;
           items.push(
             <ClarificationCard
               key={`tl-clarify-${i}`}
               payload={clarifyPayload}
+              answer={nextUserContent}
               onPick={(text) => onClarifyPick(text, clarifyPayload.question)}
             />
           );
         }
         return;
       }
-      items.push(<ToolCard key={`tl-tool-${i}`} call={call} />);
+      toolRun.push(call);
     });
+    flushToolRun(timeline.length);
     // 交互澄清但时间线里没有对应工具段（理论上罕见）：兜底渲染在末尾。
     if (interactiveClarification && clarifyPayload && !clarified) {
       items.push(
         <ClarificationCard
           key="tl-clarify-tail"
           payload={clarifyPayload}
+          answer={nextUserContent}
           onPick={(text) => onClarifyPick(text, clarifyPayload.question)}
         />
       );
@@ -256,6 +275,7 @@ export function AssistantTurn({
             {hasInteractiveClarification && clarifyPayload && onClarifyPick ? (
               <ClarificationCard
                 payload={clarifyPayload}
+                answer={nextUserContent}
                 onPick={(text) => onClarifyPick(text, clarifyPayload.question)}
               />
             ) : (

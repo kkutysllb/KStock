@@ -27,6 +27,7 @@ import {
   FileOutput,
   Folder,
   ExternalLink,
+  GitBranch,
   Library,
   ListTodo,
   Lock,
@@ -148,6 +149,7 @@ import { AttachmentSettings } from "../components/AttachmentSettings";
 import { AccountSettings } from "../components/AccountSettings";
 import { ReportSettings } from "../components/ReportSettings";
 import { ReportLibrary } from "../components/ReportLibrary";
+import { StrategiesLibrary } from "../components/StrategiesLibrary";
 import { McpExtensionsCard } from "../components/McpExtensionsCard";
 import { SkillsExtensionsCard } from "../components/SkillsExtensionsCard";
 import { AttachmentPicker, AttachmentChips } from "../components/AttachmentPicker";
@@ -164,11 +166,12 @@ import {
   type GeneralPreferences,
 } from "../lib/generalSettingsClient";
 
-type ViewMode = "landing" | "auth" | "workspace" | "settings" | "reports";
+type ViewMode = "landing" | "auth" | "workspace" | "settings" | "reports" | "strategies";
 type DesktopMenuCommand =
   | "new-task"
   | "open-settings"
   | "open-reports"
+  | "open-strategies"
   | "check-update";
 type ArtifactPreview =
   | { kind: "html"; name: string; downloadHref: string; htmlContent: string }
@@ -251,7 +254,7 @@ export function Home() {
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [workspaceSidebarWidth, setWorkspaceSidebarWidth] = useState(() =>
-    readSidebarWidth(WORKSPACE_SIDEBAR_WIDTH_KEY, 242, 180, 360)
+    readSidebarWidth(WORKSPACE_SIDEBAR_WIDTH_KEY, 280, 180, 360)
   );
   const [settingsSidebarWidth, setSettingsSidebarWidth] = useState(() =>
     readSidebarWidth(SETTINGS_SIDEBAR_WIDTH_KEY, 228, 190, 360)
@@ -888,6 +891,9 @@ export function Home() {
             setView("auth");
           }
           break;
+        case "open-strategies":
+          setView("strategies");
+          break;
         case "open-reports":
           if (currentUser) {
             setView("reports");
@@ -1395,6 +1401,18 @@ export function Home() {
     return <ReportLibrary onBack={() => setView("workspace")} />;
   }
 
+  if (view === "strategies") {
+    return (
+      <StrategiesLibrary
+        onBack={() => setView("workspace")}
+        onRerun={(prompt) => {
+          setDraft(prompt);
+          setView("workspace");
+        }}
+      />
+    );
+  }
+
   // 待删除 session 的标题（对话框展示用）。
   const pendingDeleteTitle = pendingDeleteSessionId
     ? (sessions.find((s) => s.id === pendingDeleteSessionId)?.title ?? "该任务")
@@ -1435,6 +1453,7 @@ export function Home() {
         setView("settings");
       }}
       onOpenReports={() => setView("reports")}
+      onOpenStrategies={() => setView("strategies")}
       onSelectSession={handleSelectSession}
       onDeleteSession={handleRequestDeleteSession}
       onArchiveSession={handleArchiveSession}
@@ -1931,6 +1950,7 @@ function WorkspaceShell({
   onNewSession,
   onOpenIntegrations,
   onOpenReports,
+  onOpenStrategies,
   onOpenSettings,
   onSelectSession,
   onDeleteSession,
@@ -1985,6 +2005,7 @@ function WorkspaceShell({
   onNewSession: () => void;
   onOpenIntegrations: () => void;
   onOpenReports: () => void;
+  onOpenStrategies: () => void;
   onOpenSettings: () => void;
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
@@ -2126,6 +2147,10 @@ function WorkspaceShell({
           <button className="nav-command" type="button" onClick={onOpenReports}>
             <Library size={17} />
             {!sidebarCollapsed && <span>报告库</span>}
+          </button>
+          <button className="nav-command" type="button" onClick={onOpenStrategies}>
+            <GitBranch size={17} />
+            {!sidebarCollapsed && <span>策略库</span>}
           </button>
           <button className="nav-command" type="button" onClick={onOpenIntegrations}>
             <Sparkles size={17} />

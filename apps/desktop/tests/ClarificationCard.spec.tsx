@@ -110,7 +110,7 @@ describe("ClarificationCard", () => {
     expect(onPick).toHaveBeenCalledWith("保留  中间空格");
   });
 
-  it("提交后清空选中态和文本框（防重复提交）", () => {
+  it("提交后保留选中现场（父级确认框可取消，取消时不丢已填内容）", () => {
     const payload = makeChoicePayload();
     render(<ClarificationCard payload={payload} onPick={onPick} />);
     const checkboxes = screen.getAllByRole("checkbox");
@@ -118,9 +118,83 @@ describe("ClarificationCard", () => {
     const otherInput = screen.getByLabelText("其他补充") as HTMLInputElement;
     fireEvent.change(otherInput, { target: { value: "补充" } });
     fireEvent.click(screen.getByRole("button", { name: /回复并确认/ }));
-    // 提交后 checkbox 全部恢复未选中
-    expect(checkboxes[1].getAttribute("aria-checked")).toBe("false");
-    expect(otherInput.value).toBe("");
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(checkboxes[1].getAttribute("aria-checked")).toBe("true");
+    expect(otherInput.value).toBe("补充");
+  });
+
+  it("已回复（answer）：choice 模式回显命中的选项，禁用交互并隐藏提交按钮", () => {
+    const payload = makeChoicePayload();
+    render(
+      <ClarificationCard
+        payload={payload}
+        onPick={onPick}
+        answer={"盈利质量专项\n自定义补充内容"}
+      />,
+    );
+    expect(screen.getByText("已回复")).toBeTruthy();
+    const checkboxes = screen.getAllByRole("checkbox");
+    expect(checkboxes[0].getAttribute("aria-checked")).toBe("false");
+    expect(checkboxes[1].getAttribute("aria-checked")).toBe("true");
+    expect((checkboxes[1] as HTMLButtonElement).disabled).toBe(true);
+    const otherInput = screen.getByLabelText("其他补充") as HTMLInputElement;
+    expect(otherInput.value).toBe("自定义补充内容");
+    expect(screen.queryByRole("button", { name: /回复并确认/ })).toBeNull();
+  });
+
+  it("已回复（answer）：form 模式 select 回显用户选择而非「请选择…」占位符", () => {
+    const payload = makeChoicePayload({
+      input_mode: "form",
+      options: undefined,
+      fields: [
+        {
+          name: "market_cap",
+          label: "市值范围",
+          type: "select",
+          required: true,
+          options: ["小盘(20-50亿)", "中盘(50-200亿)", "大盘(200亿以上)"],
+        },
+        { name: "note", label: "备注", type: "text" },
+      ],
+    });
+    render(
+      <ClarificationCard payload={payload} onPick={onPick} answer={"市值范围: 中盘(50-200亿)\n备注: 关注次新股"} />,
+    );
+    const select = screen.getByLabelText("market_cap") as HTMLSelectElement;
+    expect(select.value).toBe("中盘(50-200亿)");
+    expect(select.disabled).toBe(true);
+    const note = screen.getByLabelText("note") as HTMLInputElement;
+    expect(note.value).toBe("关注次新股");
+    expect(note.readOnly).toBe(true);
+    expect(screen.queryByRole("button", { name: /回复并确认/ })).toBeNull();
+  });
+
+  it("已回复（answer）：select 值不在选项里时注入临时选项保证回显", () => {
+    const payload = makeChoicePayload({
+      input_mode: "form",
+      options: undefined,
+      fields: [
+        { name: "range", label: "回测区间", type: "select", required: true, options: ["近1年", "近2年"] },
+      ],
+    });
+    render(<ClarificationCard payload={payload} onPick={onPick} answer={"回测区间: 近3年"} />);
+    const select = screen.getByLabelText("range") as HTMLSelectElement;
+    expect(select.value).toBe("近3年");
+  });
+
+  it("已回复（answer）：free_text 模式只读回显全文", () => {
+    const payload = makeChoicePayload({ input_mode: "free_text", options: undefined });
+    render(<ClarificationCard payload={payload} onPick={onPick} answer="用近两年日线数据回测" />);
+    const box = screen.getByLabelText("回复内容") as HTMLTextAreaElement;
+    expect(box.value).toBe("用近两年日线数据回测");
+    expect(box.readOnly).toBe(true);
+  });
+
+  it("answer 为空时不进入已回复态（仍可交互）", () => {
+    const payload = makeChoicePayload();
+    render(<ClarificationCard payload={payload} onPick={onPick} answer="  " />);
+    expect(screen.queryByText("已回复")).toBeNull();
+    expect(screen.getByRole("button", { name: /回复并确认/ })).toBeTruthy();
   });
 
   it("form 模式渲染字段表单：select/text/textarea，必填校验", () => {

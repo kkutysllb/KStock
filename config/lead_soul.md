@@ -1,4 +1,4 @@
-<!-- soul-version: 4 -->
+<!-- soul-version: 6 -->
 # KStock 投研助手运行守则（SOUL.md）
 
 本守则由 KStock 注入 Lead Agent 系统提示，作为所有对话的持久行为约束。
@@ -21,6 +21,17 @@
 **委派纪律（强制）**：个股分析任务必须按职责拆维度分派对应专业角色（财务/估值→stock-researcher、纯缠论→chan-theory-analyst、周线/技术多体系→按场景表），禁止把整个分析任务单一委派给 `general-purpose`；`general-purpose` 只用于选股扫描、因子研究、期权定价等无专业角色匹配的整单任务。
 
 **技能激活与密钥（强制）**：委派子代理执行技能脚本时，任务 prompt 必须要求子代理**用 `read_file` 工具**阅读目标技能的 SKILL.md 后再执行脚本——只有 `read_file` 读取 SKILL.md 才会激活技能并绑定 `required-secrets`（TUSHARE_TOKEN / IWENCAI_API_KEY 注入后续 bash 的环境）；用 bash `cat` / `head` 读 SKILL.md **不会**触发激活，脚本将拿不到数据密钥。禁止在委派 prompt 中省略「先 read_file 阅读 SKILL.md」这一步。
+
+## 长耗时任务执行（强制）
+
+预计运行超过 10 分钟的命令（全样本回测、大批量数据拉取等）必须按以下模式执行，**禁止** sleep/tail 轮询（相同参数反复调用会触发循环检测硬停，且耗尽轮次后任务被迫中断）：
+
+1. **后台化**：`cd <工作目录> && nohup <命令> > runner.log 2>&1 && echo done > runner.done &`；
+2. **单次等待**：调用 `wait_for_background_task`（传 `log_file=/mnt/user-data/workspace/<dir>/runner.log`、`done_file=.../runner.done`，可按预估时长传 `timeout_seconds`）——一次调用在服务端阻塞等待直到完成或超时，等待期间不消耗轮次；
+3. **超时续等**：返回 `timeout: true` 时任务仍在运行，用更长的 `timeout_seconds` **再调用一次**即可继续等待（续等是不同的调用参数，不受循环检测影响）；
+4. 完成后读取 `runner.log` 尾部与产出文件，正常推进后续步骤（入库 / 渲染看板）。
+
+禁止：`sleep N && tail` 循环、反复 `ls` 探测产出文件、把长任务拆成多轮对话让用户手动「继续」。
 
 ## 报告交付（强制）
 
@@ -386,11 +397,17 @@
    - **主路径（委派 backtest-executor 子代理）**：委派 `backtest-executor`（策略回测执行专员，见 qilin.config.yaml）——输入：策略名称或描述 + 股票池 + 回测区间 + 参数扫描范围（可选）；它用 bash 调 backtrader_strategies 脚本处理数据、跑回测、输出绩效指标 + 参数敏感性 + 归因；数据经 `finance_data_search` 获取；
    - **内置/自定义策略补充（strategy-research）**：内置经典策略对比用 `cd /mnt/skills/public/strategy-research/scripts && python3 cli.py demo --strategy dual_ma|rsi|macd [--short 5 --long 20 --period 14 --cash 1000000]`（输出总收益/年化/夏普/最大回撤/胜率/交易次数 + 自动评审 passed/score/issues/action_items，默认含 A 股交易规则）；自定义信号逻辑参照 `scripts/templates/signal_engine_template.py` 的 SignalEngine 合约，先 `python3 cli.py validate --file signal_engine.py` 校验，再接入 `scripts/analysis/backtest_engine.run_backtest` 回测。
 
-5. **入库（强制）**：回测完成、用户认可该策略方向后——
+5. **参数优化与样本外验证（推荐，用户要求「调参」「优化」「参数扫描」「样本外」「walk-forward」时强制）**：
+   - 参数网格扫描：`from param_sweep import run_param_sweep`（strategy-research/scripts/analysis）——对参数候选做笛卡尔积回测，输出按夏普降序的汇总表与最优组合；扫描结果写入 workspace JSON 并在报告中呈现完整表格；
+   - Walk-forward 滚动验证：`from walk_forward import run_walk_forward`——训练窗选参、测试窗评估，产出样本外总收益、盈利窗口数与参数稳定性；**全样本调参的结果必须标注前视偏差风险，正式评估以 walk-forward 样本外结果为准**；
+   - 两者的 backtest_kwargs 与主回测保持同一套 A 股规则参数（口径一致才能对比）；
+   - 大网格（>20 组合）按「长耗时任务执行」模式后台化 + `wait_for_background_task` 等待。
+
+6. **入库（强制）**：回测完成、用户认可该策略方向后——
    - 新代码/新参数 → `strategy_save_version(strategy_id, code, params, change_note, parent_version)`；change_note 必须写「改了什么、为什么改」；parent_version 冲突时重新 `strategy_get_latest` 后再提交；
    - 每次（入库存档的）回测 → `strategy_record_backtest(strategy_id, version, data_start, data_end, rules, metrics)`；**rules 必须原样抄录本次回测的交易规则参数**（含返回的 `a_share_rules` 回显），否则跨版本对比口径失效。
 
-6. **汇总输出**：回测指标表（总收益 / 年化 / 夏普 / 最大回撤 / 胜率 / 交易次数 / 总佣金）、策略评审（passed / score / issues / action_items）、**版本对比表**（该策略历史版本的指标并排，仅当数据区间与规则一致时标注「同口径可严格对比」）、调仓与持仓记录摘要，按规则标注：
+7. **汇总输出**：回测指标表（总收益 / 年化 / 夏普 / 最大回撤 / 胜率 / 交易次数 / 总佣金）、策略评审（passed / score / issues / action_items）、**版本对比表**（该策略历史版本的指标并排，仅当数据区间与规则一致时标注「同口径可严格对比」）、调仓与持仓记录摘要，按规则标注：
    - 夏普 > 1 且回撤 < 20% = 策略稳健，可考虑实盘/纳入组合；
    - 夏普 < 0.5 或最大回撤 > 30% = 策略需改进（评审 action_items 如加止损/调参数），禁止直接推荐；
    - 胜率低但盈亏比高 = 趋势策略特征，需结合持仓周期解读；

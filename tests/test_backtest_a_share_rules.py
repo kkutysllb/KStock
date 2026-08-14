@@ -201,3 +201,40 @@ def test_result_echoes_rule_config():
     assert echo["lot_size"] == 100
     assert echo["slippage"] == 0.002
     assert echo["stamp_duty_sell"] == 0.0005
+
+
+# ── 资金分配语义（活跃信号数等分）────────────────────────────────────
+
+
+def test_sparse_topk_portfolio_fully_invested():
+    """top-K 稀疏组合：500 只池选少数标的时按活跃数等分（修复前只投 2%）。"""
+    codes = ["60000{}.SH".format(i) for i in range(1, 6)]
+    df = make_df([10.0, 10.0, 10.0, 10.0])
+    data_map = {c: df for c in codes}
+    signals = {}
+    for i, code in enumerate(codes):
+        signals[code] = make_signals([0.0, 1.0 if i < 2 else 0.0, 1.0 if i < 2 else 0.0, 1.0 if i < 2 else 0.0])
+
+    result = run_backtest(data_map, signals, initial_cash=1_000_000)
+
+    buys = [t for t in result["trades"] if t["action"] == "buy"]
+    assert {b["code"] for b in buys} == set(codes[:2])
+    # 每只分配 权益/活跃数(2) = 50 万 → 10 元价 → 50000 股（整手）
+    for b in buys:
+        assert b["quantity"] == 50000
+
+
+def test_dense_signals_keep_legacy_allocation():
+    """全部同向的密集信号：active==len(codes)，与旧 len(codes) 语义一致。"""
+    codes = ["60000{}.SH".format(i) for i in range(1, 6)]
+    df = make_df([10.0, 10.0, 10.0, 10.0])
+    data_map = {c: df for c in codes}
+    signals = {c: make_signals([0.0, 1.0, 1.0, 1.0]) for c in codes}
+
+    result = run_backtest(data_map, signals, initial_cash=1_000_000)
+
+    buys = [t for t in result["trades"] if t["action"] == "buy"]
+    assert len(buys) == 5
+    for b in buys:
+        # 每只 权益/5 = 20 万 → 20000 股
+        assert b["quantity"] == 20000

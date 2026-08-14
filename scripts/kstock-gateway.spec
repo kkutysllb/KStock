@@ -76,6 +76,8 @@ a = Analysis(
         # 策略工作区：store（router 动态 import）+ agent 工具（tools 配置动态 import）。
         "scripts.kstock_strategies",
         "scripts.kstock_tools.strategy_store_tool",
+        # 长任务等待工具（tools 配置动态 import）。
+        "scripts.kstock_tools.task_wait_tool",
         # Windows 兼容垫片：run_gateway 入口 import，必须随包分发。
         "scripts.kstock_subprocess_patch",
         "scripts.kstock_windows_shims",

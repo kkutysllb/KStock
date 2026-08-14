@@ -120,6 +120,11 @@ tools:
   - name: render_html_report_from_file
     group: report
     use: scripts.kstock_tools.report_dashboard_tool:render_html_report_from_file_tool
+  # 长任务等待：单次调用阻塞等待后台进程（替代 sleep/tail 轮询，
+  # 避免撞循环检测硬停或耗尽轮次）
+  - name: wait_for_background_task
+    group: bash
+    use: scripts.kstock_tools.task_wait_tool:wait_for_background_task_tool
   # ── 策略工作区工具（策略库：版本链 + 回测运行记录）──
   - name: strategy_list
     group: strategies

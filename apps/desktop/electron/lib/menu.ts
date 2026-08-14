@@ -60,6 +60,11 @@ export function buildAppMenu(): Menu {
         accelerator: "CmdOrCtrl+Shift+L",
         click: () => sendMenuCommand("open-reports"),
       },
+      {
+        label: "打开策略库",
+        accelerator: "CmdOrCtrl+Shift+G",
+        click: () => sendMenuCommand("open-strategies"),
+      },
       { type: "separator" },
       {
         label: "打开交付文件目录",

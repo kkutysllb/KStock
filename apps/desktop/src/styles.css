@@ -862,7 +862,7 @@ button {
 .workspace-shell {
   position: relative;
   display: grid;
-  grid-template-columns: var(--workspace-sidebar-width, 242px) minmax(0, 1fr);
+  grid-template-columns: var(--workspace-sidebar-width, 280px) minmax(0, 1fr);
   /* 关键：限制 grid 行高 = shell 高度；否则子元素内容会撑开行高
      （conversation-stage 的 message-canvas 内容变长时会把 shell 顶高） */
   grid-template-rows: minmax(0, 1fr);
@@ -889,7 +889,7 @@ button {
 }
 
 .workspace-shell .sidebar-resize-handle {
-  left: var(--workspace-sidebar-width, 242px);
+  left: var(--workspace-sidebar-width, 280px);
 }
 
 .settings-shell .sidebar-resize-handle {
@@ -3165,6 +3165,86 @@ button.context-file-row:hover {
   color: #ef4444;
 }
 
+/* 连续工具调用折叠组：两个正文分段之间的多个工具卡收拢为一行汇总条
+   （默认折叠），展开后内部仍是原始 tool-card。 */
+.tool-run-group {
+  border: 1px dashed rgba(129, 205, 178, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.tool-run-group-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #9aa1ab;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tool-run-group-bar:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: #c9cdd4;
+}
+
+.tool-run-group-icon {
+  flex: 0 0 auto;
+  color: #55b89a;
+}
+
+.tool-run-group-count {
+  flex: 0 0 auto;
+  color: #c9cdd4;
+}
+
+.tool-run-group-names {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: #7f8792;
+}
+
+.tool-run-group-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.tool-run-group-status.running { color: #60a5fa; }
+.tool-run-group-status.done { color: #8f96a0; }
+.tool-run-group-status.error { color: #ef4444; }
+
+/* 运行中汇总条的迷你 spinner（与工具卡 spinner 同语言） */
+.tool-run-group-spinner {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(96, 165, 250, 0.3);
+  border-top-color: #60a5fa;
+  animation: tool-run-group-spin 0.8s linear infinite;
+}
+
+@keyframes tool-run-group-spin {
+  to { transform: rotate(360deg); }
+}
+
+.tool-run-group-body {
+  display: grid;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+
 /* 同名工具调用聚合：默认只保留一行摘要，展开后显示原始卡片。 */
 .tool-group {
   overflow: hidden;
@@ -3301,6 +3381,34 @@ button.context-file-row:hover {
   color: #e8eaed;
   line-height: 1.6;
   font-weight: 500;
+}
+
+/* 已回复态：问题旁的徽标 + 只读控件弱化 */
+.clarification-answered-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  border: 1px solid rgba(68, 198, 160, 0.45);
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: rgba(68, 198, 160, 0.12);
+  color: #7fe0c0;
+  font-size: 11px;
+  font-weight: 550;
+  vertical-align: 1px;
+}
+.clarification-card.answered .clarification-form-select:disabled,
+.clarification-card.answered input:disabled,
+.clarification-card.answered input[readonly],
+.clarification-card.answered textarea[readonly],
+.clarification-card.answered button:disabled {
+  opacity: 0.78;
+  cursor: default;
+}
+.clarification-card.answered .clarification-option.checked {
+  border-color: rgba(68, 198, 160, 0.5);
+  background: rgba(68, 198, 160, 0.1);
 }
 
 .clarification-fallback .clarification-hint {
@@ -3786,6 +3894,10 @@ button.context-file-row:hover {
   .streaming-candles .candle {
     animation: none;
     transform: scaleY(0.7);
+  }
+
+  .tool-run-group-spinner {
+    animation: none;
   }
 }
 
@@ -6989,4 +7101,253 @@ button.context-file-row:hover {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ── 策略库视图（策略列表 / 版本时间线 / 回测运行对比）────────────── */
+.strategies-library { display: block; }
+.strategies-hint {
+  margin: 22px 0;
+  border: 1px dashed rgba(129, 205, 178, 0.18);
+  border-radius: 12px;
+  padding: 22px 18px;
+  color: #74808a;
+  font-size: 13px;
+  text-align: center;
+}
+.strategies-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 22px;
+  width: min(1280px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 26px 0 72px;
+  align-items: start;
+}
+
+/* 左栏：策略卡片列表 */
+.strategies-list { display: grid; gap: 10px; position: sticky; top: 70px; }
+.strategies-item {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 13px 14px 13px 17px;
+  border: 1px solid rgba(129, 205, 178, 0.12);
+  border-radius: 12px;
+  background: linear-gradient(160deg, rgba(10, 32, 26, 0.72), rgba(4, 16, 13, 0.55));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  color: #dfe5e8;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.strategies-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 3px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+.strategies-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(68, 198, 160, 0.38);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.strategies-item.active {
+  border-color: rgba(68, 198, 160, 0.55);
+  background: linear-gradient(160deg, rgba(26, 72, 57, 0.6), rgba(10, 36, 28, 0.55));
+}
+.strategies-item.active::before { background: #44c6a0; box-shadow: 0 0 8px rgba(68, 198, 160, 0.6); }
+.strategies-item-name { display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; }
+.strategies-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  color: #7f8994;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.strategies-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; }
+.strategies-dot.tone-live { background: #44c6a0; box-shadow: 0 0 6px rgba(68, 198, 160, 0.8); }
+.strategies-dot.tone-idle { background: #6b7680; }
+.strategies-dot.tone-bad { background: #e06c6c; }
+.strategies-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+}
+.strategies-badge.tone-live { border: 1px solid rgba(68, 198, 160, 0.45); background: rgba(68, 198, 160, 0.14); color: #7fe0c0; }
+.strategies-badge.tone-idle { border: 1px solid rgba(148, 160, 170, 0.3); background: rgba(148, 160, 170, 0.1); color: #9aa5ae; }
+.strategies-badge.tone-bad { border: 1px solid rgba(224, 108, 108, 0.4); background: rgba(224, 108, 108, 0.12); color: #f0a3a3; }
+.strategies-chip {
+  border: 1px solid rgba(129, 205, 178, 0.14);
+  border-radius: 999px;
+  padding: 1px 7px;
+  color: #9aa5ae;
+  font-variant-numeric: tabular-nums;
+}
+.strategies-chip.value-up { border-color: rgba(68, 198, 160, 0.4); color: #7fe0c0; }
+.strategies-chip.value-down { border-color: rgba(224, 108, 108, 0.4); color: #f0a3a3; }
+.strategies-chip.value-warn { border-color: rgba(216, 185, 106, 0.4); color: #e6cd8e; }
+
+/* 右栏：详情 */
+.strategies-detail { display: grid; gap: 18px; min-width: 0; }
+.strategies-detail h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  color: #7fe0c0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.strategies-detail h3::before {
+  content: "";
+  width: 3px;
+  height: 13px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #55cba8, rgba(68, 198, 160, 0.35));
+}
+.strategies-identity {
+  border: 1px solid rgba(129, 205, 178, 0.16);
+  border-radius: 14px;
+  padding: 18px 20px;
+  background:
+    radial-gradient(420px 120px at 12% 0%, rgba(68, 198, 160, 0.14), transparent 70%),
+    linear-gradient(165deg, rgba(10, 32, 26, 0.8), rgba(4, 16, 13, 0.62));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+.strategies-identity-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.strategies-identity h2 { margin: 0; font-size: 21px; letter-spacing: 0.01em; }
+.strategies-hypothesis { margin: 0 0 8px; color: #aeb8bd; font-size: 13px; line-height: 1.55; }
+.strategies-identity .strategies-item-meta { font-size: 11px; }
+.strategies-identity .strategies-item-meta.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.01em;
+}
+
+/* 版本时间线：竖线 + 节点 */
+.strategies-versions {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  padding-left: 9px;
+}
+.strategies-versions::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(68, 198, 160, 0.55), rgba(129, 205, 178, 0.12));
+}
+.strategies-version {
+  position: relative;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 10px;
+}
+.strategies-version-node {
+  position: relative;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  margin-top: 15px;
+  border-radius: 50%;
+  border: 2px solid rgba(129, 205, 178, 0.5);
+  background: #071711;
+}
+.strategies-version.latest .strategies-version-node {
+  border-color: #44c6a0;
+  background: #44c6a0;
+  box-shadow: 0 0 10px rgba(68, 198, 160, 0.75);
+}
+.strategies-version-card {
+  border: 1px solid rgba(129, 205, 178, 0.12);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(165deg, rgba(8, 26, 21, 0.66), rgba(4, 16, 13, 0.5));
+  transition: border-color 0.15s ease;
+}
+.strategies-version-card:hover { border-color: rgba(68, 198, 160, 0.35); }
+.strategies-version.latest .strategies-version-card {
+  border-color: rgba(68, 198, 160, 0.42);
+  background: linear-gradient(165deg, rgba(20, 58, 46, 0.62), rgba(8, 26, 21, 0.55));
+}
+.strategies-version-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.strategies-version-head strong { color: #d6efe4; font-size: 13.5px; }
+.strategies-change-note { margin: 7px 0 0; color: #b9c3c9; font-size: 12px; line-height: 1.55; }
+.strategies-rerun { margin-top: 8px; }
+
+/* 回测运行表 / 对比表 */
+.strategies-runs-table { width: 100%; border-collapse: collapse; font-size: 12px; color: #dfe5e8; }
+.strategies-runs-table th, .strategies-runs-table td {
+  border-bottom: 1px solid rgba(129, 205, 178, 0.08);
+  padding: 9px 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+.strategies-runs-table thead th {
+  color: #7f8994;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(129, 205, 178, 0.18);
+}
+.strategies-runs-table tbody tr { transition: background 0.12s ease; }
+.strategies-runs-table tbody tr:hover td { background: rgba(129, 205, 178, 0.05); }
+.strategies-runs-table tbody tr.selected td { background: rgba(68, 198, 160, 0.1); }
+.strategies-runs-table tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 #44c6a0; }
+.strategies-runs-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.strategies-runs-table .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #93a39c; letter-spacing: 0.02em; }
+.strategies-runs-table .value-up { color: #7fe0c0; }
+.strategies-runs-table .value-down { color: #f0a3a3; }
+.strategies-runs-table .value-warn { color: #e6cd8e; }
+.strategies-runs-table .metric-name { color: #8f98a2; }
+
+/* 对比面板 */
+.strategies-compare {
+  display: grid;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px solid rgba(129, 205, 178, 0.2);
+  border-radius: 14px;
+  background:
+    radial-gradient(520px 160px at 85% 0%, rgba(68, 198, 160, 0.1), transparent 70%),
+    linear-gradient(170deg, rgba(8, 26, 21, 0.7), rgba(4, 16, 13, 0.5));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
+}
+.strategies-compare h3 { margin: 0; color: #7fe0c0; }
+.strategies-note {
+  margin: 0;
+  border-left: 2px solid rgba(216, 185, 106, 0.55);
+  padding-left: 10px;
+  color: #d8b96a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.strategies-equity-chart {
+  border: 1px solid rgba(129, 205, 178, 0.1);
+  border-radius: 12px;
+  padding: 14px 16px 10px;
+  background: rgba(3, 13, 11, 0.55);
+}
+.strategies-equity-chart h4 { margin: 0 0 10px; color: #aeb8bd; font-size: 12.5px; font-weight: 550; }
+.strategies-equity-chart svg { display: block; width: 100%; height: auto; border-radius: 8px; background: linear-gradient(180deg, rgba(6, 20, 16, 0.6), rgba(3, 13, 11, 0.2)); }
+@media (max-width: 900px) {
+  .strategies-layout { grid-template-columns: minmax(0, 1fr); }
+  .strategies-list { position: static; }
 }

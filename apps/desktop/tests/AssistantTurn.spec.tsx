@@ -59,6 +59,33 @@ describe("AssistantTurn 澄清渲染", () => {
     vi.restoreAllMocks();
   });
 
+  it("nextUserContent 非空时澄清卡进入已回复回显态（select 显示用户选择）", () => {
+    render(
+      <AssistantTurn
+        msg={makeClarifyTurn("form")}
+        onClarifyPick={onClarifyPick}
+        nextUserContent={"分析周期: 2026-W31"}
+      />,
+    );
+    expect(screen.getByText("已回复")).toBeTruthy();
+    const select = screen.getByLabelText("period") as HTMLSelectElement;
+    expect(select.value).toBe("2026-W31");
+    expect(select.disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: /回复并确认/ })).toBeNull();
+  });
+
+  it("nextUserContent 为空时澄清卡保持可交互", () => {
+    render(
+      <AssistantTurn
+        msg={makeClarifyTurn("form")}
+        onClarifyPick={onClarifyPick}
+        nextUserContent={null}
+      />,
+    );
+    expect(screen.queryByText("已回复")).toBeNull();
+    expect(screen.getByRole("button", { name: /回复并确认/ })).toBeTruthy();
+  });
+
   it("form 模式渲染 ClarificationCard（非 fallback 文本）", () => {
     render(<AssistantTurn msg={makeClarifyTurn("form")} onClarifyPick={onClarifyPick} />);
     // 渲染卡片 question 与表单字段
@@ -214,8 +241,9 @@ describe("AssistantTurn 澄清渲染", () => {
     expect(textBlocks[0].textContent).toContain("开头");
     expect(textBlocks[1].textContent).toContain("中间");
 
-    const toolCards = container.querySelectorAll(".turn-timeline .tool-card");
-    expect(toolCards).toHaveLength(2);
+    // 工具统一包进折叠组（默认收起）：两个被正文隔开的工具各自成组
+    const groups = container.querySelectorAll(".turn-timeline .tool-run-group");
+    expect(groups).toHaveLength(2);
 
     // 子元素顺序：text → tool → text → tool（交错而非堆积）
     const order = Array.from(container.querySelectorAll(".turn-timeline > *")).map((el) =>
@@ -270,7 +298,8 @@ describe("AssistantTurn 澄清渲染", () => {
     const textBlocks = container.querySelectorAll(".turn-timeline .turn-text");
     expect(textBlocks[0].querySelector(".streaming-candles")).toBeNull();
     // 运行中的工具卡用 K 线蜡烛动画表示执行进度
-    expect(container.querySelector(".tool-card.status-running .streaming-candles")).toBeTruthy();
+    // 工具统一折叠后，运行进度由汇总条的 spinner 承担（组默认收起）
+    expect(container.querySelector(".tool-run-group.status-running .tool-run-group-spinner")).toBeTruthy();
   });
 
   it("澄清卡渲染在 ask_clarification 工具的执行位置", () => {
@@ -310,5 +339,127 @@ describe("AssistantTurn 澄清渲染", () => {
     expect(container.querySelector(".turn-timeline")).toBeNull();
     expect(container.querySelector(".tool-activity-summary")).toBeTruthy();
     expect(screen.getByText("旧布局正文")).toBeTruthy();
+  });
+});
+
+describe("AssistantTurn 连续工具调用折叠组", () => {
+  function makeRunTurn(
+    timelineToolIds: string[][],
+    calls: ToolCall[]
+  ): ChatMessage {
+    // timelineToolIds: 每段连续工具组的 id 列表，组间插入正文分段
+    const timeline: ChatMessage["timeline"] = [];
+    const segments: string[] = [];
+    timelineToolIds.forEach((group, index) => {
+      if (index > 0) {
+        timeline.push({ kind: "text", index: segments.length });
+        segments.push(`段落${index}`);
+      }
+      for (const id of group) timeline.push({ kind: "tool", toolCallId: id });
+    });
+    return {
+      id: "assistant-toolrun",
+      role: "assistant",
+      createdAt: "2026-08-14T12:00:00.000Z",
+      status: "done",
+      text: segments.join(""),
+      textSegments: segments,
+      timeline,
+      toolCalls: calls,
+    };
+  }
+
+  it("正文之间 3 个连续工具调用收拢为一个折叠组，默认收起", () => {
+    const message = makeRunTurn(
+      [["t1", "t2", "t3"]],
+      [
+        { id: "t1", name: "finance_data_search", args: {}, status: "done" },
+        { id: "t2", name: "bash", args: {}, status: "done" },
+        { id: "t3", name: "bash", args: {}, status: "done" },
+      ]
+    );
+    const { container } = render(<AssistantTurn msg={message} showReasoning={false} />);
+
+    const group = container.querySelector(".tool-run-group");
+    expect(group).toBeTruthy();
+    expect(screen.getByText("工具调用 3 项")).toBeTruthy();
+    // 名字聚合：bash ×2 出现在汇总条
+    expect(screen.getByText(/bash ×2/)).toBeTruthy();
+    // 默认收起：内部无可见 tool-card
+    expect(container.querySelectorAll(".tool-run-group .tool-card")).toHaveLength(0);
+  });
+
+  it("点击汇总条展开后显示全部工具卡，再点收起", () => {
+    const message = makeRunTurn(
+      [["t1", "t2"]],
+      [
+        { id: "t1", name: "read_file", args: { path: "/a" }, status: "done" },
+        { id: "t2", name: "write_file", args: { path: "/b" }, status: "done" },
+      ]
+    );
+    const { container } = render(<AssistantTurn msg={message} showReasoning={false} />);
+
+    const bar = screen.getByRole("button", { name: /工具调用 2 项/ });
+    expect(bar.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(bar);
+    expect(bar.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelectorAll(".tool-run-group .tool-card")).toHaveLength(2);
+    fireEvent.click(bar);
+    expect(container.querySelectorAll(".tool-run-group .tool-card")).toHaveLength(0);
+  });
+
+  it("单个工具调用也统一包进折叠组（视觉一致）", () => {
+    const message = makeRunTurn(
+      [["t1"]],
+      [{ id: "t1", name: "read_file", args: {}, status: "done" }]
+    );
+    const { container } = render(<AssistantTurn msg={message} showReasoning={false} />);
+
+    const group = container.querySelector(".tool-run-group");
+    expect(group).toBeTruthy();
+    expect(screen.getByText("工具调用 1 项")).toBeTruthy();
+    expect(container.querySelectorAll(".tool-run-group .tool-card")).toHaveLength(0);
+
+    // 展开后出现单张工具卡
+    fireEvent.click(screen.getByRole("button", { name: /工具调用 1 项/ }));
+    expect(container.querySelectorAll(".tool-run-group .tool-card")).toHaveLength(1);
+  });
+
+  it("状态聚合：含失败显示失败数，含运行中显示运行进度", () => {
+    const message = makeRunTurn(
+      [["t1", "t2"]],
+      [
+        { id: "t1", name: "bash", args: {}, status: "error" },
+        { id: "t2", name: "bash", args: {}, status: "done" },
+      ]
+    );
+    const { container } = render(<AssistantTurn msg={message} showReasoning={false} />);
+    expect(screen.getByText("1 项失败")).toBeTruthy();
+    expect(container.querySelector(".tool-run-group.status-error")).toBeTruthy();
+
+    const runningMessage = makeRunTurn(
+      [["t1", "t2", "t3"]],
+      [
+        { id: "t1", name: "bash", args: {}, status: "done" },
+        { id: "t2", name: "bash", args: {}, status: "running" },
+        { id: "t3", name: "bash", args: {}, status: "pending" as never },
+      ]
+    );
+    const { container: c2 } = render(<AssistantTurn msg={runningMessage} showReasoning={false} />);
+    expect(c2.querySelector(".tool-run-group.status-running")).toBeTruthy();
+  });
+
+  it("两组连续工具被正文分隔时各自成组", () => {
+    const message = makeRunTurn(
+      [["t1", "t2"], ["t3", "t4"]],
+      [
+        { id: "t1", name: "bash", args: {}, status: "done" },
+        { id: "t2", name: "bash", args: {}, status: "done" },
+        { id: "t3", name: "read_file", args: {}, status: "done" },
+        { id: "t4", name: "write_file", args: {}, status: "done" },
+      ]
+    );
+    const { container } = render(<AssistantTurn msg={message} showReasoning={false} />);
+    expect(container.querySelectorAll(".tool-run-group")).toHaveLength(2);
   });
 });
