@@ -2364,7 +2364,7 @@ function WorkspaceShell({
         document.body,
       )}
       {artifactPreview && createPortal(
-        <div className="report-preview-overlay" role="dialog" aria-modal="true" aria-label={artifactPreview.name}>
+        <div className="report-preview-overlay" role="dialog" aria-modal="true" aria-label={artifactPreview.name} style={{ zIndex: 99999 }}>
           <div className="report-preview-dialog">
             <div className="report-preview-bar">
               <strong className="report-preview-title">{artifactPreview.name}</strong>
