@@ -3139,6 +3139,14 @@ button.context-file-row:hover {
   color: #60a5fa;
 }
 
+/* 运行中的工具卡：状态图标用迷你 K 线蜡烛动画（与正文末尾同款），
+   重置正文内联用的 margin/vertical-align，避免卡片内偏移。 */
+.tool-card .streaming-candles {
+  margin-left: 0;
+  vertical-align: 0;
+  flex: 0 0 auto;
+}
+
 .tool-card.status-done .tool-card-header {
   color: #8f96a0;
 }

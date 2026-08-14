@@ -242,14 +242,14 @@ describe("AssistantTurn 澄清渲染", () => {
 
     const { container } = render(<AssistantTurn msg={message} />);
 
-    const candles = container.querySelectorAll(".streaming-candles");
-    expect(candles).toHaveLength(1);
+    // 正文分段内只有最后一个有蜡烛（工具卡上的执行动画不算正文蜡烛）
     const textBlocks = container.querySelectorAll(".turn-timeline .turn-text");
+    expect(container.querySelectorAll(".turn-timeline .turn-text .streaming-candles")).toHaveLength(1);
     expect(textBlocks[0].querySelector(".streaming-candles")).toBeNull();
     expect(textBlocks[1].querySelector(".streaming-candles")).toBeTruthy();
   });
 
-  it("流式时时间线以运行中工具结尾则不显示正文蜡烛（工具卡自带 spinner）", () => {
+  it("流式时时间线以运行中工具结尾则不显示正文蜡烛（工具卡自带蜡烛动画）", () => {
     const message: ChatMessage = {
       id: "assistant-interleaved-tool-tail",
       role: "assistant",
@@ -266,9 +266,11 @@ describe("AssistantTurn 澄清渲染", () => {
 
     const { container } = render(<AssistantTurn msg={message} />);
 
-    expect(container.querySelector(".streaming-candles")).toBeNull();
-    // 运行中的工具卡仍有 spinner 表示进度
-    expect(container.querySelector(".tool-card.status-running .spin")).toBeTruthy();
+    // 正文分段上没有蜡烛（执行动画移到运行中的工具卡上）
+    const textBlocks = container.querySelectorAll(".turn-timeline .turn-text");
+    expect(textBlocks[0].querySelector(".streaming-candles")).toBeNull();
+    // 运行中的工具卡用 K 线蜡烛动画表示执行进度
+    expect(container.querySelector(".tool-card.status-running .streaming-candles")).toBeTruthy();
   });
 
   it("澄清卡渲染在 ask_clarification 工具的执行位置", () => {

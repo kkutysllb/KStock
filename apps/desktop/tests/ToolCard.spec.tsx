@@ -30,6 +30,20 @@ describe("ToolCard", () => {
     expect(screen.getByRole("button", { name: /准备工具调用/ })).toBeVisible();
   });
 
+  it("执行中的工具卡用 K 线蜡烛动画表示进度（与正文末尾同款）", () => {
+    const { container } = render(
+      <ToolCard
+        call={{ id: "call-running", name: "search", status: "running", args: { q: "茅台" } }}
+      />
+    );
+
+    const candles = container.querySelector(".tool-card.status-running .streaming-candles");
+    expect(candles).toBeTruthy();
+    expect(candles?.querySelectorAll(".candle")).toHaveLength(4);
+    // 不再使用旋转 spinner
+    expect(container.querySelector(".tool-card .spin")).toBeNull();
+  });
+
   it("工具卡片展开后，参数和结果内容仍默认折叠", () => {
     render(<ToolCard call={toolCall} />);
 

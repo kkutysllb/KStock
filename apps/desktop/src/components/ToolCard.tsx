@@ -1,10 +1,10 @@
 // 紧凑工具调用卡片（默认折叠）：
 // - 折叠态：状态点 + name，整行可点击展开
 // - 展开态：args 详情（key=value 列表）+ result（截断显示）
-// - running 状态保持折叠，仅 spinner 提示进度
+// - running 状态保持折叠，左侧显示迷你 K 线蜡烛动画（与正文末尾同款）提示进度
 
 import { useState } from "react";
-import { AlertCircle, Check, ChevronRight, Loader2 } from "lucide-react";
+import { AlertCircle, Check, ChevronRight } from "lucide-react";
 import type { ToolCall } from "../lib/sessionStore";
 
 interface ToolCardProps {
@@ -96,7 +96,15 @@ function ToolDetailDisclosure({
 }
 
 function ToolStatusIcon({ status }: { status: ToolCall["status"] }) {
-  if (status === "running") return <Loader2 size={12} className="spin" />;
+  if (status === "running")
+    return (
+      <span className="streaming-candles" aria-hidden="true">
+        <span className="candle" />
+        <span className="candle" />
+        <span className="candle" />
+        <span className="candle" />
+      </span>
+    );
   if (status === "done") return <Check size={12} />;
   return <AlertCircle size={12} />;
 }
