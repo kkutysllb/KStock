@@ -58,6 +58,11 @@ sandbox:
     - host_path: "<data-root>/cache"
       container_path: /mnt/cache
       read_only: false
+    # 策略研究工作区：agent 只读访问当前策略版本（读写必须走
+    # strategy_save_version / strategy_record_backtest 工具保证版本纪律）。
+    - host_path: "<data-root>/product/strategies"
+      container_path: /mnt/strategies
+      read_only: true
 
 # 定时任务（scheduled-tasks）：桌面端设置页创建周报等周期任务。
 # startup-only 配置（改 yaml 需重启 gateway）；桌面 App 未运行期间错过
@@ -115,6 +120,22 @@ tools:
   - name: render_html_report_from_file
     group: report
     use: scripts.kstock_tools.report_dashboard_tool:render_html_report_from_file_tool
+  # ── 策略工作区工具（策略库：版本链 + 回测运行记录）──
+  - name: strategy_list
+    group: strategies
+    use: scripts.kstock_tools.strategy_store_tool:strategy_list_tool
+  - name: strategy_create
+    group: strategies
+    use: scripts.kstock_tools.strategy_store_tool:strategy_create_tool
+  - name: strategy_get_latest
+    group: strategies
+    use: scripts.kstock_tools.strategy_store_tool:strategy_get_latest_tool
+  - name: strategy_save_version
+    group: strategies
+    use: scripts.kstock_tools.strategy_store_tool:strategy_save_version_tool
+  - name: strategy_record_backtest
+    group: strategies
+    use: scripts.kstock_tools.strategy_store_tool:strategy_record_backtest_tool
 
 # 子代理配置：全局参数 + 预置角色（custom_agents）
 # 预置角色覆盖 KStock 全业务线，Lead Agent 可按任务类型精准分派。

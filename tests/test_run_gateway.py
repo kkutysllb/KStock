@@ -917,3 +917,46 @@ def test_first_generate_rewrites_mount_host_path(tmp_path):
     cache_mount = next(m for m in cfg["sandbox"]["mounts"] if m["container_path"] == "/mnt/cache")
     assert cache_mount["host_path"] == str(data_root / "cache")
     assert "<data-root>" not in runtime_cfg.read_text(encoding="utf-8")
+
+
+def test_existing_mounts_gain_new_template_entries_by_container_path(tmp_path):
+    """已有 /mnt/cache 挂载的老用户：增量获得模板新增的 /mnt/strategies。
+
+    用户对既有挂载的自定义（host_path 改动）必须保留。
+    """
+    import yaml
+
+    from scripts.run_gateway import REPO_ROOT
+
+    runtime_cfg = tmp_path / "config" / "qilin.runtime.yaml"
+    qilin_data_dir = tmp_path / "runtime" / "qilin" / "data"
+    data_root = tmp_path
+
+    runtime_cfg.parent.mkdir(parents=True, exist_ok=True)
+    runtime_cfg.write_text(
+        yaml.safe_dump(
+            {
+                "database": {"backend": "sqlite", "sqlite_dir": str(qilin_data_dir)},
+                "sandbox": {
+                    "use": "qilin.sandbox.local:LocalSandboxProvider",
+                    "allow_host_bash": True,
+                    # 模拟上一版本用户：只有 /mnt/cache，且 host_path 是自定义路径
+                    "mounts": [
+                        {"host_path": "/custom/cache", "container_path": "/mnt/cache", "read_only": False}
+                    ],
+                },
+            },
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+
+    _generate_runtime_config(runtime_cfg, qilin_data_dir, REPO_ROOT, data_root)
+
+    cfg = yaml.safe_load(runtime_cfg.read_text(encoding="utf-8"))
+    mounts = {m["container_path"]: m for m in cfg["sandbox"]["mounts"]}
+    # 既有挂载保留用户自定义 host_path
+    assert mounts["/mnt/cache"]["host_path"] == "/custom/cache"
+    # 模板新增挂载按 container_path 增量下发（绝对路径改写）
+    assert mounts["/mnt/strategies"]["host_path"] == str(data_root / "product" / "strategies")
+    assert mounts["/mnt/strategies"]["read_only"] is True

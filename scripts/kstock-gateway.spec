@@ -73,6 +73,9 @@ a = Analysis(
         "scripts.kstock_tools.akshare_data_tool",
         "scripts.kstock_tools.akshare_news_tool",
         "scripts.kstock_tools.report_dashboard_tool",
+        # 策略工作区：store（router 动态 import）+ agent 工具（tools 配置动态 import）。
+        "scripts.kstock_strategies",
+        "scripts.kstock_tools.strategy_store_tool",
         # Windows 兼容垫片：run_gateway 入口 import，必须随包分发。
         "scripts.kstock_subprocess_patch",
         "scripts.kstock_windows_shims",

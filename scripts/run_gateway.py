@@ -353,17 +353,29 @@ def _generate_runtime_config(
             changed = True
 
         # 7) sandbox.mounts 增量下发：老用户的 sandbox 段（use/allow_host_bash）
-        #    早于挂载能力存在，缺 mounts 时用模板值补齐（宿主路径已按数据根
-        #    改写）。已存在的 mounts 一律保留用户配置。
+        #    早于挂载能力存在，缺 mounts 时用模板值补齐；已有 mounts 时按
+        #    container_path 增量合并（后续版本新增挂载——如策略库
+        #    /mnt/strategies——也能到达已带 /mnt/cache 的用户）。
+        #    宿主路径已按数据根改写；用户已有的同 container_path 挂载保留。
         template_sandbox = template_cfg.get("sandbox") or {}
         existing_sandbox = dict(existing.get("sandbox") or {})
-        if template_sandbox.get("mounts") and not existing_sandbox.get("mounts"):
+        template_mounts = template_sandbox.get("mounts") or []
+        if template_mounts:
+            existing_mounts = list(existing_sandbox.get("mounts") or [])
+            existing_containers = {
+                m.get("container_path") for m in existing_mounts if isinstance(m, dict)
+            }
             patch = _apply_template_path_overrides(
-                {"sandbox": template_sandbox}, qilin_data_dir, repo_root, data_root
+                {"sandbox": {**template_sandbox, "mounts": template_mounts}},
+                qilin_data_dir, repo_root, data_root,
             )
-            existing_sandbox["mounts"] = patch["sandbox"]["mounts"]
-            existing["sandbox"] = existing_sandbox
-            changed = True
+            for mount in patch["sandbox"]["mounts"]:
+                if isinstance(mount, dict) and mount.get("container_path") not in existing_containers:
+                    existing_mounts.append(mount)
+                    changed = True
+            if existing_mounts != existing_sandbox.get("mounts"):
+                existing_sandbox["mounts"] = existing_mounts
+                existing["sandbox"] = existing_sandbox
 
         if changed:
             with runtime_config_path.open("w", encoding="utf-8") as fh:
@@ -483,10 +495,12 @@ def _ensure_data_space() -> dict[str, Path]:
     product_dir = data_root / "product"
     reports_dir = data_root / "reports"
     cache_market_data_dir = data_root / "cache" / "market-data"
+    strategies_dir = data_root / "product" / "strategies"
 
     # 建立目录结构（见设计文档「目录结构」）；cache/market-data 是行情
-    # 磁盘缓存（kk_common.market_data_cache），沙箱经 /mnt/cache 同源挂载。
-    for directory in (config_dir, qilin_data_dir, logs_dir, product_dir, reports_dir, cache_market_data_dir):
+    # 磁盘缓存（kk_common.market_data_cache），沙箱经 /mnt/cache 同源挂载；
+    # product/strategies 是策略工作区（/mnt/strategies 只读挂载）。
+    for directory in (config_dir, qilin_data_dir, logs_dir, product_dir, reports_dir, cache_market_data_dir, strategies_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
     # 生成运行时配置（显式写入 database.sqlite_dir 绝对路径）
@@ -857,6 +871,12 @@ def create_app():
         paths["data_root"], paths["qilin_data_dir"] / "qilin.db"
     )
 
+    # 策略研究工作区：策略身份/版本链/回测运行，产品索引层 product/kstock.db。
+    # 沙箱内经 /mnt/strategies 只读挂载（见 config 模板 sandbox.mounts）。
+    from scripts.kstock_strategies import StrategyStore
+
+    app.state.kstock_strategy_store = StrategyStore(paths["data_root"])
+
     # ── 追加文件日志 handler（vendor app 构造后、lifespan 前）──────────────
     # vendor 的 configure_logging（lifespan）只调整 handler 的 filter/formatter，
     # 不清除已有 handler，所以这里追加的 FileHandler 会安全保留。
@@ -873,6 +893,7 @@ def create_app():
     from scripts.kstock_general_settings import router as kstock_general_settings_router
     from scripts.kstock_reports_router import router as kstock_reports_router
     from scripts.kstock_news_router import router as kstock_news_router
+    from scripts.kstock_strategies import router as kstock_strategies_router
 
     app.include_router(kstock_models_router)
     app.include_router(kstock_data_sources_router)
@@ -881,6 +902,7 @@ def create_app():
     app.include_router(kstock_general_settings_router)
     app.include_router(kstock_reports_router)
     app.include_router(kstock_news_router)
+    app.include_router(kstock_strategies_router)
     return app
 
 
