@@ -1,7 +1,7 @@
 ---
 name: stock-analysis
-description: A股个股十四维一体深度分析引擎——技术面+财务面+财报深度解读+筹码面+估值面+多模型估值+股本股东+事件统计+消息/机构/资讯层+实时行情+经营数据穿透+缠论分析+艾略特波浪+谐波形态+社交媒体情绪分析，附智能选股策略。开箱即用的跨平台技能包，支持 OpenClaw/Claude Code/Qoder 等 Agent 架构。
-version: 3.6.0
+description: A股个股十四维一体深度分析引擎——技术面+财务面+财报深度解读+筹码面+估值面+多模型估值+股本股东+事件统计+消息/机构/资讯层+实时行情+经营数据穿透+缠论分析+艾略特波浪+谐波形态+社交媒体情绪分析，附10大智能选股策略。开箱即用的跨平台技能包，支持 OpenClaw/Claude Code/Qoder 等 Agent 架构。
+version: 3.5.1
 author: kk-quant
 license: MIT
 category: finance
@@ -85,7 +85,7 @@ inputs:
 metadata:
   openclaw:
     emoji: "📊"
-    version: "3.6.0"
+    version: "3.5.1"
     author: "kk-quant"
     category: "finance"
     tags:
@@ -103,7 +103,7 @@ metadata:
     install:
       - id: pip-deps
         kind: pip
-        package: "pandas numpy matplotlib scipy python-dotenv"
+        package: "tushare pandas numpy matplotlib"
         python: python3
         label: "Install Python dependencies"
 
@@ -122,7 +122,7 @@ tags:
 
 ## 技能概述
 
-本技能包提供完整的A股个股分析能力，整合七大核心维度 + 7大高级分析模块 + 智能选股策略：
+本技能包提供完整的A股个股分析能力，整合七大核心维度 + 7大高级分析模块 + 10大智能选股策略：
 
 1. **技术面分析引擎** — 多周期K线+6大技术指标+支撑压力位
 2. **财务面分析引擎** — 营收/利润/ROE/现金流全维度
@@ -167,11 +167,9 @@ tags:
 | `analyze_harmonic_pattern.py` | 谐波形态分析（Gartley/Bat/Butterfly/Crab XABCD） | `--stock 600519.SH --json` |
 | `analyze_social_media.py` | 社交媒体情绪分析（多平台舆情+情绪评分+恐惧贪婪指数+反转检测） | `--stock 600519.SH --days 7 --json` |
 
-### 智能选股策略
+### 智能选股策略（独立技能 `stock/selection-strategies/`，脚本位于该技能包根目录）
 
-10 大策略 CLI 位于独立技能 `selection-strategies/`（/mnt/skills/public/selection-strategies/，价值/高股息/成长/动量/技术突破/超跌反弹/涨停龙头/资金追踪/多因子）；本技能内嵌 `scripts/run_chan_stock_selector.py`（缠论背驰选股）：
-
-| 脚本文件（独立技能） | 策略 | 说明 |
+| 脚本文件 | 策略 | 说明 |
 |---------|------|------|
 | `run_value_investment.py` | 价值投资 | 低PE/PB、高ROE的低估优质股 |
 | `run_high_dividend.py` | 高股息 | 股息率高、分红稳定的防御型 |
@@ -255,16 +253,23 @@ python3 scripts/business-query-cli.py --query "贵州茅台主营业务构成"
 # 股东管理数据
 python3 scripts/management-query-cli.py --query "贵州茅台股本结构"
 
-# =================== 智能选股 ===================
+# =================== 智能选股（脚本位于独立技能 stock/selection-strategies/ 根目录） ===================
 
-# 缠论背驰选股（本技能内嵌，全市场/指定股票池）
-python3 scripts/run_chan_stock_selector.py --json
-python3 scripts/run_chan_stock_selector.py --pool hs300 --signal buy --json
+# 价值投资策略
+python3 ../selection-strategies/run_value_investment.py --json
 
-# 10 大智能选股策略（价值/高股息/成长/动量/技术突破/超跌反弹/涨停龙头/资金追踪/缠论背驰/多因子）
-# 位于独立技能：cd /mnt/skills/public/selection-strategies && python3 run_multi_factor.py --json 等，详见该技能 SKILL.md
+# 高股息策略
+python3 ../selection-strategies/run_high_dividend.py --json
 
-# =================== 多估值模型 ===================
+# 缠论背驰选股（全市场/指定股票池）
+python3 ../selection-strategies/run_chan_stock_selector.py --json
+python3 ../selection-strategies/run_chan_stock_selector.py --pool hs300 --signal buy --json
+
+# 多因子横截面选股（7因子Z-score+TopN等权组合）
+python3 ../selection-strategies/run_multi_factor.py --json
+python3 ../selection-strategies/run_multi_factor.py --top-n 20 --momentum-window 10 --json
+
+# =================== 多估值模型分析 ===================
 
 # 多估值模型分析（DCF+DDM+PE-Band+PB-ROE+EV/EBITDA+交叉验证）
 python3 scripts/analysis-engine/analyze_valuation_models.py --stock 600519.SH --json
@@ -301,37 +306,46 @@ python3 scripts/analysis-engine/analyze_valuation_models.py --stock 600519.SH --
 6. **资讯 x 行情**：新闻热点 x 资金流向 — 验证市场反应方向
 7. **缠论 x 波浪**：缠论买卖点 x 波浪结构位置 — 双理论交叉验证
 8. **波浪 x 谐波**：波浪阶段 x 谐波形态PRZ — 精确反转点位
-11. **多模型估值 x 财报深度**：DCF/PE-Band等估值结果 x 三表勾稽质量 — 验证估值假设的财务支撑
-13. **股东 x 事件**：股东增减持方向 x 监管函/解禁事件 — 内部人行为 vs 外部事件交叉验证
-14. **质押 x 估值**：质押风险 x 多模型估值 — 高质押低估值的陷阱识别
+9. **多模型估值 x 财报深度**：DCF/PE-Band等估值结果 x 三表勾稽质量 — 验证估值假设的财务支撑
+10. **股东 x 事件**：股东增减持方向 x 监管函/解禁事件 — 内部人行为 vs 外部事件交叉验证
+11. **质押 x 估值**：质押风险 x 多模型估值 — 高质押低估值的陷阱识别
 
 ### 阶段三：报告输出
 
 十四维综合评分（0-100），权重分配：
 | 维度 | 权重 | 说明 |
 |------|------|------|
-| 技术面 | 6% | 趋势与买卖点 |
+| 技术面 | 7% | 趋势与买卖点 |
 | 财务面 | 8% | 盈利质量与成长性 |
 | 财报深度解读 | 8% | 三表勾稽+造假红旗+杜邦分析 |
-| 筹码面 | 6% | 主力动向 |
+| 筹码面 | 7% | 主力动向 |
 | 估值面 | 7% | 安全边际 |
 | 多估值模型 | 8% | DCF+DDM+EV/EBITDA交叉验证 |
-| 股本股东+事件 | 6% | 股东面健康度+事件风险 |
-| 消息+机构+资讯 | 6% | 情绪、预期与事件驱动 |
-| 实时行情 | 4% | 短期动能 |
+| 股本股东+事件 | 7% | 股东面健康度+事件风险 |
+| 消息+机构+资讯 | 7% | 情绪、预期与事件驱动 |
+| 实时行情 | 5% | 短期动能 |
 | 经营面 | 8% | 业务实质与护城河 |
 | 缠论分析 | 7% | 形态动力学信号 |
-| 艾略特波浪 | 4% | 波浪结构判断 |
-| 谐波形态 | 4% | PRZ反转信号 |
-| 社交媒体情绪 | 5% | 舆情与情绪驱动 |
+| 艾略特波浪 | 5% | 波浪结构判断 |
+| 谐波形态 | 5% | PRZ反转信号 |
+| 社交媒体情绪 | 11% | 舆情与情绪驱动 |
 
-### 报告生成（内置 render_html_report 工具）
+### 报告生成（委托 analysis-report）
 
-十四维综合评分完成后，本技能**不自行编写报告或绘图代码**，而是调用内置 `render_html_report` 工具统一渲染。流程：
+十四维综合评分完成后，本技能**不自行编写报告或绘图代码**，而是委托 `common/analysis-report` 统一渲染。流程：
 
-1. 将综合评分、各维度分项、关键指标、风险与数据来源整理为报告 JSON，顶层字段：`title` / `generated_at` / `summary` / `assessment` / `risk_level` / `data_overview` / `core_analysis` / `risks` / `references` / `charts`。
-2. 为每个图表按 `charts[].{tool, title, alt, args}` 结构构造，图表以内嵌 SVG 渲染，**禁止使用远程图片 URL**。至少 3 个图表。args 的完整字段规范以工具描述中的契约说明为准。
-3. 调用 `render_html_report(report_json, filename="report.html")`；若完整 JSON 已保存为 `/mnt/user-data/workspace/*.json`，改用 `render_html_report_from_file(report_json_path="/mnt/user-data/workspace/report.json", filename="report.html")`，禁止先把大 JSON 读入上下文；渲染成功后用 `present_files` 交付。
+1. 将综合评分、各维度分项、关键指标、风险与数据来源整理为 `analysis-report` 的输入 JSON（含 `title` / `generated_at` / `summary` / `assessment` / `risk_level` / `data_overview` / `core_analysis` / `risks` / `references` / `charts`）。
+2. 为每个图表读取 `chart-visualization/references/generate_{type}.md`，按官方字段构造 `args`，并对同一份数据分别用 `theme: "dark"`（背景 `#101418`）与 `theme: "default"`（背景 `#ffffff`）生成两个 URL，写入 `charts[].dark` 与 `charts[].light`。至少 3 个图表。
+3. 执行渲染器，一次生成三份文件：
+
+   ```bash
+   python3 common/analysis-report/scripts/render_report.py \
+     --input report.json \
+     --output-dir . \
+     --basename 2026-07-25_{股票代码}_stock-analysis
+   ```
+
+4. 在最终答复中列出 `{basename}.md`、`{basename}-dark.html`、`{basename}-light.html` 三份文件路径。
 
 报告只给研究结论、情景条件、风险等级和需跟踪指标，**不给出买入/卖出/持有等交易建议**。
 
@@ -345,18 +359,15 @@ python3 scripts/analysis-engine/analyze_valuation_models.py --stock 600519.SH --
 ## Python 依赖
 
 ```
+tushare>=1.4.0
 pandas>=2.0.0
 numpy>=1.24.0
 matplotlib>=3.7.0
-scipy>=1.10.0
-python-dotenv>=1.0.0
 ```
-
-> 注：Tushare 数据经 common 技能 `get_finance_data_gateway()` 获取，禁止直接 `import tushare`。
 
 ## 数据来源标注
 
-- 量化引擎数据标注「数据来源于Tushare Pro API（T+1延迟）」
+- 量化引擎数据标注「数据来源于Tushare Pro API（日频数据通常每日 18:00 后更新，具体以接口返回为准）」
 - 实时行情数据标注「数据来源于同花顺问财（实时）」
 - 经营数据标注「数据来源于同花顺问财」
 - 资讯搜索标注「数据来源于同花顺问财」
@@ -370,6 +381,6 @@ python-dotenv>=1.0.0
 ## 注意事项
 
 1. 分析结果仅供参考，不构成投资建议
-2. 量化引擎数据为 T+1 延迟，实时数据通过问财API补充
+2. Tushare 日频数据通常每日 18:00 后更新，不应标注为固定 T+1；实时数据通过问财API补充
 3. 经营层子维度可按需查询，常规分析建议至少覆盖主营业务+主要客户
 4. analyze_stock_news 通过问财 news-search API 搜索新闻，不再依赖本地数据库

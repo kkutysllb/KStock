@@ -96,7 +96,7 @@ class SimpleBackchiStockSelector:
         """
         # 初始化 Tushare API
         if not _TUSHARE_AVAILABLE:
-            raise RuntimeError("tushare 未安装，请执行 pip install tushare")
+            raise RuntimeError("tushare 不可用，请检查 Python 运行时配置")
         from dotenv import load_dotenv
         load_dotenv()
         token = os.environ.get('TUSHARE_TOKEN', '')

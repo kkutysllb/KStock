@@ -1,8 +1,8 @@
 #!/bin/sh
-# Install script for stock-analysis
+# Install script for tushare-data
 set -e
 
-echo "→ Installing stock-analysis..."
+echo "→ Installing tushare-data..."
 
 # Check Python
 if ! command -v python3 > /dev/null 2>&1; then
@@ -16,7 +16,7 @@ if [ -f requirements.txt ]; then
     echo "  → Python dependencies installed"
 fi
 
-echo "  ✓  stock-analysis installed successfully."
+echo "  ✓  tushare-data installed successfully."
 echo ""
 echo "  Environment variables needed:"
 echo "    See SKILL.md frontmatter for details."

@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-缠论MACD背驰选股脚本（自包含版）
+缠论MACD背驰选股脚本（跨技能调用版）
 
-内嵌 chan_theory_v2 引擎，基于缠论 MACD 红绿柱面积对比算法，全市场批量扫描背驰信号。
-数据通过 Tushare Pro API 实时获取，不依赖本地数据库。
+本脚本为薄封装（wrapper），实际引擎位于独立技能包 `stock/stock-analysis/`：
+  - 引擎脚本：stock-analysis/scripts/run_chan_stock_selector.py（完整实现）
+  - 缠论模块：stock-analysis/chan_theory_v2/（simple_backchi / dynamics / kline / signals）
+  - 数据网关：stock/common/（kk_common，Tushare Pro 数据入口）
+
+依赖技能包（安装 selection-strategies 前需先安装）：
+  1. stock/stock-analysis   —— 缠论引擎与 chan_theory_v2 模块
+  2. stock/common           —— kk_common 金融数据网关
+  3. TUSHARE_TOKEN 环境变量 —— 数据访问凭证（见 SKILL.md required-secrets）
 
 算法核心：
   底背驰 = 绿柱面积扩张 + 价格创新低 + MACD金叉确认 → 买入信号
   顶背驰 = 红柱面积萎缩 + 价格创新高 + MACD死叉确认 → 卖出信号
 
 用法:
-    python scripts/selection-strategies/run_chan_stock_selector.py --json
-    python scripts/selection-strategies/run_chan_stock_selector.py --pool hs300 --json
-    python scripts/selection-strategies/run_chan_stock_selector.py --freq 30min --signal buy --json
-    python scripts/selection-strategies/run_chan_stock_selector.py --pool zz500 --top 30 --json
+    python run_chan_stock_selector.py --json
+    python run_chan_stock_selector.py --pool hs300 --json
+    python run_chan_stock_selector.py --freq 30min --signal buy --json
+    python run_chan_stock_selector.py --pool zz500 --top 30 --json
 """
 
 import sys
@@ -25,24 +32,17 @@ import argparse
 
 # ── 路径解析 ──────────────────────────────────────────────
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_SKILL_ROOT = os.path.dirname(os.path.dirname(_SCRIPT_DIR))
+_STOCK_ROOT = os.path.dirname(_SCRIPT_DIR)
 
-# 内嵌缠论引擎路径
-_CHAN_ENGINE_SCRIPT = os.path.join(_SKILL_ROOT, "scripts", "run_chan_stock_selector.py")
-
-# 兼容：如果在主项目内运行，也尝试主项目脚本
-_PROJECT_ROOT = os.path.dirname(_SKILL_ROOT)
-_MAIN_PROJECT_SCRIPT = os.path.join(_PROJECT_ROOT, "scripts", "run_chan_stock_selector.py")
+# 引擎位于独立技能 stock/stock-analysis/ 中
+_CHAN_ENGINE_SCRIPT = os.path.join(_STOCK_ROOT, "stock-analysis", "scripts", "run_chan_stock_selector.py")
+_CHAN_ENGINE_CWD = os.path.join(_STOCK_ROOT, "stock-analysis")
 
 
 def _resolve_script():
-    """解析可用的缠论选股脚本"""
-    # 优先使用内嵌引擎
+    """解析缠论选股引擎脚本及其工作目录"""
     if os.path.exists(_CHAN_ENGINE_SCRIPT):
-        return _CHAN_ENGINE_SCRIPT, _SKILL_ROOT
-    # 回退到主项目脚本
-    if os.path.exists(_MAIN_PROJECT_SCRIPT):
-        return _MAIN_PROJECT_SCRIPT, _PROJECT_ROOT
+        return _CHAN_ENGINE_SCRIPT, _CHAN_ENGINE_CWD
     return None, None
 
 
@@ -60,7 +60,7 @@ def main():
     if not script:
         print(json.dumps({
             "error": "缠论选股引擎不可用",
-            "hint": "请确保 scripts/chan_engine/ 目录存在且包含缠论引擎代码"
+            "hint": "引擎位于独立技能 stock/stock-analysis/，请先安装该技能包（含 chan_theory_v2 模块）及 stock/common（kk_common 数据网关），并设置 TUSHARE_TOKEN"
         }, ensure_ascii=False))
         sys.exit(1)
 

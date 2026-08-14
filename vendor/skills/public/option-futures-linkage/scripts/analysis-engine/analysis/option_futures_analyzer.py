@@ -62,51 +62,15 @@ except Exception:
 
 # 品种映射：期指品种 → 期权标的（SSE ETF 期权 / CFFEX 股指期权）
 SYMBOL_MAP = {
-    'IF': {'name': '沪深300', 'opt_exchange': 'SSE',
-           # SSE ETF 期权：Tushare opt_basic 的 opt_code 字段不返回 'OP510300.SH' 这类值，
-           # 必须用 name 关键词匹配（合约 name 形如 '300ETF购8月4000'）。
-           # opt_code 仅作日志/历史兼容标识，不参与合约过滤。
-           'opt_code': 'OP510300.SH', 'name_keyword': ['300ETF'],
+    'IF': {'name': '沪深300', 'opt_exchange': 'SSE', 'opt_code': 'OP510300.SH',
            'underlying': '510300.SH', 'underlying_type': 'etf', 'index': '000300.SH'},
-    'IH': {'name': '上证50', 'opt_exchange': 'SSE',
-           'opt_code': 'OP510050.SH', 'name_keyword': ['50ETF'],
+    'IH': {'name': '上证50', 'opt_exchange': 'SSE', 'opt_code': 'OP510050.SH',
            'underlying': '510050.SH', 'underlying_type': 'etf', 'index': '000016.SH'},
-    'IC': {'name': '中证500', 'opt_exchange': 'SSE',
-           'opt_code': 'OP510500.SH', 'name_keyword': ['500ETF'],
+    'IC': {'name': '中证500', 'opt_exchange': 'SSE', 'opt_code': 'OP510500.SH',
            'underlying': '510500.SH', 'underlying_type': 'etf', 'index': '000905.SH'},
     'IM': {'name': '中证1000', 'opt_exchange': 'CFFEX', 'opt_code': 'OP000852.SH',
-           # CFFEX 股指期权：opt_code 字段返回 'OP000852.SH'，可精确等值匹配
            'underlying': '000852.SH', 'underlying_type': 'index', 'index': '000852.SH'},
 }
-
-
-def _filter_option_contracts(basic: pd.DataFrame, sym_info: Dict) -> pd.DataFrame:
-    """从 opt_basic 全市场合约中过滤出本品种合约。
-
-    Tushare opt_basic 字段口径（两种期权品种不同，这是历史踩坑点）：
-    - CFFEX 股指期权（IM/中证1000）：opt_code 字段返回 'OP000852.SH'，可精确等值匹配；
-    - SSE/SZSE ETF 期权（IF/IH/IC 等）：opt_code 字段不返回 'OP510300.SH' 这类值，
-      必须用 name 字段关键词匹配（合约 name 形如 '300ETF购8月4000'）。
-      口径与 market-linkage-engine 的 options_vol.py 完全一致。
-
-    历史背景：早期直接 `basic[basic['opt_code'] == opt_code]` 对 ETF 期权恒为空集，
-    导致下游报 'opt_basic 无数据' / 'OP510300.SH 无合约' 的误诊（实际 basic 有上万行，
-    只是 contracts 过滤后为空）。"""
-    exchange = sym_info.get('opt_exchange')
-    if exchange == 'CFFEX':
-        opt_code = sym_info.get('opt_code')
-        if opt_code and 'opt_code' in basic.columns:
-            return basic[basic['opt_code'] == opt_code]
-        return basic
-    # ETF 期权：按 name 关键词匹配
-    keywords = sym_info.get('name_keyword') or []
-    if not keywords or 'name' not in basic.columns:
-        return basic.iloc[0:0]
-    mask = pd.Series([False] * len(basic), index=basic.index)
-    for kw in keywords:
-        mask |= basic['name'].astype(str).str.contains(kw, na=False)
-    return basic[mask]
-
 
 # 无风险利率（近似值）
 RISK_FREE_RATE = 0.02
@@ -449,19 +413,17 @@ class OptionFuturesAnalyzer:
             'detail_rows': [],
         }
         exchange = sym_info.get('opt_exchange')
+        opt_code = sym_info.get('opt_code')
         underlying = sym_info.get('underlying')
         underlying_type = sym_info.get('underlying_type')
 
         basic = self.fetcher.get_opt_basic(exchange)
         if basic.empty:
-            opt['error'] = f'opt_basic({exchange}) 无数据'
+            opt['error'] = 'opt_basic 无数据'
             return opt
-        contracts = _filter_option_contracts(basic, sym_info)
+        contracts = basic[basic['opt_code'] == opt_code]
         if contracts.empty:
-            # 注意：这里 basic 非空（接口正常），但本品种合约过滤为空。
-            # 历史误诊是把它报成 'opt_basic 无数据'，实际是匹配口径错误。
-            opt['error'] = (f'{sym_info.get("name", "")} 未匹配到期权合约'
-                            f'（{exchange} opt_basic 共 {len(basic)} 行）')
+            opt['error'] = f'{opt_code} 无合约'
             return opt
 
         daily = self.fetcher.get_opt_daily(exchange, start_date, end_date)
@@ -815,6 +777,7 @@ class OptionFuturesAnalyzer:
         result = {'week_label': '-', 'option': {}, 'futures': {}, 'linkage': {}}
 
         exchange = sym_info.get('opt_exchange')
+        opt_code = sym_info.get('opt_code')
         underlying = sym_info.get('underlying')
         underlying_type = sym_info.get('underlying_type')
 
@@ -824,14 +787,9 @@ class OptionFuturesAnalyzer:
             result['option'] = {'error': '期权数据缺失'}
             result['linkage'] = self._analyze_linkage(sym, result['option'], result['futures'])
             return result
-        contracts = _filter_option_contracts(basic, sym_info)
-        if contracts.empty:
-            result['option'] = {'error': f'{sym_info.get("name", "")} 未匹配到期权合约'}
-            result['linkage'] = self._analyze_linkage(sym, result['option'], result['futures'])
-            return result
-        valid_codes = set(contracts['ts_code'])
+        valid_codes = set(basic[basic['opt_code'] == opt_code]['ts_code'])
         merged = daily[daily['ts_code'].isin(valid_codes)].merge(
-            contracts[['ts_code', 'call_put', 'exercise_price', 'maturity_date']],
+            basic[['ts_code', 'call_put', 'exercise_price', 'maturity_date']],
             on='ts_code', how='left')
         if merged.empty:
             result['option'] = {'error': '本品种无成交'}

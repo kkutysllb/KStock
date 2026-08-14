@@ -750,6 +750,10 @@ def main():
         print("[错误] 未输入股票信息")
         sys.exit(1)
 
+    # analysis-engine 目录即分析包所在位置
+    _engine_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'analysis-engine')
+    if _engine_dir not in sys.path:
+        sys.path.insert(0, _engine_dir)
     from financial_analyzer import FinancialAnalyzer
 
     # 初始化 Tushare API

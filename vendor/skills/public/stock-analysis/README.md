@@ -4,7 +4,7 @@ A股个股十四维一体深度分析引擎 — 跨平台技能包
 
 ## 简介
 
-本技能包提供完整的A股个股分析能力，整合七大核心维度 + 7大高级分析模块 + 智能选股策略，可在 OpenClaw、Claude Code、Qoder 等 Agent 架构中开箱即用。
+本技能包提供完整的A股个股分析能力，整合七大核心维度 + 7大高级分析模块 + 10大智能选股策略，可在 OpenClaw、Claude Code、Qoder 等 Agent 架构中开箱即用。
 
 ### 七大分析维度
 
@@ -30,19 +30,20 @@ A股个股十四维一体深度分析引擎 — 跨平台技能包
 | 多估值模型 | DCF+DDM+SOTP+PE-Band+PB-ROE+EV/EBITDA+估值陷阱+交叉验证+目标价 | Tushare Pro |
 | 股本股东+事件统计 | 股本结构+股东户数趋势+前十大股东+增减持+实控人+质押风险+6类事件统计+综合评分 | Tushare Pro + 问财 API |
 
-### 智能选股策略
+### 10大智能选股策略
 
 价值投资 / 高股息 / 成长股 / 动量突破 / 技术突破 / 超跌反弹 / 涨停龙头 / 资金追踪 / 缠论背驰选股 / 多因子横截面
-
-> 10 大策略 CLI 位于独立技能 `selection-strategies/`（/mnt/skills/public/selection-strategies/）；本技能内嵌缠论背驰选股（scripts/run_chan_stock_selector.py）。
 
 ## 快速开始
 
 ### 1. 安装
 
 ```bash
-# 自动安装（内置 Python 客户端已预装依赖，无需额外安装）
+# 方式一：自动安装
 chmod +x install.sh && ./install.sh
+
+# 方式二：手动安装
+pip3 install -r scripts/requirements.txt
 ```
 
 ### 2. 配置环境变量
@@ -90,11 +91,11 @@ python3 scripts/market-query-cli.py --query "贵州茅台实时行情"
 # 经营数据穿透
 python3 scripts/business-query-cli.py --query "贵州茅台主营业务构成"
 
-# 缠论背驰选股（本技能内嵌）
-python3 scripts/run_chan_stock_selector.py --pool hs300 --signal buy --json
+# 价值投资选股
+python3 scripts/selection-strategies/run_value_investment.py --json
 
-# 10 大智能选股策略（独立技能 selection-strategies/）：
-cd /mnt/skills/public/selection-strategies && python3 run_multi_factor.py --json
+# 缠论背驰选股
+python3 scripts/selection-strategies/run_chan_stock_selector.py --pool hs300 --signal buy --json
 ```
 
 ## 目录结构
@@ -105,11 +106,10 @@ stock-analysis/
 ├── README.md                         # 本文件
 ├── LICENSE                           # MIT 许可证
 ├── install.sh                        # 自动安装脚本
-├── chan_theory_v2/                   # 缠论理论引擎包（core/models/config/signals/strategies）
 ├── scripts/
-│   ├── analysis-engine/              # 15个分析引擎 + 2个分析库模块
-│   │   ├── analyze_technical.py          # 技术分析（依赖 technical_analyzer 库）
-│   │   ├── analyze_financial_report.py   # 财务分析（依赖 financial_analyzer 库）
+│   ├── analysis-engine/              # 16个分析脚本
+│   │   ├── analyze_technical.py          # 技术分析
+│   │   ├── analyze_financial_report.py   # 财务分析
 │   │   ├── analyze_stock_chips.py        # 筹码分析
 │   │   ├── analyze_stock_valuation.py    # 估值分析
 │   │   ├── analyze_stock_company_info.py # 公司信息
@@ -117,23 +117,40 @@ stock-analysis/
 │   │   ├── analyze_stock_institute_research.py  # 机构调研
 │   │   ├── analyze_stock_earnings_forecast.py    # 盈利预测
 │   │   ├── analyze_stock_margin.py        # 融资融券
-│   │   ├── analyze_stock_chan.py          # 缠论分析（桥接入口）
+│   │   ├── analyze_stock_chan.py          # 缠论分析（内嵌引擎）
 │   │   ├── analyze_elliott_wave.py        # 艾略特波浪分析
 │   │   ├── analyze_harmonic_pattern.py    # 谐波形态分析
 │   │   ├── analyze_social_media.py         # 社交媒体情绪分析
 │   │   ├── analyze_financial_deep.py       # 财报深度解读
 │   │   ├── analyze_valuation_models.py     # 多估值模型分析（DCF+DDM+PE-Band+PB-ROE+EV/EBITDA）
 │   │   ├── analyze_stock_shareholder.py     # 股本股东信息+事件统计
-│   ├── analyze_stock_chan.py         # 缠论引擎入口（依赖 chan_theory_v2）
-│   ├── run_chan_stock_selector.py    # 缠论背驰选股
+│   ├── selection-strategies/         # 10个智能选股策略
+│   │   ├── run_value_investment.py
+│   │   ├── run_high_dividend.py
+│   │   ├── run_growth_stock.py
+│   │   ├── run_momentum_breakthrough.py
+│   │   ├── run_technical_breakthrough.py
+│   │   ├── run_oversold_rebound.py
+│   │   ├── run_limit_up_leader.py
+│   │   ├── run_fund_flow_tracking.py
+│   │   ├── run_chan_stock_selector.py      # 缠论背驰选股（内嵌引擎）
+│   │   └── run_multi_factor.py             # 多因子横截面选股
+│   ├── chan_theory_v2/              # 缠论引擎（内嵌）
 │   ├── market-query-cli.py           # 实时行情查询CLI
 │   ├── business-query-cli.py         # 经营数据查询CLI
-│   └── management-query-cli.py       # 股东管理查询CLI
+│   ├── management-query-cli.py       # 股东管理查询CLI
+│   ├── requirements.txt              # Python 依赖
+│   └── package.sh                    # 打包脚本
 ├── references/                       # 参考文档
 │   ├── business-query.md
 │   ├── management-query.md
 │   ├── chart-specs.md
-│   └── news-search.md
+│   ├── news-search.md
+│   └── valuation-methodology.md
+└── adapters/                         # 平台适配指南
+    ├── openclaw.md
+    ├── claude.md
+    └── generic.md
 ```
 
 ## 平台集成
@@ -152,17 +169,27 @@ stock-analysis/
 
 ### 通用集成
 
-参考各平台官方技能包集成方式（将整个目录放入平台 skills 目录）。
+参考 `adapters/generic.md` 中的 REST API / Shell / LangChain @tool 集成方式。
 
 ## 多因子横截面选股
 
 ```bash
-# 多因子选股（独立技能 selection-strategies/）
-cd /mnt/skills/public/selection-strategies && python3 run_multi_factor.py --json
+# 多因子选股（默认 Top10 等权组合）
+python3 scripts/selection-strategies/run_multi_factor.py --json
 
 # 自定义 TopN 和动量窗口
-cd /mnt/skills/public/selection-strategies && python3 run_multi_factor.py --top-n 20 --momentum-window 10 --json
+python3 scripts/selection-strategies/run_multi_factor.py --top-n 20 --momentum-window 10 --json
 ```
+
+## 打包发布
+
+```bash
+chmod +x scripts/package.sh && scripts/package.sh
+```
+
+输出文件：
+- `dist/stock-analysis.skill` — OpenClaw 格式（ZIP）
+- `dist/stock-analysis-v3.5.0.tar.gz` — 通用格式
 
 ## 环境要求
 

@@ -33,7 +33,7 @@ def _get_pro_api():
     global _pro
     if _pro is None:
         if not _TS_AVAILABLE:
-            raise RuntimeError("kk_common 未安装，请 pip install -e common/")
+            raise RuntimeError("kk_common 不可用，请检查 Python 运行时配置")
         _pro = get_finance_data_gateway()
     return _pro
 

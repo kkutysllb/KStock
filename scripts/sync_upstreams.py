@@ -111,6 +111,12 @@ def sync_skill_pack(
         shutil.copytree(item.source_dir, item.target_dir)
     # 上游复制完成后重放 KStock 本地技能补丁（vendor 会被整体覆盖，
     # 本地修复集中在 patch_vendor_skills.py 幂等重放）。
+    # 直接以 python scripts/sync_upstreams.py 运行时项目根不在 sys.path，
+    # 需显式注入以保证 scripts 包可导入（python -m 方式则无需）。
+    import sys as _sys
+
+    if str(REPO_ROOT) not in _sys.path:
+        _sys.path.insert(0, str(REPO_ROOT))
     from scripts.patch_vendor_skills import apply_skill_patches
 
     patched = apply_skill_patches(vendor_root=vendor_root)

@@ -254,8 +254,8 @@ python3 scripts/analysis-engine/analyze_option_payoff.py --action price --type c
 
 | 模块 | 说明 |
 |------|------|
-| `scripts/analysis/bs_model.py` | Black-Scholes 定价 + Greeks + 隐含波动率 |
-| `scripts/analysis/payoff_engine.py` | 多腿组合盈亏计算引擎 |
+| `scripts/analysis-engine/bs_model.py` | Black-Scholes 定价 + Greeks + 隐含波动率 |
+| `scripts/analysis-engine/payoff_engine.py` | 多腿组合盈亏计算引擎 |
 | `scripts/analysis-engine/analyze_option_payoff.py` | CLI 入口脚本 |
 
 ## 注意事项

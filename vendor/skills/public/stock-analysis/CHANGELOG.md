@@ -1,17 +1,18 @@
 # Changelog
 
-## [3.6.0] - 2026-08-02
-
-### Removed
-- 移除机器学习趋势预测引擎（analyze_trend_prediction.py / run_trend_model_train.py）及其全部文档引用（SKILL.md/README），十四维分析体系同步重编号。
-- 移除依赖声明中的 tushare / scikit-learn / lightgbm（数据经 common 网关获取，禁止直接 import tushare）。
+## [3.5.2] - 2026-08-05
 
 ### Fixed
-- 修复 analyze_financial_report.py / analyze_technical.py 导入 `analysis.*` 包失败（ModuleNotFoundError，analysis/ 目录不存在），改为同目录库模块导入。
+- 修复日线/分钟级正常交易间隔被误报「异常时间间隔」：`kline_processor` 的
+  间隔校验补充午休间隔（5700/6300/9000s）、跨日偏移（66600+n×86400s）与
+  整天数间隔（86400s 整数倍，1~62 天）三类正常模式；人为缺根仍能正确告警。
+
+## [3.5.1] - 2026-08-04
 
 ### Changed
-- SKILL.md / README 目录结构与实际对齐（selection-strategies 指向独立技能、chan_theory_v2 位于根目录、移除虚构的 ml-prediction/adapters/package.sh）。
-- 依赖声明统一以 SKILL.md frontmatter requires.packages 为准（内置 Python 客户端已预装依赖，不提供 requirements.txt）。
+- 数据访问切换为 `kk_common` 金融数据网关（`get_finance_data_gateway`），不再直接 `import tushare`，符合数据访问边界约束。
+- 移除个股趋势预测（机器学习）能力：删除趋势预测相关脚本与依赖清单，收敛为十四维分析引擎。
+- 修复 `from analysis.* import` 残留断链（analysis/ 目录已更名 analysis-engine/），改为注入 analysis-engine 路径后直接导入。
 
 ## [3.5.0] - 2026-07-03
 

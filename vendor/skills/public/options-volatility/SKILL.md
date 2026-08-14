@@ -166,8 +166,8 @@ python3 scripts/analysis-engine/analyze_option_volatility.py \
 
 | 模块 | 说明 |
 |------|------|
-| `scripts/analysis/realized_vol.py` | 多方法实现波动率计算引擎 |
-| `scripts/analysis/vol_engine.py` | 波动率分析综合引擎 |
+| `scripts/analysis-engine/realized_vol.py` | 多方法实现波动率计算引擎 |
+| `scripts/analysis-engine/vol_engine.py` | 波动率分析综合引擎 |
 | `scripts/analysis-engine/analyze_option_volatility.py` | CLI 入口脚本 |
 
 ## 注意事项

@@ -32,7 +32,7 @@ try:
     import numpy as np
     import pandas as pd
 except ImportError:
-    print(json.dumps({"error": "缺少依赖: pip install pandas numpy"}, ensure_ascii=False))
+    print(json.dumps({"error": "缺少依赖: pandas/numpy 不可用，请检查 Python 运行时配置"}, ensure_ascii=False))
     sys.exit(1)
 
 try:

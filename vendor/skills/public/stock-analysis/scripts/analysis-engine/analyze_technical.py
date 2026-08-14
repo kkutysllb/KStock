@@ -654,7 +654,10 @@ def main():
         print("[错误] 未输入股票信息")
         sys.exit(1)
 
-    # 导入分析模块（与脚本同目录的库模块）
+    # 导入分析模块（analysis-engine 目录即分析包所在位置）
+    _engine_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'analysis-engine')
+    if _engine_dir not in sys.path:
+        sys.path.insert(0, _engine_dir)
     from technical_analyzer import TechnicalDataFetcher, TechnicalAnalyzer
 
     # 股票解析
