@@ -55,7 +55,32 @@ def _tail(path: Path, lines: int = _TAIL_LINES) -> str:
         return ""
 
 
+def _pid_alive_win(pid: int) -> bool:
+    """Windows 进程存活探测：OpenProcess + GetExitCodeProcess。
+
+    Windows 上 os.kill(pid, 0) 不可靠：对刚退出的进程可能返回 None
+    （OpenProcess 对已终止但句柄仍被引用的 PID 仍会成功），无法区分
+    存活与已退出。改为标准做法：PROCESS_QUERY_LIMITED_INFORMATION
+    打开进程，GetExitCodeProcess 返回 STILL_ACTIVE(259) 才算存活。
+    """
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    process = kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION
+    if not process:
+        return False  # 进程不存在或无权查询，视为已退出
+    try:
+        exit_code = ctypes.c_ulong()
+        if not kernel32.GetExitCodeProcess(process, ctypes.byref(exit_code)):
+            return True  # 查询失败（进程将退出）保守视为存活
+        return exit_code.value == 259  # STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(process)
+
+
 def _pid_alive(pid: int) -> bool:
+    if os.name == "nt":
+        return _pid_alive_win(pid)
     try:
         os.kill(pid, 0)
         return True
@@ -63,10 +88,6 @@ def _pid_alive(pid: int) -> bool:
         return False
     except PermissionError:
         return True  # 进程存在但属主不同，视为存活
-    except OSError:
-        # Windows：os.kill(pid, 0) 对已退出进程抛 OSError（WinError 87），
-        # 而非 ProcessLookupError，同样视为已退出。
-        return False
 
 
 @tool("wait_for_background_task", parse_docstring=True)
