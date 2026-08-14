@@ -1932,13 +1932,20 @@ function WorkspaceShell({
   const [artifactPreview, setArtifactPreview] = useState<ArtifactPreview | null>(null);
   const [artifactError, setArtifactError] = useState<string | null>(null);
   const [artifactSaving, setArtifactSaving] = useState(false);
+  // 预览 blob URL 追踪：revoke 统一放这里（state updater 保持纯函数，StrictMode 安全）。
+  const previewUrlRef = useRef<string | null>(null);
+  // 打开请求序号：连续/双击链接时丢弃过期请求，关闭预览时使 pending 请求失效，
+  // 避免「点返回后 pending 请求完成又把预览弹出来」的竞态。
+  const openSeqRef = useRef(0);
 
   const openArtifact = useCallback(async (href: string, name: string) => {
+    const seq = ++openSeqRef.current;
     setArtifactError(null);
     try {
       const response = await fetch(href, { credentials: "include" });
       if (!response.ok) throw new Error(`加载失败（${response.status}）`);
       const blob = await response.blob();
+      if (seq !== openSeqRef.current) return; // 已关闭/已被新请求取代，丢弃
       const previewKind = getArtifactPreviewKind(name, blob.type);
       if (previewKind === "html") {
         // blob iframe 的 base 非层级化：Vite HMR 注入与根绝对路径资源无法解析，
@@ -1946,37 +1953,38 @@ function WorkspaceShell({
         const text = await readBlobText(blob);
         const cleaned = sanitizePreviewHtml(text, new URL(href, GATEWAY_URL).origin);
         const url = URL.createObjectURL(new Blob([cleaned], { type: "text/html" }));
-        setArtifactPreview((current) => {
-          if (current) URL.revokeObjectURL(current.url);
-          return { kind: "html", name, href, url };
-        });
+        if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = url;
+        setArtifactPreview({ kind: "html", name, href, url });
       } else if (previewKind === "markdown" || previewKind === "text") {
         const url = URL.createObjectURL(blob);
         const text = await readBlobText(blob);
-        setArtifactPreview((current) => {
-          if (current) URL.revokeObjectURL(current.url);
-          return { kind: previewKind, name, href, url, text };
-        });
+        if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = url;
+        setArtifactPreview({ kind: previewKind, name, href, url, text });
       } else {
-        const url = URL.createObjectURL(blob);
+        const downloadUrl = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
-        anchor.href = url;
+        anchor.href = downloadUrl;
         anchor.download = name;
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
-        URL.revokeObjectURL(url);
+        URL.revokeObjectURL(downloadUrl);
       }
     } catch (err) {
+      if (seq !== openSeqRef.current) return; // 过期请求的失败不打扰当前状态
       setArtifactError(err instanceof Error ? err.message : "文件加载失败");
     }
   }, []);
 
   const closeArtifactPreview = useCallback(() => {
-    setArtifactPreview((current) => {
-      if (current) URL.revokeObjectURL(current.url);
-      return null;
-    });
+    openSeqRef.current += 1; // 使所有 pending 的打开请求失效
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setArtifactPreview(null);
   }, []);
 
   const saveArtifactPreview = useCallback(async () => {

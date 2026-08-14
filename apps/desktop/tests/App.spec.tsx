@@ -502,6 +502,7 @@ test("交付文件中的 Markdown 和日志在产品内预览并提供下载", a
   expect(Buffer.from(reportBytes).toString("utf8")).toBe("# 周报\n\n正文");
 
   fireEvent.click(screen.getByRole("button", { name: "返回任务页面" }));
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "report.md" })).not.toBeInTheDocument());
   fireEvent.click(await screen.findByRole("button", { name: /bash-1\.log/ }));
 
   expect(await screen.findByRole("dialog", { name: "bash-1.log" })).toBeVisible();
@@ -511,6 +512,90 @@ test("交付文件中的 Markdown 和日志在产品内预览并提供下载", a
   const logCall = desktopBridgeMock.saveArtifact.mock.calls[1];
   expect(logCall?.[0]).toBe("bash-1.log");
   expect(Buffer.from(logCall?.[1] as Uint8Array).toString("utf8")).toBe("line one\nline two");
+
+  fetchSpy.mockRestore();
+});
+
+test("预览关闭后 pending 的打开请求完成不再弹出预览", async () => {
+  authMock.tryGetCurrentUser.mockResolvedValueOnce({
+    id: "u1", email: "t@k.dev", system_role: "user",
+  });
+  vi.mocked(listModels).mockResolvedValueOnce({
+    models: [{
+      name: "test-model",
+      display_name: "Test",
+      description: null,
+      use: "openai",
+      model: "gpt-4",
+      api_base: null,
+      api_key_env: null,
+      supports_thinking: false,
+      supports_vision: false,
+      supports_reasoning_effort: false,
+    }],
+    default_model: "test-model",
+  });
+  turnsMock.getWorkspaceChanges.mockResolvedValueOnce({
+    available: true,
+    files: [
+      { path: "outputs/report.md", root: "outputs", status: "created", size_after: 18 },
+      { path: "outputs/bash-1.log", root: "outputs", status: "created", size_after: 12 },
+    ],
+  });
+  turnsMock.streamRun.mockImplementation(async (opts) => {
+    opts.handlers.onRunId?.("run-delivery");
+    opts.handlers.onFrame({ event: "messages", data: [{ type: "ai", content: "已完成", id: "m1" }, {}] });
+    opts.handlers.onFrame({ event: "end", data: null });
+  });
+  // report.md 请求挂起（模拟慢请求）；bash-1.log 立即返回。
+  let resolveReport!: (value: Response) => void;
+  const reportPending = new Promise<Response>((resolve) => { resolveReport = resolve; });
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("report.md")) return reportPending;
+    if (url.endsWith("bash-1.log")) {
+      return new Response("line one", { status: 200, headers: { "Content-Type": "text/plain" } });
+    }
+    return new Response("missing", { status: 404 });
+  });
+  const createObjectUrl = vi.fn().mockReturnValue("blob:artifact-preview");
+  const revokeObjectUrl = vi.fn();
+  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectUrl });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revokeObjectUrl });
+
+  render(<App />);
+
+  const textarea = await screen.findByRole("textbox", { name: "消息输入" });
+  await screen.findByRole("combobox", { name: "模型选择" });
+  fireEvent.change(textarea, { target: { value: "生成报告" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+
+  fireEvent.click(await screen.findByRole("button", { name: "显示环境信息" }));
+
+  // 1) 点 report.md：fetch 挂起，预览尚未打开。
+  fireEvent.click(await screen.findByRole("button", { name: /report\.md/ }));
+  await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
+    expect.stringMatching(/report\.md$/),
+    expect.objectContaining({ credentials: "include" })
+  ));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+  // 2) 点 bash-1.log：立即打开预览。
+  fireEvent.click(await screen.findByRole("button", { name: /bash-1\.log/ }));
+  expect(await screen.findByRole("dialog", { name: "bash-1.log" })).toBeVisible();
+
+  // 3) 点返回任务页面关闭预览。
+  fireEvent.click(screen.getByRole("button", { name: "返回任务页面" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+  // 4) 挂起的 report.md 请求此刻完成：不得再弹出预览。
+  await act(async () => {
+    resolveReport(new Response("# 周报\n\n正文", { status: 200, headers: { "Content-Type": "text/markdown" } }));
+    await reportPending;
+    // 等后续 promise 链（blob()、readBlobText）与 React 状态提交充分 flush。
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
   fetchSpy.mockRestore();
 });
