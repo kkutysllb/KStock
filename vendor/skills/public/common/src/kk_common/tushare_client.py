@@ -17,7 +17,14 @@ from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, timedelta
 
 import pandas as pd
-import tushare as ts
+
+try:
+    import tushare as ts
+    _TUSHARE_AVAILABLE = True
+except ImportError:  # KStock patch: tushare 非必需依赖，软导入避免 import 即崩
+    ts = None
+    _TUSHARE_AVAILABLE = False
+
 from dotenv import load_dotenv
 
 # 加载环境变量
@@ -61,6 +68,8 @@ class TushareClient:
         Args:
             token: Tushare Pro Token，如果为 None 则从环境变量获取
         """
+        if not _TUSHARE_AVAILABLE:
+            raise ImportError("tushare 未安装：无法访问 Tushare 数据（请安装 tushare 或 tushare-data 运行时）")
         self.token = token or os.getenv('TUSHARE_TOKEN')
         if not self.token:
             raise ValueError("未找到 TUSHARE_TOKEN，请配置环境变量或在 .env 文件中设置")

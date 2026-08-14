@@ -42,6 +42,11 @@ KStock 对上游技能包的全部本地修复：同步完成后自动重放，�
 5. **pywencai 误导提示**（analyze_industry）：``__init__`` 在 pywencai
    缺失时打印 "请 pip install pywencai"，误导 Agent 去安装依赖而放弃
    网关 CLI 主路径。修复：删除该提示（主数据源为问财网关 CLI，纯标准库）。
+6. **tushare 软导入**（tushare_client）：``import tushare as ts`` 是模块级
+   硬导入，CI/网关环境（uv sync 只装 pyproject 依赖，无 tushare）下
+   ``import kk_common.tushare_client`` 即崩，拖垮依赖它的数据网关与测试。
+   修复：软导入 + ``_TUSHARE_AVAILABLE`` 标志，TushareClient 实例化时
+   才抛明确的 ImportError（沙箱运行时装了 tushare，行为不变）。
 
 幂等性：每个补丁应用前检查目标状态，已修复则跳过，可重复执行。
 """
@@ -678,6 +683,37 @@ def _fix_backtest_cli(text: str) -> str | None:
     return patched
 
 
+# ── tushare 软导入补丁（common/kk_common/tushare_client）────────────────
+# 模块级硬导入 tushare：CI/网关环境无 tushare 时 import 即崩。软导入 +
+# 实例化时检查，保证无 tushare 环境也能 import 本模块（数据请求才失败）。
+_TUSHARE_CLIENT_PATH = "public/common/src/kk_common/tushare_client.py"
+
+_TUSHARE_CLIENT_FIXES = (
+    (
+        "import pandas as pd\nimport tushare as ts\nfrom dotenv import load_dotenv\n",
+        "import pandas as pd\n\n"
+        "try:\n"
+        "    import tushare as ts\n"
+        "    _TUSHARE_AVAILABLE = True\n"
+        "except ImportError:  # KStock patch: tushare 非必需依赖，软导入避免 import 即崩\n"
+        "    ts = None\n"
+        "    _TUSHARE_AVAILABLE = False\n"
+        "\n"
+        "from dotenv import load_dotenv\n",
+    ),
+    (
+        "        self.token = token or os.getenv('TUSHARE_TOKEN')\n"
+        "        if not self.token:\n"
+        "            raise ValueError(\"未找到 TUSHARE_TOKEN，请配置环境变量或在 .env 文件中设置\")\n",
+        "        if not _TUSHARE_AVAILABLE:\n"
+        "            raise ImportError(\"tushare 未安装：无法访问 Tushare 数据（请安装 tushare 或 tushare-data 运行时）\")\n"
+        "        self.token = token or os.getenv('TUSHARE_TOKEN')\n"
+        "        if not self.token:\n"
+        "            raise ValueError(\"未找到 TUSHARE_TOKEN，请配置环境变量或在 .env 文件中设置\")\n",
+    ),
+)
+
+
 # ── 行情数据磁盘缓存补丁（common/kk_common）──────────────────────────────
 # 每次任务在线重拉同样的历史行情，重复消耗 Tushare 积分。规范源码保存在
 # scripts/patches/market_data_cache.py（KStock 自有，同步不覆盖），由补丁
@@ -707,6 +743,18 @@ _FINANCE_GATEWAY_FIXES = (
 ''',
     ),
 )
+
+
+def _fix_tushare_client_soft_import(text: str) -> str | None:
+    """tushare_client：模块级硬导入改软导入 + 实例化时检查；已修复返回 None。"""
+    if "_TUSHARE_AVAILABLE" in text:
+        return None
+    patched = text
+    for old, new in _TUSHARE_CLIENT_FIXES:
+        patched = patched.replace(old, new, 1)
+    if patched == text:
+        return None
+    return patched
 
 
 def _fix_finance_gateway_cache(text: str) -> str | None:
@@ -879,6 +927,7 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
         (_BACKTEST_ENGINE_PATH, _fix_backtest_a_share),
         (_BACKTEST_CLI_PATH, _fix_backtest_cli),
         (_FINANCE_GATEWAY_PATH, _fix_finance_gateway_cache),
+        (_TUSHARE_CLIENT_PATH, _fix_tushare_client_soft_import),
     ):
         target = vendor_root / rel_path
         if not target.exists():

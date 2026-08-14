@@ -6,6 +6,9 @@
 """
 
 from pathlib import Path
+import sys
+
+import pytest
 
 from scripts.patch_vendor_skills import (
     _BACKTEST_CLI_FIXES,
@@ -520,3 +523,81 @@ def test_finance_gateway_cache_weave_round_trip():
         assert new in upstream_like
         upstream_like = upstream_like.replace(new, old, 1)
     assert _fix_finance_gateway_cache(upstream_like) == current
+
+
+def test_tushare_client_soft_import_round_trip():
+    """tushare_client 软导入补丁：上游硬导入形态能重建当前 vendor 文件。
+
+    CI（uv sync 无 tushare）与网关环境 import tushare_client 即崩，
+    拖垮依赖它的数据网关与 test_market_data_cache；软导入后无 tushare
+    也能 import，实例化才抛明确 ImportError。
+    """
+    from scripts.patch_vendor_skills import (
+        _TUSHARE_CLIENT_FIXES,
+        _fix_tushare_client_soft_import,
+    )
+
+    vendor_root = Path(__file__).resolve().parent.parent / "vendor" / "skills"
+    rel = "public/common/src/kk_common/tushare_client.py"
+    current = (vendor_root / rel).read_text(encoding="utf-8")
+    assert _fix_tushare_client_soft_import(current) is None  # 幂等
+
+    upstream_like = current
+    for old, new in _TUSHARE_CLIENT_FIXES:
+        assert new in upstream_like
+        upstream_like = upstream_like.replace(new, old, 1)
+    assert _fix_tushare_client_soft_import(upstream_like) == current
+
+    # 语法仍有效（py_compile）
+    import py_compile
+
+    py_compile.compile(str(vendor_root / rel), doraise=True)
+
+
+def test_market_data_cache_imports_without_tushare():
+    """无 tushare 环境（CI）下缓存模块导入链不崩（子进程隔离验证）。
+
+    进程内模拟受 kk_common 包缓存干扰（其他测试已真实导入 tushare），
+    子进程从零导入可精确复现 CI 的 uv sync 干净环境。
+    """
+    import subprocess
+    import textwrap
+
+    src = str(
+        Path(__file__).resolve().parent.parent
+        / "vendor/skills/public/common/src"
+    )
+    script = textwrap.dedent(
+        f'''\
+        import sys
+
+        class Blocker:
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname == "tushare" or fullname.startswith("tushare."):
+                    raise ImportError(f"blocked: {{fullname}}")
+                return None
+
+        sys.meta_path.insert(0, Blocker())
+        sys.path.insert(0, {src!r})
+
+        from kk_common import tushare_client, finance_data_gateway, market_data_cache
+        assert tushare_client._TUSHARE_AVAILABLE is False
+        try:
+            tushare_client.TushareClient(token="x")
+            raise SystemExit("should raise ImportError")
+        except ImportError:
+            pass
+        gateway = finance_data_gateway.FinanceDataGateway(adapter=object())
+        assert market_data_cache.handles("daily") is True
+        assert gateway is not None
+        print("OK")
+        '''
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "OK" in result.stdout
