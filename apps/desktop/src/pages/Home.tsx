@@ -165,8 +165,8 @@ type DesktopMenuCommand =
   | "open-reports"
   | "check-update";
 type ArtifactPreview =
-  | { kind: "html"; name: string; href: string; htmlContent: string }
-  | { kind: "markdown" | "text"; name: string; href: string; text: string };
+  | { kind: "html"; name: string; downloadHref: string; htmlContent: string }
+  | { kind: "markdown" | "text"; name: string; downloadHref: string; text: string };
 type AuthMode = "login" | "register";
 
 const WORKSPACE_SIDEBAR_WIDTH_KEY = "kstock.workspaceSidebarWidth";
@@ -1962,10 +1962,10 @@ function WorkspaceShell({
         // 根绝对路径资源回源到文件所在 origin。
         const text = await readBlobText(blob);
         const cleaned = sanitizePreviewHtml(text, new URL(absoluteHref, GATEWAY_URL).origin);
-        setArtifactPreview({ kind: "html", name, href, htmlContent: cleaned });
+        setArtifactPreview({ kind: "html", name, downloadHref: absoluteHref, htmlContent: cleaned });
       } else if (previewKind === "markdown" || previewKind === "text") {
         const text = await readBlobText(blob);
-        setArtifactPreview({ kind: previewKind, name, href, text });
+        setArtifactPreview({ kind: previewKind, name, downloadHref: absoluteHref, text });
       } else {
         const downloadUrl = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
@@ -1992,7 +1992,7 @@ function WorkspaceShell({
     setArtifactError(null);
     setArtifactSaving(true);
     try {
-      const response = await fetch(artifactPreview.href, { credentials: "include" });
+      const response = await fetch(artifactPreview.downloadHref, { credentials: "include" });
       if (!response.ok) throw new Error(`下载失败（${response.status}）`);
       const blob = await response.blob();
       const saveResult = await saveArtifactBlob(artifactPreview.name, blob);

@@ -105,21 +105,6 @@ export function createMainWindow(): BrowserWindow {
     return { action: "allow" };
   });
 
-  // 防护：阻止渲染层主框架意外导航（如链接点击未 preventDefault、拖拽 URL 等）。
-  // 主框架导航会使 React 应用卸载，用户看到「KStock 正在加载」且全部状态丢失。
-  // dev server（localhost:1420）与 app:// 协议的内部跳转予以放行。
-  window.webContents.on("will-navigate", (event, url) => {
-    const parsed = (() => { try { return new URL(url); } catch { return null; } })();
-    if (!parsed) { event.preventDefault(); return; }
-    // dev 模式允许 Vite HMR 的 ws 与同源页面跳转
-    const isDevNav = !app.isPackaged && parsed.origin === "http://localhost:1420";
-    const isAppScheme = parsed.protocol === "app:";
-    if (!isDevNav && !isAppScheme) {
-      logMain(`will-navigate 拦截非预期导航: ${url}`);
-      event.preventDefault();
-    }
-  });
-
   const url = devServerUrl();
   if (url) {
     void window.loadURL(url);
