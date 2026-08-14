@@ -91,9 +91,8 @@ class FinancialDataFetcher:
             df = self.pro.income(
                 ts_code=ts_code, start_date=start_date,
                 fields="ts_code,end_date,report_type,revenue,total_cogs,"
-                       "sell_exp,admin_exp,rd_exp,oper_profit,total_profit,"
-                       "n_income,n_income_attr_p,minority_plr,"
-                       "excite_income,excite_tax,end_date,ann_date"
+                       "sell_exp,admin_exp,rd_exp,operate_profit,total_profit,"
+                       "n_income,n_income_attr_p,minority_gain,ann_date"
             )
             if df is not None and not df.empty:
                 if "report_type" in df.columns:
@@ -108,13 +107,13 @@ class FinancialDataFetcher:
                 ts_code=ts_code, start_date=start_date,
                 fields="ts_code,end_date,report_type,"
                        "total_assets,total_liab,total_hldr_eqy_exc_min_int,"
-                       "money_cap,accounts_receiv,inventory,goodwill,"
-                       "cip,fix_asset_total,total_current_assets,total_current_liab,"
+                       "money_cap,accounts_receiv,inventories,goodwill,"
+                       "cip,fix_assets_total,total_cur_assets,total_cur_liab,"
                        "prepayment,oth_receiv,"
-                       "st_borr,lt_borr,bonds_payable,"
+                       "st_borr,lt_borr,bond_payable,"
                        "accounts_pay,contract_liab,"
                        "minority_int,"
-                       "undistr_profit,cap_rese,surplus_rese"
+                       "undistr_porfit,cap_rese,surplus_rese"
             )
             if df is not None and not df.empty:
                 if "report_type" in df.columns:
@@ -128,8 +127,8 @@ class FinancialDataFetcher:
             df = self.pro.cashflow(
                 ts_code=ts_code, start_date=start_date,
                 fields="ts_code,end_date,report_type,"
-                       "n_cashflow_act,n_cashflow_inv_act,n_cashflow_fnc_act,"
-                       "c_fr_sale_sg,c_pay goods_for_sv"
+                       "n_cashflow_act,n_cashflow_inv_act,n_cash_flows_fnc_act,"
+                       "c_fr_sale_sg,c_paid_goods_s"
             )
             if df is not None and not df.empty:
                 if "report_type" in df.columns:
@@ -143,10 +142,10 @@ class FinancialDataFetcher:
             df = self.pro.fina_indicator(
                 ts_code=ts_code, start_date=start_date,
                 fields="ts_code,end_date,"
-                       "grossprofit_margin,netprofit_margin,roe,roa,dtowequity,"
+                       "grossprofit_margin,netprofit_margin,roe,roa,debt_to_eqt,"
                        "debt_to_assets,netprofit_yoy,ocf_to_or,"
                        "inv_turn,ar_turn,ocf_to_debt,"
-                       "eqy_to_debt,bps,ebit_of_gr,bps,cfps"
+                       "eqt_to_debt,bps,ebit_of_gr,cfps"
             )
             if df is not None and not df.empty:
                 result["indicators"] = df
@@ -157,8 +156,7 @@ class FinancialDataFetcher:
         try:
             df = self.pro.income(
                 ts_code=ts_code, start_date=start_date,
-                fields="ts_code,end_date,report_type,n_income_attr_p,"
-                       "excite_income,excite_tax"
+                fields="ts_code,end_date,report_type,n_income_attr_p"
             )
             if df is not None and not df.empty:
                 if "report_type" in df.columns:
@@ -560,7 +558,7 @@ class FraudRedFlagDetector:
             total = self._val(latest, "total_assets")
             st_borr = self._val(latest, "st_borr")
             lt_borr = self._val(latest, "lt_borr")
-            bonds = self._val(latest, "bonds_payable")
+            bonds = self._val(latest, "bond_payable")
             interest_debt = st_borr + lt_borr + bonds
 
             if total > 0:
@@ -607,12 +605,12 @@ class FraudRedFlagDetector:
         if income is not None and balance is not None:
             merged = pd.merge(
                 income[["end_date", "revenue"]].tail(4),
-                balance[["end_date", "inventory"]].tail(4),
+                balance[["end_date", "inventories"]].tail(4),
                 on="end_date", how="inner"
             ).sort_values("end_date")
 
             if len(merged) >= 2:
-                inv_ratio = merged["inventory"] / merged["revenue"].replace(0, np.nan)
+                inv_ratio = merged["inventories"] / merged["revenue"].replace(0, np.nan)
                 latest_ratio = inv_ratio.iloc[-1]
                 prev_ratio = inv_ratio.iloc[-2] if len(inv_ratio) >= 2 else latest_ratio
                 if prev_ratio > 0 and latest_ratio / prev_ratio > 1.5:
@@ -655,7 +653,7 @@ class FraudRedFlagDetector:
 
             # 红旗7: 在建工程不转固
             cip = self._val(latest, "cip")
-            fix = self._val(latest, "fix_asset_total")
+            fix = self._val(latest, "fix_assets_total")
             if fix > 0 and cip / fix > 0.5:
                 flags.append({
                     "id": 7, "name": "在建工程不转固",
@@ -751,7 +749,7 @@ class DuPontAnalyzer:
         # 合并最近几期
         merged = pd.merge(
             income[["end_date", "revenue", "n_income_attr_p", "total_profit",
-                    "oper_profit", "total_cogs"]].tail(4),
+                    "operate_profit", "total_cogs"]].tail(4),
             balance[["end_date", "total_assets", "total_hldr_eqy_exc_min_int",
                      "total_liab"]].tail(4),
             on="end_date", how="inner"
@@ -767,7 +765,7 @@ class DuPontAnalyzer:
             ta = self._v(row, "total_assets")
             equity = self._v(row, "total_hldr_eqy_exc_min_int")
             tp = self._v(row, "total_profit")
-            op = self._v(row, "oper_profit")
+            op = self._v(row, "operate_profit")
             liab = self._v(row, "total_liab")
 
             if rev == 0 or ta == 0 or equity == 0:
@@ -860,7 +858,7 @@ class CashFlowMatrixAnalyzer:
         latest = df.iloc[-1]
         cfo = self._v(latest, "n_cashflow_act")
         cfi = self._v(latest, "n_cashflow_inv_act")
-        cff = self._v(latest, "n_cashflow_fnc_act")
+        cff = self._v(latest, "n_cash_flows_fnc_act")
 
         cfo_sign = "+" if cfo > 0 else "-"
         cfi_sign = "-" if cfi < 0 else "+"

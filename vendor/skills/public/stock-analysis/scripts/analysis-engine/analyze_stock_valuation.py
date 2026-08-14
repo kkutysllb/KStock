@@ -584,9 +584,9 @@ def analyze_stock_valuation(stock_input: str) -> dict:
         # 添加历史数据用于图表渲染
         'history': {
             'dates': df['trade_date'].dt.strftime('%Y-%m-%d').tolist() if hasattr(df['trade_date'], 'dt') else df['trade_date'].tolist(),
-            'pe': df['pe'].where(df['pe'] > 0).fillna(method='ffill').tolist(),
-            'pb': df['pb'].where(df['pb'] > 0).fillna(method='ffill').tolist(),
-            'ps': df['ps'].where(df['ps'] > 0).fillna(method='ffill').tolist(),
+            'pe': df['pe'].where(df['pe'] > 0).ffill().tolist(),
+            'pb': df['pb'].where(df['pb'] > 0).ffill().tolist(),
+            'ps': df['ps'].where(df['ps'] > 0).ffill().tolist(),
         },
     }
 
