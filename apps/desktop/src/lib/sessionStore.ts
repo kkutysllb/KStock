@@ -96,6 +96,15 @@ export interface TurnUsage {
 
 export type TurnStatus = "streaming" | "needs_input" | "done" | "error" | "compacted";
 
+/**
+ * 交错时间线分段（Cursor/Cline 风格）：正文与工具调用按引擎执行顺序
+ * 交替排列，而非所有工具调用堆在正文之前。由 turnReducer 在流式累积时
+ * 同步构建。历史会话恢复的旧消息没有 timeline，UI 回退到旧渲染路径。
+ */
+export type TurnSegment =
+  | { kind: "text"; index: number }
+  | { kind: "tool"; toolCallId: string };
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
@@ -117,6 +126,17 @@ export interface ChatMessage {
   skills?: string[];
   /** 引擎 values 快照的 summary_text（对话压缩摘要，compaction 时生成）。 */
   summaryText?: string;
+  /**
+   * 正文分段（按工具调用切分）。与 timeline 配对使用：
+   * timeline 中 ``{kind:"text", index}`` 引用本数组下标。
+   * ``text`` 仍是全量拼接字符串（兼容旧渲染路径与历史会话）。
+   */
+  textSegments?: string[];
+  /**
+   * 执行时间线：text 分段与工具调用的交错顺序（Cursor/Cline 风格）。
+   * 缺失时（历史会话/旧数据）UI 回退到「工具汇总 + 全文」旧渲染。
+   */
+  timeline?: TurnSegment[];
   /** 该 assistant turn 对应的引擎 run id。 */
   runId?: string;
   /** 同一 assistant turn 内所有可用于分支的引擎消息 ID。 */

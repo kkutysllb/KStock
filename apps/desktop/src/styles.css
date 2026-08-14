@@ -3625,6 +3625,14 @@ button.context-file-row:hover {
   white-space: pre-wrap;
 }
 
+/* Cursor/Cline 风格交错时间线：正文分段与内联工具卡按执行顺序排列。
+   tool-card 无自带 margin，间距由本容器 grid gap 统一控制。 */
+.turn-timeline {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
 /* turn 正文（markdown-body 内部自控间距与换行） */
 .turn-text {
   font-size: 14px;

@@ -182,4 +182,131 @@ describe("AssistantTurn 澄清渲染", () => {
 
     expect(screen.getByText(/Python path configuration/)).toBeVisible();
   });
+
+  it("timeline 存在时正文与工具调用按执行顺序交错渲染", () => {
+    const message: ChatMessage = {
+      id: "assistant-interleaved",
+      role: "assistant",
+      createdAt: "2026-08-02T12:00:00.000Z",
+      status: "done",
+      text: "开头中间",
+      textSegments: ["开头", "中间"],
+      timeline: [
+        { kind: "text", index: 0 },
+        { kind: "tool", toolCallId: "tool-1" },
+        { kind: "text", index: 1 },
+        { kind: "tool", toolCallId: "tool-2" },
+      ],
+      toolCalls: [
+        { id: "tool-1", name: "read_file", args: { path: "/a" }, status: "done" },
+        { id: "tool-2", name: "write_file", args: { path: "/b" }, status: "done" },
+      ],
+    };
+
+    const { container } = render(<AssistantTurn msg={message} showReasoning={false} />);
+
+    expect(container.querySelector(".turn-timeline")).toBeTruthy();
+    // 所有工具都在时间线内：不再出现堆积的工具活动摘要
+    expect(container.querySelector(".tool-activity-summary")).toBeNull();
+
+    const textBlocks = container.querySelectorAll(".turn-timeline .turn-text");
+    expect(textBlocks).toHaveLength(2);
+    expect(textBlocks[0].textContent).toContain("开头");
+    expect(textBlocks[1].textContent).toContain("中间");
+
+    const toolCards = container.querySelectorAll(".turn-timeline .tool-card");
+    expect(toolCards).toHaveLength(2);
+
+    // 子元素顺序：text → tool → text → tool（交错而非堆积）
+    const order = Array.from(container.querySelectorAll(".turn-timeline > *")).map((el) =>
+      el.classList.contains("turn-text") ? "text" : "tool"
+    );
+    expect(order).toEqual(["text", "tool", "text", "tool"]);
+  });
+
+  it("流式时蜡烛只在最后一个正文分段上显示", () => {
+    const message: ChatMessage = {
+      id: "assistant-interleaved-streaming",
+      role: "assistant",
+      createdAt: "2026-08-02T12:00:00.000Z",
+      status: "streaming",
+      text: "前置后",
+      textSegments: ["前置", "后"],
+      timeline: [
+        { kind: "text", index: 0 },
+        { kind: "tool", toolCallId: "tool-1" },
+        { kind: "text", index: 1 },
+      ],
+      toolCalls: [{ id: "tool-1", name: "read_file", args: {}, status: "running" }],
+    };
+
+    const { container } = render(<AssistantTurn msg={message} />);
+
+    const candles = container.querySelectorAll(".streaming-candles");
+    expect(candles).toHaveLength(1);
+    const textBlocks = container.querySelectorAll(".turn-timeline .turn-text");
+    expect(textBlocks[0].querySelector(".streaming-candles")).toBeNull();
+    expect(textBlocks[1].querySelector(".streaming-candles")).toBeTruthy();
+  });
+
+  it("流式时时间线以运行中工具结尾则不显示正文蜡烛（工具卡自带 spinner）", () => {
+    const message: ChatMessage = {
+      id: "assistant-interleaved-tool-tail",
+      role: "assistant",
+      createdAt: "2026-08-02T12:00:00.000Z",
+      status: "streaming",
+      text: "前置",
+      textSegments: ["前置"],
+      timeline: [
+        { kind: "text", index: 0 },
+        { kind: "tool", toolCallId: "tool-1" },
+      ],
+      toolCalls: [{ id: "tool-1", name: "read_file", args: {}, status: "running" }],
+    };
+
+    const { container } = render(<AssistantTurn msg={message} />);
+
+    expect(container.querySelector(".streaming-candles")).toBeNull();
+    // 运行中的工具卡仍有 spinner 表示进度
+    expect(container.querySelector(".tool-card.status-running .spin")).toBeTruthy();
+  });
+
+  it("澄清卡渲染在 ask_clarification 工具的执行位置", () => {
+    const base = makeClarifyTurn("form");
+    const message: ChatMessage = {
+      ...base,
+      textSegments: ["前置说明"],
+      timeline: [
+        { kind: "text", index: 0 },
+        { kind: "tool", toolCallId: "call-clarify-1" },
+      ],
+    };
+
+    const { container } = render(<AssistantTurn msg={message} onClarifyPick={onClarifyPick} />);
+
+    expect(container.querySelector(".turn-timeline")).toBeTruthy();
+    expect(screen.getByText("请确认分析周期")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /回复并确认/ })).toBeTruthy();
+    // 交互澄清激活：fallback 正文分段全部隐藏
+    expect(container.querySelectorAll(".turn-timeline .turn-text")).toHaveLength(0);
+  });
+
+  it("无 timeline 的旧消息回退旧布局（工具汇总 + 全文）", () => {
+    const message: ChatMessage = {
+      id: "assistant-legacy",
+      role: "assistant",
+      createdAt: "2026-08-02T12:00:00.000Z",
+      status: "done",
+      text: "旧布局正文",
+      toolCalls: [
+        { id: "tool-1", name: "read_file", args: { path: "/a" }, status: "done" },
+      ],
+    };
+
+    const { container } = render(<AssistantTurn msg={message} showReasoning={false} />);
+
+    expect(container.querySelector(".turn-timeline")).toBeNull();
+    expect(container.querySelector(".tool-activity-summary")).toBeTruthy();
+    expect(screen.getByText("旧布局正文")).toBeTruthy();
+  });
 });

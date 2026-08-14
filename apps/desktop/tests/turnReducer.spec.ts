@@ -162,6 +162,66 @@ describe("messages 事件", () => {
     expect(s.toolCalls?.[0].args).toEqual({});
   });
 
+  it("正文与工具调用按执行顺序交错记录到 timeline", () => {
+    let s = initialTurn();
+    const t0 = 1000;
+    // 正文 → 工具 → 正文 → 工具（Cursor/Cline 风格执行顺序）
+    s = reduceFrame(s, frame("messages", aiMsg({ id: "m1", content: "开头" })), t0);
+    s = reduceFrame(s, frame("messages", aiMsg({ id: "m1", tool_calls: [{ id: "tc1", name: "read_file", args: {} }] })), t0 + 100);
+    s = reduceFrame(s, frame("messages", aiMsg({ id: "m1", content: "中间" })), t0 + 200);
+    s = reduceFrame(s, frame("messages", aiMsg({ id: "m1", tool_calls: [{ id: "tc2", name: "write_file", args: {} }] })), t0 + 300);
+
+    expect(s.text).toBe("开头中间");
+    expect(s.textSegments).toEqual(["开头", "中间"]);
+    expect(s.timeline).toEqual([
+      { kind: "text", index: 0 },
+      { kind: "tool", toolCallId: "tc1" },
+      { kind: "text", index: 1 },
+      { kind: "tool", toolCallId: "tc2" },
+    ]);
+  });
+
+  it("连续正文追加到当前分段，不产生新分段", () => {
+    let s = initialTurn();
+    s = reduceFrame(s, frame("messages", aiMsg({ id: "m1", content: "甲" })), 1000);
+    s = reduceFrame(s, frame("messages", aiMsg({ id: "m1", content: "乙" })), 1100);
+    expect(s.text).toBe("甲乙");
+    expect(s.textSegments).toEqual(["甲乙"]);
+    expect(s.timeline).toEqual([{ kind: "text", index: 0 }]);
+  });
+
+  it("ai 帧重发同一 tool_call 不重复插入时间线", () => {
+    let s = initialTurn();
+    s = reduceFrame(s, frame("messages", aiMsg({ id: "m1", tool_calls: [{ id: "tc1", name: "search", args: {} }] })), 1000);
+    // values 快照重放常见的同一 tool_call 重发帧
+    s = reduceFrame(s, frame("messages", aiMsg({ id: "m1", tool_calls: [{ id: "tc1", name: "search", args: {} }] })), 1200);
+    expect(s.toolCalls).toHaveLength(1);
+    expect(s.timeline).toEqual([{ kind: "tool", toolCallId: "tc1" }]);
+  });
+
+  it("工具结果回填不改变时间线", () => {
+    let s = initialTurn();
+    s = reduceFrame(s, frame("messages", aiMsg({ id: "m1", tool_calls: [{ id: "tc1", name: "search", args: {} }] })), 1000);
+    s = reduceFrame(s, frame("messages", toolMsg({ tool_call_id: "tc1", content: '{"ok":true}' })), 1200);
+    expect(s.toolCalls?.[0].status).toBe("done");
+    expect(s.timeline).toEqual([{ kind: "tool", toolCallId: "tc1" }]);
+  });
+
+  it("纯文本 turn 的 timeline 不含工具分段（UI 走旧布局回退）", () => {
+    let s = initialTurn();
+    s = reduceFrame(s, frame("messages", aiMsg({ id: "m1", content: "纯文本" })), 1000);
+    expect(s.timeline).toEqual([{ kind: "text", index: 0 }]);
+    expect(s.timeline?.some((segment) => segment.kind === "tool")).toBe(false);
+  });
+
+  it("无 timeline 的旧消息不受影响（兼容历史会话）", () => {
+    // 模拟旧数据：直接构造 state 结构（不走 reducer 的 turn 不可能存在，
+    // 这里验证 timeline/textSegments 是可选字段，UI 缺失回退）。
+    const s = initialTurn();
+    expect(s.timeline).toBeUndefined();
+    expect(s.textSegments).toBeUndefined();
+  });
+
   it("首个 tool_call 时刻 = reasoning 结束", () => {
     let s = initialTurn();
     s = reduceFrame(s, frame("messages", aiMsg({ additional_kwargs: { reasoning_content: "思考" } })), 100);

@@ -152,10 +152,23 @@ function reduceAiMessage(
     return next;
   }
 
-  // 正文增量（空 content 忽略：values 快照补发的空 content 不影响）
+  // 正文增量（空 content 忽略：values 快照补发的空 content 不影响）。
+  // 同步维护 textSegments + timeline：连续正文追加到当前 text 分段，
+  // 否则新建分段（Cursor/Cline 风格交错展示的数据基础）。
   const content = msg.content;
   if (typeof content === "string" && content) {
     next.text = (next.text ?? "") + content;
+    const timeline = next.timeline ?? [];
+    const last = timeline.length > 0 ? timeline[timeline.length - 1] : undefined;
+    const segments = next.textSegments ?? [];
+    if (last && last.kind === "text") {
+      const updated = [...segments];
+      updated[last.index] = (updated[last.index] ?? "") + content;
+      next.textSegments = updated;
+    } else {
+      next.textSegments = [...segments, content];
+      next.timeline = [...timeline, { kind: "text", index: segments.length }];
+    }
   }
 
   // reasoning 流：兼容 reasoning_content（DeepSeek/o1）与 reasoning（其他 provider）
@@ -174,11 +187,24 @@ function reduceAiMessage(
     if (next.reasoning && next.reasoning.endedAt == null) {
       next.reasoning = { ...next.reasoning, endedAt: now };
     }
+    const prevIds = new Set((next.toolCalls ?? []).map((tc) => tc.id));
     next.toolCalls = mergeToolCalls(
       next.toolCalls ?? [],
       toolCalls as Array<Record<string, unknown>>,
       now
     );
+    // 新增的工具调用按合并后顺序追加到 timeline（id 去重：
+    // ai 帧重发同一 tool_call 不得重复插入时间线）。
+    const timeline = [...(next.timeline ?? [])];
+    for (const tc of next.toolCalls) {
+      if (
+        !prevIds.has(tc.id) &&
+        !timeline.some((s) => s.kind === "tool" && s.toolCallId === tc.id)
+      ) {
+        timeline.push({ kind: "tool", toolCallId: tc.id });
+      }
+    }
+    next.timeline = timeline;
   }
 
   // usage_metadata
