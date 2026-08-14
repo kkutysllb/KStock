@@ -58,6 +58,18 @@ describe("sanitizePreviewHtml", () => {
     expect(cleaned).toContain("正文");
   });
 
+  it("移除 module 入口脚本（如 /src/main.tsx），保留 classic 脚本并回源", () => {
+    const html = [
+      "<script type=\"module\" src=\"/src/main.tsx\"></script>",
+      "<script type=\"module\" src=\"https://cdn.example.com/lib.mjs\"></script>",
+      "<script src=\"/assets/app.js\"></script>",
+    ].join("\n");
+    const cleaned = sanitizePreviewHtml(html, ORIGIN);
+    expect(cleaned).not.toContain("main.tsx");
+    expect(cleaned).not.toContain("lib.mjs");
+    expect(cleaned).toContain(`src="${ORIGIN}/assets/app.js"`);
+  });
+
   it("根绝对路径资源回源到 baseOrigin，保留协议/协议相对/非路径 URL", () => {
     const html = [
       "<link rel=\"stylesheet\" href=\"/style.css\">",
