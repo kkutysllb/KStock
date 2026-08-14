@@ -21,6 +21,24 @@ KStock 对上游技能包的全部本地修复：同步完成后自动重放，�
 2. **np import bug**（analyze_stock_valuation / analyze_stock_margin）：
    脚本使用 ``np.array`` / ``np.percentile`` / ``np.sum`` 但从未
    ``import numpy as np``（NameError 崩溃）。修复：补齐导入。
+3. **Tushare 字段名错误**（analyze_financial_deep，ts bug 修复后的第 2 层）：
+   请求的字段名与官方接口不符（inventory→inventories、fix_asset_total→
+   fix_assets_total、total_current_assets→total_cur_assets、
+   total_current_liab→total_cur_liab、bonds_payable→bond_payable、
+   undistr_profit→undistr_porfit、oper_profit→operate_profit、
+   minority_plr→minority_gain、n_cashflow_fnc_act→n_cash_flows_fnc_act、
+   c_pay goods_for_sv→c_paid_goods_s、dtowequity→debt_to_eqt、
+   eqy_to_debt→eqt_to_debt），无效字段被官方静默忽略 → 返回 DataFrame
+   缺列 → 数据层 KeyError；同时修复 fields 重复字段（end_date×2、bps×2，
+   pandas 3.0 抛 duplicate keys）与移除官方无此字段的 excite_income/
+   excite_tax。
+4. **pandas 3.0 兼容**（analyze_stock_valuation）：``fillna(method='ffill')``
+   在 pandas 3.0 已移除（2.1 弃用），抛
+   ``TypeError: NDFrame.fillna() got an unexpected keyword argument 'method'``。
+   修复：改用 ``.ffill()``。
+5. **pywencai 误导提示**（analyze_industry）：``__init__`` 在 pywencai
+   缺失时打印 "请 pip install pywencai"，误导 Agent 去安装依赖而放弃
+   网关 CLI 主路径。修复：删除该提示（主数据源为问财网关 CLI，纯标准库）。
 
 幂等性：每个补丁应用前检查目标状态，已修复则跳过，可重复执行。
 """
@@ -62,6 +80,58 @@ _NP_BUG_SCRIPTS = (
     "public/stock-analysis/scripts/analysis-engine/analyze_stock_margin.py",
 )
 
+# ── Tushare 字段名修复补丁（financial_deep）───────────────────────────────
+# 上游脚本 fields 中的字段名与官方接口不符，无效字段被官方静默忽略，
+# 返回 DataFrame 缺列 → 后续 KeyError。同时修 fields 重复（pandas 3.0
+# duplicate keys）与空格字段名。幂等检测：已含官方字段名则跳过。
+_TS_FIELD_FIX_SCRIPTS = (
+    "public/stock-analysis/scripts/analysis-engine/analyze_financial_deep.py",
+)
+
+# (旧片段, 新片段) 精确替换对，覆盖 fields 定义与全部列名使用点
+_TS_FIELD_REPLACEMENTS = (
+    # income fields
+    ("rd_exp,oper_profit,total_profit,", "rd_exp,operate_profit,total_profit,"),
+    ("n_income,n_income_attr_p,minority_plr,", "n_income,n_income_attr_p,minority_gain,"),
+    ("excite_income,excite_tax,ann_date", "ann_date"),
+    # balancesheet fields
+    ("money_cap,accounts_receiv,inventory,goodwill,", "money_cap,accounts_receiv,inventories,goodwill,"),
+    ("cip,fix_asset_total,total_current_assets,total_current_liab,",
+     "cip,fix_assets_total,total_cur_assets,total_cur_liab,"),
+    ("st_borr,lt_borr,bonds_payable,", "st_borr,lt_borr,bond_payable,"),
+    ("undistr_profit,cap_rese,surplus_rese", "undistr_porfit,cap_rese,surplus_rese"),
+    # cashflow fields
+    ("n_cashflow_act,n_cashflow_inv_act,n_cashflow_fnc_act,",
+     "n_cashflow_act,n_cashflow_inv_act,n_cash_flows_fnc_act,"),
+    ("c_fr_sale_sg,c_pay goods_for_sv", "c_fr_sale_sg,c_paid_goods_s"),
+    # fina_indicator fields
+    ("grossprofit_margin,netprofit_margin,roe,roa,dtowequity,",
+     "grossprofit_margin,netprofit_margin,roe,roa,debt_to_eqt,"),
+    ("bps,ebit_of_gr,bps,cfps", "bps,ebit_of_gr,cfps"),
+    ("eqy_to_debt,bps,ebit_of_gr,cfps", "eqt_to_debt,bps,ebit_of_gr,cfps"),
+    # deduct_income 查询（官方无 excite_income/excite_tax 字段）
+    ('report_type,n_income_attr_p,"\n                       "excite_income,excite_tax"',
+     'report_type,n_income_attr_p"'),
+    # 使用点列名
+    ('self._val(latest, "bonds_payable")', 'self._val(latest, "bond_payable")'),
+    ('balance[["end_date", "inventory"]]', 'balance[["end_date", "inventories"]]'),
+    ('merged["inventory"]', 'merged["inventories"]'),
+    ('self._val(latest, "fix_asset_total")', 'self._val(latest, "fix_assets_total")'),
+    ('"oper_profit", "total_cogs"]].tail(4)', '"operate_profit", "total_cogs"]].tail(4)'),
+    ('self._v(row, "oper_profit")', 'self._v(row, "operate_profit")'),
+    ('self._v(latest, "n_cashflow_fnc_act")', 'self._v(latest, "n_cash_flows_fnc_act")'),
+)
+
+# ── pandas 3.0 兼容补丁（fillna method 移除）──────────────────────────────
+_PANDAS3_FFILL_SCRIPTS = (
+    "public/stock-analysis/scripts/analysis-engine/analyze_stock_valuation.py",
+)
+
+# ── pywencai 误导提示移除补丁（analyze_industry）──────────────────────────
+_PYWENCAI_HINT_SCRIPTS = (
+    "public/industry-analysis/scripts/analyze_industry.py",
+)
+
 
 def _patch_file(path: Path, name: str, apply_fn) -> bool:
     """对单个文件应用补丁函数，返回是否发生了改动（补丁后与原文不同）。"""
@@ -93,6 +163,37 @@ def _fix_np_bug(text: str) -> str | None:
     return text.replace(_NP_ANCHOR, _NP_INSERTION, 1)
 
 
+def _fix_ts_field_bug(text: str) -> str | None:
+    """修复 Tushare 字段名/重复字段 bug；已修复返回 None（幂等跳过）。"""
+    if "inventories" in text and "c_paid_goods_s" in text:
+        return None
+    patched = text
+    for old, new in _TS_FIELD_REPLACEMENTS:
+        patched = patched.replace(old, new)
+    if patched == text:
+        return None
+    return patched
+
+
+def _fix_pandas3_ffill(text: str) -> str | None:
+    """修复 pandas 3.0 fillna(method=...) 兼容；已修复返回 None（幂等跳过）。"""
+    if "fillna(method=" not in text:
+        return None
+    # 替换串不带前导点：原文本 `.fillna(method='ffill')` 前导点保留，
+    # 否则会生成 `..ffill()` 双点。
+    return text.replace("fillna(method='ffill')", "ffill()")
+
+
+def _fix_pywencai_hint(text: str) -> str | None:
+    """移除 pywencai 缺失时的误导安装提示；已修复返回 None（幂等跳过）。"""
+    pattern = re.compile(
+        r'\n\s*print\("  ⚠️ pywencai 未安装，请执行: pip install pywencai", file=sys\.stderr\)'
+    )
+    if not pattern.search(text):
+        return None
+    return pattern.sub("", text)
+
+
 def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     """应用全部技能补丁，返回本次发生改动的文件列表（相对 vendor_root）。
 
@@ -111,6 +212,24 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
         if not target.exists():
             continue
         if _patch_file(target, rel_path, _fix_np_bug):
+            changed.append(rel_path)
+    for rel_path in _TS_FIELD_FIX_SCRIPTS:
+        target = vendor_root / rel_path
+        if not target.exists():
+            continue
+        if _patch_file(target, rel_path, _fix_ts_field_bug):
+            changed.append(rel_path)
+    for rel_path in _PANDAS3_FFILL_SCRIPTS:
+        target = vendor_root / rel_path
+        if not target.exists():
+            continue
+        if _patch_file(target, rel_path, _fix_pandas3_ffill):
+            changed.append(rel_path)
+    for rel_path in _PYWENCAI_HINT_SCRIPTS:
+        target = vendor_root / rel_path
+        if not target.exists():
+            continue
+        if _patch_file(target, rel_path, _fix_pywencai_hint):
             changed.append(rel_path)
     return changed
 
