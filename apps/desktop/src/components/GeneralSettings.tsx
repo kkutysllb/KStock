@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Eye, Keyboard, LayoutPanelLeft, RotateCcw, Save } from "lucide-react";
+import { Bell, Check, Eye, Keyboard, LayoutPanelLeft, RotateCcw, Save } from "lucide-react";
 import {
   DEFAULT_GENERAL_PREFERENCES,
   isGeneralSettingsApiError,
@@ -121,6 +121,15 @@ export function GeneralSettings({ initialValue, onSaved }: GeneralSettingsProps)
           hint="显示主代理和子代理的工具调用卡片"
           checked={draft.show_tool_calls}
           onChange={(value) => update("show_tool_calls", value)}
+        />
+      </GeneralSection>
+
+      <GeneralSection icon={Bell} title="通知" description="长任务在后台执行时通过系统通知提醒，点击通知回到应用窗口。">
+        <ToggleField
+          label="任务完成通知"
+          hint="运行超过 15 秒的任务在完成/失败/等待回复时弹出系统通知；窗口聚焦时自动静默"
+          checked={draft.notify_task_done}
+          onChange={(value) => update("notify_task_done", value)}
         />
       </GeneralSection>
 

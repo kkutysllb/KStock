@@ -42,6 +42,8 @@ class GeneralPreferences(BaseModel):
     send_shortcut: Literal["enter", "mod_enter"] = "enter"
     keep_draft_after_send: bool = False
     keep_attachments_after_send: bool = False
+    # 任务完成/失败系统通知（窗口聚焦时主进程自动降级不打扰）。
+    notify_task_done: bool = True
 
 
 class GeneralSettingsResponse(BaseModel):

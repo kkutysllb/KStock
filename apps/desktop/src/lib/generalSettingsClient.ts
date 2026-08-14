@@ -14,6 +14,7 @@ export interface GeneralPreferences {
   send_shortcut: "enter" | "mod_enter";
   keep_draft_after_send: boolean;
   keep_attachments_after_send: boolean;
+  notify_task_done: boolean;
 }
 
 export const DEFAULT_GENERAL_PREFERENCES: GeneralPreferences = {
@@ -30,6 +31,7 @@ export const DEFAULT_GENERAL_PREFERENCES: GeneralPreferences = {
   send_shortcut: "enter",
   keep_draft_after_send: false,
   keep_attachments_after_send: false,
+  notify_task_done: true,
 };
 
 export interface GeneralSettingsApiError {
@@ -84,12 +86,33 @@ export async function getGeneralPreferences(): Promise<GeneralPreferences> {
   return withDefaults(response.preferences ?? {});
 }
 
-export async function updateGeneralPreferences(
-  preferences: GeneralPreferences
-): Promise<GeneralPreferences> {
+async function putPreferences(preferences: GeneralPreferences): Promise<GeneralPreferences> {
   const response = await settingsFetch<{ preferences: GeneralPreferences }>(
     "/api/v1/kstock/general-settings",
     { method: "PUT", body: JSON.stringify({ ...preferences }) }
   );
   return withDefaults(response.preferences);
+}
+
+export async function updateGeneralPreferences(
+  preferences: GeneralPreferences
+): Promise<GeneralPreferences> {
+  try {
+    return await putPreferences(preferences);
+  } catch (error) {
+    // 旧版 gateway 的 GeneralPreferences 是 extra="forbid"：前端新增字段
+    // （notify_task_done）会被 422 拒绝。剥离新增字段重试一次，保证旧网关
+    // 下其余设置仍可保存；重建网关包（build-gateway-bundle.sh）后字段自然
+    // 生效。返回值经 withDefaults 补齐，调用方无感。
+    if (
+      isGeneralSettingsApiError(error) &&
+      error.status === 422 &&
+      "notify_task_done" in preferences
+    ) {
+      const legacy = { ...preferences } as Partial<GeneralPreferences>;
+      delete legacy.notify_task_done;
+      return putPreferences(legacy as GeneralPreferences);
+    }
+    throw error;
+  }
 }

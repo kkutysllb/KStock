@@ -1,5 +1,6 @@
 import {
   Brain,
+  CalendarClock,
   Database,
   FileSearch,
   Gauge,
@@ -231,6 +232,18 @@ export const SETTING_SECTIONS: SettingSection[] = [
       { name: "预置角色", value: "5 个", hint: "market-data / stock-researcher / chan-theory / backtest / report-writer" },
       { name: "全局超时", value: "1800 秒", hint: "对应 subagents.timeout_seconds" },
       { name: "每轮上限", value: "6 次", hint: "对应 subagents.max_total_per_run" }
+    ]
+  },
+  {
+    id: "scheduled-tasks",
+    title: "定时任务",
+    group: "执行",
+    icon: CalendarClock,
+    summary: "周期性自动研究任务（如市场全景周报）：到点自动执行并通知，产物进入报告库。",
+    fields: [
+      { name: "调度器", value: "引擎内置 scheduler", hint: "需重启 gateway 生效（新版默认启用）" },
+      { name: "执行方式", value: "每次新建任务线程", hint: "fresh_thread_per_run" },
+      { name: "完成提醒", value: "系统通知", hint: "桌面端轮询任务状态变化" }
     ]
   },
   {
