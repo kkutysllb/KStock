@@ -109,6 +109,15 @@ def sync_skill_pack(
             shutil.rmtree(item.target_dir)
         item.target_dir.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(item.source_dir, item.target_dir)
+    # 上游复制完成后重放 KStock 本地技能补丁（vendor 会被整体覆盖，
+    # 本地修复集中在 patch_vendor_skills.py 幂等重放）。
+    from scripts.patch_vendor_skills import apply_skill_patches
+
+    patched = apply_skill_patches(vendor_root=vendor_root)
+    if patched:
+        print(f"已重放技能补丁 {len(patched)} 个文件：")
+        for rel_path in patched:
+            print(f"  - {rel_path}")
     return plan
 
 

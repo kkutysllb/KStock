@@ -677,6 +677,42 @@ def test_ensure_default_soul_preserves_user_content(tmp_path):
     assert soul_path.read_text(encoding="utf-8") == "# 用户自定义守则\n"
 
 
+def test_ensure_default_soul_upgrades_versioned_soul(tmp_path):
+    """带版本标记的旧版 SOUL.md 在模板版本更高时自动升级。"""
+    from scripts.run_gateway import REPO_ROOT, _ensure_default_soul
+
+    qilin_home = tmp_path / "runtime" / "qilin"
+    qilin_home.mkdir(parents=True, exist_ok=True)
+    soul_path = qilin_home / "SOUL.md"
+    soul_path.write_text("<!-- soul-version: 1 -->\n# 旧版守则\n", encoding="utf-8")
+
+    _ensure_default_soul(qilin_home)
+
+    template = (REPO_ROOT / "config" / "lead_soul.md").read_text(encoding="utf-8")
+    assert soul_path.read_text(encoding="utf-8") == template
+
+
+def test_ensure_default_soul_keeps_same_or_newer_version(tmp_path):
+    """版本相同不覆盖；本地版本更高不回退。"""
+    from scripts.run_gateway import REPO_ROOT, _ensure_default_soul
+
+    template = (REPO_ROOT / "config" / "lead_soul.md").read_text(encoding="utf-8")
+    qilin_home = tmp_path / "runtime" / "qilin"
+    qilin_home.mkdir(parents=True, exist_ok=True)
+    soul_path = qilin_home / "SOUL.md"
+
+    # 版本相同
+    soul_path.write_text(template, encoding="utf-8")
+    _ensure_default_soul(qilin_home)
+    assert soul_path.read_text(encoding="utf-8") == template
+
+    # 本地版本更高
+    newer = template.replace("soul-version: 2", "soul-version: 99", 1)
+    soul_path.write_text(newer, encoding="utf-8")
+    _ensure_default_soul(qilin_home)
+    assert soul_path.read_text(encoding="utf-8") == newer
+
+
 # ── 用户数据根目录：~/.kstock 默认与历史 v1 目录迁移 ────────────────
 
 

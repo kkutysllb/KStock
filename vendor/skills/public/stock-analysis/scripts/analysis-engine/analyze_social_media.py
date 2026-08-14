@@ -37,8 +37,8 @@ except ImportError:
 
 try:
     from kk_common import get_finance_data_gateway
-except ImportError:
-    ts = None
+except ImportError:  # KStock patch: kk_common 由 common 技能提供，失败时置 None
+    get_finance_data_gateway = None
 
 
 # ============================================================
@@ -117,7 +117,7 @@ class SocialMediaSentimentEngine:
     def _init_tushare(self):
         """初始化 Tushare Pro"""
         token = os.getenv("TUSHARE_TOKEN")
-        if ts and token:
+        if get_finance_data_gateway and token:
             self.tushare_pro = get_finance_data_gateway()
 
     # ----------------------------------------------------------

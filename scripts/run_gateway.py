@@ -68,6 +68,7 @@ from typing import Any
 # 技能 / sandbox / 工具脚本里全部 subprocess 调用。Unix 下 no-op。
 from scripts.kstock_subprocess_patch import apply_subprocess_no_window_patch
 from scripts.kstock_windows_shims import apply_windows_bash_cwd_prefix_shim
+from scripts.kstock_bash_guard import apply_bash_error_guard
 
 apply_subprocess_no_window_patch()
 
@@ -704,13 +705,43 @@ def _patch_aiosqlite_busy_timeout() -> None:
 
 
 def _ensure_default_soul(qilin_home: Path) -> None:
-    """首次启动时写入 Lead Agent 运行守则（SOUL.md），已存在则保留用户内容。"""
-    soul_path = qilin_home / "SOUL.md"
-    if soul_path.exists() or not _SOUL_TEMPLATE.exists():
+    """SOUL.md 模板同步：带版本标记的模板随版本升级，用户自建内容保留。
+
+    模板头部 ``<!-- soul-version: N -->`` 标记产品托管版本；本地 SOUL.md
+    若带同款标记且版本低于模板则覆盖升级（产品行为约束演进——如子代理
+    角色分派——必须到达 Lead）。本地 SOUL.md 无标记视为用户自建内容，
+    绝不覆盖。
+    """
+    if not _SOUL_TEMPLATE.exists():
         return
-    qilin_home.mkdir(parents=True, exist_ok=True)
-    soul_path.write_text(_SOUL_TEMPLATE.read_text(encoding="utf-8"), encoding="utf-8")
-    print(f"  SOUL.md        : 已写入 Lead Agent 运行守则 → {soul_path}", flush=True)
+    template_text = _SOUL_TEMPLATE.read_text(encoding="utf-8")
+    template_version = _soul_version(template_text)
+    if template_version is None:
+        return
+
+    soul_path = qilin_home / "SOUL.md"
+    if not soul_path.exists():
+        qilin_home.mkdir(parents=True, exist_ok=True)
+        soul_path.write_text(template_text, encoding="utf-8")
+        print(f"  SOUL.md        : 已写入 Lead Agent 运行守则 → {soul_path}", flush=True)
+        return
+
+    local_version = _soul_version(soul_path.read_text(encoding="utf-8"))
+    if local_version is None:
+        return  # 用户自建内容，保留
+    if local_version < template_version:
+        soul_path.write_text(template_text, encoding="utf-8")
+        print(
+            f"  SOUL.md        : 模板升级 v{local_version} → v{template_version}"
+            "（子代理角色分派等行为约束更新）",
+            flush=True,
+        )
+
+
+def _soul_version(text: str) -> int | None:
+    """提取 SOUL.md 模板版本标记，无标记返回 None（视为用户自建内容）。"""
+    match = re.search(r"<!--\s*soul-version:\s*(\d+)\s*-->", text)
+    return int(match.group(1)) if match else None
 
 
 def create_app():
@@ -718,6 +749,7 @@ def create_app():
     _patch_aiosqlite_busy_timeout()
     _apply_vendor_extensions_config_compat_shim()
     _apply_windows_sandbox_shims()
+    apply_bash_error_guard()
     paths = _ensure_data_space()
     # ── 开发日志：先清空网关负责的两个文件（覆写模式，不残留上次运行）──
     from scripts.kstock_dev_logs import (

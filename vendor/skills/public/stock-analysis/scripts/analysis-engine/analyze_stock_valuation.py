@@ -13,6 +13,7 @@
   python scripts/analyze_stock_valuation.py --stock 000001.SZ --json
 """
 
+import numpy as np  # KStock patch: 修复上游遗漏的 numpy 导入
 import argparse
 import json
 import os
