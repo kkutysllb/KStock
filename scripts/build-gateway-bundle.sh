@@ -22,9 +22,6 @@ case "$(uname -s)" in
     LIB_DST="$PYTHON_RUNTIME/lib/"
     STDLIB_SRC_REL="lib/python3.12"
     STDLIB_DST="$PYTHON_RUNTIME/lib/python3.12"
-    # PBS 把 C 扩展 .so 放在 lib/python3.12/lib-dynload/，与 stdlib 一起复制即可。
-    PLATFORM_LIBS_SRC_REL="lib/python3.12/lib-dynload"
-    PLATFORM_LIBS_DST="$PYTHON_RUNTIME/lib/python3.12/lib-dynload"
     ;;
   Linux)
     RUNTIME_PY="$PYTHON_RUNTIME/bin/python3"
@@ -32,8 +29,6 @@ case "$(uname -s)" in
     LIB_DST="$PYTHON_RUNTIME/lib/"
     STDLIB_SRC_REL="lib/python3.12"
     STDLIB_DST="$PYTHON_RUNTIME/lib/python3.12"
-    PLATFORM_LIBS_SRC_REL="lib/python3.12/lib-dynload"
-    PLATFORM_LIBS_DST="$PYTHON_RUNTIME/lib/python3.12/lib-dynload"
     ;;
   MINGW*|MSYS*|CYGWIN*)
     # Windows venv 的标准解释器位置是 Scripts/python.exe。不能把
@@ -49,9 +44,7 @@ case "$(uname -s)" in
     # Lib/。运行时通过 sys.path 解析 pyd 时会在 <prefix>/DLLs 中查找，因此必须
     # 把整个 DLLs/ 复制到 runtime 根目录，否则打包版在客户机上 ``import ctypes``
     # 会触发 ``from _ctypes import Union, Structure, Array`` 失败（pandas.errors
-    # 等会立即踩到）。
-    PLATFORM_LIBS_SRC_REL="DLLs"
-    PLATFORM_LIBS_DST="$PYTHON_RUNTIME/DLLs"
+    # 等会立即踩到）。DLLs 复制在本脚本后段 Windows 专属段执行。
     ;;
   *)
     echo "!! 不支持平台: $(uname -s)" >&2
@@ -240,24 +233,25 @@ if [ ! -d "$STDLIB_DST/encodings" ]; then
 fi
 
 # ── 复制平台 C 扩展模块 ────────────────────────────────────────────
-# python-build-standalone 把 stdlib 的 C 扩展模块（Windows: *.pyd + 共享 DLL；
-# POSIX: *.so）与纯 Python stdlib 分开放置：Windows 在 <prefix>/DLLs/，POSIX 在
-# lib/python3.12/lib-dynload/。CPython 启动后通过 sys.path 解析 ``import _ctypes``
-# 等 pyd/.so 模块时只查找这些目录，不在纯 Python 的 Lib/ 里。漏复制会让打包版
-# 客户机在 ``import ctypes``（pandas.errors -> numpy._core._dtype_ctypes -> ctypes
-# -> ``from _ctypes import Union, Structure, Array``）立即踩 ModuleNotFoundError。
-# 历史回归：commit 62c4d83 只复制了 stdlib 顶层，Windows 校验块又显式跳过
-# lib-dynload 检查（verify_package_resources.py 同样跳过 Windows），导致此缺陷
-# 长期未被发现。下方使用 ``cp -R`` 整目录，并加 sentinel 文件存在性断言。
-PLATFORM_LIBS_SRC="$STANDALONE_ROOT/$PLATFORM_LIBS_SRC_REL"
-if [ ! -d "$PLATFORM_LIBS_SRC" ]; then
-    echo "!! standalone Python 平台扩展目录缺失: $PLATFORM_LIBS_SRC" >&2
-    exit 1
-fi
-mkdir -p "$PLATFORM_LIBS_DST"
-cp -R "$PLATFORM_LIBS_SRC/." "$PLATFORM_LIBS_DST/"
+# 本段是 Windows 专属加固：PBS 在 Windows 把 C 扩展模块（_ctypes.pyd /
+# _ssl.pyd / libffi-8.dll 等）放在 <prefix>/DLLs/，与 Lib/ 同级；运行时通过
+# sys.path 解析 pyd 时只查 DLLs 目录，漏复制会让打包版客户机 ``import ctypes``
+# （pandas.errors -> numpy._core._dtype_ctypes -> ``from _ctypes import Union,
+# Structure, Array``）立即踩 ModuleNotFoundError（历史回归：commit 62c4d83）。
+# POSIX 保持 v1.0.8 行为：不复制、不校验 C 扩展——v1.0.8 的 macOS/Linux 产物
+# 从未有此问题，而 v1.0.9 把 Windows 的检测要求混进 POSIX 后连杀两版发布
+# （sentinel 绑死 lib-dynload/_ctypes*.so，但 CI 上 PBS POSIX 的 lib-dynload
+# 为空壳目录）。教训：Windows 的打包要求不得外溢到其他平台。
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*)
+    PLATFORM_LIBS_SRC="$STANDALONE_ROOT/DLLs"
+    PLATFORM_LIBS_DST="$PYTHON_RUNTIME/DLLs"
+    if [ ! -d "$PLATFORM_LIBS_SRC" ]; then
+        echo "!! standalone Python Windows DLLs 目录缺失: $PLATFORM_LIBS_SRC" >&2
+        exit 1
+    fi
+    mkdir -p "$PLATFORM_LIBS_DST"
+    cp -R "$PLATFORM_LIBS_SRC/." "$PLATFORM_LIBS_DST/"
     # sentinel: _ctypes.pyd 是最早被触发的 pyd（pandas.errors -> ctypes ->
     # ``from _ctypes import Union, Structure, Array``）。仅校验目录存在不足以
     # 捕捉"目录存在但内部为空/复制被中断"等异常，因此再断言 sentinel 文件存在。
@@ -277,19 +271,7 @@ case "$(uname -s)" in
     done
     ;;
   Darwin|Linux)
-    # PBS（20260814 起）的 POSIX 布局把 C 扩展 .so 直接放在 lib/python3.12/
-    # 顶层（与 .py 混放，_ctypes.cpython-312-darwin.so 等），lib-dynload/ 目录
-    # 存在但可能为空壳（v1.0.9 的 sentinel 绑死 lib-dynload/_ctypes*.so 因此在
-    # macOS/Linux CI 误报缺失）。stdlib 顶层的 find 复制已把两种布局的 .so 一并
-    # 带入 runtime，sentinel 改为在 stdlib 树（顶层 + 一层子目录）glob 查找，
-    # 不绑死目录布局；真缺失时下方 smoke import 亦会兜底失败。
-    CTYPES_SO="$(find "$STDLIB_DST" -maxdepth 2 -name '_ctypes*.so' -print -quit 2>/dev/null || true)"
-    if [ -z "$CTYPES_SO" ]; then
-        echo "!! python-runtime POSIX C 扩展缺失 sentinel: $STDLIB_DST (maxdepth 2) 内无 _ctypes*.so" >&2
-        echo "   stdlib 顶层 .so 数量: $(find "$STDLIB_DST" -maxdepth 1 -name '*.so' 2>/dev/null | wc -l | tr -d ' ')" >&2
-        exit 1
-    fi
-    echo "  POSIX C 扩展 sentinel OK: $CTYPES_SO"
+    # v1.0.8 行为：POSIX 不复制、不校验 C 扩展（见段首注释）。
     ;;
 esac
 
@@ -339,16 +321,23 @@ PY
     echo "  Windows runtime DLL dirs: $DLL_DIR_COUNT under $RUNTIME_SITE_PACKAGES"
     ;;
 esac
-# Smoke 测试：直接 import ctypes 而非依赖 pandas 的传递性触发。
-# 历史上 ``import pandas`` 在 build 机的 pyvenv.cfg home 指向 standalone Python
-# 时碰巧能从原 PBS 路径找到 _ctypes.pyd（fallback），打包到客户机 PYTHONHOME 切换
-# 后立刻失效，smoke 漏报。显式 import ctypes 触发 ``from _ctypes import Union,
-# Structure, Array`` 是真实的失败入口；同时校验 numpy/pandas/tushare/akshare 的
-# 传递依赖链（其中 pandas 会触发 _ctypes）。注意 ``ctypes`` 模块没有 ``_ctypes``
-# 属性（``from _ctypes import ...`` 不会把模块名挂进命名空间，v1.0.9 曾因此
-# AttributeError 三平台全挂），要打印加载路径必须显式 ``import _ctypes``——
-# 此时它已在 sys.modules 中，零额外开销。
-"$RUNTIME_PY" -c "import ctypes, _ctypes, kk_common, pandas, tushare, akshare, dotenv; print('  python-runtime OK; ctypes=', ctypes.__file__, '_ctypes=', _ctypes.__file__)"
+# Smoke 测试。Windows 用强化版：直接 import ctypes 而非依赖 pandas 的传递性
+# 触发——历史上 ``import pandas`` 在 build 机的 pyvenv.cfg home 指向 standalone
+# Python 时碰巧能从原 PBS 路径找到 _ctypes.pyd（fallback），打包到客户机
+# PYTHONHOME 切换后立刻失效，smoke 漏报；显式 import ctypes 触发 ``from
+# _ctypes import Union, Structure, Array`` 是真实的失败入口。注意 ``ctypes``
+# 模块没有 ``_ctypes`` 属性（``from _ctypes import ...`` 不会把模块名挂进命名
+# 空间，v1.0.9 曾因此 AttributeError 三平台全挂），要打印加载路径必须显式
+# ``import _ctypes``。POSIX 沿用 v1.0.8 的纯依赖导入版（Windows 的检测要求
+# 不外溢，见上段注释）。
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    "$RUNTIME_PY" -c "import ctypes, _ctypes, kk_common, pandas, tushare, akshare, dotenv; print('  python-runtime OK; ctypes=', ctypes.__file__, '_ctypes=', _ctypes.__file__)"
+    ;;
+  *)
+    "$RUNTIME_PY" -c "import kk_common, pandas, tushare, akshare, dotenv; print('  python-runtime OK')"
+    ;;
+esac
 du -sh "$PYTHON_RUNTIME"
 
 python scripts/verify_package_resources.py

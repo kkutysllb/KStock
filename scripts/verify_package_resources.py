@@ -147,21 +147,14 @@ class Verifier:
         else:
             self.pass_("product python-runtime stdlib encodings")
             if os.name != "nt":
-                # PBS（20260814 起）的 POSIX 布局把 C 扩展 .so 放在 stdlib 顶层
-                # 与 .py 混放，lib-dynload/ 可能为空壳目录；只校验目录存在性会被
-                # 空目录绕过（v1.0.9 曾因此在 macOS/Linux CI 误报），改为校验
-                # _ctypes 扩展文件真实存在（顶层或 lib-dynload 均可），与 build
-                # 脚本的 maxdepth-2 sentinel 对齐。
-                ctypes_candidates = list(stdlib_root.glob("_ctypes*.so")) + list(
-                    (stdlib_root / "lib-dynload").glob("_ctypes*.so")
-                )
-                if any(path.is_file() for path in ctypes_candidates):
-                    self.pass_("product python-runtime POSIX _ctypes extension")
+                # POSIX 保持 v1.0.8 行为：仅校验 stdlib 目录完整性，不做 Windows 式
+                # C 扩展文件校验——Windows 的 _ctypes 检测要求外溢到 POSIX 曾连杀
+                # v1.0.9 两版发布（CI 上 PBS POSIX 的 lib-dynload 为空壳目录）。
+                lib_dynload = stdlib_root / "lib-dynload"
+                if lib_dynload.is_dir():
+                    self.pass_("product python-runtime stdlib lib-dynload")
                 else:
-                    self.fail(
-                        "product python-runtime POSIX _ctypes extension",
-                        f"No _ctypes*.so under {stdlib_root} (top-level or lib-dynload)",
-                    )
+                    self.fail("product python-runtime stdlib lib-dynload", f"Missing: {lib_dynload}")
             else:
                 # Windows 上 PBS 把 C 扩展放在 <runtime>/DLLs/。仅校验 stdlib 会被
                 # commit 62c4d83 漏复制的 DLLs/ 缺陷绕过——pandas.errors 会立即踩

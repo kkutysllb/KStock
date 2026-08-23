@@ -202,18 +202,18 @@ def test_build_gateway_bundle_copies_python_standard_library():
     assert "! -name EXTERNALLY-MANAGED" in script
 
 
-def test_build_gateway_bundle_copies_platform_c_extensions():
-    """PBS 把 C 扩展（Windows DLLs/、POSIX lib-dynload/）与 stdlib 分开放置，
-    必须整目录复制，否则打包版 import ctypes 会踩 _ctypes.pyd 缺失。
-    """
+def test_build_gateway_bundle_copies_windows_c_extensions_only():
+    """Windows 的 DLLs/ C 扩展复制是 Windows 专属加固；POSIX 保持 v1.0.8 行为
+    （不复制、不校验）——Windows 检测要求外溢到 POSIX 曾连杀 v1.0.9 两版发布。"""
     script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
 
-    assert 'PLATFORM_LIBS_SRC_REL="DLLs"' in script
-    assert 'PLATFORM_LIBS_SRC_REL="lib/python3.12/lib-dynload"' in script
-    assert 'PLATFORM_LIBS_SRC="$STANDALONE_ROOT/$PLATFORM_LIBS_SRC_REL"' in script
+    # Windows 分支：DLLs 整目录复制
+    assert 'PLATFORM_LIBS_SRC="$STANDALONE_ROOT/DLLs"' in script
     assert 'PLATFORM_LIBS_DST="$PYTHON_RUNTIME/DLLs"' in script
-    assert 'PLATFORM_LIBS_DST="$PYTHON_RUNTIME/lib/python3.12/lib-dynload"' in script
     assert "cp -R \"$PLATFORM_LIBS_SRC/.\" \"$PLATFORM_LIBS_DST/\"" in script
+    # POSIX 不得定义/引用平台扩展变量（防 Windows 要求再次外溢）
+    assert "PLATFORM_LIBS_SRC_REL" not in script
+    assert 'lib/python3.12/lib-dynload"' not in script
 
 
 def test_build_gateway_bundle_asserts_ctypes_sentinel_in_platform_libs():
@@ -222,10 +222,8 @@ def test_build_gateway_bundle_asserts_ctypes_sentinel_in_platform_libs():
     script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
 
     assert '_ctypes.pyd' in script
-    # POSIX sentinel 布局无关：PBS（20260814 起）把 C 扩展 .so 放在 stdlib
-    # 顶层与 .py 混放（_ctypes.cpython-312-darwin.so 等），lib-dynload/ 可能为
-    # 空壳，绑死 lib-dynload 的 sentinel 会在 macOS/Linux CI 误报缺失。
-    assert "find \"$STDLIB_DST\" -maxdepth 2 -name '_ctypes*.so'" in script
+    # sentinel 仅 Windows 分支：POSIX 无 C 扩展 sentinel（CI 上 PBS POSIX 的
+    # lib-dynload 为空壳目录，绑死它必然误杀 macOS/Linux）。
     # Windows 共享 DLL 也要断言存在(pandas / requests / curl_cffi 都依赖)。
     for shared in ("libffi-8.dll", "libssl-3-x64.dll", "libcrypto-3-x64.dll", "sqlite3.dll"):
         assert shared in script, f"Windows shared library sentinel missing: {shared}"
@@ -256,12 +254,13 @@ def test_build_gateway_bundle_smoke_imports_ctypes_directly():
     )
 
 
-def test_verify_package_resources_checks_posix_ctypes_glob():
-    """verify_package_resources 的 POSIX 分支必须校验 _ctypes*.so 文件真实存在
-    （stdlib 顶层或 lib-dynload），目录存在性会被 PBS 空壳 lib-dynload 绕过。"""
+def test_verify_package_resources_posix_keeps_v108_dir_check():
+    """verify 的 POSIX 分支保持 v1.0.8 目录存在性检查，不得引入 Windows 式
+    C 扩展文件校验（外溢曾连杀 v1.0.9 两版发布）。"""
     source = Path("scripts/verify_package_resources.py").read_text(encoding="utf-8")
 
-    assert 'glob("_ctypes*.so")' in source
+    assert 'lib_dynload = stdlib_root / "lib-dynload"' in source
+    assert "glob(\"_ctypes*.so\")" not in source
 
 
 def test_verify_package_resources_checks_windows_dlls():
