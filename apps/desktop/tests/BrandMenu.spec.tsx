@@ -85,7 +85,9 @@ describe("BrandMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: /KStock 工作区菜单/ }));
     const menu = await screen.findByRole("menu");
     expect(menu).toBeInTheDocument();
-    expect(withinMenu(menu, "关于 KStock 版本 v1.0.7")).toBeInTheDocument();
+    // about 区渲染为 <strong>{name}</strong> + <span>版本 v{version}</span>，
+    // 组件内无「关于」字样，按实际结构断言。
+    expect(withinMenu(menu, "版本 v1.0.7")).toBeInTheDocument();
     expect(withinMenu(menu, "检查更新")).toBeInTheDocument();
     expect(withinMenu(menu, "打开日志目录")).toBeInTheDocument();
     expect(withinMenu(menu, "重启 gateway")).toBeInTheDocument();
