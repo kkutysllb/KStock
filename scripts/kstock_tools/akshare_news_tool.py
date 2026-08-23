@@ -15,10 +15,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timedelta
 from typing import Any
 
 from langchain.tools import BaseTool
+
+logger = logging.getLogger(__name__)
 
 
 class FinanceNewsSearchTool(BaseTool):
@@ -91,6 +94,9 @@ def fetch_market_news(max_results: int = 10) -> list[dict[str, str]]:
                     "summary": _first_text(item, "摘要", "新闻内容", "content")[:180],
                 })
     except Exception:
+        # 东方财富主源不可用时回退央视新闻，但记录原因便于排障
+        # （典型：Windows 下 akshare 未安装或系统代理不可达）。
+        logger.warning("stock_info_global_em 拉取失败，回退央视新闻源", exc_info=True)
         rows = []
 
     if len(rows) < limit:

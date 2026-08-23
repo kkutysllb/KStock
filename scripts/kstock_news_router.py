@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter
 
 from scripts.kstock_tools.akshare_news_tool import fetch_market_news
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/v1/kstock/landing-news", tags=["kstock-news"])
@@ -31,6 +34,9 @@ async def list_landing_news() -> dict[str, object]:
             try:
                 items = await asyncio.to_thread(fetch_market_news, 10)
             except Exception:
+                # akshare 缺失 / 依赖未装 / 网络代理异常等都在这里暴露到 gateway.log，
+                # 避免落地页空态无任何排障线索（Windows 开发机缺 akshare 时曾因此静默失败）。
+                logger.warning("landing-news 拉取失败", exc_info=True)
                 items = []
             if items:
                 _cache = (time.monotonic(), items)
