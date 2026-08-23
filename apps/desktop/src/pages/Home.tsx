@@ -1837,6 +1837,8 @@ function AuthPage({
 
   return (
     <main className="auth-shell">
+      {/* Windows 无框窗口拖拽带（macOS 下 display:none，原生标题栏可拖）。 */}
+      <div className="titlebar-drag-strip" aria-hidden="true" />
       <button className="back-button" type="button" onClick={onBack}>
         <ArrowLeft size={17} />
         <span>返回首页</span>
@@ -2952,6 +2954,8 @@ function SettingsPage({
       className={`settings-shell density-${generalPreferences.density} ${generalPreferences.reduce_motion ? "reduce-motion" : ""}`}
       style={{ "--settings-sidebar-width": `${sidebarWidth}px` } as CSSProperties}
     >
+      {/* Windows 无框窗口拖拽带（macOS 下 display:none，原生标题栏可拖）。 */}
+      <div className="titlebar-drag-strip" aria-hidden="true" />
       <aside className="settings-sidebar" aria-label="设置菜单">
         <button className="settings-back" type="button" onClick={onBack}>
           <ArrowLeft size={17} />

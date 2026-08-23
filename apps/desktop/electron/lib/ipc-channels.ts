@@ -9,6 +9,11 @@ export const IPC = {
   menuCommand: "kstock:menu",
   // 窗口控制
   windowToggleMaximize: "window:toggle-maximize",
+  windowMinimize: "window:minimize",
+  windowClose: "window:close",
+  windowIsMaximized: "window:is-maximized",
+  // 主进程 → 渲染进程：最大化状态变化（自绘窗控按钮切换 最大化/还原图标）
+  windowMaximizeChanged: "window:maximize-changed",
   windowSetZoom: "window:set-zoom",
   windowReload: "window:reload",
   windowToggleDevtools: "window:toggle-devtools",
@@ -50,8 +55,15 @@ export type UpdateCheckResult =
 
 /** 渲染进程通过 ``window.kstockDesktop`` 暴露的桥接接口契约。 */
 export interface DesktopBridge {
+  /** 宿主平台（win32 / darwin / linux）。 */
+  readonly platform: string;
   onMenuCommand(cb: (command: MenuCommand) => void): () => void;
   toggleMaximize(): Promise<void>;
+  minimize(): Promise<void>;
+  closeWindow(): Promise<void>;
+  isMaximized(): Promise<boolean>;
+  /** 订阅最大化状态变化（无框窗口自绘按钮图标切换）。 */
+  onMaximizeChange(cb: (maximized: boolean) => void): () => void;
   openExternal(url: string): Promise<void>;
   restartGateway(): Promise<string>;
   gatewayStatus(): Promise<{ port: number; running: boolean; childAlive: boolean }>;

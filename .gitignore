@@ -35,3 +35,7 @@ vendor/**/build/
 # WorkBuddy æœ¬åœ°å·¥ä½œæ•°æ®ï¼ˆè®°å¿†/æ—¥å¿—ï¼‰ï¼Œä¸å…¥åº“
 .workbuddy/
 tests/.test_release_packaging.py.swp
+
+# Windows ¿ª·¢»ú±¾µØ¹¤¾ßÁ´ÓëÁÙÊ±²úÎï£¨uv °²×°Ä¿Â¼ / ÁÙÊ±ÑéÖ¤½ØÍ¼£©
+.tools/
+.tmp/

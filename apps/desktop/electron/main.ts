@@ -86,7 +86,10 @@ if (!app.requestSingleInstanceLock()) {
     // 避免 .exe 占用 / 端口冲突导致安装失败。
     setGatewayShutdownHandler(() => gateway.killAndWait());
 
-    Menu.setApplicationMenu(buildAppMenu());
+    // macOS 保留原生菜单栏（Cmd 加速器 / 红绿灯配套菜单）；
+    // Windows/Linux 无框窗口没有菜单栏，菜单功能全部迁入托盘
+    // （buildTray），窗口级快捷键由 registerFramelessShortcuts 兑底。
+    Menu.setApplicationMenu(process.platform === "darwin" ? buildAppMenu() : null);
     logMain("ready：创建主窗口");
     createMainWindow();
     buildTray();

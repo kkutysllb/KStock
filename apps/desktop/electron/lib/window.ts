@@ -40,6 +40,13 @@ export function sendMenuCommand(command: string): void {
   mainWindow?.webContents.send(IPC.menuCommand, { command });
 }
 
+/**
+ * 非 macOS 平台采用无框窗口（Windows/Linux 自绘标题栏 + 窗控按钮），
+ * macOS 保留系统红绿灯。渲染层 WindowControls 组件负责 Windows 下的
+ * 最小化/最大化/关闭按钮，各顶栏自带 -webkit-app-region 拖拽区。
+ */
+const isFrameless = process.platform !== "darwin";
+
 export function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1440,
@@ -47,7 +54,10 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 1180,
     minHeight: 760,
     show: false,
-    autoHideMenuBar: false,
+    // Windows/Linux 无框：无系统标题栏与菜单栏；菜单功能全部迁移到托盘。
+    // Alt 呼出的隐藏菜单栏也不再需要（应用菜单在 main.ts 置空）。
+    frame: !isFrameless,
+    autoHideMenuBar: isFrameless,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     // macOS Overlay 标题栏下红绿灯按钮位置（对齐原 trafficLightPosition）。
     trafficLightPosition: { x: 13, y: 22 },
@@ -88,6 +98,23 @@ export function createMainWindow(): BrowserWindow {
   window.webContents.on("did-finish-load", () => {
     logMain("渲染进程 did-finish-load");
   });
+
+  // 最大化状态推送给渲染层：Windows 自绘窗控按钮需要在
+  // Square（最大化）/ Copy（还原）图标间切换。
+  const notifyMaximizeState = () => {
+    if (window.isDestroyed()) return;
+    window.webContents.send(IPC.windowMaximizeChanged, {
+      maximized: window.isMaximized(),
+    });
+  };
+  window.on("maximize", notifyMaximizeState);
+  window.on("unmaximize", notifyMaximizeState);
+
+  // 无框平台没有应用菜单（菜单已迁到托盘），菜单里注册的窗口级快捷键
+  // 全部失效，这里用 before-input-event 补齐，行为与原菜单一一对应。
+  if (isFrameless) {
+    registerFramelessShortcuts(window);
+  }
 
   // 捕获渲染层所有 console 输出（含未捕获异常，Chromium 会以 error level 打入 console）。
   // 这是定位打包态黑屏的决定性诊断手段——main 进程可看到 React 抛出的具体错误。
@@ -131,6 +158,11 @@ export function registerWindowIpc(): void {
     else win.maximize();
   });
 
+  // Windows 自绘窗控按钮（WindowControls 组件）的三个动作。
+  ipcMain.handle(IPC.windowMinimize, () => mainWindow?.minimize());
+  ipcMain.handle(IPC.windowClose, () => mainWindow?.close());
+  ipcMain.handle(IPC.windowIsMaximized, () => mainWindow?.isMaximized() ?? false);
+
   ipcMain.handle(IPC.windowSetZoom, (_event, factor: number) => {
     zoomFactor = Math.min(2.0, Math.max(0.6, factor));
     mainWindow?.webContents.setZoomFactor(zoomFactor);
@@ -156,6 +188,66 @@ export function adjustZoom(delta: number): void {
 export function resetZoom(): void {
   zoomFactor = 1.0;
   mainWindow?.webContents.setZoomFactor(zoomFactor);
+}
+
+/**
+ * 无框平台快捷键兜底（对齐原应用菜单 accelerator）。
+ *
+ * 菜单迁入托盘后，托盘菜单项的 accelerator 不会注册为窗口级快捷键，
+ * Ctrl+N / Ctrl+R / Ctrl+= 等只能在这里手动补齐。preventDefault 避免
+ * 渲染层（如文本编辑器）再响应同一组合。
+ */
+function registerFramelessShortcuts(window: BrowserWindow): void {
+  window.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    const ctrl = input.control || input.meta;
+    const shift = input.shift;
+
+    // F12 / Ctrl+Shift+I 开发者工具（无菜单后 Windows 唯一入口）。
+    if (input.key === "F12" || (ctrl && shift && input.key.toLowerCase() === "i")) {
+      event.preventDefault();
+      if (window.webContents.isDevToolsOpened()) window.webContents.closeDevTools();
+      else window.webContents.openDevTools();
+      return;
+    }
+    if (!ctrl) return;
+
+    // 视图：重载 / 缩放（对齐原「视图」菜单）。
+    const key = input.key.toLowerCase();
+    if (key === "r" && !shift) {
+      event.preventDefault();
+      window.webContents.reload();
+    } else if (key === "r" && shift) {
+      event.preventDefault();
+      window.webContents.reloadIgnoringCache();
+    } else if ((input.key === "+" || input.key === "=") && !shift) {
+      event.preventDefault();
+      adjustZoom(0.1);
+    } else if (input.key === "-" && !shift) {
+      event.preventDefault();
+      adjustZoom(-0.1);
+    } else if (input.key === "0" && !shift) {
+      event.preventDefault();
+      resetZoom();
+    // 文件：新任务 / 报告库 / 策略库（sendMenuCommand 走渲染层既有处理链）。
+    } else if (key === "n" && !shift) {
+      event.preventDefault();
+      sendMenuCommand("new-task");
+    } else if (key === "l" && shift) {
+      event.preventDefault();
+      sendMenuCommand("open-reports");
+    } else if (key === "g" && shift) {
+      event.preventDefault();
+      sendMenuCommand("open-strategies");
+    // 应用：偏好设置 / 检查更新。
+    } else if (input.key === "," && !shift) {
+      event.preventDefault();
+      sendMenuCommand("open-settings");
+    } else if (key === "u" && shift) {
+      event.preventDefault();
+      sendMenuCommand("check-update");
+    }
+  });
 }
 
 /**

@@ -386,11 +386,14 @@ button {
   background: #e06f6a;
 }
 
+/* 宽屏下用 margin-left 居中进 1180px 内容区：margin 不占 width，
+   避免 border-box 下 padding-left 吃掉 min(720px, 58vw) 的文本宽度
+   （此前 2560px 宽屏下文本只剩 30px 可用宽，整版文案被挤成竖排）。 */
 .hero-copy {
   position: relative;
   z-index: 4;
   width: min(720px, 58vw);
-  padding-left: max(0px, calc((100vw - 1180px) / 2));
+  margin-left: max(0px, calc((100vw - 1180px) / 2));
 }
 
 .engine-brief {
@@ -2372,6 +2375,7 @@ button.context-file-row:hover {
 
   .hero-copy {
     width: 100%;
+    margin-left: 0;
   }
 
   .engine-brief {
@@ -7350,4 +7354,110 @@ button.context-file-row:hover {
 @media (max-width: 900px) {
   .strategies-layout { grid-template-columns: minmax(0, 1fr); }
   .strategies-list { position: static; }
+}
+
+/* ── Windows 无框窗口 ──
+   win32 下 Electron frame:false：原生标题栏/菜单栏移除，菜单功能在托盘。
+   .os-windows 由 main.tsx 在渲染前挂到 <html>/<body>；右上角窗控按钮
+   由 WindowControls 组件自绘。各规则只收回 macOS 红绿灯让位、
+   给右侧窗控让位（150px ≈ 3×46px 按钮 + 呼吸），内容整体左移。 */
+
+.window-controls {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 100000;
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.window-control-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  color: #c8d2ce;
+  background: transparent;
+  cursor: default;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.window-control-button:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #f2f6f4;
+}
+
+/* Windows 习惯：关闭悬停红底白字。 */
+.window-control-close:hover {
+  background: #e81123;
+  color: #fff;
+}
+
+/* settings / auth 页没有自带 drag 顶栏，顶部盖一条拖拽带。
+   默认隐藏（macOS 原生标题栏已提供拖拽），仅 Windows 启用；
+   z-index 压在返回按钮（z-index:2）之下，不拦截点击。 */
+.titlebar-drag-strip {
+  display: none;
+}
+
+.os-windows .titlebar-drag-strip {
+  display: block;
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 38px;
+  z-index: 1;
+  -webkit-app-region: drag;
+}
+
+/* 落地页：左侧收回红绿灯让位（86→28），右侧给窗控让位，logo/按钮整体左移。 */
+.os-windows .landing-nav {
+  padding-left: 28px;
+  padding-right: 150px;
+}
+
+/* 工作台顶栏：右侧给窗控让位；侧栏折叠时左侧收回红绿灯让位（104→18）。 */
+.os-windows .workspace-topbar {
+  padding-right: 150px;
+}
+
+.os-windows .workspace-shell.sidebar-collapsed .workspace-topbar {
+  padding-left: 18px;
+}
+
+/* 工作台侧栏：顶部无红绿灯，内容上移。 */
+.os-windows .codex-sidebar {
+  padding-top: 14px;
+}
+
+/* 报告库/策略库顶栏：左收红绿灯让位，右给窗控让位。 */
+.os-windows .report-library-topbar {
+  padding-left: 20px;
+  padding-right: 150px;
+}
+
+/* 报告全屏预览顶栏：同上。 */
+.os-windows .report-preview-bar {
+  padding-left: 14px;
+  padding-right: 150px;
+}
+
+/* 设置页：顶部有拖拽带，侧栏/内容从带下方开始（44 > 38 避免重叠）。 */
+.os-windows .settings-sidebar {
+  padding-top: 44px;
+}
+
+.os-windows .settings-content {
+  padding-top: 56px;
+}
+
+/* 登录/注册页：返回按钮左移（无红绿灯让位），拖拽带定位锚点。 */
+.auth-shell {
+  position: relative;
+}
+
+.os-windows .auth-shell .back-button {
+  left: 20px;
 }

@@ -8,6 +8,9 @@ import { contextBridge, ipcRenderer } from "electron";
 import { IPC, type MenuCommand, type UpdateCheckResult } from "./lib/ipc-channels";
 
 const api = {
+  /** 宿主平台（win32 / darwin / linux）。渲染层用它在 Windows 下启用自绘窗控。 */
+  platform: process.platform,
+
   /** 系统菜单 / 托盘命令（对齐原 listen("kstock://menu")）。返回取消订阅函数。 */
   onMenuCommand(cb: (command: MenuCommand) => void): () => void {
     const handler = (_event: unknown, payload: { command: MenuCommand }) => {
@@ -19,6 +22,28 @@ const api = {
 
   toggleMaximize(): Promise<void> {
     return ipcRenderer.invoke(IPC.windowToggleMaximize);
+  },
+
+  // Windows 无框窗口自绘窗控（WindowControls 组件）。
+  minimize(): Promise<void> {
+    return ipcRenderer.invoke(IPC.windowMinimize);
+  },
+
+  closeWindow(): Promise<void> {
+    return ipcRenderer.invoke(IPC.windowClose);
+  },
+
+  isMaximized(): Promise<boolean> {
+    return ipcRenderer.invoke(IPC.windowIsMaximized);
+  },
+
+  /** 订阅最大化状态变化（图标在 最大化/还原 间切换）。返回取消订阅函数。 */
+  onMaximizeChange(cb: (maximized: boolean) => void): () => void {
+    const handler = (_event: unknown, payload: { maximized: boolean }) => {
+      cb(payload.maximized);
+    };
+    ipcRenderer.on(IPC.windowMaximizeChanged, handler);
+    return () => ipcRenderer.removeListener(IPC.windowMaximizeChanged, handler);
   },
 
   openExternal(url: string): Promise<void> {

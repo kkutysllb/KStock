@@ -160,17 +160,67 @@ export function buildTray(): void {
 
   tray = new Tray(icon);
   tray.setToolTip("KStock 量化助手");
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: "显示窗口", click: () => showMainWindow() },
-      { label: "隐藏窗口", click: () => activeWindow()?.hide() },
-      { type: "separator" },
-      { label: "检查更新…", click: () => sendMenuCommand("check-update") },
-      { type: "separator" },
-      { label: "退出", click: () => app.quit() },
-    ]),
-  );
+  // 无框平台没有应用菜单，托盘菜单承载全部菜单功能（对齐 buildAppMenu）。
+  // macOS 菜单栏已有完整菜单，托盘保持精简。
+  const menu = process.platform === "darwin" ? buildDarwinTrayMenu() : buildFullTrayMenu();
+  tray.setContextMenu(Menu.buildFromTemplate(menu));
+
+  // Windows 习惯：左键点托盘图标切换主窗口显隐（右键才弹菜单）。
+  if (process.platform === "win32") {
+    tray.on("click", () => toggleMainWindow());
+  }
   logMain("托盘已创建");
+}
+
+/** macOS 托盘菜单：菜单栏已覆盖全部功能，只留窗口开关与退出。 */
+function buildDarwinTrayMenu(): MenuItemConstructorOptions[] {
+  return [
+    { label: "显示窗口", click: () => showMainWindow() },
+    { label: "隐藏窗口", click: () => activeWindow()?.hide() },
+    { type: "separator" },
+    { label: "检查更新…", click: () => sendMenuCommand("check-update") },
+    { type: "separator" },
+    { label: "退出", click: () => app.quit() },
+  ];
+}
+
+/**
+ * Windows/Linux 托盘菜单：无框窗口没有菜单栏，原「文件/视图/帮助」
+ * 菜单的全部入口都在这里（快捷键由 registerFramelessShortcuts 兑底）。
+ */
+function buildFullTrayMenu(): MenuItemConstructorOptions[] {
+  return [
+    { label: "显示窗口", click: () => showMainWindow() },
+    { label: "隐藏窗口", click: () => activeWindow()?.hide() },
+    // 菜单模板静态构建，标签不随状态刷新，点击时按当前状态切换。
+    {
+      label: "最大化 / 还原",
+      click: () => {
+        const win = activeWindow();
+        if (!win) return;
+        if (win.isMaximized()) win.unmaximize();
+        else win.maximize();
+      },
+    },
+    { type: "separator" },
+    { label: "新建任务", click: () => sendMenuCommand("new-task") },
+    { label: "打开报告库", click: () => sendMenuCommand("open-reports") },
+    { label: "打开策略库", click: () => sendMenuCommand("open-strategies") },
+    { type: "separator" },
+    { label: "偏好设置…", click: () => sendMenuCommand("open-settings") },
+    { label: "检查更新…", click: () => sendMenuCommand("check-update") },
+    { type: "separator" },
+    { label: "重新加载", click: () => activeWindow()?.webContents.reload() },
+    { type: "separator" },
+    { label: "打开交付文件目录", click: () => openPath(join(appDataDirectory(), "runtime", "qilin", "users")) },
+    { label: "打开应用数据目录", click: () => openPath(appDataDirectory()) },
+    { label: "打开日志目录", click: () => openPath(join(appDataDirectory(), "logs")) },
+    { type: "separator" },
+    { label: "项目主页", click: () => void shell.openExternal(PROJECT_HOME) },
+    { label: "问题反馈", click: () => void shell.openExternal(PROJECT_ISSUES) },
+    { type: "separator" },
+    { label: "退出", click: () => app.quit() },
+  ];
 }
 
 /**
@@ -223,6 +273,19 @@ function activeWindow(): BrowserWindow | undefined {
 function showMainWindow(): void {
   const win = activeWindow();
   if (win) {
+    win.show();
+    win.focus();
+    if (win.isMinimized()) win.restore();
+  }
+}
+
+/** Windows 托盘左键：可见则隐藏，否则显示（含从最小化还原）。 */
+function toggleMainWindow(): void {
+  const win = activeWindow();
+  if (!win) return;
+  if (win.isVisible() && !win.isMinimized()) {
+    win.hide();
+  } else {
     win.show();
     win.focus();
     if (win.isMinimized()) win.restore();

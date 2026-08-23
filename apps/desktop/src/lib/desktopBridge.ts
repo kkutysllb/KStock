@@ -27,8 +27,15 @@ export type UpdateCheckResult =
 
 /** 渲染进程可用的宿主桥接 API。 */
 export interface DesktopBridgeApi {
+  /** 宿主平台（win32 / darwin / linux）。Windows 无框窗口据此启用自绘窗控。 */
+  readonly platform: string;
   onMenuCommand(cb: (command: MenuCommand) => void): () => void;
   toggleMaximize(): Promise<void>;
+  minimize(): Promise<void>;
+  closeWindow(): Promise<void>;
+  isMaximized(): Promise<boolean>;
+  /** 订阅最大化状态变化（自绘窗控按钮在 最大化/还原图标间切换）。 */
+  onMaximizeChange(cb: (maximized: boolean) => void): () => void;
   openExternal(url: string): Promise<void>;
   restartGateway(): Promise<string>;
   gatewayStatus(): Promise<{
@@ -65,6 +72,11 @@ export function isDesktopRuntime(): boolean {
 /** 获取桥接 API；无桥时返回 null。 */
 export function getDesktopBridge(): DesktopBridgeApi | null {
   return typeof window !== "undefined" ? window.kstockDesktop ?? null : null;
+}
+
+/** 当前是否 Windows 桌面宿主（无框窗口，需自绘窗控与拖拽区）。 */
+export function isWindowsDesktop(): boolean {
+  return getDesktopBridge()?.platform === "win32";
 }
 
 /**
