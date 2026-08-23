@@ -272,6 +272,11 @@ export function Home() {
   // 恢复请求返回时不能再用空历史覆盖本地会话，否则会出现“消息发出后消失”。
   const localSessionBeforeHistoryLoadedRef = useRef(false);
   const localSessionBeforeHistoryLoadedIdRef = useRef<string | null>(null);
+  // 历史拉取是否真正完成。不能用 sessionsLoaded 判定：!currentUser 分支
+  // （auth 解析前的瞬时态）会预置 sessionsLoaded=true，此后 new-task 误以为
+  // 历史已加载不设 marker，登录后恢复完成又用空历史覆盖用户刚建的会话
+  // （App.spec “桌面系统菜单事件” flaky 根因）。
+  const historyFetchDoneRef = useRef(false);
   const [draft, setDraft] = useState("");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -460,9 +465,11 @@ export function Home() {
       return;
     }
     let cancelled = false;
+    historyFetchDoneRef.current = false; // 新一轮拉取开始，重新接受 marker 保护
     (async () => {
       const threads = await listThreads(100);
       if (cancelled) return;
+      historyFetchDoneRef.current = true;
       let restored = threads.map(threadToSession);
       const lastSessionId = generalPreferences.restore_last_session
         ? localStorage.getItem(`kstock.lastSession.${currentUser.id}`)
@@ -858,7 +865,7 @@ export function Home() {
 
   const handleNewSession = useCallback(() => {
     const nextSession = createSession("新研究会话");
-    if (!sessionsLoaded) {
+    if (!historyFetchDoneRef.current) {
       localSessionBeforeHistoryLoadedRef.current = true;
       localSessionBeforeHistoryLoadedIdRef.current = nextSession.id;
     }
@@ -868,7 +875,7 @@ export function Home() {
     // 待发附件是会话级状态：新建任务必须清空，避免上一个任务的文件残留
     // 到新任务面板或随下一条消息发送。
     setPendingAttachments([]);
-  }, [sessionsLoaded]);
+  }, []);
 
   useEffect(() => {
     // 桌面端系统菜单 / 托盘命令（由 preload 桥推送）。浏览器预览环境无桥时
@@ -1160,7 +1167,7 @@ export function Home() {
   const sendText = async (input: string, modelName: string) => {
     const text = input.trim();
     if (!text || !modelName || streamingId) return;
-    if (!sessionsLoaded) {
+    if (!historyFetchDoneRef.current) {
       localSessionBeforeHistoryLoadedRef.current = true;
       localSessionBeforeHistoryLoadedIdRef.current = activeSession?.id ?? null;
     }
@@ -1168,7 +1175,7 @@ export function Home() {
     let session = activeSession;
     if (!session) {
       session = createSession(text.slice(0, 18));
-      if (!sessionsLoaded) localSessionBeforeHistoryLoadedIdRef.current = session.id;
+      if (!historyFetchDoneRef.current) localSessionBeforeHistoryLoadedIdRef.current = session.id;
       setSessions((current) => [session!, ...current]);
       setActiveSessionId(session.id);
     }
