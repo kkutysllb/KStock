@@ -202,6 +202,62 @@ def test_build_gateway_bundle_copies_python_standard_library():
     assert "! -name EXTERNALLY-MANAGED" in script
 
 
+def test_build_gateway_bundle_copies_platform_c_extensions():
+    """PBS 把 C 扩展（Windows DLLs/、POSIX lib-dynload/）与 stdlib 分开放置，
+    必须整目录复制，否则打包版 import ctypes 会踩 _ctypes.pyd 缺失。
+    """
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    assert 'PLATFORM_LIBS_SRC_REL="DLLs"' in script
+    assert 'PLATFORM_LIBS_SRC_REL="lib/python3.12/lib-dynload"' in script
+    assert 'PLATFORM_LIBS_SRC="$STANDALONE_ROOT/$PLATFORM_LIBS_SRC_REL"' in script
+    assert 'PLATFORM_LIBS_DST="$PYTHON_RUNTIME/DLLs"' in script
+    assert 'PLATFORM_LIBS_DST="$PYTHON_RUNTIME/lib/python3.12/lib-dynload"' in script
+    assert "cp -R \"$PLATFORM_LIBS_SRC/.\" \"$PLATFORM_LIBS_DST/\"" in script
+
+
+def test_build_gateway_bundle_asserts_ctypes_sentinel_in_platform_libs():
+    """复制平台扩展后必须断言 _ctypes.pyd / _ctypes.so 实际存在,防止"目录复制
+    成功但内部为空/sentinel 缺失"这类异常蒙混过关。"""
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    assert '_ctypes.pyd' in script
+    assert '_ctypes.so' in script
+    # Windows 共享 DLL 也要断言存在(pandas / requests / curl_cffi 都依赖)。
+    for shared in ("libffi-8.dll", "libssl-3-x64.dll", "libcrypto-3-x64.dll", "sqlite3.dll"):
+        assert shared in script, f"Windows shared library sentinel missing: {shared}"
+
+
+def test_build_gateway_bundle_smoke_imports_ctypes_directly():
+    """Smoke 测试必须显式 ``import ctypes`` 而非依赖 pandas 的传递触发。
+    否则 build 机 pyvenv.cfg home 仍指向原 PBS 时会从那里 fallback 找到 _ctypes,
+    而打包到客户机 PYTHONHOME 切换后立刻失败——但 build 阶段绿灯。
+    """
+    script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
+
+    # 用 ``print('  python-runtime OK`` 锚点定位真正的 smoke 行（脚本里还有一处
+    # ``import site`` 是 PATH bootstrap 用，两者都以 ``$RUNTIME_PY -c`` 开头）。
+    smoke_marker = "print('  python-runtime OK"
+    smoke_idx = script.index(smoke_marker)
+    smoke_line = script[:smoke_idx].rstrip().splitlines()[-1]
+    assert "import ctypes" in smoke_line, (
+        f"smoke test must import ctypes directly so the build fails loudly when "
+        f"_ctypes.pyd / _ctypes.so is missing from python-runtime; got: {smoke_line}"
+    )
+
+
+def test_verify_package_resources_checks_windows_dlls():
+    """verify_package_resources 必须在 Windows 路径上同时校验 DLLs/ 与
+    _ctypes.pyd,否则无法捕捉 build 脚本漏复制 DLLs 的回归。"""
+    source = Path("scripts/verify_package_resources.py").read_text(encoding="utf-8")
+
+    assert "DLLs" in source
+    assert "_ctypes.pyd" in source
+    # 共享 DLL sentinel 与 build 脚本对齐
+    for shared in ("libffi-8.dll", "libssl-3-x64.dll", "libcrypto-3-x64.dll", "sqlite3.dll"):
+        assert shared in source, f"verify script missing Windows sentinel: {shared}"
+
+
 def test_build_gateway_bundle_adds_windows_site_package_dll_dirs_before_import_check():
     script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
 
@@ -290,6 +346,55 @@ def test_electron_builder_targets_nsis_on_windows():
 
     assert "nsis" in config
     assert "msi" not in config.lower()
+
+
+def test_electron_builder_nsis_artifact_name_aligns_with_updater_metadata():
+    """NSIS artifactName 必须使用连字符且无空格。
+
+    electron-builder 默认 ``${productName} Setup ${version}.${ext}`` 带空格,
+    GitHub Release 资源名不允许空格,内部会替换成连字符写入 latest.yml.url;
+    但实际生成/上传的 .exe 资源名仍可能用点分隔符 (KStock.Setup.1.0.8.exe),
+    导致 electron-updater 按 latest.yml.url 拼接下载 URL 时 404 (历史回归 v1.0.8)。
+
+    显式固定 artifactName 让"实际文件 + latest.yml.url + GitHub 资源名"三处对齐。
+    """
+    import re
+
+    config = Path("apps/desktop/electron-builder.yml").read_text(encoding="utf-8")
+
+    # 提取 nsis 段(顶层 nsis: 块,排除 mac/linux/win 内部出现的 "nsis" 字串)
+    nsis_section_match = re.search(r"^nsis:\n((?:  .*\n)+)", config, re.MULTILINE)
+    assert nsis_section_match, "未找到顶层 nsis: 配置块"
+    nsis_section = nsis_section_match.group(1)
+
+    artifact_match = re.search(r"^\s*artifactName:\s*(.+?)\s*$", nsis_section, re.MULTILINE)
+    assert artifact_match, "nsis 配置块必须显式设置 artifactName (避免 electron-builder 默认带空格导致 GitHub 资源名 vs latest.yml.url 不一致)"
+    artifact_pattern = artifact_match.group(1)
+
+    # artifactName 内禁止空格(GitHub 资源名不允许)且不带 `${arch}`(NSIS 没有 arch 维度)
+    assert " " not in artifact_pattern, f"nsis.artifactName 含空格会被 GitHub 拒绝: {artifact_pattern!r}"
+    assert "${arch}" not in artifact_pattern, f"nsis.artifactName 不应包含 ${{arch}} 宏: {artifact_pattern!r}"
+    # 必须含 ${productName} 与 ${version} 才能保证与 macOS/Linux 资源在 latest.yml 的字段一致
+    assert "${productName}" in artifact_pattern, f"nsis.artifactName 缺少 ${{productName}}: {artifact_pattern!r}"
+    assert "${version}" in artifact_pattern, f"nsis.artifactName 缺少 ${{version}}: {artifact_pattern!r}"
+
+
+def test_build_release_sh_verifies_updater_metadata_against_actual_assets():
+    """build-release.sh 的 verify_release_assets 必须交叉比对 latest.yml 里 url/path
+    是否能在 GitHub 资源列表中找到,捕获"实际文件名 ≠ 元数据 URL"的回归。
+    """
+    script = Path("build-release.sh").read_text(encoding="utf-8")
+
+    assert "verify_release_assets" in script
+    # 必须解析 latest.yml / latest-mac.yml / latest-linux.yml 三份元数据
+    for f in ("latest.yml", "latest-mac.yml", "latest-linux.yml"):
+        assert f in script, f"verify_release_assets 必须解析 {f} 的 url/path 字段"
+    # 必须从 release 拉 yml 内容并 grep url/path
+    assert "url:" in script and "path:" in script, (
+        "verify_release_assets 必须解析 yml 里的 url/path 行,与 GitHub 资源名比对"
+    )
+    # 必须有失败退出逻辑(否则只是打印就漏检)
+    assert "exit 1" in script, "verify_release_assets 检测到不匹配必须以非零状态退出"
 
 
 def test_electron_builder_skips_linux_appimage():

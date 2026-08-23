@@ -467,10 +467,13 @@ verify_release_assets() {
   RELEASE_JSON="$release_json" VERSION="$VERSION" python3 <<'PY'
 import json
 import os
+import subprocess
 import sys
 
 data = json.loads(os.environ["RELEASE_JSON"])
 version = os.environ["VERSION"]
+tag = data.get("tagName", "")
+repo = os.environ.get("REPO_SLUG", "")
 assets = [asset.get("name", "") for asset in data.get("assets", [])]
 
 def has_suffix(suffix):
@@ -485,7 +488,7 @@ checks = [
 ]
 missing = [label for label, ok in checks if not ok]
 if missing:
-    print(f"Release {data.get('tagName')} is missing expected assets:", file=sys.stderr)
+    print(f"Release {tag} is missing expected assets:", file=sys.stderr)
     for label in missing:
         print(f"  - {label}", file=sys.stderr)
     print("Assets found:", file=sys.stderr)
@@ -493,9 +496,65 @@ if missing:
         print(f"  - {name}", file=sys.stderr)
     sys.exit(1)
 
+# ── 交叉比对 latest.yml 里的 url/path 字段必须能在资源列表里找到 ──
+# electron-updater 拼接下载 URL 的依据是 latest.yml 里的 url/path;若 GitHub
+# 资源列表里找不到同名字段,客户端就会 404。历史回归: v1.0.8 latest.yml
+# 写的 KStock-Setup-1.0.8.exe (连字符),但资源列表里是 KStock.Setup.1.0.8.exe
+# (点分隔),导致 electron-updater 下载失败。
 print(f"Release assets verified: {data.get('url', '<no url>')}")
 for name in sorted(assets):
     print(f"  - {name}")
+
+asset_set = set(assets)
+metadata_files = [
+    (f"latest.yml", "Windows installer (latest.yml.url/path)"),
+    (f"latest-mac.yml", "macOS updater archive (latest-mac.yml.url/path)"),
+    (f"latest-linux.yml", "Linux package (latest-linux.yml.url/path)"),
+]
+url_mismatches = []
+for filename, desc in metadata_files:
+    if filename not in asset_set:
+        continue  # 上面 has_suffix 检查已报告,这里不再重复
+    metadata_url = subprocess.check_output(
+        ["gh", "release", "view", tag, "--repo", repo,
+         "--json", "assets", "--jq", f".assets[] | select(.name == \"{filename}\") | .browser_download_url"],
+        stderr=subprocess.DEVNULL,
+    ).decode().strip()
+    if not metadata_url:
+        continue
+    # 提取 yml 内容,从 download URL 反推资源名
+    raw = subprocess.check_output(
+        ["gh", "release", "view", tag, "--repo", repo,
+         "--jq", f".assets[] | select(.name == \"{filename}\") | .url"],
+        stderr=subprocess.DEVNULL,
+    ).decode().strip()
+    yml_bytes = subprocess.check_output(
+        ["curl", "-fsSL", raw],
+        stderr=subprocess.DEVNULL,
+    )
+    declared_urls = []
+    for line in yml_bytes.decode("utf-8", errors="replace").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("url:") or stripped.startswith("path:"):
+            declared_urls.append(stripped.split(":", 1)[1].strip())
+    for declared in declared_urls:
+        if declared and declared not in asset_set:
+            url_mismatches.append(
+                f"  - {desc}: {filename} references '{declared}', "
+                f"but no GitHub asset with that name exists"
+            )
+
+if url_mismatches:
+    print("\nERROR: latest.yml/lastest-mac.yml/latest-linux.yml url/path "
+          "mismatch (electron-updater 会按这些字段拼接下载 URL,GitHub 404):",
+          file=sys.stderr)
+    print("\n".join(url_mismatches), file=sys.stderr)
+    print("\nAssets found on the release:", file=sys.stderr)
+    for name in sorted(assets):
+        print(f"  - {name}", file=sys.stderr)
+    sys.exit(1)
+
+print(f"  All metadata files reference real assets ✓")
 PY
 }
 

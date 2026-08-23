@@ -1,4 +1,4 @@
-node_modules/
+﻿node_modules/
 dist/
 /build/
 coverage/
@@ -36,6 +36,13 @@ vendor/**/build/
 .workbuddy/
 tests/.test_release_packaging.py.swp
 
-# Windows ���������ع���������ʱ���uv ��װĿ¼ / ��ʱ��֤��ͼ��
+# Windows ���������ع���������ʱ���uv ��װĿ¼ / ��ʱ��֤��ͼ��
 .tools/
 .tmp/
+
+# dsh（DeepSeek Harness）临时落盘：用户上传的附件 / 截图、会话 drop。
+# 这些是用户与 agent 交互的一次性数据，不应入库。
+.drops/
+
+# pnpm 自建内容可寻址 store（pnpm install 时自动生成），不入库
+.pnpm-store/

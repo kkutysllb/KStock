@@ -73,6 +73,14 @@ nsis:
   uninstallerIcon: build/icon.ico
   # 安装前终止残留的 gateway 进程，避免 DLL 占用导致复制失败。
   include: build/installer.nsh
+  # 强制 NSIS 安装包文件名带连字符 (KStock-Setup-1.0.8.exe)。
+  # electron-builder 默认 ${productName} Setup ${version}.${ext} 带空格,
+  # GitHub Release 不允许资源名带空格,内部会替换成连字符写入 latest.yml.url;
+  # 但实际文件 / 上传步骤仍可能输出点分隔符 (KStock.Setup.1.0.8.exe),导致
+  # electron-updater 按 latest.yml 拼接下载 URL 时 404。
+  # 这里显式固定命名,让"实际文件 + latest.yml.url + GitHub 资源名"三处一致,
+  # 跨平台自动更新链路即可正常工作。
+  artifactName: ${productName}-Setup-${version}.${ext}
 
 linux:
   icon: build/icons
