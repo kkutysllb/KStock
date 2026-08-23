@@ -277,13 +277,19 @@ case "$(uname -s)" in
     done
     ;;
   Darwin|Linux)
-    # lib-dynload 已在上面整目录 cp -R 中包含。PBS 的 POSIX C 扩展文件名带
-    # ABI 标签（_ctypes.cpython-312-darwin.so / _ctypes.cpython-312-x86_64-linux-
-    # gnu.so），不存在裸名 _ctypes.so，sentinel 必须用 glob 匹配（两种命名都兼容）。
-    if ! ls "$PLATFORM_LIBS_DST"/_ctypes*.so >/dev/null 2>&1; then
-        echo "!! python-runtime POSIX C 扩展缺失 sentinel: $PLATFORM_LIBS_DST/_ctypes*.so" >&2
+    # PBS（20260814 起）的 POSIX 布局把 C 扩展 .so 直接放在 lib/python3.12/
+    # 顶层（与 .py 混放，_ctypes.cpython-312-darwin.so 等），lib-dynload/ 目录
+    # 存在但可能为空壳（v1.0.9 的 sentinel 绑死 lib-dynload/_ctypes*.so 因此在
+    # macOS/Linux CI 误报缺失）。stdlib 顶层的 find 复制已把两种布局的 .so 一并
+    # 带入 runtime，sentinel 改为在 stdlib 树（顶层 + 一层子目录）glob 查找，
+    # 不绑死目录布局；真缺失时下方 smoke import 亦会兜底失败。
+    CTYPES_SO="$(find "$STDLIB_DST" -maxdepth 2 -name '_ctypes*.so' -print -quit 2>/dev/null || true)"
+    if [ -z "$CTYPES_SO" ]; then
+        echo "!! python-runtime POSIX C 扩展缺失 sentinel: $STDLIB_DST (maxdepth 2) 内无 _ctypes*.so" >&2
+        echo "   stdlib 顶层 .so 数量: $(find "$STDLIB_DST" -maxdepth 1 -name '*.so' 2>/dev/null | wc -l | tr -d ' ')" >&2
         exit 1
     fi
+    echo "  POSIX C 扩展 sentinel OK: $CTYPES_SO"
     ;;
 esac
 

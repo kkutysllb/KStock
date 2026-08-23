@@ -222,10 +222,10 @@ def test_build_gateway_bundle_asserts_ctypes_sentinel_in_platform_libs():
     script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
 
     assert '_ctypes.pyd' in script
-    # POSIX sentinel 用 glob：PBS 的 C 扩展文件名带 ABI 标签
-    # （_ctypes.cpython-312-darwin.so / _ctypes.cpython-312-x86_64-linux-gnu.so），
-    # 不存在裸名 _ctypes.so，精确匹配会在 macOS/Linux CI 上必然误报缺失。
-    assert 'ls "$PLATFORM_LIBS_DST"/_ctypes*.so' in script
+    # POSIX sentinel 布局无关：PBS（20260814 起）把 C 扩展 .so 放在 stdlib
+    # 顶层与 .py 混放（_ctypes.cpython-312-darwin.so 等），lib-dynload/ 可能为
+    # 空壳，绑死 lib-dynload 的 sentinel 会在 macOS/Linux CI 误报缺失。
+    assert "find \"$STDLIB_DST\" -maxdepth 2 -name '_ctypes*.so'" in script
     # Windows 共享 DLL 也要断言存在(pandas / requests / curl_cffi 都依赖)。
     for shared in ("libffi-8.dll", "libssl-3-x64.dll", "libcrypto-3-x64.dll", "sqlite3.dll"):
         assert shared in script, f"Windows shared library sentinel missing: {shared}"
@@ -254,6 +254,14 @@ def test_build_gateway_bundle_smoke_imports_ctypes_directly():
         f"ctypes has no attribute '_ctypes' (this exact bug broke the v1.0.9 "
         f"release on all platforms); use 'import _ctypes' instead; got: {smoke_line}"
     )
+
+
+def test_verify_package_resources_checks_posix_ctypes_glob():
+    """verify_package_resources 的 POSIX 分支必须校验 _ctypes*.so 文件真实存在
+    （stdlib 顶层或 lib-dynload），目录存在性会被 PBS 空壳 lib-dynload 绕过。"""
+    source = Path("scripts/verify_package_resources.py").read_text(encoding="utf-8")
+
+    assert 'glob("_ctypes*.so")' in source
 
 
 def test_verify_package_resources_checks_windows_dlls():
