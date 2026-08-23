@@ -152,6 +152,41 @@ class Verifier:
                     self.pass_("product python-runtime stdlib lib-dynload")
                 else:
                     self.fail("product python-runtime stdlib lib-dynload", f"Missing: {lib_dynload}")
+            else:
+                # Windows 上 PBS 把 C 扩展放在 <runtime>/DLLs/。仅校验 stdlib 会被
+                # commit 62c4d83 漏复制的 DLLs/ 缺陷绕过——pandas.errors 会立即踩
+                # ``from _ctypes import Union, Structure, Array`` 失败。同时校验
+                # sentinel pyd 与几个常用共享 DLL，强制 build 脚本把整个 DLLs/ 复制
+                # 进来。
+                dll_root = runtime / "DLLs"
+                if dll_root.is_dir():
+                    self.pass_("product python-runtime Windows DLLs directory")
+                else:
+                    self.fail(
+                        "product python-runtime Windows DLLs directory",
+                        f"Missing: {dll_root}（打包版 import ctypes 会因 _ctypes.pyd "
+                        f"缺失而 ModuleNotFoundError）",
+                    )
+                ctypes_pyd = dll_root / "_ctypes.pyd"
+                if ctypes_pyd.is_file():
+                    self.pass_("product python-runtime Windows _ctypes.pyd")
+                else:
+                    self.fail(
+                        "product python-runtime Windows _ctypes.pyd",
+                        f"Missing: {ctypes_pyd}",
+                    )
+                # pandas.errors -> numpy._core._dtype_ctypes 的传递链还会顺带踩
+                # _ssl / _hashlib / _socket；它们的依赖共享库 libssl/libcrypto/
+                # sqlite3/libffi 都必须随 pyd 一起在 DLLs/ 里。
+                for shared in ("libffi-8.dll", "libssl-3-x64.dll", "libcrypto-3-x64.dll", "sqlite3.dll"):
+                    candidate = dll_root / shared
+                    if candidate.is_file():
+                        self.pass_(f"product python-runtime Windows {shared}")
+                    else:
+                        self.fail(
+                            f"product python-runtime Windows {shared}",
+                            f"Missing: {candidate}",
+                        )
 
     def run(self) -> int:
         self.verify_source_contract()
