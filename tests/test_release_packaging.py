@@ -217,12 +217,15 @@ def test_build_gateway_bundle_copies_platform_c_extensions():
 
 
 def test_build_gateway_bundle_asserts_ctypes_sentinel_in_platform_libs():
-    """复制平台扩展后必须断言 _ctypes.pyd / _ctypes.so 实际存在,防止"目录复制
+    """复制平台扩展后必须断言 _ctypes.pyd / POSIX glob sentinel 实际存在,防止"目录复制
     成功但内部为空/sentinel 缺失"这类异常蒙混过关。"""
     script = Path("scripts/build-gateway-bundle.sh").read_text(encoding="utf-8")
 
     assert '_ctypes.pyd' in script
-    assert '_ctypes.so' in script
+    # POSIX sentinel 用 glob：PBS 的 C 扩展文件名带 ABI 标签
+    # （_ctypes.cpython-312-darwin.so / _ctypes.cpython-312-x86_64-linux-gnu.so），
+    # 不存在裸名 _ctypes.so，精确匹配会在 macOS/Linux CI 上必然误报缺失。
+    assert 'ls "$PLATFORM_LIBS_DST"/_ctypes*.so' in script
     # Windows 共享 DLL 也要断言存在(pandas / requests / curl_cffi 都依赖)。
     for shared in ("libffi-8.dll", "libssl-3-x64.dll", "libcrypto-3-x64.dll", "sqlite3.dll"):
         assert shared in script, f"Windows shared library sentinel missing: {shared}"
@@ -243,6 +246,13 @@ def test_build_gateway_bundle_smoke_imports_ctypes_directly():
     assert "import ctypes" in smoke_line, (
         f"smoke test must import ctypes directly so the build fails loudly when "
         f"_ctypes.pyd / _ctypes.so is missing from python-runtime; got: {smoke_line}"
+    )
+    # 防回归：``ctypes`` 模块没有 ``_ctypes`` 属性（内部是 ``from _ctypes import
+    # ...``），v1.0.9 的 smoke 写了 ``ctypes._ctypes.__file__`` 导致 AttributeError
+    # 三平台构建全挂。要拿加载路径必须显式 ``import _ctypes``。
+    assert "ctypes._ctypes" not in smoke_line, (
+        f"ctypes has no attribute '_ctypes' (this exact bug broke the v1.0.9 "
+        f"release on all platforms); use 'import _ctypes' instead; got: {smoke_line}"
     )
 
 

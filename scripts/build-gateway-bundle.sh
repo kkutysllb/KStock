@@ -277,9 +277,11 @@ case "$(uname -s)" in
     done
     ;;
   Darwin|Linux)
-    # lib-dynload 已在上面整目录 cp -R 中包含；这里 sentinel 用 _ctypes.so。
-    if [ ! -f "$PLATFORM_LIBS_DST/_ctypes.so" ]; then
-        echo "!! python-runtime POSIX C 扩展缺失 sentinel: $PLATFORM_LIBS_DST/_ctypes.so" >&2
+    # lib-dynload 已在上面整目录 cp -R 中包含。PBS 的 POSIX C 扩展文件名带
+    # ABI 标签（_ctypes.cpython-312-darwin.so / _ctypes.cpython-312-x86_64-linux-
+    # gnu.so），不存在裸名 _ctypes.so，sentinel 必须用 glob 匹配（两种命名都兼容）。
+    if ! ls "$PLATFORM_LIBS_DST"/_ctypes*.so >/dev/null 2>&1; then
+        echo "!! python-runtime POSIX C 扩展缺失 sentinel: $PLATFORM_LIBS_DST/_ctypes*.so" >&2
         exit 1
     fi
     ;;
@@ -336,8 +338,11 @@ esac
 # 时碰巧能从原 PBS 路径找到 _ctypes.pyd（fallback），打包到客户机 PYTHONHOME 切换
 # 后立刻失效，smoke 漏报。显式 import ctypes 触发 ``from _ctypes import Union,
 # Structure, Array`` 是真实的失败入口；同时校验 numpy/pandas/tushare/akshare 的
-# 传递依赖链（其中 pandas 会触发 _ctypes）。
-"$RUNTIME_PY" -c "import ctypes, kk_common, pandas, tushare, akshare, dotenv; print('  python-runtime OK; ctypes=', ctypes.__file__, '_ctypes=', ctypes._ctypes.__file__)"
+# 传递依赖链（其中 pandas 会触发 _ctypes）。注意 ``ctypes`` 模块没有 ``_ctypes``
+# 属性（``from _ctypes import ...`` 不会把模块名挂进命名空间，v1.0.9 曾因此
+# AttributeError 三平台全挂），要打印加载路径必须显式 ``import _ctypes``——
+# 此时它已在 sys.modules 中，零额外开销。
+"$RUNTIME_PY" -c "import ctypes, _ctypes, kk_common, pandas, tushare, akshare, dotenv; print('  python-runtime OK; ctypes=', ctypes.__file__, '_ctypes=', _ctypes.__file__)"
 du -sh "$PYTHON_RUNTIME"
 
 python scripts/verify_package_resources.py
