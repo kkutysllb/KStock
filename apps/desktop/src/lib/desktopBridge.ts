@@ -37,6 +37,13 @@ export interface DesktopBridgeApi {
   /** 订阅最大化状态变化（自绘窗控按钮在 最大化/还原图标间切换）。 */
   onMaximizeChange(cb: (maximized: boolean) => void): () => void;
   openExternal(url: string): Promise<void>;
+  /**
+   * 在系统文件管理器中打开本地目录（白名单：logs / app-data）。
+   * 渲染层下拉菜单「打开日志目录」使用，主进程拒绝任何未声明的目标。
+   */
+  openPath(target: "logs" | "app-data"): Promise<{ ok: boolean; error?: string }>;
+  /** 应用元信息：版本号 / 名称 / 平台。版本号取自 package.json。 */
+  appInfo(): Promise<{ version: string; name: string; platform: NodeJS.Platform }>;
   restartGateway(): Promise<string>;
   gatewayStatus(): Promise<{
     port: number;
@@ -116,6 +123,42 @@ export async function openExternalUrl(url: string): Promise<void> {
     }
   }
   window.open(url, "_blank", "noopener,noreferrer");
+}
+
+/**
+ * 在系统文件管理器中打开本地目录（白名单 logs / app-data）。
+ *
+ * 无宿主桥（浏览器预览 / vitest）时静默 no-op；预览环境没有系统文件管理器。
+ */
+export async function openLocalPath(
+  target: "logs" | "app-data",
+): Promise<{ ok: boolean; error?: string }> {
+  const bridge = getDesktopBridge();
+  if (!bridge?.openPath) return { ok: false, error: "no-bridge" };
+  try {
+    return await bridge.openPath(target);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * 获取应用元信息（版本号 / 名称 / 平台）。
+ *
+ * 无宿主桥时返回安全占位（version="" 让关于菜单降级为「未知版本」）。
+ */
+export async function fetchAppInfo(): Promise<
+  { version: string; name: string; platform: string }
+> {
+  const bridge = getDesktopBridge();
+  if (!bridge?.appInfo) {
+    return { version: "", name: "KStock", platform: "unknown" };
+  }
+  try {
+    return await bridge.appInfo();
+  } catch {
+    return { version: "", name: "KStock", platform: "unknown" };
+  }
 }
 
 /**

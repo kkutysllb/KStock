@@ -156,6 +156,8 @@ import { AttachmentPicker, AttachmentChips } from "../components/AttachmentPicke
 import { GeneralSettings } from "../components/GeneralSettings";
 import { UpdateButton } from "../components/UpdateButton";
 import { SidebarResizeHandle } from "../components/SidebarResizeHandle";
+import { BrandMenu } from "../components/BrandMenu";
+import { LogoMark } from "../components/LogoMark";
 import { DataSourcesSettings } from "../components/DataSourcesSettings";
 import { Markdown } from "../lib/markdown";
 import { ArtifactLinkContext, sanitizePreviewHtml } from "../lib/artifactLinks";
@@ -1703,22 +1705,6 @@ function ReasoningModePicker({
   );
 }
 
-function LogoMark({ compact = false }: { compact?: boolean }) {
-  return (
-    <svg
-      className={compact ? "logo-mark compact" : "logo-mark"}
-      viewBox="0 0 64 64"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <rect x="4" y="4" width="56" height="56" rx="14" />
-      <path className="logo-stem" d="M21 16h9c2 0 4 2 4 4v24c0 2-2 4-4 4h-9z" />
-      <path className="logo-arm" d="M34 31 50 16h9L41 34l18 14H47L34 38z" />
-      <path className="logo-line" d="M15 43 28 38l8 4 12-11 9 3" />
-    </svg>
-  );
-}
-
 function AuthPage({
   mode,
   needsSetup,
@@ -2133,13 +2119,7 @@ function WorkspaceShell({
       >
       <aside className="codex-sidebar" aria-label="工作区侧边栏">
         <div className="sidebar-title">
-          {!sidebarCollapsed && (
-            <div className="sidebar-brand" aria-label="KStock 工作区">
-              <LogoMark compact />
-              <strong>KStock</strong>
-              <ChevronDown size={15} />
-            </div>
-          )}
+          {!sidebarCollapsed && <BrandMenu variant="workspace" />}
         </div>
         <div className="nav-stack">
           <button className="nav-command" type="button" onClick={onNewSession}>
@@ -2957,6 +2937,9 @@ function SettingsPage({
       {/* Windows 无框窗口拖拽带（macOS 下 display:none，原生标题栏可拖）。 */}
       <div className="titlebar-drag-strip" aria-hidden="true" />
       <aside className="settings-sidebar" aria-label="设置菜单">
+        <div className="settings-brand-row">
+          <BrandMenu variant="settings" />
+        </div>
         <button className="settings-back" type="button" onClick={onBack}>
           <ArrowLeft size={17} />
           <span>返回应用</span>

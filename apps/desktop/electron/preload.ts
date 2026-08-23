@@ -50,6 +50,20 @@ const api = {
     return ipcRenderer.invoke(IPC.shellOpenExternal, url);
   },
 
+  /**
+   * 在系统文件管理器中打开本地目录。target 限定为白名单枚举，
+   * 主进程负责解析为绝对路径并拒绝任何未声明的目标，避免渲染层
+   * 通过此通道访问任意本地目录。
+   */
+  openPath(target: "logs" | "app-data"): Promise<{ ok: boolean; error?: string }> {
+    return ipcRenderer.invoke(IPC.shellOpenPath, target);
+  },
+
+  /** 应用元信息：版本号 / 名称 / 平台。版本号取自 package.json (`app.getVersion`)。 */
+  appInfo(): Promise<{ version: string; name: string; platform: NodeJS.Platform }> {
+    return ipcRenderer.invoke(IPC.appInfo);
+  },
+
   restartGateway(): Promise<string> {
     return ipcRenderer.invoke(IPC.gatewayRestart);
   },

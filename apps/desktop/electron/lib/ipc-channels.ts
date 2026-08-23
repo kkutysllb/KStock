@@ -25,7 +25,10 @@ export const IPC = {
   gatewayAppDataDir: "gateway:app-data-dir",
   // 宿主能力
   shellOpenExternal: "shell:open-external",
+  shellOpenPath: "shell:open-path",
   shellSaveArtifact: "shell:save-artifact",
+  // 应用元信息（侧边栏 logo 下拉的「关于 KStock」用）
+  appInfo: "app:info",
   // 系统通知（任务完成/失败提醒；窗口聚焦时主进程自动降级不打扰）
   showNotification: "ui:show-notification",
   // 自动更新
@@ -65,6 +68,13 @@ export interface DesktopBridge {
   /** 订阅最大化状态变化（无框窗口自绘按钮图标切换）。 */
   onMaximizeChange(cb: (maximized: boolean) => void): () => void;
   openExternal(url: string): Promise<void>;
+  /**
+   * 在系统文件管理器中打开本地目录（白名单：用户数据根与 logs 子目录）。
+   * 渲染层下拉菜单「打开日志目录」使用，避免直接暴露任意本地路径。
+   */
+  openPath(target: "logs" | "app-data"): Promise<{ ok: boolean; error?: string }>;
+  /** 返回应用元信息（版本号、名称、平台），侧边栏 logo 下拉「关于 KStock」展示。 */
+  appInfo(): Promise<{ version: string; name: string; platform: NodeJS.Platform }>;
   restartGateway(): Promise<string>;
   gatewayStatus(): Promise<{ port: number; running: boolean; childAlive: boolean }>;
   appDataDir(): Promise<string>;

@@ -969,6 +969,169 @@ body.sidebar-resizing {
   white-space: nowrap;
 }
 
+/* 侧边栏顶部 logo 下拉菜单（workspace / settings 共享）*/
+.brand-menu {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.brand-menu__trigger {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  /* 复用 .sidebar-brand 的布局，让 workspace/settings 视觉位置与原先装饰版完全一致 */
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+  gap: 7px;
+  padding-right: 3px;
+  border-radius: 8px;
+  transition: background 140ms ease;
+}
+
+.brand-menu__trigger:hover,
+.brand-menu__trigger:focus-visible {
+  background: rgba(255, 255, 255, 0.05);
+  outline: none;
+}
+
+.brand-menu__trigger strong {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.brand-menu__chevron {
+  color: #727a84;
+  transition: transform 160ms ease, color 160ms ease;
+  flex: 0 0 auto;
+}
+
+.brand-menu__chevron.chevron-expanded {
+  color: #d9dde3;
+  transform: rotate(180deg);
+}
+
+.brand-menu__dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  z-index: 40;
+  padding: 6px 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: #1d2126;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  display: grid;
+  gap: 2px;
+}
+
+/* settings 侧栏较窄，下拉向右展开避免裁剪 */
+.brand-menu--settings .brand-menu__dropdown {
+  left: 0;
+  right: auto;
+}
+
+.brand-menu__about {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px 6px;
+  color: #d9dde3;
+}
+
+.brand-menu__about > svg {
+  color: #31c7a2;
+  flex: 0 0 auto;
+}
+
+.brand-menu__about-main {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.brand-menu__about-main strong {
+  font-size: 12px;
+}
+
+.brand-menu__about-main span {
+  color: #8f96a0;
+  font-size: 11px;
+}
+
+.brand-menu__divider {
+  height: 1px;
+  margin: 4px 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.brand-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #d9dde3;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.brand-menu__item:hover,
+.brand-menu__item:focus-visible {
+  background: #292d31;
+  outline: none;
+}
+
+.brand-menu__item > svg {
+  flex: 0 0 auto;
+  color: #aeb5be;
+}
+
+.brand-menu__item--danger {
+  color: #e8a8a0;
+}
+
+.brand-menu__item--danger:hover,
+.brand-menu__item--danger:focus-visible {
+  background: rgba(232, 104, 96, 0.16);
+  color: #ff8c84;
+}
+
+.brand-menu__item--danger > svg {
+  color: #e8a8a0;
+}
+
+/* settings 侧栏 logo 行：放在 .settings-back 之前，与顶部 drag strip 留 2px 缓冲，
+   与下方「返回应用」按钮之间留 16px 视觉分组（之前 6px 视觉粘连）。 */
+.settings-brand-row {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  margin: 0 0 16px;
+  padding: 0 4px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.settings-brand-row .brand-menu__trigger {
+  padding: 0 6px;
+}
+
 .icon-ghost {
   display: grid;
   place-items: center;
@@ -2044,7 +2207,9 @@ button.context-file-row:hover {
 
 .settings-sidebar {
   overflow: auto;
-  padding: 48px 7px 10px;
+  /* padding-top 收紧到与 Windows drag-strip(22px)接近:brand 行贴近顶部,
+     仅留 ~2px 缓冲避免边框与 drag strip 视觉粘连。 */
+  padding: 24px 7px 10px;
 }
 
 .settings-back {
@@ -5820,7 +5985,8 @@ button.context-file-row:hover {
 }
 
 .settings-sidebar {
-  padding: 42px 10px 16px;
+  /* 与基础 .settings-sidebar padding-top: 24px 对齐。背景与边框覆盖原样式。 */
+  padding: 24px 10px 16px;
   background: rgba(4, 16, 13, 0.97);
   border-right-color: rgba(129, 205, 178, 0.1);
   backdrop-filter: blur(14px);
@@ -6222,7 +6388,8 @@ button.context-file-row:hover {
 }
 
 .settings-shell.density-compact .settings-content {
-  padding-top: 34px;
+  /* 与基础 .os-windows .settings-content padding-top: 36px 对齐略紧。 */
+  padding-top: 22px;
 }
 
 .settings-shell.reduce-motion *,
@@ -7407,7 +7574,9 @@ button.context-file-row:hover {
   display: block;
   position: absolute;
   inset: 0 0 auto 0;
-  height: 38px;
+  /* 38 → 22:与 .settings-sidebar padding-top: 24px 对齐,brand 行贴近顶部。
+     22px 仍可双击最大化（Windows 默认热区），且足够拖动窗口。 */
+  height: 22px;
   z-index: 1;
   -webkit-app-region: drag;
 }
@@ -7444,13 +7613,14 @@ button.context-file-row:hover {
   padding-right: 150px;
 }
 
-/* 设置页：顶部有拖拽带，侧栏/内容从带下方开始（44 > 38 避免重叠）。 */
+/* 设置页：顶部有拖拽带（高 22px），侧栏从拖拽带下方紧贴开始；
+   padding-top 24 > drag strip 22 保留 ~2px 缓冲防边框粘连。 */
 .os-windows .settings-sidebar {
-  padding-top: 44px;
+  padding-top: 24px;
 }
 
 .os-windows .settings-content {
-  padding-top: 56px;
+  padding-top: 36px;
 }
 
 /* 登录/注册页：返回按钮左移（无红绿灯让位），拖拽带定位锚点。 */

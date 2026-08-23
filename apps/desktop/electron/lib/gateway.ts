@@ -16,7 +16,7 @@ import {
   mkdirSync,
   openSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { homedir, platform } from "node:os";
 
 /** 内置 gateway 监听端口（与 scripts/run_gateway.py 的 GATEWAY_PORT 默认值一致）。 */
@@ -60,18 +60,105 @@ export async function portAlive(port: number): Promise<boolean> {
   return results.some(Boolean);
 }
 
-/** 定位内置 gateway 可执行文件：打包态读 resources/gateway，开发态回退到项目 dist。 */
-function gatewayExecutable(): string {
+/** gateway 子进程启动规格：打包态走 PyInstaller 产物；dev 模式无产物时回退到 Python 入口。 */
+interface GatewayLaunchSpec {
+  /** spawn 的可执行程序（绝对路径，或 PATH 中可解析的二进制名）。 */
+  command: string;
+  /** 透传给 command 的参数列表。 */
+  args: string[];
+  /** 子进程工作目录。 */
+  cwd: string;
+  /** 用于错误信息的人可读描述（与日志/UI 文案一致）。 */
+  label: string;
+}
+
+/**
+ * 解析 gateway 子进程启动方式，按以下顺序尝试：
+ *
+ * 1. 打包态 ``process.resourcesPath/gateway/kstock-gateway(.exe)``（electron-builder
+ *    extraResources 注入位置）。
+ * 2. 开发态 ``<repo>/dist/kstock-gateway/kstock-gateway(.exe)``（scripts/build-gateway-bundle.sh
+ *    的 PyInstaller 产物；dev 与打包态同源同一份二进制，保证开发环境验证效果一致）。
+ * 3. dev 模式 ``app.isPackaged === false`` 且 1/2 均缺失时，自动回退到 ``uv run python
+ *    scripts/run_gateway.py``，cwd 切到仓库根，让 venv/.venv 解析到 ``.venv``。
+ *    这样新贡献者无需先跑 PyInstaller 打包就能 dev；运行期行为与 1/2 完全一致
+ *    （同一份 scripts/run_gateway.py）。
+ *
+ * 任何路径都不可用时抛错：打包态指引重装；dev 模式指引装 uv 或构建产物。
+ */
+function resolveGatewayLaunch(): GatewayLaunchSpec {
   const exeName = platform() === "win32" ? "kstock-gateway.exe" : "kstock-gateway";
   const bundled = join(process.resourcesPath, "gateway", exeName);
-  if (existsSync(bundled)) return bundled;
-  // 开发态：apps/desktop → ../../dist/kstock-gateway
-  const devPath = join(app.getAppPath(), "..", "..", "dist", "kstock-gateway", exeName);
-  if (existsSync(devPath)) return devPath;
+  if (existsSync(bundled)) {
+    return {
+      command: bundled,
+      args: ["--serve"],
+      cwd: dirname(bundled),
+      label: "bundled gateway (PyInstaller onedir)",
+    };
+  }
+  // 开发态：apps/desktop → ../../dist/kstock-gateway（与 build-gateway-bundle.sh 产物路径一致）
+  const devDist = join(app.getAppPath(), "..", "..", "dist", "kstock-gateway", exeName);
+  if (existsSync(devDist)) {
+    return {
+      command: devDist,
+      args: ["--serve"],
+      cwd: dirname(devDist),
+      label: "dev bundled gateway (PyInstaller onedir)",
+    };
+  }
+  // dev 模式兜底：直接 spawn `uv run python scripts/run_gateway.py`，无需先打 PyInstaller 包。
+  // 打包态（app.isPackaged === true）下不进入此分支——客户机不应当依赖外部 uv/python。
+  if (!app.isPackaged) {
+    const repoRoot = resolve(app.getAppPath(), "..", "..");
+    const scriptPath = join(repoRoot, "scripts", "run_gateway.py");
+    if (!existsSync(scriptPath)) {
+      throw new Error(
+        `dev gateway 入口缺失：${scriptPath}（仓库结构异常，请确认 scripts/run_gateway.py 存在）`,
+      );
+    }
+    const uv = resolveUvBinary(repoRoot);
+    if (!uv) {
+      throw new Error(
+        `dev gateway 兜底失败：未在 PATH 找到 uv，且项目本地 .tools/uv/${platform() === "win32" ? "uv.exe" : "uv"} 不存在。` +
+          `解决方案：(1) 安装 uv（https://github.com/astral-sh/uv）；` +
+          `(2) 执行 bash scripts/build-gateway-bundle.sh 构建 PyInstaller 产物；` +
+          `(3) 手动 \`uv run python scripts/run_gateway.py\` 启动 gateway 后再启动 Electron。`,
+      );
+    }
+    return {
+      command: uv,
+      // --no-sync 跳过 venv 同步（开发态期望 venv 已就绪；省一次 lockfile 检查）
+      args: ["run", "--no-sync", "python", "scripts/run_gateway.py"],
+      cwd: repoRoot,
+      label: "dev python gateway (uv run scripts/run_gateway.py)",
+    };
+  }
   throw new Error(
-    `内置 gateway 缺失：${bundled}（开发态请先执行 scripts/build-gateway-bundle.sh，` +
-      `或手动 \`uv run python scripts/run_gateway.py\` 启动 gateway）`,
+    `内置 gateway 缺失：${bundled}（打包态请重装 KStock；dev 态请确认 uv 可用或执行 bash scripts/build-gateway-bundle.sh）`,
   );
+}
+
+/**
+ * 解析 uv 二进制位置。优先级：
+ * 1. 项目本地 ``<repo>/.tools/uv/uv(.exe)``（与 scripts/kstock_python_runtime.py
+ *    的策略一致；CI 与本地共享同一份 uv，避免 winget/homebrew 版本漂移）。
+ * 2. PATH 上的 ``uv``（依赖用户已安装 uv）。
+ *
+ * 未找到返回 null；调用方负责给出修复指引。
+ */
+function resolveUvBinary(repoRoot: string): string | null {
+  const localCandidates = [
+    join(repoRoot, ".tools", "uv", platform() === "win32" ? "uv.exe" : "uv"),
+    join(repoRoot, ".tools", "uv", "uv.exe"),
+    join(repoRoot, ".tools", "uv", "uv"),
+  ];
+  for (const candidate of localCandidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  // 退化到 PATH：让 Node spawn 自行解析。无法提前判定 uv 是否真的在 PATH，
+  // 但 launch 失败时会得到 ENOENT，调用方 try/catch 可识别。
+  return "uv";
 }
 
 /** gateway 子进程日志 fd 缓存：首次打开时覆盖写入，本次进程内复用。 */
@@ -155,9 +242,11 @@ export class GatewayProcess {
       return "gateway 已启动";
     }
 
-    const exe = gatewayExecutable();
+    const launch = resolveGatewayLaunch();
     const dataDir = appDataDirectory();
     const logFd = gatewayLogFd();
+    // 写入 launch 路径选择（便于 dev 模式排查回退路径、确认是打包还是 Python 入口）
+    appendFileSync(logFd, `[launcher] mode=${launch.label} command=${launch.command} args=${JSON.stringify(launch.args)} cwd=${launch.cwd}\n`);
     const env = {
       ...process.env,
       // 强制桌面端和 bundled Python/vendor 配置使用同一端点；不能依赖
@@ -165,15 +254,18 @@ export class GatewayProcess {
       GATEWAY_HOST: "localhost",
       GATEWAY_PORT: String(GATEWAY_PORT),
       KSTOCK_APP_DATA_DIR: dataDir,
+      // dev 模式 spawn 的 uv/python 子进程默认 buffering 会延迟日志；
+      // 强制无缓冲让 desktop-gateway.log 实时可见 gateway 启动进度。
+      PYTHONUNBUFFERED: "1",
     };
 
-    const child = spawn(exe, ["--serve"], {
+    const child = spawn(launch.command, launch.args, {
       env,
-      cwd: dirname(exe),
+      cwd: launch.cwd,
       stdio: ["ignore", logFd, logFd],
       // Unix：建独立进程组以便 kill(-pid) 整树终止。
       detached: platform() !== "win32",
-      // Windows：避免 PyInstaller onedir 子进程弹出 cmd 黑窗。
+      // Windows：避免 PyInstaller onedir / uv 中转进程弹出 cmd 黑窗。
       windowsHide: true,
     });
 
@@ -181,8 +273,10 @@ export class GatewayProcess {
       if (this.child === child) this.child = null;
     });
 
-    // 等待端口就绪（最长约 20 秒；首次启动需初始化 SQLite + 迁移）。
-    for (let i = 0; i < 40; i += 1) {
+    // 等待端口就绪（最长约 60 秒；首次启动需初始化 SQLite + 迁移，
+    // dev 模式走 `uv run python scripts/run_gateway.py` 还会再叠 uv 引导 + venv
+    // 解析；冷启动实测可达 30-50s。Electron 启动本身已 2-3s，留充足缓冲。
+    for (let i = 0; i < 120; i += 1) {
       if (child.exitCode !== null || child.signalCode !== null) {
         throw new Error(
           `gateway 在监听端口前退出（code=${child.exitCode}, signal=${child.signalCode}）；` +

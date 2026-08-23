@@ -16,7 +16,7 @@ import {
   shell,
 } from "electron";
 import { writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   appDataDirectory,
@@ -143,6 +143,28 @@ function registerShellIpc(): void {
     }
     await shell.openExternal(url);
   });
+
+  // 白名单路径解析：渲染层只能请求 "logs" / "app-data" 两个固定目标，
+  // 由主进程映射到 ~/.kstock/logs 与 ~/.kstock，绝对不接受任意路径入参。
+  // 这样 logo 下拉「打开日志目录」不会变成任意本地文件读取的通道。
+  ipcMain.handle(IPC.shellOpenPath, async (_event, target: unknown) => {
+    if (target !== "logs" && target !== "app-data") {
+      return { ok: false, error: `unsupported target: ${String(target)}` };
+    }
+    const base = appDataDirectory();
+    const absolute = target === "logs" ? join(base, "logs") : base;
+    mkdirSync(absolute, { recursive: true });
+    const errorMessage = await shell.openPath(absolute);
+    return errorMessage ? { ok: false, error: errorMessage } : { ok: true };
+  });
+
+  // 应用元信息。version 来自 package.json (`app.getVersion`),
+  // name 来自 productName（electron-builder.yml 配 KStock），platform 是 process.platform。
+  ipcMain.handle(IPC.appInfo, () => ({
+    version: app.getVersion(),
+    name: app.getName(),
+    platform: process.platform,
+  }));
 
   ipcMain.handle(IPC.showNotification, (_event, title: string, body: string) => {
     if (!Notification.isSupported()) {
