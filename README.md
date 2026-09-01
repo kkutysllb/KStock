@@ -5,16 +5,17 @@ KStock 是一个跨平台桌面端股票量化智能体，核心引擎使用 QiL
 ## 现状
 
 - 桌面端：Electron + React
-- 侧车：Python + QiLin
+- 后端：内置 QiLin gateway（Python / FastAPI，由 Electron 主进程托管）
 - 技能：本地精选副本 + 同步脚本
 - CI：跨平台检查与发布脚本已建立
 
 ## 快速开始
 
 ```bash
-pnpm install
-python -m pip install -e ./sidecar
-pnpm -C apps/desktop dev
+pnpm install                          # 前端依赖
+uv venv && uv sync                    # Python 运行时（editable 安装 vendor/qilin）
+bash scripts/build-gateway-bundle.sh  # 构建开发用 gateway（首次或修改 Python 后）
+pnpm dev:desktop                      # 启动 Electron 桌面端（主进程自动托管 gateway）
 ```
 
 ## 常用命令
