@@ -456,11 +456,15 @@ def _ensure_data_space() -> dict[str, Path]:
     reports_dir = data_root / "reports"
     cache_market_data_dir = data_root / "cache" / "market-data"
     strategies_dir = data_root / "product" / "strategies"
+    factors_dir = data_root / "product" / "factors"
+    selections_dir = data_root / "product" / "selections"
 
     # 建立目录结构（见设计文档「目录结构」）；cache/market-data 是行情
     # 磁盘缓存（kk_common.market_data_cache），沙箱经 /mnt/cache 同源挂载；
-    # product/strategies 是策略工作区（/mnt/strategies 只读挂载）。
-    for directory in (config_dir, qilin_data_dir, logs_dir, product_dir, reports_dir, cache_market_data_dir, strategies_dir):
+    # product/strategies 是策略工作区（/mnt/strategies 只读挂载）；
+    # product/factors 是因子工作区（/mnt/factors 只读挂载）；
+    # product/selections 是选股工作区（/mnt/selections 只读挂载）。
+    for directory in (config_dir, qilin_data_dir, logs_dir, product_dir, reports_dir, cache_market_data_dir, strategies_dir, factors_dir, selections_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
     # 生成运行时配置（显式写入 database.sqlite_dir 绝对路径）
@@ -824,6 +828,18 @@ def create_app():
 
     app.state.kstock_strategy_store = StrategyStore(paths["data_root"])
 
+    # 因子研究工作区：因子身份/版本链/检验运行，产品索引层 product/kstock.db。
+    # 沙箱内经 /mnt/factors 只读挂载（见 config 模板 sandbox.mounts）。
+    from scripts.kstock_factors import FactorStore
+
+    app.state.kstock_factor_store = FactorStore(paths["data_root"])
+
+    # 选股工作区：方案身份/要求版本链/选股运行与报告，产品索引层 product/kstock.db。
+    # 沙箱内经 /mnt/selections 只读挂载（见 config 模板 sandbox.mounts）。
+    from scripts.kstock_selections import SelectionStore
+
+    app.state.kstock_selection_store = SelectionStore(paths["data_root"])
+
     # ── 追加文件日志 handler（vendor app 构造后、lifespan 前）──────────────
     # vendor 的 configure_logging（lifespan）只调整 handler 的 filter/formatter，
     # 不清除已有 handler，所以这里追加的 FileHandler 会安全保留。
@@ -841,6 +857,8 @@ def create_app():
     from scripts.kstock_reports_router import router as kstock_reports_router
     from scripts.kstock_news_router import router as kstock_news_router
     from scripts.kstock_strategies import router as kstock_strategies_router
+    from scripts.kstock_factors import router as kstock_factors_router
+    from scripts.kstock_selections import router as kstock_selections_router
 
     app.include_router(kstock_models_router)
     app.include_router(kstock_data_sources_router)
@@ -850,6 +868,8 @@ def create_app():
     app.include_router(kstock_reports_router)
     app.include_router(kstock_news_router)
     app.include_router(kstock_strategies_router)
+    app.include_router(kstock_factors_router)
+    app.include_router(kstock_selections_router)
     return app
 
 

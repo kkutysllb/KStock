@@ -209,7 +209,8 @@ rm -rf "$PYTHON_RUNTIME"/bin/2to3* "$PYTHON_RUNTIME"/bin/idle3* "$PYTHON_RUNTIME
     "$PYTHON_RUNTIME"/Scripts/2to3* "$PYTHON_RUNTIME"/Scripts/idle3* "$PYTHON_RUNTIME"/Scripts/pydoc3* \
     "$PYTHON_RUNTIME"/lib/python3.12/{idlelib,test,tkinter,turtledemo,ensurepip,lib2to3} 2>/dev/null || true
 # 技能依赖（kk_common 数据客户端 + 第三方库）
-uv pip install --python "$RUNTIME_PY" pandas tushare python-dotenv akshare
+# scipy：factor-research 技能 IC/IR 分析的 Spearman 相关依赖（corr(method="spearman")）
+uv pip install --python "$RUNTIME_PY" pandas numpy scipy tushare python-dotenv akshare
 uv pip install --python "$RUNTIME_PY" vendor/skills/public/common
 
 # uv venv 只会创建 site-packages，解释器标准库仍通过 pyvenv.cfg home 指向
@@ -340,7 +341,12 @@ case "$(uname -s)" in
 esac
 du -sh "$PYTHON_RUNTIME"
 
-python scripts/verify_package_resources.py
+# macOS 无 python 别名（仅 python3），Linux/Windows CI 两名皆有：取可用的那个。
+if command -v python3 >/dev/null 2>&1; then
+  python3 scripts/verify_package_resources.py
+else
+  python scripts/verify_package_resources.py
+fi
 
 # electron-builder 只会签外层 .app 和 Electron 主程序，不会递归签 resources/gateway 里
 # PyInstaller 收集的 Mach-O 二进制。Apple notarization 会逐个检查这些

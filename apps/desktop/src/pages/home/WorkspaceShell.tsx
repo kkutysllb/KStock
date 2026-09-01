@@ -1,5 +1,5 @@
 /**
- * 工作台外壳：侧栏（历史任务/账户）+ 会话流 + 输入区 + 右侧研究上下文面板。
+ * 工作台外壳：侧栏（工作区/账户）+ 会话流 + 输入区 + 右侧研究上下文面板。
  * 从 Home.tsx 拆出（行为不变），一并收纳历史桶列表与上下文面板子组件。
  */
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -21,6 +21,9 @@ import {
   FileOutput,
   FileText,
   Folder,
+  FolderOpen,
+  FolderTree,
+  FlaskConical,
   GitBranch,
   Library,
   ListTodo,
@@ -33,6 +36,7 @@ import {
   Settings,
   Sparkles,
   Square,
+  Star,
   Trash2,
   Upload,
   UsersRound,
@@ -49,7 +53,11 @@ import { GATEWAY_URL } from "../../lib/gatewayUrl";
 import { mergeDeliveryFiles, resolveArtifactFetchHref, toAbsoluteUrl } from "../../lib/deliveryFiles";
 import { ArtifactLinkContext, sanitizePreviewHtml } from "../../lib/artifactLinks";
 import { Markdown } from "../../lib/markdown";
-import { groupSessionsByBucket, type HistoryBucket } from "../../lib/historyGrouping";
+import {
+  groupSessionsByTaskCategory,
+  ARCHIVED_GROUP_KEY,
+  type TaskGroupKey
+} from "../../lib/taskCategory";
 import type { ChatMessage, ChatSession } from "../../lib/sessionStore";
 import type { ModelConfig } from "../../lib/modelsClient";
 import type { AuthUser } from "../../lib/authClient";
@@ -126,6 +134,8 @@ export function WorkspaceShell({
   onOpenIntegrations,
   onOpenReports,
   onOpenStrategies,
+  onOpenFactors,
+  onOpenSelections,
   onOpenSettings,
   onSelectSession,
   onDeleteSession,
@@ -159,7 +169,7 @@ export function WorkspaceShell({
   sidebarWidth: number;
   historyCollapsed: boolean;
   /** 各历史桶的折叠态（会话内记忆，重启重置）。 */
-  collapsedBuckets: Set<HistoryBucket>;
+  collapsedBuckets: Set<TaskGroupKey>;
   /** 正在归档/取消归档中的 session id（防护重复点击）。 */
   archiveBusySessionIds: ReadonlySet<string>;
   generalPreferences: GeneralPreferences;
@@ -181,12 +191,14 @@ export function WorkspaceShell({
   onOpenIntegrations: () => void;
   onOpenReports: () => void;
   onOpenStrategies: () => void;
+  onOpenFactors: () => void;
+  onOpenSelections: () => void;
   onOpenSettings: () => void;
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onArchiveSession: (sessionId: string) => void;
   onUnarchiveSession: (sessionId: string) => void;
-  onToggleBucket: (bucket: HistoryBucket) => void;
+  onToggleBucket: (bucket: TaskGroupKey) => void;
   onSend: (model: string) => void;
   onStop: () => void;
   pendingAttachments: UploadedFileRef[];
@@ -321,6 +333,14 @@ export function WorkspaceShell({
             <GitBranch size={17} />
             {!sidebarCollapsed && <span>策略库</span>}
           </button>
+          <button className="nav-command" type="button" onClick={onOpenFactors}>
+            <FlaskConical size={17} />
+            {!sidebarCollapsed && <span>因子库</span>}
+          </button>
+          <button className="nav-command" type="button" onClick={onOpenSelections}>
+            <Star size={17} />
+            {!sidebarCollapsed && <span>选股库</span>}
+          </button>
           <button className="nav-command" type="button" onClick={onOpenIntegrations}>
             <Sparkles size={17} />
             {!sidebarCollapsed && <span>技能与插件</span>}
@@ -334,7 +354,8 @@ export function WorkspaceShell({
               aria-expanded={!historyCollapsed}
               onClick={onToggleHistory}
             >
-              <span className="side-section-label">历史任务</span>
+              <FolderTree size={16} className="side-section-icon" aria-hidden="true" />
+              <span className="side-section-title">工作区</span>
               <span className="side-section-count">{sessions.length + archivedSessions.length}</span>
               <ChevronRight
                 size={13}
@@ -345,9 +366,9 @@ export function WorkspaceShell({
             {!historyCollapsed && (
               <div className="session-strip">
                 {sessions.length === 0 && archivedSessions.length === 0 ? (
-                  <p className="session-empty">暂无历史任务</p>
+                  <p className="session-empty">工作区暂无任务</p>
                 ) : (
-                  <HistoryBucketList
+                  <WorkspaceTaskList
                     sessions={sessions}
                     archivedSessions={archivedSessions}
                     activeSessionId={activeSession?.id}
@@ -689,11 +710,11 @@ export function WorkspaceShell({
 }
 
 /**
- * 历史任务多级折叠列表：按时间桶分组建。默认只展开「今天 + 3 天内」，
- * 其他桶需用户手动展开。「已归档」桶单独靠 archivedSessions 驱动，
- * 与时间桶互斥。
+ * 工作区任务列表：按任务种类分组折叠展示（taskCategory.ts 纯读侧分类，
+ * 标题关键词推导——已存在的历史任务渲染时即按种类归类）。
+ * 「已归档」组沿用原语义，单独靠 archivedSessions 驱动，置于种类分组之后。
  */
-function HistoryBucketList({
+function WorkspaceTaskList({
   sessions,
   archivedSessions,
   activeSessionId,
@@ -708,28 +729,27 @@ function HistoryBucketList({
   sessions: ChatSession[];
   archivedSessions: ChatSession[];
   activeSessionId: string | undefined;
-  collapsedBuckets: Set<HistoryBucket>;
+  collapsedBuckets: Set<TaskGroupKey>;
   archiveBusySessionIds: ReadonlySet<string>;
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onArchiveSession: (sessionId: string) => void;
   onUnarchiveSession: (sessionId: string) => void;
-  onToggleBucket: (bucket: HistoryBucket) => void;
+  onToggleBucket: (bucket: TaskGroupKey) => void;
 }) {
-  // 时间桶：sessions 里不是已归档的全部按 updatedAtIso 分桶。
-  const nonArchived = sessions;
-  const buckets = groupSessionsByBucket(nonArchived);
+  // 任务种类分组：sessions（未归档）按标题关键词分类；空组不出现，固定顺序。
+  const groups = groupSessionsByTaskCategory(sessions);
   const hasArchived = archivedSessions.length > 0;
 
   return (
     <>
-      {buckets.map((group) => (
-        <BucketBlock
-          key={group.bucket}
-          bucket={group.bucket}
+      {groups.map((group) => (
+        <TaskGroupBlock
+          key={group.key}
+          groupKey={group.key}
           label={group.label}
           sessions={group.sessions}
-          collapsed={collapsedBuckets.has(group.bucket)}
+          collapsed={collapsedBuckets.has(group.key)}
           activeSessionId={activeSessionId}
           archiveBusySessionIds={archiveBusySessionIds}
           onSelectSession={onSelectSession}
@@ -739,11 +759,11 @@ function HistoryBucketList({
         />
       ))}
       {hasArchived && (
-        <BucketBlock
-          bucket="archived"
+        <TaskGroupBlock
+          groupKey={ARCHIVED_GROUP_KEY}
           label="已归档"
           sessions={archivedSessions}
-          collapsed={collapsedBuckets.has("archived")}
+          collapsed={collapsedBuckets.has(ARCHIVED_GROUP_KEY)}
           activeSessionId={activeSessionId}
           archiveBusySessionIds={archiveBusySessionIds}
           onSelectSession={onSelectSession}
@@ -757,9 +777,9 @@ function HistoryBucketList({
   );
 }
 
-/** 单个历史任务桶的折叠区块。 */
-function BucketBlock({
-  bucket,
+/** 单个任务种类分组的折叠区块。 */
+function TaskGroupBlock({
+  groupKey,
   label,
   sessions,
   collapsed,
@@ -771,7 +791,7 @@ function BucketBlock({
   onUnarchiveSession,
   onToggleBucket,
 }: {
-  bucket: HistoryBucket;
+  groupKey: TaskGroupKey;
   label: string;
   sessions: ChatSession[];
   collapsed: boolean;
@@ -781,7 +801,7 @@ function BucketBlock({
   onDeleteSession: (sessionId: string) => void;
   onArchiveSession: (sessionId: string) => void;
   onUnarchiveSession?: (sessionId: string) => void;
-  onToggleBucket: (bucket: HistoryBucket) => void;
+  onToggleBucket: (bucket: TaskGroupKey) => void;
 }) {
   return (
     <div className="session-bucket">
@@ -789,13 +809,13 @@ function BucketBlock({
         type="button"
         className="side-bucket-header"
         aria-expanded={!collapsed}
-        onClick={() => onToggleBucket(bucket)}
+        onClick={() => onToggleBucket(groupKey)}
       >
-        <ChevronRight
-          size={11}
-          className={!collapsed ? "chevron-expanded" : ""}
-          aria-hidden="true"
-        />
+        {collapsed ? (
+          <Folder size={13} aria-hidden="true" />
+        ) : (
+          <FolderOpen size={13} aria-hidden="true" />
+        )}
         <span className="side-section-label">{label}</span>
         <span className="side-section-count">{sessions.length}</span>
       </button>
@@ -806,7 +826,7 @@ function BucketBlock({
               key={session.id}
               session={session}
               active={session.id === activeSessionId}
-              bucket={bucket}
+              archived={groupKey === ARCHIVED_GROUP_KEY}
               busy={archiveBusySessionIds.has(session.id)}
               onSelectSession={onSelectSession}
               onDeleteSession={onDeleteSession}
@@ -821,7 +841,7 @@ function BucketBlock({
 }
 
 /**
- * 单个历史任务行。根据桶上下文展示不同动作：
+ * 单个工作区任务行。根据分组上下文展示不同动作：
  * - 归档桶：取消归档（调回主列表） + 删除
  * - 其他桶：归档（需 threadId） + 删除
  * 本地新建无 threadId 的 session 只能删除，不能归档。
@@ -829,7 +849,7 @@ function BucketBlock({
 function SessionRow({
   session,
   active,
-  bucket,
+  archived,
   busy,
   onSelectSession,
   onDeleteSession,
@@ -838,15 +858,15 @@ function SessionRow({
 }: {
   session: ChatSession;
   active: boolean;
-  bucket: HistoryBucket;
+  archived: boolean;
   busy: boolean;
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onArchiveSession: (sessionId: string) => void;
   onUnarchiveSession?: (sessionId: string) => void;
 }) {
-  const canArchive = bucket !== "archived" && Boolean(session.threadId);
-  const canUnarchive = bucket === "archived" && Boolean(session.threadId);
+  const canArchive = !archived && Boolean(session.threadId);
+  const canUnarchive = archived && Boolean(session.threadId);
   return (
     <div className={`session-row ${active ? "active" : ""} ${busy ? "busy" : ""}`}>
       <button

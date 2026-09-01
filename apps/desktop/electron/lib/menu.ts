@@ -65,6 +65,16 @@ export function buildAppMenu(): Menu {
         accelerator: "CmdOrCtrl+Shift+G",
         click: () => sendMenuCommand("open-strategies"),
       },
+      {
+        label: "打开因子库",
+        accelerator: "CmdOrCtrl+Shift+F",
+        click: () => sendMenuCommand("open-factors"),
+      },
+      {
+        label: "打开选股库",
+        accelerator: "CmdOrCtrl+Shift+S",
+        click: () => sendMenuCommand("open-selections"),
+      },
       { type: "separator" },
       {
         label: "打开交付文件目录",
@@ -206,6 +216,8 @@ function buildFullTrayMenu(): MenuItemConstructorOptions[] {
     { label: "新建任务", click: () => sendMenuCommand("new-task") },
     { label: "打开报告库", click: () => sendMenuCommand("open-reports") },
     { label: "打开策略库", click: () => sendMenuCommand("open-strategies") },
+    { label: "打开因子库", click: () => sendMenuCommand("open-factors") },
+    { label: "打开选股库", click: () => sendMenuCommand("open-selections") },
     { type: "separator" },
     { label: "偏好设置…", click: () => sendMenuCommand("open-settings") },
     { label: "检查更新…", click: () => sendMenuCommand("check-update") },

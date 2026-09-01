@@ -941,9 +941,13 @@ body.sidebar-resizing {
   display: flex;
   flex-direction: column;
   padding: 42px 12px 14px;
+  /* 定高外壳内的滚动容器：裁掉溢出，由 .session-strip 承担纵向滚动 */
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar-title {
+  flex: 0 0 auto;
   gap: 5px;
   min-height: 42px;
   margin: 0 2px 10px;
@@ -1150,6 +1154,7 @@ body.sidebar-resizing {
   display: grid;
   gap: 2px;
   margin-top: 4px;
+  flex: 0 0 auto;
 }
 
 .nav-command {
@@ -1193,6 +1198,7 @@ body.sidebar-resizing {
   width: 100%;
   margin: 10px 0 3px;
   padding: 3px 14px;
+  flex: 0 0 auto;
   border: 0;
   background: transparent;
   color: #777e88;
@@ -1209,6 +1215,23 @@ body.sidebar-resizing {
 /* header 内的 label 重置 margin（原 .side-section-label 有 margin） */
 .side-section-header .side-section-label {
   margin: 0;
+}
+
+/* 工作区分区主标题（原「历史任务」）：字号明显大于桶标签，突出分区身份。 */
+.side-section-header .side-section-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #d6dade;
+}
+
+/* 工作区标题前的装饰图标：FolderTree 与 16px 线宽下比 Layers 更清晰，
+   光学上略大于文字字号以对齐 x-height；随主题色弱化不抢层级。 */
+.side-section-header .side-section-icon {
+  flex: 0 0 auto;
+  color: #9aa2ac;
+  margin-bottom: 1px;
 }
 
 .side-section-count {
@@ -1231,6 +1254,13 @@ body.sidebar-resizing {
   color: #6b7280;
 }
 
+/* 装饰图标豁免「推到行尾」的 auto 边距：该规则原为尾部折叠箭头设计，
+   头部存在两个直子 svg 时剩余空间会被平分，把装饰图标顶到行中间。 */
+.side-section-header > svg.side-section-icon {
+  margin-left: 0;
+  color: #9aa2ac;
+}
+
 .session-empty {
   margin: 4px 14px;
   color: #6b7280;
@@ -1241,6 +1271,13 @@ body.sidebar-resizing {
 .session-strip {
   display: grid;
   gap: 4px;
+  /* 工作区任务列表是侧栏唯一的弹性滚动区：分类展开过多时出滚动条，
+     品牌区/导航/分区标题/页脚保持固定（flex-shrink:0 见各自规则）。 */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  align-content: start;
 }
 
 /* session-row 现为容器（div），内含 main button + delete button */
@@ -1271,6 +1308,13 @@ body.sidebar-resizing {
   padding: 5px 28px 5px 14px;
   cursor: pointer;
   font: inherit;
+}
+
+/* 任务标题：略小于分类组标签（12.5px/600），保证「工作区 > 分类 > 任务」的层级。 */
+.session-row-main strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .session-row-delete {
@@ -1339,19 +1383,25 @@ body.sidebar-resizing {
   align-items: center;
   gap: 5px;
   width: 100%;
-  margin: 0;
+  margin: 8px 0 2px;
   padding: 2px 14px;
   border: 0;
   background: transparent;
-  color: #6b7280;
-  font-size: 10px;
+  color: #9aa2ac;
+  font-size: 13px;
   font-weight: 700;
+  letter-spacing: 0.02em;
   cursor: pointer;
   text-align: left;
 }
 
 .side-bucket-header .side-section-label {
   margin: 0;
+  /* 分类组标签：span 自带的 10px 会压过按钮上的继承字号，必须在此显式覆盖 */
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #9aa2ac;
 }
 
 .side-bucket-header:hover {
@@ -1437,6 +1487,7 @@ body.sidebar-resizing {
   gap: 2px;
   margin-top: auto;
   padding-top: 10px;
+  flex: 0 0 auto;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
@@ -7339,6 +7390,22 @@ button.context-file-row:hover {
 .strategies-badge.tone-live { border: 1px solid rgba(68, 198, 160, 0.45); background: rgba(68, 198, 160, 0.14); color: #7fe0c0; }
 .strategies-badge.tone-idle { border: 1px solid rgba(148, 160, 170, 0.3); background: rgba(148, 160, 170, 0.1); color: #9aa5ae; }
 .strategies-badge.tone-bad { border: 1px solid rgba(224, 108, 108, 0.4); background: rgba(224, 108, 108, 0.12); color: #f0a3a3; }
+/* 因子库「已采用」状态（adopted）：金色系，与绿色 live/红色 bad 区分。 */
+.strategies-dot.tone-good { background: #e8a33d; box-shadow: 0 0 6px rgba(232, 163, 61, 0.8); }
+.strategies-badge.tone-good { border: 1px solid rgba(232, 163, 61, 0.45); background: rgba(232, 163, 61, 0.14); color: #f0c37e; }
+/* 选股库运行报告查看块：等宽、限高可滚动。 */
+.strategies-report-view {
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.6;
+  border: 1px solid rgba(129, 205, 178, 0.16);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(10, 16, 20, 0.35);
+}
 .strategies-chip {
   border: 1px solid rgba(129, 205, 178, 0.14);
   border-radius: 999px;

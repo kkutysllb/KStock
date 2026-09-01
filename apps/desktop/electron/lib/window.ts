@@ -249,7 +249,7 @@ function registerFramelessShortcuts(window: BrowserWindow): void {
     } else if (input.key === "0" && !shift) {
       event.preventDefault();
       resetZoom();
-    // 文件：新任务 / 报告库 / 策略库（sendMenuCommand 走渲染层既有处理链）。
+    // 文件：新任务 / 报告库 / 策略库 / 因子库 / 选股库（sendMenuCommand 走渲染层既有处理链）。
     } else if (key === "n" && !shift) {
       event.preventDefault();
       sendMenuCommand("new-task");
@@ -259,6 +259,12 @@ function registerFramelessShortcuts(window: BrowserWindow): void {
     } else if (key === "g" && shift) {
       event.preventDefault();
       sendMenuCommand("open-strategies");
+    } else if (key === "f" && shift) {
+      event.preventDefault();
+      sendMenuCommand("open-factors");
+    } else if (key === "s" && shift) {
+      event.preventDefault();
+      sendMenuCommand("open-selections");
     // 应用：偏好设置 / 检查更新。
     } else if (input.key === "," && !shift) {
       event.preventDefault();

@@ -44,11 +44,11 @@ import {
   type UploadedFileRef,
   type WorkspaceChangeFile,
 } from "../lib/turnsClient";
+import { selectStaleSessions } from "../lib/historyGrouping";
 import {
-  DEFAULT_COLLAPSED_BUCKETS,
-  selectStaleSessions,
-  type HistoryBucket,
-} from "../lib/historyGrouping";
+  DEFAULT_COLLAPSED_TASK_GROUPS,
+  type TaskGroupKey,
+} from "../lib/taskCategory";
 import {
   buildEditedBranchSession,
   editableUserMessageIds,
@@ -72,17 +72,21 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { LogoMark } from "../components/LogoMark";
 import { ReportLibrary } from "../components/ReportLibrary";
 import { StrategiesLibrary } from "../components/StrategiesLibrary";
+import { FactorsLibrary } from "../components/FactorsLibrary";
+import { SelectionsLibrary } from "../components/SelectionsLibrary";
 import { AuthPage } from "./home/AuthPage";
 import { LandingPage } from "./home/LandingPage";
 import { SettingsPage } from "./home/SettingsPage";
 import { WorkspaceShell } from "./home/WorkspaceShell";
 import type { AuthMode } from "./home/types";
-type ViewMode = "landing" | "auth" | "workspace" | "settings" | "reports" | "strategies";
+type ViewMode = "landing" | "auth" | "workspace" | "settings" | "reports" | "strategies" | "factors" | "selections";
 type DesktopMenuCommand =
   | "new-task"
   | "open-settings"
   | "open-reports"
   | "open-strategies"
+  | "open-factors"
+  | "open-selections"
   | "check-update";
 
 const WORKSPACE_SIDEBAR_WIDTH_KEY = "kstock.workspaceSidebarWidth";
@@ -159,8 +163,9 @@ export function Home() {
   const [reasoningMode, setReasoningMode] = useState<ReasoningMode>(readReasoningMode);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [dataSources, setDataSources] = useState<DataSourceConfig[]>([]);
-  // 流式 run 状态。
-  const [streamingId, setStreamingId] = useState<string | null>(null);
+  // 流式 run 状态：活跃流 id 从消息 status 派生（activeStreamingId），
+  // 支持多会话并行流式，不再用全局单值 state。
+  // 澄清确认弹窗草稿：非 null 时弹窗可见，确认后作为消息发送（不再回填主输入框）。
   // 澄清确认弹窗草稿：非 null 时弹窗可见，确认后作为消息发送（不再回填主输入框）。
   const [clarifyDraft, setClarifyDraft] = useState<{ text: string; question?: string } | null>(null);
   // 输入区待发附件（本轮要随消息携带的 UploadedFileRef）。发送成功后清空。
@@ -173,21 +178,24 @@ export function Home() {
   const [workspaceChanges, setWorkspaceChanges] = useState<WorkspaceChangeFile[]>([]);
   const [workspaceChangesLoading, setWorkspaceChangesLoading] = useState(false);
   const workspaceChangesKeyRef = useRef<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  // 当前正在执行的 run 标识（threadId + runId），由 streamRun 的 onRunId 回调填入。
+  // 流式任务并行支持：每个流式 turn 各自持有中止控制器 / 运行记录 / 停止标记
+  // （此前为全局单例，同时只能跟一个流——第二个任务必须先停止第一个才能发送）。
+  const abortMapRef = useRef<Map<string, AbortController>>(new Map());
+  // 当前正在执行的 run 标识（turnId → threadId + runId），由 streamRun 的 onRunId 回调填入。
   // handleStop 用它显式调 cancel API 即时停止 agent/subagent，而不只靠 abort 断流。
-  const activeRunRef = useRef<{ threadId: string; runId: string } | null>(null);
+  const runMapRef = useRef<Map<string, { threadId: string; runId: string }>>(new Map());
   // 防止重复点击停止（cancelRun 是异步请求，连点会发多次）。
-  const stoppingRef = useRef(false);
+  const stoppingTurnsRef = useRef<Set<string>>(new Set());
   // 删除历史任务的二次确认状态（替代 window.confirm，在桌面端 webview 中可靠弹窗）。
   // pendingDeleteSessionId：待删除的 session id；后端失败时填 confirmError 提示二次确认。
   const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [deleteDeleting, setDeleteDeleting] = useState(false);
-  // 历史任务按时间分桶后的折叠状态：DEFAULT_COLLAPSED_BUCKETS 是「3 天以外」初始折叠。
-  // 会话内记忆（重启后重置）——符合「启动时默认只展开3天以内」的设计。
-  const [collapsedBuckets, setCollapsedBuckets] = useState<Set<HistoryBucket>>(
-    () => new Set(DEFAULT_COLLAPSED_BUCKETS)
+  // 工作区任务按任务种类分组后的折叠状态：DEFAULT_COLLAPSED_TASK_GROUPS
+  // 初始折叠「通用其他 / 已归档」，具体种类默认展开。
+  // 会话内记忆（重启后重置）。
+  const [collapsedBuckets, setCollapsedBuckets] = useState<Set<TaskGroupKey>>(
+    () => new Set(DEFAULT_COLLAPSED_TASK_GROUPS)
   );
   // 已归档任务：单独拉取（listThreads 默认不返回归档项），只在 sidebar 的
   // 「已归档」桶展开时呈现。归档项不占用主列表。
@@ -206,19 +214,6 @@ export function Home() {
     setSettingsSidebarWidth(width);
     persistSidebarWidth(SETTINGS_SIDEBAR_WIDTH_KEY, width);
   }, []);
-
-  // 任务开始执行时（streamingId 由 null → 非 null）自动展开浮动面板，
-  // 让用户立刻看到任务摘要 / Todo / Subagent 等实时进度。任务执行期间
-  // 用户手动收起不会被重新撑开（streamingId 一直非 null，不触发跃变）；
-  // 任务结束（变回 null）也不自动收起，方便查看结果。下一个任务开始
-  // 才会再次自动展开。
-  const prevStreamingIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (prevStreamingIdRef.current === null && streamingId !== null) {
-      setRightPanelOpen(true);
-    }
-    prevStreamingIdRef.current = streamingId;
-  }, [streamingId]);
 
   // 启动时探测 gateway 会话与系统初始化状态。
   // gateway 冷启动需数秒（PyInstaller 引导 + 导入重依赖），探测失败时后台
@@ -624,6 +619,30 @@ export function Home() {
     () => sessions.find((session) => session.id === activeSessionId) ?? sessions[0],
     [activeSessionId, sessions]
   );
+
+  // 当前查看会话中正在流式的 turn id（从消息 status 派生，而非全局单值——
+  // 多个会话可同时各自流式，互不阻塞：发送/停止按钮只作用于当前查看的会话）。
+  const activeStreamingId = useMemo(() => {
+    const messages = activeSession?.messages;
+    if (!messages) return null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].status === "streaming") return messages[i].id;
+    }
+    return null;
+  }, [activeSession]);
+
+  // 任务开始执行时（当前查看会话的活跃流 id 由 null → 非 null）自动展开浮动面板，
+  // 让用户立刻看到任务摘要 / Todo / Subagent 等实时进度。任务执行期间
+  // 用户手动收起不会被重新撑开（id 一直非 null，不触发跃变）；
+  // 任务结束（变回 null）也不自动收起，方便查看结果。下一个任务开始
+  // 才会再次自动展开。并行任务切换会话时按新会话的活跃流独立判定。
+  const prevStreamingIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevStreamingIdRef.current === null && activeStreamingId !== null) {
+      setRightPanelOpen(true);
+    }
+    prevStreamingIdRef.current = activeStreamingId;
+  }, [activeStreamingId]);
   const editableUserMessageIdSet = useMemo(
     () => editableUserMessageIds(activeSession?.messages ?? []),
     [activeSession?.messages]
@@ -775,6 +794,12 @@ export function Home() {
         case "open-strategies":
           setView("strategies");
           break;
+        case "open-factors":
+          setView("factors");
+          break;
+        case "open-selections":
+          setView("selections");
+          break;
         case "open-reports":
           if (currentUser) {
             setView("reports");
@@ -874,8 +899,8 @@ export function Home() {
     }
   };
 
-  // 切换某个历史任务桶的折叠状态（会话内记忆，重启重置）。
-  const handleToggleBucket = (bucket: HistoryBucket) => {
+  // 切换某个任务种类分组的折叠状态（会话内记忆，重启重置）。
+  const handleToggleBucket = (bucket: TaskGroupKey) => {
     setCollapsedBuckets((prev) => {
       const next = new Set(prev);
       if (next.has(bucket)) {
@@ -957,13 +982,13 @@ export function Home() {
   }: StreamIntoSessionOptions) => {
     const turn = createAssistantTurn(model.name);
     const startedAt = Date.now();
-    setStreamingId(turn.id);
+    // 流式活跃状态由消息自身 status（streaming → 终态）承载，可多会话并行各流各的。
     setSessions((current) =>
       current.map((session) => (session.id === sessionId ? appendTurnToSession(session, turn) : session))
     );
 
     const controller = new AbortController();
-    abortRef.current = controller;
+    abortMapRef.current.set(turn.id, controller);
     let turnState = initialTurn();
     const patchTurn = () =>
       setSessions((current) =>
@@ -982,7 +1007,7 @@ export function Home() {
         signal: controller.signal,
         handlers: {
           onRunId: (runId) => {
-            activeRunRef.current = { threadId, runId };
+            runMapRef.current.set(turn.id, { threadId, runId });
             turnState = { ...turnState, runId };
             patchTurn();
           },
@@ -999,13 +1024,13 @@ export function Home() {
         }
       });
     } finally {
-      abortRef.current = null;
-      activeRunRef.current = null;
-      // 用户主动停止（stoppingRef）不发通知；长任务完成/等待回复（≥15s）、
+      abortMapRef.current.delete(turn.id);
+      runMapRef.current.delete(turn.id);
+      // 用户主动停止（stoppingTurnsRef）不发通知；长任务完成/等待回复（≥15s）、
       // 失败（≥3s，过滤掉连模型都没建立的瞬时配置错误）提醒一次。
       // 主进程在窗口聚焦时自动降级不打扰；浏览器预览无桥静默忽略。
-      const wasStopped = stoppingRef.current;
-      stoppingRef.current = false;
+      const wasStopped = stoppingTurnsRef.current.has(turn.id);
+      stoppingTurnsRef.current.delete(turn.id);
       const status = turnState.status;
       if (
         !wasStopped &&
@@ -1026,7 +1051,6 @@ export function Home() {
           void showDesktopNotification(title, body);
         }
       }
-      setStreamingId((id) => (id === turn.id ? null : id));
     }
   };
 
@@ -1038,7 +1062,9 @@ export function Home() {
   // 发送任意文本（主输入框 / 澄清确认对话框共用）：内容来自调用方显式传入。
   const sendText = async (input: string, modelName: string) => {
     const text = input.trim();
-    if (!text || !modelName || streamingId) return;
+    // 其他会话的流式任务不阻塞这里（并行支持）；当前会话自身流式时由
+    // composer 呈停止态，澄清回传等直调路径也在此兜底。
+    if (!text || !modelName || activeStreamingId) return;
     if (!historyFetchDoneRef.current) {
       localSessionBeforeHistoryLoadedRef.current = true;
       localSessionBeforeHistoryLoadedIdRef.current = activeSession?.id ?? null;
@@ -1106,7 +1132,7 @@ export function Home() {
 
   const handleEditResend = async (messageId: string, replacementText: string) => {
     const source = activeSession;
-    if (!source?.threadId || streamingId) throw new Error("当前任务暂时无法编辑重发");
+    if (!source?.threadId || activeStreamingId) throw new Error("当前任务暂时无法编辑重发");
     const modelName = selectEditModel(
       source.messages.find((message) => message.id === messageId),
       models.map((model) => model.name),
@@ -1147,28 +1173,38 @@ export function Home() {
 
   // 停止生成：立即响应 UI + 异步 cancel 后端 run + abort SSE 断流兼兜底。
   //
-  // 重要：必须先 setStreamingId(null) 让 UI 即时从「生成中」更改为可输入态，
-  // 不能等 cancelRun / streamRun 返回——桌面端 webview 中 fetch + ReadableStream
-  // 的 abort 有时不能即时释放 SSE 长连接的 reader.read()，导致 streamRun
-  // promise 迟迟不 resolve、handleSend 的 finally 不执行、UI 卡在「生成中」。
-  // 变更顺序后：UI 立即响应；cancel 后台异步发；abort 兑底断流；streamRun
-  // 后续 resolve 时 finally 里的 setStreamingId((id) => id === turn.id ? null : id)
-  // 因 streamingId 已被这里置为 null（不等于 turn.id）而不会重复修改。
+  // 活跃流状态由消息 status 派生：这里必须「先把这个 turn 的 status 落成终态」
+  // 让 UI 即时从「生成中」变为可输入态，不能等 cancelRun / streamRun 返回——
+  // 桌面端 webview 中 fetch + ReadableStream 的 abort 有时不能即时释放 SSE
+  // 长连接的 reader.read()，导致 streamRun promise 迟迟不 resolve。
+  // （停止原因标注在 turn.error 上；streamRun 的 finally 稍后清理 ref 映射。）
   //
   // 双保险：cancelRun 直接通知 RunManager 取消（不等断连检测延迟）；abort 确保
   // fetch 连接断开；后端 on_disconnect=cancel 会兼底取消。cancelRun 失败不阻断。
+  // 只停止当前查看会话的流式 turn——其他会话的并行任务不受影响。
   const handleStop = async () => {
-    if (stoppingRef.current) return;
-    stoppingRef.current = true;
-    // 1. 立即响应 UI：清 streamingId（stop 按钮变回 send 按钮）。
-    const streamingTurnId = streamingId;
-    if (streamingTurnId) {
-      setStreamingId((id) => (id === streamingTurnId ? null : id));
-    }
+    const streamingTurnId = activeStreamingId;
+    if (!streamingTurnId || stoppingTurnsRef.current.has(streamingTurnId)) return;
+    stoppingTurnsRef.current.add(streamingTurnId);
+    // 1. 立即响应 UI：该 turn 状态落成终态（停止按钮变回发送按钮）。
+    setSessions((current) =>
+      current.map((session) =>
+        session.id === activeSession?.id
+          ? {
+              ...session,
+              messages: session.messages.map((message) =>
+                message.id === streamingTurnId && message.status === "streaming"
+                  ? { ...message, status: "error" as const, error: "已手动停止" }
+                  : message
+              )
+            }
+          : session
+      )
+    );
     // 2. 立即 abort SSE 连接（不等 cancelRun，避免 fetch 网络延迟阻塞断流）。
-    abortRef.current?.abort();
+    abortMapRef.current.get(streamingTurnId)?.abort();
     // 3. 后台异步发 cancel（fire-and-forget）：通知后端 RunManager 即时取消 agent + subagent。
-    const run = activeRunRef.current;
+    const run = runMapRef.current.get(streamingTurnId);
     if (run) {
       cancelRun(run.threadId, run.runId).catch(() => {
         // cancel 失败不报错：abort 已断流，后端断连检测会兼底 cancel。
@@ -1294,6 +1330,30 @@ export function Home() {
     );
   }
 
+  if (view === "factors") {
+    return (
+      <FactorsLibrary
+        onBack={() => setView("workspace")}
+        onRerun={(prompt) => {
+          setDraft(prompt);
+          setView("workspace");
+        }}
+      />
+    );
+  }
+
+  if (view === "selections") {
+    return (
+      <SelectionsLibrary
+        onBack={() => setView("workspace")}
+        onRerun={(prompt) => {
+          setDraft(prompt);
+          setView("workspace");
+        }}
+      />
+    );
+  }
+
   // 待删除 session 的标题（对话框展示用）。
   const pendingDeleteTitle = pendingDeleteSessionId
     ? (sessions.find((s) => s.id === pendingDeleteSessionId)?.title ?? "该任务")
@@ -1319,7 +1379,7 @@ export function Home() {
       reasoningMode={reasoningMode}
       modelsLoading={modelsLoading}
       sessionsLoaded={sessionsLoaded}
-      streamingId={streamingId}
+      streamingId={activeStreamingId}
       editableUserMessageIds={editableUserMessageIdSet}
       onEditResend={handleEditResend}
       onModelChange={handleModelChange}
@@ -1335,6 +1395,8 @@ export function Home() {
       }}
       onOpenReports={() => setView("reports")}
       onOpenStrategies={() => setView("strategies")}
+      onOpenFactors={() => setView("factors")}
+      onOpenSelections={() => setView("selections")}
       onSelectSession={handleSelectSession}
       onDeleteSession={handleRequestDeleteSession}
       onArchiveSession={handleArchiveSession}

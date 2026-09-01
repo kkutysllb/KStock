@@ -74,6 +74,16 @@ sandbox:
     - host_path: "<data-root>/product/strategies"
       container_path: /mnt/strategies
       read_only: true
+    # 因子研究工作区：agent 只读访问当前因子版本（读写必须走
+    # factor_save_version / factor_record_run 工具保证版本纪律）。
+    - host_path: "<data-root>/product/factors"
+      container_path: /mnt/factors
+      read_only: true
+    # 选股工作区：agent 只读访问当前选股要求（读写必须走
+    # selection_save_version / selection_record_run 工具保证版本纪律）。
+    - host_path: "<data-root>/product/selections"
+      container_path: /mnt/selections
+      read_only: true
 
 # 定时任务（scheduled-tasks）：桌面端设置页创建周报等周期任务。
 # startup-only 配置（改 yaml 需重启 gateway）；桌面 App 未运行期间错过
@@ -152,6 +162,38 @@ tools:
   - name: strategy_record_backtest
     group: strategies
     use: scripts.kstock_tools.strategy_store_tool:strategy_record_backtest_tool
+  # ── 因子工作区工具（因子库：版本链 + 检验运行记录）──
+  - name: factor_list
+    group: factors
+    use: scripts.kstock_tools.factor_store_tool:factor_list_tool
+  - name: factor_create
+    group: factors
+    use: scripts.kstock_tools.factor_store_tool:factor_create_tool
+  - name: factor_get_latest
+    group: factors
+    use: scripts.kstock_tools.factor_store_tool:factor_get_latest_tool
+  - name: factor_save_version
+    group: factors
+    use: scripts.kstock_tools.factor_store_tool:factor_save_version_tool
+  - name: factor_record_run
+    group: factors
+    use: scripts.kstock_tools.factor_store_tool:factor_record_run_tool
+  # ── 选股工作区工具（选股库：要求版本链 + 运行报告归档）──
+  - name: selection_list
+    group: selections
+    use: scripts.kstock_tools.selection_store_tool:selection_list_tool
+  - name: selection_create
+    group: selections
+    use: scripts.kstock_tools.selection_store_tool:selection_create_tool
+  - name: selection_get_latest
+    group: selections
+    use: scripts.kstock_tools.selection_store_tool:selection_get_latest_tool
+  - name: selection_save_version
+    group: selections
+    use: scripts.kstock_tools.selection_store_tool:selection_save_version_tool
+  - name: selection_record_run
+    group: selections
+    use: scripts.kstock_tools.selection_store_tool:selection_record_run_tool
 
 # 子代理配置：全局参数 + 预置角色（custom_agents）
 # 预置角色覆盖 KStock 全业务线，Lead Agent 可按任务类型精准分派。

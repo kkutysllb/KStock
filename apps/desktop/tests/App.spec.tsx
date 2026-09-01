@@ -208,9 +208,18 @@ test("桌面系统菜单事件可新建任务、打开设置并触发更新检�
   // 等会话列表稳定（listThreads mock 返回空，本地默认 session 的合并
   // 在 CI 高负载下会因 useEffect 时序抑动）。不假设固定初始值，只验证
   // new-task 菜单事件后“新增了一个会话”这个用户契约。
+  // 工作区分组默认全部闭合（用户手动展开）：先展开「个股分析」组
+  // （默认会话标题含「研究」被归入该组），让会话行进入可计数状态。
+  // 工作区分组默认全部闭合且初始无会话：初始仅顶栏 1 处标题文本。
   const initialCount = await screen.findAllByText("新研究会话").then((els) => els.length);
 
   await emitDesktopMenuCommand("new-task");
+
+  // 新会话（标题含「研究」）落入「个股分析」组（默认闭合）——展开该组让
+  // 行可见，再验证 new-task 的 +1 契约。
+  fireEvent.click(
+    await screen.findByRole("button", { name: /个股分析/ }, { timeout: 5000 }),
+  );
 
   await waitFor(() => {
     expect(screen.getAllByText("新研究会话").length).toBe(initialCount + 1);

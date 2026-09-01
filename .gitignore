@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 dist/
 /build/
 coverage/
@@ -8,6 +8,10 @@ __pycache__/
 *.pyc
 .venv/
 sidecar/.venv/
+
+# 本地 uv 缓存（沙箱内构建/装依赖时重定向到工作区，体积大不入库）
+.uv-cache/
+
 apps/desktop/dist/
 apps/desktop/dist-electron/
 apps/desktop/release/

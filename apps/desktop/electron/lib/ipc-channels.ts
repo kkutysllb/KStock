@@ -38,6 +38,8 @@ export type MenuCommand =
   | "open-settings"
   | "open-reports"
   | "open-strategies"
+  | "open-factors"
+  | "open-selections"
   | "check-update";
 
 /**
