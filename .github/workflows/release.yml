@@ -93,7 +93,9 @@ jobs:
           merge-multiple: true
       - name: 列出安装包
         run: ls -lh dist-release
+      - name: 生成发布说明（release/<tag>.md，转绝对链接并回填发布日期）
+        run: bash scripts/publish_release_notes.sh "$GITHUB_REF_NAME" release-notes.md
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: dist-release/**
-          generate_release_notes: true
+          body_path: release-notes.md
