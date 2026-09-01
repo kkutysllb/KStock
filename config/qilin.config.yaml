@@ -22,6 +22,17 @@ token_budget:
 
 max_recursion_limit: 1000
 
+# 认证：桌面单用户产品关闭自助注册。
+# gateway 绑定 loopback 对本机所有用户可达；若开放注册，低权限本机用户可
+# 自注册账号（无 Origin 头的请求免 CSRF 校验），且路由授权默认全权限，
+# 叠加 sandbox.allow_host_bash=true 即形成本机横向提权面（经 agent 的宿主
+# bash 以 KStock 属主身份执行命令）。首启管理员初始化（/auth/initialize，
+# 由 needs_setup 门控）不受此开关影响；已存在的 runtime.yaml 缺 auth 段时
+# 由 run_gateway 的缺段自愈逻辑补齐本段。
+auth:
+  local:
+    allow_registration: false
+
 models: []
 
 # 推理模式能力示例。实际模型由设置页写入用户数据目录的 runtime.yaml；

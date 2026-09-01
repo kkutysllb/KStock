@@ -32,6 +32,25 @@ function devServerUrl(): string | null {
 /** prod 模式渲染层入口（app:// 自定义协议）。 */
 const PROD_ENTRY = "app://localhost/index.html";
 
+/**
+ * 允许在窗口内导航的 origin 白名单。
+ *
+ * 打包态只有 ``app://localhost``；dev 态追加 Vite dev server origin
+ * （HMR 整页刷新会触发 will-navigate）。
+ */
+function allowedInternalOrigins(): string[] {
+  const origins = ["app://localhost"];
+  const dev = devServerUrl();
+  if (dev) {
+    try {
+      origins.push(new URL(dev).origin);
+    } catch {
+      // 非法 VITE_DEV_SERVER_URL 时忽略 dev origin。
+    }
+  }
+  return origins;
+}
+
 export function getMainWindow(): BrowserWindow | null {
   return mainWindow;
 }
@@ -123,13 +142,31 @@ export function createMainWindow(): BrowserWindow {
     logMain(`renderer[${levelName}]: ${message} (${sourceId}:${line})`);
   });
 
-  // 外部链接（http/https）在系统浏览器打开，其余链接在窗口内导航。
+  // 外部 http(s) 链接一律转交系统浏览器；其余 window.open 全部拒绝。
+  // 不允许应用创建任何新窗口：子窗口会继承 preload 桥（kstockDesktop）
+  // 且未注册 open handler，file:// 等自定义协议更不能获得窗口。
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) {
       void shell.openExternal(url);
-      return { action: "deny" };
     }
-    return { action: "allow" };
+    return { action: "deny" };
+  });
+
+  // 主框架导航拦截（will-navigate）：仅允许应用自身 origin（SPA 入口与刷新）。
+  // 防止被注入的渲染层脚本把整个窗口导航到任意外部站点——应用无边框无地址栏，
+  // 整页跳转用户难以察觉，且新页面会成为外部 origin 的请求源与钓鱼载体。
+  const internalOrigins = allowedInternalOrigins();
+  window.webContents.on("will-navigate", (event, url) => {
+    let allowed = false;
+    try {
+      allowed = internalOrigins.includes(new URL(url).origin);
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) {
+      event.preventDefault();
+      logMain("will-navigate blocked: " + url);
+    }
   });
 
   const url = devServerUrl();

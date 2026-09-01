@@ -56,8 +56,6 @@ import os
 import re
 import shutil
 import sys
-import tempfile
-import threading
 from pathlib import Path
 from typing import Any
 
@@ -85,63 +83,19 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.kstock_subprocess_patch import apply_subprocess_no_window_patch
 from scripts.kstock_windows_shims import apply_windows_bash_cwd_prefix_shim
 from scripts.kstock_bash_guard import apply_bash_error_guard
+from scripts.kstock_csrf_origin_patch import apply_csrf_origin_hardening
 
 apply_subprocess_no_window_patch()
+# CSRF Origin 加固：直连绑定模式下忽略 Forwarded / X-Forwarded-* 可伪造头，
+# 修复 auth 端点 Origin 校验被 Forwarded 头伪造绕过（登录 CSRF / 抢注 admin）。
+# 详见 scripts/kstock_csrf_origin_patch.py 模块 docstring。
+apply_csrf_origin_hardening()
 
-
-def _apply_vendor_extensions_config_compat_shim() -> None:
-    """为 vendor/qilin 快照缺失的 extensions_config 符号注入兼容实现。
-
-    幂等且带 ``hasattr`` 防御：上游修复并重新同步后，这些分支会自动跳过，
-    不会覆盖上游实现。
-    """
-    import qilin.config.extensions_config as ec
-
-    # 1) 写入串行化锁 —— mcp.py 第 369 行 ``with extensions_config_write_lock:``
-    if not hasattr(ec, "extensions_config_write_lock"):
-        ec.extensions_config_write_lock = threading.Lock()
-
-    # 2) 原子写入 extensions config —— mcp.py 第 412 行
-    #    语义：把 config_data(dict) 以原子方式写入 config_path(Path/str)。
-    if not hasattr(ec, "atomic_write_extensions_config"):
-        def atomic_write_extensions_config(config_path: Any, config_data: Any) -> None:
-            path = str(config_path)
-            directory = os.path.dirname(path) or "."
-            os.makedirs(directory, exist_ok=True)
-            fd, tmp = tempfile.mkstemp(prefix=".ext_cfg_", suffix=".json", dir=directory)
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                    json.dump(config_data, fh, ensure_ascii=False, indent=2)
-                os.replace(tmp, path)
-            except Exception:
-                if os.path.exists(tmp):
-                    os.remove(tmp)
-                raise
-
-        ec.atomic_write_extensions_config = atomic_write_extensions_config
-
-    # 3) transport 别名规范化 —— mcp.py 第 76 行（Pydantic model_validator before）
-    #    语义：接收 model 原始输入 data，若为 dict 则规范 transport 字段别名后返回。
-    if not hasattr(ec, "normalize_mcp_transport_alias"):
-        _TRANSPORT_ALIASES: dict[str, str] = {
-            "http": "streamable_http",
-            "streamablehttp": "streamable_http",
-            "ws": "sse",
-            "websocket": "sse",
-        }
-
-        def normalize_mcp_transport_alias(data: Any) -> Any:
-            if not isinstance(data, dict):
-                return data
-            for key in ("type", "transport"):
-                raw = data.get(key)
-                if isinstance(raw, str):
-                    normalized = _TRANSPORT_ALIASES.get(raw.strip().lower(), raw.strip().lower())
-                    data[key] = normalized
-            return data
-
-        ec.normalize_mcp_transport_alias = normalize_mcp_transport_alias
-
+# 注：历史上这里有一个 vendor extensions_config 兼容垫片（注入
+# extensions_config_write_lock / atomic_write_extensions_config /
+# normalize_mcp_transport_alias 三个符号）。当前 vendor 快照已全部提供
+# 这些符号（qilin/config/extensions_config.py:77/:371/:415），垫片退役删除。
+# 若未来上游同步再次出现符号缺口，请恢复幂等 hasattr 注入模式。
 
 def _resolve_app_data_root() -> Path:
     """解析 KStock 用户数据根目录（跨平台）。
@@ -836,7 +790,6 @@ def _soul_version(text: str) -> int | None:
 def create_app():
     """应用工厂：先打垫片、初始化用户数据空间、配 CORS，再构造 QiLin gateway。"""
     _patch_aiosqlite_busy_timeout()
-    _apply_vendor_extensions_config_compat_shim()
     _apply_windows_sandbox_shims()
     apply_bash_error_guard()
     paths = _ensure_data_space()

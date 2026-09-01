@@ -79,10 +79,37 @@ export function registerAppProtocol(): void {
 }
 
 /**
+ * 允许携带代理凭据（CSRF token + 会话 cookie）的请求发起 origin。
+ *
+ * 代理层会把 Origin 改写为 gateway 自身 origin 并注入 X-CSRF-Token，
+ * 再由主进程 net.fetch 自动附加 HttpOnly 会话 cookie——等于把主框架的
+ * 已认证身份借给请求发起方。因此必须校验发起 origin：仅主框架
+ * ``app://localhost``（或无 Origin 头的主进程内部请求）可信；沙箱 iframe
+ * （报告预览，opaque origin，Origin: ``null``）等一律 403，防止注入内容
+ * 借代理层注入的凭据盲打已认证写接口。
+ */
+const TRUSTED_PROXY_ORIGINS = new Set(["app://localhost"]);
+
+function isTrustedProxyRequest(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (origin === null) return true; // 主进程内部请求 / 非浏览器客户端
+  return TRUSTED_PROXY_ORIGINS.has(origin);
+}
+
+/**
  * gateway 反向代理：流式透传请求/响应（含 SSE），Origin 改写为 gateway 自身 origin，
  * set-cookie 剥离 ``domain`` 属性（避免 app:// origin 下被浏览器拒绝）。
  */
 async function proxyGateway(request: Request, target: string): Promise<Response> {
+  // 安全闸门：不可信 origin（含沙箱 iframe 的 null origin）直接拒绝，
+  // 不注入凭据也不转发。
+  if (!isTrustedProxyRequest(request)) {
+    logMain("proxyGateway 403: origin=" + String(request.headers.get("origin")) + " method=" + request.method);
+    return new Response(JSON.stringify({ detail: "forbidden origin" }), {
+      status: 403,
+      headers: { "content-type": "application/json; charset=utf-8" },
+    });
+  }
   const forwardHeaders = new Headers();
   request.headers.forEach((value, key) => {
     const lk = key.toLowerCase();
