@@ -20,7 +20,7 @@ export type AppUpdateState =
   | { phase: "idle" }
   | { phase: "checking" }
   | { phase: "installing" }
-  | { phase: "ready"; version: string }
+  | { phase: "ready"; version: string; releaseNotes?: string }
   | { phase: "error"; message: string };
 
 export function useAppUpdate() {
@@ -34,8 +34,8 @@ export function useAppUpdate() {
     const bridge = getDesktopBridge();
     if (!bridge?.onUpdateReady) return;
 
-    const unsubscribe = bridge.onUpdateReady(({ version }) => {
-      setState({ phase: "ready", version });
+    const unsubscribe = bridge.onUpdateReady(({ version, releaseNotes }) => {
+      setState({ phase: "ready", version, releaseNotes });
     });
     return unsubscribe;
   }, []);

@@ -1170,6 +1170,12 @@ body.sidebar-resizing {
   text-align: left;
 }
 
+/* 侧栏上方主菜单（新研究/报告库/策略库/因子库/选股库/技能与插件）：
+   14px 主入口字号，高于底部账户/页脚的 12px 次级入口。 */
+.nav-stack .nav-command {
+  font-size: 14px;
+}
+
 .nav-command svg,
 .settings-group button svg {
   width: 15px;
@@ -1217,13 +1223,13 @@ body.sidebar-resizing {
   margin: 0;
 }
 
-/* 工作区分区主标题（原「历史任务」）：字号明显大于桶标签，突出分区身份。 */
+/* 工作区分区主标题（原「历史任务」）：字号明显大于桶标签，灰色弱化装饰感。 */
 .side-section-header .side-section-title {
   margin: 0;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: #d6dade;
+  color: #9aa2ac;
 }
 
 /* 工作区标题前的装饰图标：FolderTree 与 16px 线宽下比 Layers 更清晰，
@@ -7251,6 +7257,63 @@ button.context-file-row:hover {
   border-radius: 50%;
   background: #ff6b6b;
   box-shadow: 0 0 0 2px #0b1f19;
+}
+
+/* 图标 + 悬停浮层的锚点容器：fixed 定位浮层按此矩形计算坐标 */
+.sidebar-update-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* 新版本发布内容浮层（悬停更新图标展示）：固定定位防侧栏裁剪 */
+.update-notes-popover {
+  position: fixed;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  width: min(400px, calc(100vw - 24px));
+  max-height: min(60vh, 480px);
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: #1d2126;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  text-align: left;
+}
+
+.update-notes-head {
+  flex-shrink: 0;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  font-weight: 600;
+  color: #e6f2ec;
+}
+
+.update-notes-body {
+  overflow-y: auto;
+  font-size: 12.5px;
+  color: #c9d3ce;
+}
+
+/* 浮层内 markdown 排版压缩：发布说明是小窗口阅读，比正文紧凑 */
+.update-notes-body .markdown-body { font-size: 12.5px; line-height: 1.55; }
+.update-notes-body .markdown-body > :first-child { margin-top: 0; }
+.update-notes-body .markdown-body h1,
+.update-notes-body .markdown-body h2 { font-size: 14px; margin: 10px 0 6px; }
+.update-notes-body .markdown-body h3,
+.update-notes-body .markdown-body h4 { font-size: 13px; margin: 8px 0 4px; }
+.update-notes-body .markdown-body p { margin: 4px 0; }
+.update-notes-body .markdown-body ul,
+.update-notes-body .markdown-body ol { margin: 4px 0; padding-left: 18px; }
+.update-notes-body .markdown-body li { margin: 2px 0; }
+.update-notes-body .markdown-body hr { margin: 8px 0; }
+.update-notes-body .markdown-body code {
+  font-size: 11.5px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* 全局轻量 toast（检查更新等即时反馈）：顶部居中，逐条自动消失 */

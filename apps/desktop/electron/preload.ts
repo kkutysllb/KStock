@@ -90,8 +90,13 @@ const api = {
     return ipcRenderer.invoke(IPC.updateInstall);
   },
 
-  onUpdateReady(cb: (info: { version: string }) => void): () => void {
-    const handler = (_event: unknown, payload: { version: string }) =>
+  onUpdateReady(
+    cb: (info: { version: string; releaseNotes?: string }) => void,
+  ): () => void {
+    const handler = (
+      _event: unknown,
+      payload: { version: string; releaseNotes?: string },
+    ) =>
       cb(payload);
     ipcRenderer.on(IPC.updateReady, handler);
     return () => ipcRenderer.off(IPC.updateReady, handler);

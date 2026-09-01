@@ -21,7 +21,7 @@ export type MenuCommand =
  * 让渲染层能给用户明确反馈（toast），而不是永远静默。
  */
 export type UpdateCheckResult =
-  | { status: "available"; version: string }
+  | { status: "available"; version: string; releaseNotes?: string }
   | { status: "latest"; version: string }
   | { status: "error"; message: string };
 
@@ -57,8 +57,10 @@ export interface DesktopBridgeApi {
   ): Promise<{ saved: boolean; path?: string }>;
   updateCheck(): Promise<UpdateCheckResult>;
   updateInstall(): Promise<void>;
-  /** 订阅主进程的"更新已下载就绪"事件（主进程主动推送）。 */
-  onUpdateReady(cb: (info: { version: string }) => void): () => void;
+  /** 订阅主进程的"更新已下载就绪"事件（主进程主动推送，含发布说明）。 */
+  onUpdateReady(
+    cb: (info: { version: string; releaseNotes?: string }) => void,
+  ): () => void;
   /** 弹系统通知；窗口聚焦/系统不支持时主进程自动降级。 */
   showNotification(title: string, body: string): Promise<{ ok: boolean; reason?: string }>;
 }

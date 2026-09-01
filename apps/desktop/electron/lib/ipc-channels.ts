@@ -47,7 +47,7 @@ export type MenuCommand =
  * 让渲染层能给用户明确反馈（toast），而不是永远静默。
  */
 export type UpdateCheckResult =
-  | { status: "available"; version: string }
+  | { status: "available"; version: string; releaseNotes?: string }
   | { status: "latest"; version: string }
   | { status: "error"; message: string };
 /**
