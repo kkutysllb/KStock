@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ValidationError
 
+from scripts.kstock_common import validation_error_details
 from scripts.kstock_models import (
     _atomic_write_yaml,
     _runtime_config_path,
@@ -95,13 +96,13 @@ def _validate_section(section: str, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         instance = model_cls(**payload)
     except ValidationError as exc:
-        errors = []
-        for err in exc.errors():
-            loc = ".".join(str(p) for p in err["loc"])
-            errors.append({"field": loc or "(root)", "message": err["msg"], "type": err["type"]})
         raise HTTPException(
             status_code=400,
-            detail={"code": "validation_failed", "message": f"{section} 配置校验失败", "errors": errors},
+            detail={
+                "code": "validation_failed",
+                "message": f"{section} 配置校验失败",
+                "errors": validation_error_details(exc),
+            },
         ) from exc
     # exclude_none=False：让 None 显式写回 yaml（如 model_name: null 是合法配置）
     dumped = instance.model_dump()

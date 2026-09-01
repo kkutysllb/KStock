@@ -622,22 +622,10 @@ def _setup_bundled_python_env() -> None:
         )
 
 
-def _allow_public_landing_news() -> None:
-    """Expose only the landing-news read endpoint before QiLin builds middleware."""
+def _allow_public_path(path: str) -> None:
+    """把只读端点并入 gateway 免鉴权白名单（幂等）。"""
     from app.gateway import auth_middleware
 
-    path = "/api/v1/kstock/landing-news"
-    if path not in auth_middleware._PUBLIC_EXACT_PATHS:
-        auth_middleware._PUBLIC_EXACT_PATHS = frozenset(
-            {*auth_middleware._PUBLIC_EXACT_PATHS, path}
-        )
-
-
-def _allow_public_data_source_status() -> None:
-    """Expose only the secret-free data-source status endpoint."""
-    from app.gateway import auth_middleware
-
-    path = "/api/v1/kstock/data-source-status"
     if path not in auth_middleware._PUBLIC_EXACT_PATHS:
         auth_middleware._PUBLIC_EXACT_PATHS = frozenset(
             {*auth_middleware._PUBLIC_EXACT_PATHS, path}
@@ -804,8 +792,8 @@ def create_app():
     clear_server_logs()
     _load_secrets_env(paths["data_root"])
     _configure_gateway_security()
-    _allow_public_landing_news()
-    _allow_public_data_source_status()
+    _allow_public_path("/api/v1/kstock/landing-news")
+    _allow_public_path("/api/v1/kstock/data-source-status")
     _install_secrets_injection()
     # 启动日志：明确告知用户数据落点，便于排查
     print("=" * 64, flush=True)

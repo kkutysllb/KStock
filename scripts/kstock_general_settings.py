@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import tempfile
 import threading
 from pathlib import Path
 from typing import Any, Literal
@@ -18,6 +16,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from qilin.runtime.user_context import get_effective_user_id
+from scripts.kstock_common import write_json_atomic
+from scripts.kstock_common import data_root as _data_root
 
 
 router = APIRouter(prefix="/api/v1/kstock", tags=["kstock-general-settings"])
@@ -53,10 +53,6 @@ class GeneralSettingsResponse(BaseModel):
 DEFAULT_PREFERENCES = GeneralPreferences()
 
 
-def _data_root() -> Path:
-    return Path(os.environ["KSTOCK_APP_DATA_DIR"])
-
-
 def _preferences_path(user_id: str | None = None) -> Path:
     identity = user_id or get_effective_user_id()
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
@@ -79,17 +75,7 @@ def _read_preferences(user_id: str) -> GeneralPreferences:
 
 
 def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=".general_settings_", suffix=".json", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(payload, fh, ensure_ascii=False, indent=2)
-            fh.write("\n")
-        os.replace(temporary, path)
-    except Exception:
-        if os.path.exists(temporary):
-            os.remove(temporary)
-        raise
+    write_json_atomic(path, payload)
 
 
 @router.get("/general-settings", response_model=GeneralSettingsResponse)

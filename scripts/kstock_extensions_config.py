@@ -13,8 +13,6 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 import threading
 from pathlib import Path
 from typing import Any
@@ -22,16 +20,16 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from scripts.kstock_common import validation_error_details
+from scripts.kstock_common import write_json_atomic
+from scripts.kstock_common import data_root as _data_root
+
 router = APIRouter(prefix="/api/v1/kstock/extensions", tags=["kstock-extensions"])
 
 _write_lock = threading.Lock()
 
 
 # ── 路径解析 ─────────────────────────────────────────────────────────
-
-
-def _data_root() -> Path:
-    return Path(os.environ["KSTOCK_APP_DATA_DIR"])
 
 
 def _extensions_config_path() -> Path:
@@ -68,18 +66,7 @@ def _read_extensions_json() -> dict[str, Any]:
 
 def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
     """原子写入 JSON：tmp 文件 + os.replace。"""
-    directory = str(path.parent)
-    os.makedirs(directory, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".ext_cfg_", suffix=".json", dir=directory)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-            fh.write("\n")
-        os.replace(tmp, str(path))
-    except Exception:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        raise
+    write_json_atomic(path, data)
 
 
 # ── pydantic 校验 ───────────────────────────────────────────────────
@@ -92,14 +79,7 @@ def _validate_mcp_server(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         instance = McpServerConfig(**payload)
     except Exception as exc:
-        # pydantic ValidationError 包含 errors()
-        errors = []
-        if hasattr(exc, "errors"):
-            for err in exc.errors():
-                loc = ".".join(str(p) for p in err["loc"])
-                errors.append({"field": loc or "(root)", "message": err["msg"], "type": err["type"]})
-        else:
-            errors.append({"field": "(root)", "message": str(exc), "type": "value_error"})
+        errors = validation_error_details(exc)
         raise HTTPException(
             status_code=400,
             detail={

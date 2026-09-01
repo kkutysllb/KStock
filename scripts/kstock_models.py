@@ -13,8 +13,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -22,12 +20,10 @@ import yaml
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from scripts.kstock_common import atomic_write
+from scripts.kstock_common import data_root as _data_root
+
 router = APIRouter(prefix="/api/v1/kstock", tags=["kstock-models"])
-
-
-def _data_root() -> Path:
-    """返回当前 KStock 用户数据根目录（由 run_gateway.py 注入环境变量）。"""
-    return Path(os.environ["KSTOCK_APP_DATA_DIR"])
 
 
 def _runtime_config_path() -> Path:
@@ -79,20 +75,11 @@ def load_runtime_models() -> list[dict[str, Any]]:
 
 def _atomic_write_yaml(path: Path, data: dict[str, Any]) -> None:
     """备份原文件后，用临时文件 + os.replace 原子替换。"""
-    if path.exists():
-        backup_name = f"{path.name}.{int(path.stat().st_mtime * 1000)}.bak"
-        shutil.copy2(path, _backups_dir() / backup_name)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    directory = str(path.parent)
-    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=directory)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            yaml.safe_dump(data, fh, allow_unicode=True, sort_keys=False)
-        os.replace(tmp, path)
-    except Exception:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        raise
+    atomic_write(
+        path,
+        lambda fh: yaml.safe_dump(data, fh, allow_unicode=True, sort_keys=False),
+        backup_dir=_backups_dir(),
+    )
 
 
 def save_runtime_models(models: list[dict[str, Any]]) -> None:
@@ -112,19 +99,14 @@ def _load_secrets_lines() -> list[str]:
 
 def _write_secrets_lines(lines: list[str]) -> None:
     path = _secrets_env_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
     is_new = not path.exists()
-    fd, tmp = tempfile.mkstemp(prefix=".secrets.env.", suffix=".tmp", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write("\n".join(lines))
-            if lines:
-                fh.write("\n")
-        os.replace(tmp, path)
-    except Exception:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        raise
+
+    def _write(fh: Any) -> None:
+        fh.write("\n".join(lines))
+        if lines:
+            fh.write("\n")
+
+    atomic_write(path, _write)
     # 仅 Unix 有意义：文件创建即收紧权限
     if is_new and os.name != "nt":
         os.chmod(path, 0o600)
@@ -211,17 +193,10 @@ def _load_prefs() -> dict[str, Any]:
 
 
 def _save_prefs(prefs: dict[str, Any]) -> None:
-    path = _prefs_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".prefs.", suffix=".tmp", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(prefs, fh, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)
-    except Exception:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        raise
+    atomic_write(
+        _prefs_path(),
+        lambda fh: json.dump(prefs, fh, ensure_ascii=False, indent=2),
+    )
 
 
 def get_default_model() -> str | None:
