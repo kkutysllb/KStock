@@ -13,6 +13,10 @@ import argparse
 import html
 import json
 import re
+
+# 引用链接仅放行 http(s)：javascript:/data: 等 scheme 的 href 即使经 HTML
+# 转义也会被浏览器点击执行（转义不拦 scheme），报告来源含外部新闻时不可信。
+_SAFE_HREF_RE = re.compile(r"^https?://", re.IGNORECASE)
 from pathlib import Path
 from typing import Any
 
@@ -933,7 +937,8 @@ def _render_reference_item(item: Any, esc) -> str:
         source = esc(item.get("source") or "")
         as_of = esc(item.get("as_of") or item.get("date") or "")
         url = item.get("url")
-        label = f'<a href="{esc(url)}" rel="noreferrer" target="_blank">{title}</a>' if isinstance(url, str) and url else title
+        safe_url = url.strip() if isinstance(url, str) and _SAFE_HREF_RE.match(url.strip()) else None
+        label = f'<a href="{esc(safe_url)}" rel="noreferrer" target="_blank">{title}</a>' if safe_url else title
         meta = " · ".join(part for part in (source, as_of) if part)
         return f"<li>{label}{f'<small>{meta}</small>' if meta else ''}</li>"
     text = esc(item)

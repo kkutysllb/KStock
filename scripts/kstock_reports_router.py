@@ -54,7 +54,19 @@ def get_report_content(report_id: str, request: Request):
         path = _store(request).open_report_path(report_id, user_id=get_effective_user_id())
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="报告不存在") from exc
-    return FileResponse(path, media_type="text/html", headers={"Content-Disposition": "inline"})
+    return FileResponse(
+        path,
+        media_type="text/html",
+        headers={
+            "Content-Disposition": "inline",
+            # 直接用浏览器打开 content_url 时强制 opaque origin：脚本可继续
+            # 运行（图表/交互不被破坏），但文档拿不到 gateway 同源下的
+            # csrf_token cookie（httponly=False），无法构造带 X-CSRF-Token
+            # 的同源调用——堵住「报告 HTML 落地浏览器 → 同源 RCE」链路。
+            "Content-Security-Policy": "sandbox allow-scripts",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.delete("/{report_id}")
