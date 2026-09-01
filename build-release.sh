@@ -98,11 +98,48 @@ run_shell() {
   if [[ "$DRY_RUN" == true ]]; then
     return 0
   fi
-  bash -lc "$command"
+  # 用非登录 bash：登录 shell（-l）会经 path_helper 重建 PATH，把
+  # prefer_homebrew_node 的对齐结果洗掉，重新命中 /usr/local 旧 node。
+  # 脚本依赖的工具（node/pnpm/uv/python3/gh）均已在父进程 PATH 验证。
+  bash -c "$command"
 }
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+# ── Node 工具链对齐 ─────────────────────────────────────────────────────
+# run_shell 曾用 bash -lc 执行子命令：登录 bash 会重走 path_helper 重建
+# PATH，把 /usr/local/bin 排在 homebrew 之前。机器上残留的旧版
+# /usr/local/bin/node（如 v22.11.0）会抢在 homebrew Node 之前被选中，
+# 与新版 pnpm（要求 Node ≥22.13）不兼容，发布在 check-ci 阶段才报错。
+# 这里显式把 homebrew bin 前置到 PATH，对齐用户交互 shell（.zshrc 已
+# homebrew 优先）。CI Linux / Intel Mac 无 /opt/homebrew，自然跳过。
+prefer_homebrew_node() {
+  local hb
+  for hb in /opt/homebrew/bin /home/linuxbrew/.linuxbrew/bin "$HOME/.linuxbrew/bin"; do
+    if [[ -x "$hb/node" ]]; then
+      export PATH="$hb:$PATH"
+      log "Node toolchain aligned: node $(node -v) @ $(command -v node)"
+      return 0
+    fi
+  done
+}
+
+# pnpm/node 兼容性预检：pnpm 新版本对 Node 有下限要求（如 ≥22.13），
+# 不兼容时任何 pnpm 命令都会立即失败。与其跑到 check-ci 中途爆炸，
+# 不如在这里快速失败并给出可执行的修复指引。
+ensure_pnpm_compatible() {
+  need_cmd pnpm
+  need_cmd node
+  if ! pnpm -v >/dev/null 2>&1; then
+    die "pnpm is not compatible with current Node: node $(node -v) @ $(command -v node), pnpm @ $(command -v pnpm)
+修复任选其一后重试：
+  1) brew upgrade node —— 升级 homebrew Node（pnpm 11.x 要求 Node ≥22.13）
+  2) 移除/升级 PATH 中旧版 Node（曾命中 /usr/local/bin/node v22.11.0）
+  3) 安装与 package.json packageManager 一致的 pnpm：npm i -g pnpm@9.15.0"
+  fi
+  log "pnpm $(pnpm -v) @ node $(node -v)"
 }
 
 confirm() {
@@ -317,7 +354,7 @@ refresh_lockfiles() {
     log "Skipping lockfile refresh"
     return 0
   fi
-  need_cmd pnpm
+  ensure_pnpm_compatible
   need_cmd uv
   log "Refreshing lockfiles"
   run pnpm install --lockfile-only --ignore-scripts
@@ -329,6 +366,7 @@ run_checks() {
     log "Skipping checks"
     return 0
   fi
+  ensure_pnpm_compatible
   log "Running release checks"
   run_shell "python scripts/verify_package_resources.py --source-only"
   run_shell "bash scripts/check-ci.sh"
@@ -560,6 +598,7 @@ PY
 
 main() {
   parse_args "$@"
+  prefer_homebrew_node
   ensure_repo_state
 
   if [[ "$WATCH_LATEST" == true && -z "$VERSION" ]]; then
