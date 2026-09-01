@@ -8,9 +8,14 @@
 //
 // CSRF: Double Submit Cookie（cookie csrf_token + header X-CSRF-Token）。
 // 实测确认带 header 的 fetch POST 能通过 csrf_middleware（非 EventSource）。
+//
+// 纯 JSON 调用统一经共享 requestJson（turnsRequest 薄封装）；streamRun 的
+// SSE 流式逻辑保持独立，不经该通道。
 
 import { GATEWAY_URL, readCsrfToken } from "./gatewayUrl";
 import { parseSseStream, type SseFrame } from "./sseParser";
+import { requestJson } from "./requestJson";
+import type { GatewayErrorContext, SuccessParseMode } from "./requestJson";
 
 /** 注入 RunCreateRequest.context 的模型运行参数。 */
 export interface RunContext {
@@ -150,16 +155,11 @@ export interface StreamRunOptions {
 
 /** 创建引擎 thread，返回 thread_id。 */
 export async function ensureThread(): Promise<string> {
-  const resp = await fetch(`${GATEWAY_URL}/api/threads`, {
-    method: "POST",
-    credentials: "include",
-    headers: jsonHeaders(),
-    body: "{}"
-  });
-  if (!resp.ok) {
-    throw await toError("创建 thread 失败", resp);
-  }
-  const data = (await resp.json()) as { thread_id?: string };
+  const data = await turnsRequest<{ thread_id?: string }>(
+    "/api/threads",
+    { method: "POST", body: "{}" },
+    { errorPrefix: "创建 thread 失败" }
+  );
   if (!data.thread_id) {
     throw new Error("创建 thread 失败：响应缺少 thread_id");
   }
@@ -171,16 +171,11 @@ export async function createThreadBranch(
   threadId: string,
   body: ThreadBranchRequest
 ): Promise<ThreadBranchResponse> {
-  const resp = await fetch(`${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/branches`, {
-    method: "POST",
-    credentials: "include",
-    headers: jsonHeaders(),
-    body: JSON.stringify(body)
-  });
-  if (!resp.ok) {
-    throw await toError("创建会话分支失败", resp);
-  }
-  return (await resp.json()) as ThreadBranchResponse;
+  return turnsRequest<ThreadBranchResponse>(
+    `/api/threads/${encodeURIComponent(threadId)}/branches`,
+    { method: "POST", body: JSON.stringify(body) },
+    { errorPrefix: "创建会话分支失败" }
+  );
 }
 
 /** 准备在指定 user turn 上执行后端原生 edit-regenerate。 */
@@ -189,22 +184,17 @@ export async function prepareEditRegenerate(
   humanMessageId: string,
   replacementText: string
 ): Promise<EditRegeneratePrepareResponse> {
-  const resp = await fetch(
-    `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/runs/edit-regenerate/prepare`,
+  return turnsRequest<EditRegeneratePrepareResponse>(
+    `/api/threads/${encodeURIComponent(threadId)}/runs/edit-regenerate/prepare`,
     {
       method: "POST",
-      credentials: "include",
-      headers: jsonHeaders(),
       body: JSON.stringify({
         human_message_id: humanMessageId,
         replacement_text: replacementText
       })
-    }
+    },
+    { errorPrefix: "准备编辑重发失败" }
   );
-  if (!resp.ok) {
-    throw await toError("准备编辑重发失败", resp);
-  }
-  return (await resp.json()) as EditRegeneratePrepareResponse;
 }
 
 /**
@@ -215,48 +205,34 @@ export async function prepareEditRegenerate(
  * 返回 { success, message }；失败抛错。
  */
 export async function deleteThread(threadId: string): Promise<void> {
-  const resp = await fetch(`${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}`, {
-    method: "DELETE",
-    credentials: "include",
-    headers: jsonHeaders()
-  });
-  if (!resp.ok) {
-    throw await toError("删除 thread 失败", resp);
-  }
   // HTTP 2xx 即成功。后端返回 { success, message }，best-effort 消费 body
   // （空 body 或非 JSON 不影响判定）。
-  try {
-    await resp.text();
-  } catch {
-    /* ignore */
-  }
+  await turnsRequest<unknown>(
+    `/api/threads/${encodeURIComponent(threadId)}`,
+    { method: "DELETE" },
+    { errorPrefix: "删除 thread 失败", parse: "discard" }
+  );
 }
 
 /**
  * 标记 / 取消标记一个 thread 为「已归档」。
  *
- * 后端：PATCH /api/threads/{id}，body ``{ metadata: { qilin_archived: bool } }``。
- * 单键 PATCH 被后端 ``_is_pin_metadata_patch`` 识别为 bookkeeping，不会 bump
- * ``updated_at``（归档不是对话活动，不应抹掉会话在时间倒序表里的位置）。
+ * 后端：PATCH /api/threads/{id}，body `{ metadata: { qilin_archived: bool } }`。
+ * 单键 PATCH 被后端 `_is_pin_metadata_patch` 识别为 bookkeeping，不会 bump
+ * `updated_at`（归档不是对话活动，不应抹掉会话在时间倒序表里的位置）。
  *
  * 调用后需在本地从 sessions 移除该 session（归档项不占用主列表），
  * 并追加到 archivedSessions 状态。
  */
 export async function archiveThread(threadId: string, archived: boolean): Promise<void> {
-  const resp = await fetch(`${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}`, {
-    method: "PATCH",
-    credentials: "include",
-    headers: jsonHeaders(),
-    body: JSON.stringify({ metadata: { qilin_archived: archived } })
-  });
-  if (!resp.ok) {
-    throw await toError(archived ? "归档 thread 失败" : "取消归档 thread 失败", resp);
-  }
-  try {
-    await resp.text();
-  } catch {
-    /* ignore */
-  }
+  await turnsRequest<unknown>(
+    `/api/threads/${encodeURIComponent(threadId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ metadata: { qilin_archived: archived } })
+    },
+    { errorPrefix: archived ? "归档 thread 失败" : "取消归档 thread 失败", parse: "discard" }
+  );
 }
 
 /**
@@ -334,23 +310,12 @@ export async function streamRun(opts: StreamRunOptions): Promise<void> {
  * 推荐两者同时使用（cancelRun 先发，abort 断流兼兜底）。
  */
 export async function cancelRun(threadId: string, runId: string): Promise<void> {
-  const resp = await fetch(
-    `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/cancel?action=interrupt`,
-    {
-      method: "POST",
-      credentials: "include",
-      headers: jsonHeaders()
-    }
-  );
-  if (!resp.ok) {
-    throw await toError("取消 run 失败", resp);
-  }
   // best-effort 消费 body（202/204 均无关键 payload）
-  try {
-    await resp.text();
-  } catch {
-    /* ignore */
-  }
+  await turnsRequest<unknown>(
+    `/api/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/cancel?action=interrupt`,
+    { method: "POST" },
+    { errorPrefix: "取消 run 失败", parse: "discard" }
+  );
 }
 
 /**
@@ -358,15 +323,11 @@ export async function cancelRun(threadId: string, runId: string): Promise<void> 
  * 返回引擎原始 messages 数组；Task 9 写转换为 ChatMessage[]。
  */
 export async function fetchThreadMessages(threadId: string): Promise<unknown[]> {
-  const resp = await fetch(`${GATEWAY_URL}/api/threads/${threadId}/messages`, {
-    method: "GET",
-    credentials: "include",
-    headers: jsonHeaders()
-  });
-  if (!resp.ok) {
-    throw await toError("拉取历史消息失败", resp);
-  }
-  const data = (await resp.json()) as unknown;
+  const data = await turnsRequest<unknown>(
+    `/api/threads/${threadId}/messages`,
+    { method: "GET" },
+    { errorPrefix: "拉取历史消息失败" }
+  );
   // 引擎返回 { messages: [...] } 或直接 [...]；兼容两种形态
   if (Array.isArray(data)) return data;
   if (data && typeof data === "object" && Array.isArray((data as Record<string, unknown>).messages)) {
@@ -392,37 +353,29 @@ export interface ThreadSummary {
  * 后端：POST /api/threads/search，需登录（根据 cookie 里 user 自动过滤）。
  * 返回按 updated_at 倾倒库（后端默认行为）的 thread 列表；未登录或无 thread 返回空数组。
  *
- * 默认不包含已归档的 thread（后端 ``include_archived=false``）。需在「已归档」
- * 桶展示归档任务时传 ``{ includeArchived: true }``。
+ * 默认不包含已归档的 thread（后端 `include_archived=false`）。需在「已归档」
+ * 桶展示归档任务时传 `{ includeArchived: true }`。
  */
 export async function listThreads(
   limit = 100,
   options: { includeArchived?: boolean } = {}
 ): Promise<ThreadSummary[]> {
-  let resp: Response;
   try {
-    resp = await fetch(`${GATEWAY_URL}/api/threads/search`, {
-      method: "POST",
-      credentials: "include",
-      headers: jsonHeaders(),
-      body: JSON.stringify({
-        limit,
-        offset: 0,
-        include_archived: options.includeArchived === true
-      })
-    });
+    const data = await turnsRequest<unknown>(
+      "/api/threads/search",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          limit,
+          offset: 0,
+          include_archived: options.includeArchived === true
+        })
+      },
+      { errorPrefix: "拉取会话列表失败" }
+    );
+    return Array.isArray(data) ? (data as ThreadSummary[]) : [];
   } catch {
-    return [];
-  }
-  if (!resp.ok) {
-    // 401/403 或 gateway 未启动时返回空，不打断启动流程
-    return [];
-  }
-  try {
-    const data = (await resp.json()) as unknown;
-    if (!Array.isArray(data)) return [];
-    return data as ThreadSummary[];
-  } catch {
+    // 网络异常 / 非 2xx / 非 JSON：返回空数组，不打断启动流程
     return [];
   }
 }
@@ -466,8 +419,8 @@ export function runContextFromModel(
  * message.additional_kwargs.files 一并发送）。
  *
  * 注意：multipart 请求不能手动设 Content-Type，浏览器会自动附加 boundary；
- * 这里用 csrfHeaders() 只带 CSRF token。若部分文件被引擎跳过（不安全文件名
- * 等），返回数组只含成功上传的项；全部失败时抛错。
+ * 这里只带 CSRF token。若部分文件被引擎跳过（不安全文件名等），返回数组
+ * 只含成功上传的项；全部失败时抛错。
  */
 export async function uploadFiles(
   threadId: string,
@@ -479,24 +432,16 @@ export async function uploadFiles(
   for (const f of files) {
     form.append("files", f, f.name);
   }
-  const resp = await fetch(
-    `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/uploads`,
-    {
-      method: "POST",
-      credentials: "include",
-      headers: csrfHeaders(),
-      body: form
-    }
-  );
-  if (!resp.ok) {
-    throw await toError("上传附件失败", resp);
-  }
-  const data = (await resp.json()) as {
+  const data = await turnsRequest<{
     success: boolean;
     files: Record<string, unknown>[];
     message: string;
     skipped_files?: string[];
-  };
+  }>(
+    `/api/threads/${encodeURIComponent(threadId)}/uploads`,
+    { method: "POST", body: form },
+    { errorPrefix: "上传附件失败", contentType: "never" }
+  );
   if (!data.files || data.files.length === 0) {
     throw new Error(data.message || "上传失败");
   }
@@ -505,44 +450,31 @@ export async function uploadFiles(
 
 /** 读取 thread 的上传限制（字节单位）。 */
 export async function getUploadLimits(threadId: string): Promise<UploadLimits> {
-  const resp = await fetch(
-    `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/uploads/limits`,
-    { method: "GET", credentials: "include", headers: jsonHeaders() }
+  return turnsRequest<UploadLimits>(
+    `/api/threads/${encodeURIComponent(threadId)}/uploads/limits`,
+    { method: "GET" },
+    { errorPrefix: "读取上传限制失败" }
   );
-  if (!resp.ok) {
-    throw await toError("读取上传限制失败", resp);
-  }
-  return (await resp.json()) as UploadLimits;
 }
 
 /** 列出 thread 已上传的文件。 */
 export async function listUploads(threadId: string): Promise<UploadedFileRef[]> {
-  const resp = await fetch(
-    `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/uploads/list`,
-    { method: "GET", credentials: "include", headers: jsonHeaders() }
+  const data = await turnsRequest<{ files?: Record<string, unknown>[]; count?: number }>(
+    `/api/threads/${encodeURIComponent(threadId)}/uploads/list`,
+    { method: "GET" },
+    { errorPrefix: "列出附件失败" }
   );
-  if (!resp.ok) {
-    throw await toError("列出附件失败", resp);
-  }
-  const data = (await resp.json()) as { files?: Record<string, unknown>[]; count?: number };
   return (data.files ?? []).map(toFileRef);
 }
 
 /** 删除 thread 的某个已上传文件。 */
 export async function deleteUpload(threadId: string, filename: string): Promise<void> {
-  const resp = await fetch(
-    `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/uploads/${encodeURIComponent(filename)}`,
-    { method: "DELETE", credentials: "include", headers: jsonHeaders() }
-  );
-  if (!resp.ok) {
-    throw await toError("删除附件失败", resp);
-  }
   // best-effort 消费 body（无关键 payload）
-  try {
-    await resp.text();
-  } catch {
-    /* ignore */
-  }
+  await turnsRequest<unknown>(
+    `/api/threads/${encodeURIComponent(threadId)}/uploads/${encodeURIComponent(filename)}`,
+    { method: "DELETE" },
+    { errorPrefix: "删除附件失败", parse: "discard" }
+  );
 }
 
 /** 读取某次 run 记录的 workspace/output 变更，用于展示真实交付文件。 */
@@ -550,14 +482,11 @@ export async function getWorkspaceChanges(
   threadId: string,
   runId: string
 ): Promise<WorkspaceChangesResponse> {
-  const resp = await fetch(
-    `${GATEWAY_URL}/api/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/workspace-changes?include_files=true&include_diff=false`,
-    { method: "GET", credentials: "include", headers: jsonHeaders() }
+  const data = await turnsRequest<Partial<WorkspaceChangesResponse>>(
+    `/api/threads/${encodeURIComponent(threadId)}/runs/${encodeURIComponent(runId)}/workspace-changes?include_files=true&include_diff=false`,
+    { method: "GET" },
+    { errorPrefix: "读取交付文件失败" }
   );
-  if (!resp.ok) {
-    throw await toError("读取交付文件失败", resp);
-  }
-  const data = (await resp.json()) as Partial<WorkspaceChangesResponse>;
   return {
     available: Boolean(data.available),
     files: Array.isArray(data.files) ? data.files : [],
@@ -573,6 +502,26 @@ export function artifactUrl(threadId: string, virtualPath: string): string {
 }
 
 // ── 内部工具 ──
+
+/**
+ * 纯 JSON 调用的共享通道：Content-Type 常驻 + CSRF 注入 + 「prefix（status）：
+ * detail」错误归一，委托共享 requestJson。headers 传普通对象（与既有调用
+ * 方/测试观察到的头容器形状一致）。
+ */
+function turnsRequest<T>(
+  path: string,
+  init: RequestInit,
+  opts: { errorPrefix: string; parse?: SuccessParseMode; contentType?: "always" | "never" }
+): Promise<T> {
+  return requestJson<T>(path, { ...init, headers: {} }, {
+    contentType: opts.contentType ?? "always",
+    csrf: "always",
+    successParse: opts.parse ?? "json",
+    errorFactory: (ctx) => errorFromContext(opts.errorPrefix, ctx.status, ctx.body, ctx.rawText)
+  });
+}
+
+/** streamRun 专用（SSE 路径）：JSON Content-Type + CSRF。 */
 function jsonHeaders(): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
   const csrf = readCsrfToken();
@@ -580,12 +529,31 @@ function jsonHeaders(): Record<string, string> {
   return h;
 }
 
-/** multipart/form-data 请求专用：只带 CSRF，不加 Content-Type（浏览器自动加 boundary）。 */
-function csrfHeaders(): Record<string, string> {
-  const h: Record<string, string> = {};
-  const csrf = readCsrfToken();
-  if (csrf) h["X-CSRF-Token"] = csrf;
-  return h;
+/** 「prefix（status）：detail」错误文案归一（detail 缺失/不可读时省略 detail 段）。 */
+function errorFromContext(prefix: string, status: number, body: unknown, rawText: string): Error {
+  let detail = "";
+  if (body !== undefined && body !== null) {
+    detail = (body as { detail?: string }).detail ?? JSON.stringify(body);
+  } else if (rawText) {
+    detail = rawText;
+  }
+  const msg = detail ? `${prefix}（${status}）：${detail}` : `${prefix}（${status}）`;
+  return new Error(msg);
+}
+
+async function toError(prefix: string, resp: Response): Promise<Error> {
+  let body: unknown;
+  let rawText = "";
+  try {
+    body = await resp.json();
+  } catch {
+    try {
+      rawText = await resp.text();
+    } catch {
+      /* ignore */
+    }
+  }
+  return errorFromContext(prefix, resp.status, body, rawText);
 }
 
 /** 从引擎 UploadedFileInfo dict 提取前端需要的字段子集。 */
@@ -602,20 +570,4 @@ function toFileRef(raw: Record<string, unknown>): UploadedFileRef {
       ? { markdown_artifact_url: raw.markdown_artifact_url }
       : {})
   };
-}
-
-async function toError(prefix: string, resp: Response): Promise<Error> {
-  let detail = "";
-  try {
-    const body = await resp.json();
-    detail = (body as { detail?: string }).detail ?? JSON.stringify(body);
-  } catch {
-    try {
-      detail = await resp.text();
-    } catch {
-      /* ignore */
-    }
-  }
-  const msg = detail ? `${prefix}（${resp.status}）：${detail}` : `${prefix}（${resp.status}）`;
-  return new Error(msg);
 }

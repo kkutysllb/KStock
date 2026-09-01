@@ -15,9 +15,11 @@
 // 注意：GET /memory 在后端不支持完整 doc 时返回 501（minimal backend），
 // 前端应优雅降级（只展示 config 部分）。facts CRUD 在不支持时返回 501。
 //
-// 与 modelsClient 共享 GATEWAY_URL/credentials/csrf 策略。
+// 与 modelsClient 等共享 requestJson 的 credentials/csrf 策略。
 
-import { GATEWAY_URL, readCsrfToken } from "./gatewayUrl";
+import type { GatewayApiError } from "./gatewayApiError";
+import { isGatewayApiError } from "./gatewayApiError";
+import { requestJson } from "./requestJson";
 
 // ── 数据模型（与后端 Pydantic 对齐）──
 
@@ -82,49 +84,25 @@ export interface MemoryStatus {
 
 // ── 错误归一 ──
 
-export interface MemoryApiError {
-  message: string;
-  status: number;
-}
+/** 归一化错误形状（共享 GatewayApiError 的别名，保持原导出名）。 */
+export type MemoryApiError = GatewayApiError;
 
 /** 统一 fetch：credentials + JSON + CSRF，归一错误为 MemoryApiError。 */
 async function memoryFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-  const csrf = readCsrfToken();
-  if (csrf && !headers.has("X-CSRF-Token")) {
-    headers.set("X-CSRF-Token", csrf);
-  }
-  let response: Response;
-  try {
-    response = await fetch(`${GATEWAY_URL}${path}`, { ...init, headers, credentials: "include" });
-  } catch {
-    throw { message: "无法连接本地引擎，请确认 gateway 已启动", status: 0 } satisfies MemoryApiError;
-  }
-  const text = await response.text();
-  let body: unknown = null;
-  if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = { detail: text };
-    }
-  }
-  if (!response.ok) {
-    const detail = (body as { detail?: unknown } | null)?.detail;
-    let message: string;
-    if (typeof detail === "string") {
-      message = detail;
-    } else if (detail && typeof detail === "object" && "message" in detail) {
-      message = String((detail as { message: unknown }).message);
-    } else {
-      message = "操作失败，请稍后重试";
-    }
-    throw { message, status: response.status } satisfies MemoryApiError;
-  }
-  return body as T;
+  return requestJson<T>(path, init, {
+    networkErrorFactory: () => ({
+      message: "无法连接本地引擎，请确认 gateway 已启动",
+      status: 0,
+    }),
+    errorFactory: ({ status, detail }) => ({
+      message: typeof detail === "string"
+        ? detail
+        : detail && typeof detail === "object" && "message" in detail
+          ? String((detail as { message: unknown }).message)
+          : "操作失败，请稍后重试",
+      status,
+    }),
+  });
 }
 
 // ── API ─────────────────────────────────────────────────────────────
@@ -201,7 +179,7 @@ export function getMemoryStatus(): Promise<MemoryStatus> {
   return memoryFetch<MemoryStatus>("/api/memory/status");
 }
 
-/** 类型守卫。 */
+/** 类型守卫（委托共享实现）。 */
 export function isMemoryApiError(err: unknown): err is MemoryApiError {
-  return typeof err === "object" && err !== null && "message" in err && "status" in err;
+  return isGatewayApiError(err);
 }

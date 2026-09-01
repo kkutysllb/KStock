@@ -7,7 +7,6 @@ import {
   BrowserWindow,
   ipcMain,
   shell,
-  type WebContents,
 } from "electron";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -199,22 +198,6 @@ export function registerWindowIpc(): void {
   ipcMain.handle(IPC.windowMinimize, () => mainWindow?.minimize());
   ipcMain.handle(IPC.windowClose, () => mainWindow?.close());
   ipcMain.handle(IPC.windowIsMaximized, () => mainWindow?.isMaximized() ?? false);
-
-  ipcMain.handle(IPC.windowSetZoom, (_event, factor: number) => {
-    zoomFactor = Math.min(2.0, Math.max(0.6, factor));
-    mainWindow?.webContents.setZoomFactor(zoomFactor);
-  });
-
-  ipcMain.handle(IPC.windowReload, () => {
-    mainWindow?.webContents.reload();
-  });
-
-  ipcMain.handle(IPC.windowToggleDevtools, () => {
-    const contents: WebContents | undefined = mainWindow?.webContents;
-    if (!contents) return;
-    if (contents.isDevToolsOpened()) contents.closeDevTools();
-    else contents.openDevTools();
-  });
 }
 
 export function adjustZoom(delta: number): void {

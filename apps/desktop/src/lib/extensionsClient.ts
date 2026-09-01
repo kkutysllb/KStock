@@ -1,9 +1,11 @@
 // ── MCP 扩展配置 API 客户端（对接 /api/v1/kstock/extensions）──
 //
 // 持久化真源是 <数据根>/config/extensions_config.json。
-// 与 runtimeConfigClient.ts 共享 GATEWAY_URL + CSRF + 错误归一逻辑。
+// 与 runtimeConfigClient.ts 共享 requestJson 的 GATEWAY_URL + CSRF + 错误归一。
 
-import { GATEWAY_URL, readCsrfToken } from "./gatewayUrl";
+import type { GatewayApiError } from "./gatewayApiError";
+import { isGatewayApiError } from "./gatewayApiError";
+import { requestJson } from "./requestJson";
 
 // ── 数据模型（与后端 McpServerPayload 对齐）──
 
@@ -29,64 +31,38 @@ export interface ExtensionsConfig {
 
 // ── 错误归一 ──
 
-export interface ExtensionsApiError {
-  message: string;
-  status: number;
-}
+/** 归一化错误形状（共享 GatewayApiError 的别名，保持原导出名）。 */
+export type ExtensionsApiError = GatewayApiError;
 
 export function isExtensionsApiError(e: unknown): e is ExtensionsApiError {
-  return typeof e === "object" && e !== null && "message" in e && "status" in e;
+  return isGatewayApiError(e);
 }
 
 async function extensionsFetch<T>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-  const csrf = readCsrfToken();
-  if (csrf && !headers.has("X-CSRF-Token")) {
-    headers.set("X-CSRF-Token", csrf);
-  }
-  let response: Response;
-  try {
-    response = await fetch(`${GATEWAY_URL}${path}`, {
-      ...init,
-      headers,
-      credentials: "include",
-    });
-  } catch {
-    throw {
+  // 原语义：空 body（body 为 null）时以空对象返回。
+  const body = await requestJson<T | null>(path, init, {
+    networkErrorFactory: () => ({
       message: "无法连接本地引擎，请确认 gateway 已启动",
       status: 0,
-    } satisfies ExtensionsApiError;
-  }
-  const text = await response.text();
-  let body: unknown = null;
-  if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = { detail: text };
-    }
-  }
-  if (!response.ok) {
-    const detail = (body as { detail?: unknown } | null)?.detail;
-    let message: string;
-    if (typeof detail === "string") {
-      message = detail;
-    } else if (detail && typeof detail === "object") {
-      message =
-        typeof (detail as Record<string, unknown>).message === "string"
-          ? (detail as Record<string, string>).message
-          : "操作失败";
-    } else {
-      message = `操作失败（HTTP ${response.status}）`;
-    }
-    throw { message, status: response.status } satisfies ExtensionsApiError;
-  }
+    }),
+    errorFactory: ({ status, detail }) => {
+      let message: string;
+      if (typeof detail === "string") {
+        message = detail;
+      } else if (detail && typeof detail === "object") {
+        message =
+          typeof (detail as Record<string, unknown>).message === "string"
+            ? (detail as Record<string, string>).message
+            : "操作失败";
+      } else {
+        message = `操作失败（HTTP ${status}）`;
+      }
+      return { message, status };
+    },
+  });
   return (body ?? {}) as T;
 }
 

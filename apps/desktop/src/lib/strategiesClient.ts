@@ -5,7 +5,9 @@
  * 策略是持续迭代的活资产（版本链 + 回测运行），与一次性交付物的报告库分离。
  */
 
-import { GATEWAY_URL, readCsrfToken } from "./gatewayUrl";
+import type { GatewayApiError } from "./gatewayApiError";
+import { isGatewayApiError } from "./gatewayApiError";
+import { requestJson } from "./requestJson";
 
 export interface StrategyRunSummary {
   run_id: string;
@@ -57,38 +59,25 @@ export interface StrategyEquity {
   equity: Array<Record<string, unknown>>;
 }
 
-export interface StrategiesApiError {
-  message: string;
-  status: number;
-}
+/** 归一化错误形状（共享 GatewayApiError 的别名，保持原导出名）。 */
+export type StrategiesApiError = GatewayApiError;
 
 export function isStrategiesApiError(error: unknown): error is StrategiesApiError {
-  return Boolean(error && typeof error === "object" && "message" in error && "status" in error);
+  return isGatewayApiError(error);
 }
 
+// 原语义保留：仅非 GET 注入 Content-Type/CSRF；不捕获网络错误；
+// 错误消息优先取 detail 字符串，否则回退「请求失败（status）」；成功严格 json()。
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.method && init.method !== "GET") {
-    headers.set("Content-Type", "application/json");
-    const csrf = readCsrfToken();
-    if (csrf) headers.set("X-CSRF-Token", csrf);
-  }
-  const response = await fetch(`${GATEWAY_URL}${path}`, {
-    ...init,
-    headers,
-    credentials: "include",
+  return requestJson<T>(path, init, {
+    contentType: "non-get",
+    csrf: "non-get",
+    successParse: "json",
+    errorFactory: ({ status, detail }) => ({
+      message: typeof detail === "string" ? detail : `请求失败（${status}）`,
+      status,
+    }),
   });
-  if (!response.ok) {
-    let message = `请求失败（${response.status}）`;
-    try {
-      const body = (await response.json()) as { detail?: string };
-      if (typeof body.detail === "string") message = body.detail;
-    } catch {
-      // 非 JSON 错误体，保留默认消息。
-    }
-    throw { message, status: response.status } satisfies StrategiesApiError;
-  }
-  return (await response.json()) as T;
 }
 
 export function listStrategies(): Promise<Strategy[]> {

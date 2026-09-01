@@ -1,12 +1,14 @@
 /**
  * KStock 模型配置 API 客户端 —— 对接 KStock 自有的 /api/v1/kstock/models。
  *
- * 与 authClient.ts 共享 GATEWAY_URL、cookie/credentials 策略（经 gatewayUrl），
+ * 与 authClient.ts 共享 requestJson 的 cookie/credentials 策略，
  * 但错误体系独立（模型配置不涉及认证错误码，统一归一为 ModelsApiError）。
  * 引擎原生 GET /api/models 只读且不返回 provider/endpoint/api_key，本客户端
  * 对接的 KStock 写入层补齐这些字段。
  */
-import { GATEWAY_URL, readCsrfToken } from "./gatewayUrl";
+import type { GatewayApiError } from "./gatewayApiError";
+import { isGatewayApiError } from "./gatewayApiError";
+import { requestJson } from "./requestJson";
 
 /** 一条模型配置（对应后端 ModelItem）。api_key_env 是 $ENV 引用而非明文。 */
 export interface ModelConfig {
@@ -42,58 +44,29 @@ export interface ModelsListResponse {
   default_model: string | null;
 }
 
-/** 模型配置操作归一化错误。 */
-export interface ModelsApiError {
-  message: string;
-  status: number;
-}
+/** 模型配置操作归一化错误（共享 GatewayApiError 的别名，保持原导出名）。 */
+export type ModelsApiError = GatewayApiError;
 
 /**
- * 统一 fetch：自动 ``credentials: "include"``、JSON Content-Type、CSRF header，
- * 并把 gateway 的三种 detail 形态（对象 ``{message}`` / 裸字符串 / 校验数组）
- * 归一为 {@link ModelsApiError}。
+ * 统一 fetch：自动 `credentials: "include"`、JSON Content-Type、CSRF header，
+ * 并把 gateway 的三种 detail 形态（对象 `{message}` / 裸字符串 / 校验数组）
+ * 归一为 {@link ModelsApiError}（经共享 requestJson）。
  */
 async function modelsFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-  const csrf = readCsrfToken();
-  if (csrf && !headers.has("X-CSRF-Token")) {
-    headers.set("X-CSRF-Token", csrf);
-  }
-  let response: Response;
-  try {
-    response = await fetch(`${GATEWAY_URL}${path}`, { ...init, headers, credentials: "include" });
-  } catch {
-    throw { message: "无法连接本地引擎，请确认 gateway 已启动", status: 0 } satisfies ModelsApiError;
-  }
-  const text = await response.text();
-  let body: unknown = null;
-  if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = { detail: text };
-    }
-  }
-  if (!response.ok) {
-    const detail = (body as { detail?: unknown } | null)?.detail;
-    let message: string;
-    if (typeof detail === "string") {
-      message = detail;
-    } else if (
-      detail &&
-      typeof detail === "object" &&
-      "message" in detail
-    ) {
-      message = String((detail as { message: unknown }).message);
-    } else {
-      message = "操作失败，请稍后重试";
-    }
-    throw { message, status: response.status } satisfies ModelsApiError;
-  }
-  return body as T;
+  return requestJson<T>(path, init, {
+    networkErrorFactory: () => ({
+      message: "无法连接本地引擎，请确认 gateway 已启动",
+      status: 0,
+    }),
+    errorFactory: ({ status, detail }) => ({
+      message: typeof detail === "string"
+        ? detail
+        : detail && typeof detail === "object" && "message" in detail
+          ? String((detail as { message: unknown }).message)
+          : "操作失败，请稍后重试",
+      status,
+    }),
+  });
 }
 
 // ── API ─────────────────────────────────────────────────────────────
@@ -144,12 +117,7 @@ export function setDefaultModel(
   );
 }
 
-/** 类型守卫：捕获的值是否为 ModelsApiError。 */
+/** 类型守卫：捕获的值是否为 ModelsApiError（委托共享实现）。 */
 export function isModelsApiError(err: unknown): err is ModelsApiError {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "message" in err &&
-    "status" in err
-  );
+  return isGatewayApiError(err);
 }

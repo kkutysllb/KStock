@@ -126,13 +126,9 @@ if (!app.requestSingleInstanceLock()) {
 
 const gateway = new GatewayProcess();
 
-/** 注册 gateway 进程管理 IPC。 */
+/** 注册 gateway 进程管理 IPC（渲染层实际消费的只有重启通道）。 */
 function registerGatewayIpc(): void {
-  ipcMain.handle(IPC.gatewayStart, async () => gateway.ensureStarted());
-  ipcMain.handle(IPC.gatewayStop, () => gateway.killAndWait());
   ipcMain.handle(IPC.gatewayRestart, async () => gateway.restart());
-  ipcMain.handle(IPC.gatewayStatus, async () => gateway.status());
-  ipcMain.handle(IPC.gatewayAppDataDir, () => appDataDirectory());
 }
 
 /** 注册宿主能力 IPC（打开外链、保存文件、系统通知）。 */

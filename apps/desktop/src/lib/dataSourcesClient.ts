@@ -1,4 +1,6 @@
-import { GATEWAY_URL, readCsrfToken } from "./gatewayUrl";
+import type { GatewayApiError } from "./gatewayApiError";
+import { isGatewayApiError } from "./gatewayApiError";
+import { requestJson } from "./requestJson";
 
 export interface DataSourceConfig {
   id: "tushare" | "iwencai";
@@ -16,47 +18,29 @@ export interface DataSourcesWritePayload {
   iwencai_api_key?: string | null;
 }
 
-export interface DataSourcesApiError {
-  message: string;
-  status: number;
-}
+/** 归一化错误形状（共享 GatewayApiError 的别名，保持原导出名）。 */
+export type DataSourcesApiError = GatewayApiError;
 
 export function isDataSourcesApiError(error: unknown): error is DataSourcesApiError {
-  return Boolean(error && typeof error === "object" && "message" in error && "status" in error);
+  return isGatewayApiError(error);
 }
 
 async function dataSourcesFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  const csrf = readCsrfToken();
-  if (csrf) headers.set("X-CSRF-Token", csrf);
-
-  let response: Response;
-  try {
-    response = await fetch(`${GATEWAY_URL}${path}`, { ...init, headers, credentials: "include" });
-  } catch {
-    throw { message: "无法连接本地引擎，请确认 gateway 已启动", status: 0 } satisfies DataSourcesApiError;
-  }
-
-  const text = await response.text();
-  let body: unknown = null;
-  if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = { detail: text };
-    }
-  }
-  if (!response.ok) {
-    const detail = (body as { detail?: unknown } | null)?.detail;
-    const message = typeof detail === "string"
-      ? detail
-      : response.status === 401
-        ? "请先登录后管理数据源凭证"
-        : "数据源凭证保存失败，请稍后重试";
-    throw { message, status: response.status } satisfies DataSourcesApiError;
-  }
-  return body as T;
+  return requestJson<T>(path, init, {
+    csrf: "always",
+    networkErrorFactory: () => ({
+      message: "无法连接本地引擎，请确认 gateway 已启动",
+      status: 0,
+    }),
+    errorFactory: ({ status, detail }) => ({
+      message: typeof detail === "string"
+        ? detail
+        : status === 401
+          ? "请先登录后管理数据源凭证"
+          : "数据源凭证保存失败，请稍后重试",
+      status,
+    }),
+  });
 }
 
 export function getDataSources(): Promise<DataSourcesResponse> {

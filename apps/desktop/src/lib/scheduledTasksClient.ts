@@ -5,7 +5,9 @@
  * 落库）；桌面端负责创建/管理任务，并轮询 last_run 状态变化发通知。
  */
 
-import { GATEWAY_URL, readCsrfToken } from "./gatewayUrl";
+import type { GatewayApiError } from "./gatewayApiError";
+import { isGatewayApiError } from "./gatewayApiError";
+import { requestJson } from "./requestJson";
 
 export interface ScheduledTask {
   id: string;
@@ -35,40 +37,26 @@ export interface ScheduledTaskRun {
   finished_at?: string | null;
 }
 
-export interface ScheduledTaskApiError {
-  message: string;
-  status: number;
-}
+/** 归一化错误形状（共享 GatewayApiError 的别名，保持原导出名）。 */
+export type ScheduledTaskApiError = GatewayApiError;
 
 export function isScheduledTaskApiError(error: unknown): error is ScheduledTaskApiError {
-  return Boolean(error && typeof error === "object" && "message" in error && "status" in error);
+  return isGatewayApiError(error);
 }
 
+// 原语义保留：仅非 GET 注入 Content-Type/CSRF；不捕获网络错误；
+// 204 返回 undefined；错误消息优先取 detail 字符串；成功严格 json()。
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.method && init.method !== "GET") {
-    headers.set("Content-Type", "application/json");
-    const csrf = readCsrfToken();
-    if (csrf) headers.set("X-CSRF-Token", csrf);
-  }
-  const response = await fetch(`${GATEWAY_URL}${path}`, {
-    ...init,
-    headers,
-    credentials: "include",
+  return requestJson<T>(path, init, {
+    contentType: "non-get",
+    csrf: "non-get",
+    successParse: "json",
+    noContentAsUndefined: true,
+    errorFactory: ({ status, detail }) => ({
+      message: typeof detail === "string" ? detail : `请求失败（${status}）`,
+      status,
+    }),
   });
-  if (!response.ok) {
-    let message = `请求失败（${response.status}）`;
-    try {
-      const body = (await response.json()) as { detail?: string };
-      if (typeof body.detail === "string") message = body.detail;
-    } catch {
-      // 非 JSON 错误体，保留默认消息。
-    }
-    const error: ScheduledTaskApiError = { message, status: response.status };
-    throw error;
-  }
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
 }
 
 export function listScheduledTasks(): Promise<ScheduledTask[]> {

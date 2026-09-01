@@ -14,15 +14,8 @@ export const IPC = {
   windowIsMaximized: "window:is-maximized",
   // 主进程 → 渲染进程：最大化状态变化（自绘窗控按钮切换 最大化/还原图标）
   windowMaximizeChanged: "window:maximize-changed",
-  windowSetZoom: "window:set-zoom",
-  windowReload: "window:reload",
-  windowToggleDevtools: "window:toggle-devtools",
-  // 内置 gateway 进程管理
-  gatewayStart: "gateway:start",
-  gatewayStop: "gateway:stop",
+  // 内置 gateway 进程管理（渲染层实际消费的只有重启通道）
   gatewayRestart: "gateway:restart",
-  gatewayStatus: "gateway:status",
-  gatewayAppDataDir: "gateway:app-data-dir",
   // 宿主能力
   shellOpenExternal: "shell:open-external",
   shellOpenPath: "shell:open-path",
@@ -55,42 +48,9 @@ export type UpdateCheckResult =
   | { status: "available"; version: string }
   | { status: "latest"; version: string }
   | { status: "error"; message: string };
-
-/** 渲染进程通过 ``window.kstockDesktop`` 暴露的桥接接口契约。 */
-export interface DesktopBridge {
-  /** 宿主平台（win32 / darwin / linux）。 */
-  readonly platform: string;
-  onMenuCommand(cb: (command: MenuCommand) => void): () => void;
-  toggleMaximize(): Promise<void>;
-  minimize(): Promise<void>;
-  closeWindow(): Promise<void>;
-  isMaximized(): Promise<boolean>;
-  /** 订阅最大化状态变化（无框窗口自绘按钮图标切换）。 */
-  onMaximizeChange(cb: (maximized: boolean) => void): () => void;
-  openExternal(url: string): Promise<void>;
-  /**
-   * 在系统文件管理器中打开本地目录（白名单：用户数据根与 logs 子目录）。
-   * 渲染层下拉菜单「打开日志目录」使用，避免直接暴露任意本地路径。
-   */
-  openPath(target: "logs" | "app-data"): Promise<{ ok: boolean; error?: string }>;
-  /** 返回应用元信息（版本号、名称、平台），侧边栏 logo 下拉「关于 KStock」展示。 */
-  appInfo(): Promise<{ version: string; name: string; platform: NodeJS.Platform }>;
-  restartGateway(): Promise<string>;
-  gatewayStatus(): Promise<{ port: number; running: boolean; childAlive: boolean }>;
-  appDataDir(): Promise<string>;
-  saveArtifact(name: string, bytes: Uint8Array): Promise<{ saved: boolean; path?: string }>;
-  /**
-   * 弹系统通知。窗口聚焦时返回 { ok: false, reason: "focused" } 不打扰；
-   * 系统不支持时返回 { ok: false, reason: "unsupported" }。点击通知聚焦主窗口。
-   */
-  showNotification(title: string, body: string): Promise<{ ok: boolean; reason?: string }>;
-  /**
-   * 检查是否有新版本。发现新版本时主进程立即后台下载，本方法仅返回结果
-   * 供"手动检查更新"反馈用；下载完成会通过 onUpdateReady 回调推送。
-   */
-  updateCheck(): Promise<UpdateCheckResult>;
-  /** 下载已完成时调用，退出应用并运行安装器替换文件后重启。 */
-  updateInstall(): Promise<void>;
-  /** 订阅主进程的"更新已下载就绪"事件（主进程主动推送）。 */
-  onUpdateReady(cb: (info: { version: string }) => void): () => void;
-}
+/**
+ * 桥接 API 契约的单一事实源是 preload.ts 末尾的 `export type DesktopBridgeApi = typeof api`；
+ * 渲染进程侧的镜像接口在 src/lib/desktopBridge.ts（DesktopBridgeApi）。
+ * 三者（preload api 字面量 / 本文件通道名 / 渲染层接口）必须同步修改，
+ * 不在此处再维护第三份接口副本（历史上曾漂移为死代码，已删除）。
+ */

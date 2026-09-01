@@ -1,4 +1,5 @@
-import { GATEWAY_URL, readCsrfToken } from "./gatewayUrl";
+import { GATEWAY_URL } from "./gatewayUrl";
+import { requestJson } from "./requestJson";
 
 export interface ReportLibraryItem {
   report_id: string;
@@ -19,13 +20,14 @@ export interface ReportLibraryItem {
 
 interface ReportsResponse { reports: ReportLibraryItem[] }
 
+// 原语义保留：不注入 Content-Type、不捕获网络错误、错误不解析 detail、
+// 成功响应严格 response.json()（错误为 Error 实例而非 {message,status} 形状）。
 async function reportsFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  const csrf = readCsrfToken();
-  if (csrf) headers.set("X-CSRF-Token", csrf);
-  const response = await fetch(`${GATEWAY_URL}${path}`, { ...init, headers, credentials: "include" });
-  if (!response.ok) throw new Error(`报告库请求失败（${response.status}）`);
-  return (await response.json()) as T;
+  return requestJson<T>(path, init, {
+    contentType: "never",
+    successParse: "json",
+    errorFactory: ({ status }) => new Error(`报告库请求失败（${status}）`),
+  });
 }
 
 export async function listReports(filters: { date?: string; symbol?: string; query?: string } = {}): Promise<ReportLibraryItem[]> {

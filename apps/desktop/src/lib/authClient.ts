@@ -3,15 +3,17 @@
  *
  * 设计要点
  * --------
- * - 所有请求带 ``credentials: "include"``，让 gateway 下发的 ``access_token``
- *   (HttpOnly) 与 ``csrf_token`` (JS 可读) cookie 随请求自动携带。
- * - 注册 / 登录 / 登出 / 初始化 属于 gateway 的 CSRF ``_AUTH_EXEMPT_PATHS``，
- *   首次请求无需 X-CSRF-Token；登录成功后 gateway 会下发 ``csrf_token`` cookie，
- *   后续受保护的状态变更请求由 ``withCsrfHeader`` 自动读取并附加。
- * - gateway 的错误响应有三种形态，``parseGatewayError`` 统一归一为
- *   ``AuthApiError``，供 UI 按 ``code`` 给出中文友好提示。
+ * - 所有请求带 `credentials: "include"`，让 gateway 下发的 `access_token`
+ *   (HttpOnly) 与 `csrf_token` (JS 可读) cookie 随请求自动携带。
+ * - 注册 / 登录 / 登出 / 初始化 属于 gateway 的 CSRF `_AUTH_EXEMPT_PATHS`，
+ *   首次请求无需 X-CSRF-Token；登录成功后 gateway 会下发 `csrf_token` cookie，
+ *   后续受保护的状态变更请求由共享 requestJson 自动读取并附加。
+ * - gateway 的错误响应有三种形态，`parseGatewayError` 统一归一为
+ *   `AuthApiError`，供 UI 按 `code` 给出中文友好提示。
  */
-import { GATEWAY_URL, readCsrfToken } from "./gatewayUrl";
+import type { GatewayApiError } from "./gatewayApiError";
+import { isGatewayApiError } from "./gatewayApiError";
+import { requestJson } from "./requestJson";
 
 /** gateway /api/v1/auth/me 与注册响应中的用户对象。 */
 export interface AuthUser {
@@ -22,7 +24,7 @@ export interface AuthUser {
   oauth_provider?: string | null;
 }
 
-/** gateway ``AuthErrorCode`` 的镜像（见 vendor/.../auth/errors.py）。 */
+/** gateway `AuthErrorCode` 的镜像（见 vendor/.../auth/errors.py）。 */
 export type AuthErrorCode =
   | "invalid_credentials"
   | "token_expired"
@@ -39,22 +41,18 @@ export type AuthErrorCode =
   | "unknown";
 
 /** 归一化后的认证错误。 */
-export interface AuthApiError {
+export interface AuthApiError extends GatewayApiError {
   code: AuthErrorCode;
-  /** 面向用户的中文提示。 */
-  message: string;
-  /** HTTP 状态码（网络错误时为 0）。 */
-  status: number;
 }
 
-/** 注册请求体（对应 gateway ``/api/v1/auth/register``）。 */
+/** 注册请求体（对应 gateway `/api/v1/auth/register`）。 */
 export interface RegisterPayload {
   email: string;
   password: string;
   remember_me?: boolean;
 }
 
-/** 初始化管理员请求体（对应 gateway ``/api/v1/auth/initialize``）。 */
+/** 初始化管理员请求体（对应 gateway `/api/v1/auth/initialize`）。 */
 export interface InitializeAdminPayload {
   email: string;
   password: string;
@@ -85,12 +83,12 @@ const ERROR_MESSAGES: Record<AuthErrorCode, string> = {
 };
 
 /**
- * 把 gateway 的多种错误响应形态归一为 ``AuthApiError``。
+ * 把 gateway 的多种错误响应形态归一为 `AuthApiError`。
  *
  * gateway 三种错误 body：
- * 1. ``{detail: {code, message}}`` —— 结构化业务错误（多数 auth 端点）
- * 2. ``{detail: "..."}``            —— 裸字符串（如登录限流 429）
- * 3. ``{detail: [{loc, msg}]}``      —— pydantic 校验错误（422）
+ * 1. `{detail: {code, message}}` —— 结构化业务错误（多数 auth 端点）
+ * 2. `{detail: "..."}`            —— 裸字符串（如登录限流 429）
+ * 3. `{detail: [{loc, msg}]}`      —— pydantic 校验错误（422）
  */
 function parseGatewayError(status: number, body: unknown): AuthApiError {
   let code: AuthErrorCode = "unknown";
@@ -133,54 +131,22 @@ function parseGatewayError(status: number, body: unknown): AuthApiError {
   };
 }
 
-/** 统一 fetch 封装：带 cookie、归一错误、JSON 解析。 */
+/** 统一 fetch 封装：带 cookie、归一错误、JSON 解析（委托共享 requestJson）。 */
 async function gatewayFetch<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-  // 若已有 csrf_token cookie，为受保护端点自动附加 double-submit header。
-  // auth exempt 端点没有 cookie 时不附加，无副作用。
-  const csrf = readCsrfToken();
-  if (csrf && !headers.has("X-CSRF-Token")) {
-    headers.set("X-CSRF-Token", csrf);
-  }
-
-  let response: Response;
-  try {
-    response = await fetch(`${GATEWAY_URL}${path}`, {
-      ...init,
-      headers,
-      credentials: "include",
-    });
-  } catch {
+  return requestJson<T>(path, init, {
+    // auth exempt 端点没有 csrf cookie 时不附加；显式 X-CSRF-Token 优先。
+    csrf: "if-missing",
     // 网络层失败：gateway 未启动 / 跨域被拦
-    const err: AuthApiError = {
+    networkErrorFactory: () => ({
       code: "network_error",
       message: ERROR_MESSAGES.network_error,
       status: 0,
-    };
-    throw err;
-  }
-
-  let body: unknown = null;
-  const text = await response.text();
-  if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = { detail: text };
-    }
-  }
-
-  if (!response.ok) {
-    throw parseGatewayError(response.status, body);
-  }
-
-  return body as T;
+    }),
+    errorFactory: (ctx) => parseGatewayError(ctx.status, ctx.body),
+  });
 }
 
 // ── 认证 API ────────────────────────────────────────────────────────────
@@ -199,12 +165,12 @@ export function register(payload: RegisterPayload): Promise<AuthUser> {
 }
 
 /**
- * 首次启动初始化管理员账户（对应 gateway ``/api/v1/auth/initialize``）。
+ * 首次启动初始化管理员账户（对应 gateway `/api/v1/auth/initialize`）。
  *
- * 仅当 ``setup-status`` 返回 ``needs_setup=true`` 时可调用，成功后创建
- * ``system_role="admin"`` 的账户并下发会话 cookie。已存在 admin 时返回
- * 409 ``system_already_initialized``。这是引擎侧「角色」的唯一体现：
- * 首个初始化账户为管理员，后续 ``register`` 只能创建普通用户。
+ * 仅当 `setup-status` 返回 `needs_setup=true` 时可调用，成功后创建
+ * `system_role="admin"` 的账户并下发会话 cookie。已存在 admin 时返回
+ * 409 `system_already_initialized`。这是引擎侧「角色」的唯一体现：
+ * 首个初始化账户为管理员，后续 `register` 只能创建普通用户。
  */
 export function initializeAdmin(payload: InitializeAdminPayload): Promise<AuthUser> {
   return gatewayFetch<AuthUser>("/api/v1/auth/initialize", {
@@ -236,7 +202,7 @@ export function logout(): Promise<{ message: string }> {
   return gatewayFetch<{ message: string }>("/api/v1/auth/logout", { method: "POST" });
 }
 
-/** 读取当前会话用户；未登录时抛 ``not_authenticated`` 错误。 */
+/** 读取当前会话用户；未登录时抛 `not_authenticated` 错误。 */
 export function getCurrentUser(): Promise<AuthUser> {
   return gatewayFetch<AuthUser>("/api/v1/auth/me");
 }
@@ -254,13 +220,7 @@ export async function tryGetCurrentUser(): Promise<AuthUser | null> {
   }
 }
 
-/** 类型守卫：判断异常是否为归一化后的 AuthApiError。 */
+/** 类型守卫：判断异常是否为归一化后的 AuthApiError（委托共享实现 + code 检查）。 */
 export function isAuthApiError(err: unknown): err is AuthApiError {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    "message" in err &&
-    "status" in err
-  );
+  return isGatewayApiError(err) && "code" in err;
 }

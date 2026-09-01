@@ -5,12 +5,11 @@
 
 import { getDesktopBridge, isDesktopRuntime } from "./desktopBridge";
 import { GATEWAY_URL } from "./gatewayUrl";
+import type { GatewayApiError } from "./gatewayApiError";
+import { isGatewayApiError } from "./gatewayApiError";
 
-/** gateway 进程控制错误（归一化）。 */
-export interface GatewayControlApiError {
-  message: string;
-  status: number;
-}
+/** gateway 进程控制错误（归一化；共享 GatewayApiError 的别名）。 */
+export type GatewayControlApiError = GatewayApiError;
 
 /** restart 响应。supervised 字段保留以兼容设置页现有调用方。 */
 export interface RestartResult {
@@ -84,14 +83,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** 类型守卫。 */
+/** 类型守卫（委托共享实现）。 */
 export function isGatewayControlApiError(
   err: unknown
 ): err is GatewayControlApiError {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "message" in err &&
-    "status" in err
-  );
+  return isGatewayApiError(err);
 }

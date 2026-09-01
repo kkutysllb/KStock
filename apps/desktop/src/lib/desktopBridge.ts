@@ -25,7 +25,13 @@ export type UpdateCheckResult =
   | { status: "latest"; version: string }
   | { status: "error"; message: string };
 
-/** 渲染进程可用的宿主桥接 API。 */
+/**
+ * 渲染进程可用的宿主桥接 API。
+ *
+ * 单一事实源是 electron/preload.ts 的 `export type DesktopBridgeApi = typeof api`；
+ * 本接口为其渲染层镜像，修改桥接面时必须与 preload.ts / electron/lib/ipc-channels.ts
+ * 三处同步（通道名集中声明在 ipc-channels.ts）。
+ */
 export interface DesktopBridgeApi {
   /** 宿主平台（win32 / darwin / linux）。Windows 无框窗口据此启用自绘窗控。 */
   readonly platform: string;
@@ -45,12 +51,6 @@ export interface DesktopBridgeApi {
   /** 应用元信息：版本号 / 名称 / 平台。版本号取自 package.json。 */
   appInfo(): Promise<{ version: string; name: string; platform: NodeJS.Platform }>;
   restartGateway(): Promise<string>;
-  gatewayStatus(): Promise<{
-    port: number;
-    running: boolean;
-    childAlive: boolean;
-  }>;
-  appDataDir(): Promise<string>;
   saveArtifact(
     name: string,
     bytes: Uint8Array,
@@ -95,34 +95,6 @@ export function onMenuCommand(
   cb: (command: MenuCommand) => void,
 ): () => void {
   return getDesktopBridge()?.onMenuCommand(cb) ?? (() => undefined);
-}
-
-/** 切换窗口最大化。无宿主桥时静默忽略。 */
-export async function toggleWindowMaximize(): Promise<void> {
-  try {
-    await getDesktopBridge()?.toggleMaximize();
-  } catch {
-    // 浏览器预览环境无原生窗口，忽略。
-  }
-}
-
-/**
- * 在系统浏览器打开外链。
- *
- * 无宿主桥时回退到 ``window.open``（浏览器预览环境）。
- */
-export async function openExternalUrl(url: string): Promise<void> {
-  if (!/^https?:\/\//i.test(url)) return;
-  const bridge = getDesktopBridge();
-  if (bridge) {
-    try {
-      await bridge.openExternal(url);
-      return;
-    } catch {
-      // 桥接失败时回退。
-    }
-  }
-  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 /**

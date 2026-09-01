@@ -68,14 +68,6 @@ const api = {
     return ipcRenderer.invoke(IPC.gatewayRestart);
   },
 
-  gatewayStatus(): Promise<{ port: number; running: boolean; childAlive: boolean }> {
-    return ipcRenderer.invoke(IPC.gatewayStatus);
-  },
-
-  appDataDir(): Promise<string> {
-    return ipcRenderer.invoke(IPC.gatewayAppDataDir);
-  },
-
   saveArtifact(
     name: string,
     bytes: Uint8Array,

@@ -7,7 +7,9 @@
 //   memoryClient → /api/memory/* 引擎只读 API（读取热重载后的生效单例值）
 //   runtimeConfigClient → /api/v1/kstock/runtime-config KStock 读写 API（读写 yaml 文件内容）
 
-import { GATEWAY_URL, readCsrfToken } from "./gatewayUrl";
+import type { GatewayApiError } from "./gatewayApiError";
+import { isGatewayApiError } from "./gatewayApiError";
+import { requestJson } from "./requestJson";
 
 // ── 数据模型（与后端 pydantic 对齐）──
 
@@ -211,9 +213,7 @@ export type RuntimeTopLevelField = "max_recursion_limit";
 
 // ── 错误归一 ──
 
-export interface RuntimeConfigApiError {
-  message: string;
-  status: number;
+export interface RuntimeConfigApiError extends GatewayApiError {
   /** 校验失败时的字段级错误明细（status=400 时才有） */
   fieldErrors?: Array<{ field: string; message: string; type: string }>;
 }
@@ -222,58 +222,32 @@ async function runtimeConfigFetch<T>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-  const csrf = readCsrfToken();
-  if (csrf && !headers.has("X-CSRF-Token")) {
-    headers.set("X-CSRF-Token", csrf);
-  }
-  let response: Response;
-  try {
-    response = await fetch(`${GATEWAY_URL}${path}`, {
-      ...init,
-      headers,
-      credentials: "include",
-    });
-  } catch {
-    throw {
+  return requestJson<T>(path, init, {
+    networkErrorFactory: () => ({
       message: "无法连接本地引擎，请确认 gateway 已启动",
       status: 0,
-    } satisfies RuntimeConfigApiError;
-  }
-  const text = await response.text();
-  let body: unknown = null;
-  if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = { detail: text };
-    }
-  }
-  if (!response.ok) {
-    const detail = (body as { detail?: unknown } | null)?.detail;
-    let message: string;
-    let fieldErrors: RuntimeConfigApiError["fieldErrors"];
-    if (typeof detail === "string") {
-      message = detail;
-    } else if (detail && typeof detail === "object") {
-      const d = detail as Record<string, unknown>;
-      message = typeof d.message === "string" ? d.message : "配置校验失败";
-      if (Array.isArray(d.errors)) {
-        fieldErrors = (d.errors as Array<Record<string, unknown>>).map((e) => ({
-          field: String(e.field ?? ""),
-          message: String(e.message ?? ""),
-          type: String(e.type ?? ""),
-        }));
+    }),
+    errorFactory: ({ status, detail }) => {
+      let message: string;
+      let fieldErrors: RuntimeConfigApiError["fieldErrors"];
+      if (typeof detail === "string") {
+        message = detail;
+      } else if (detail && typeof detail === "object") {
+        const d = detail as Record<string, unknown>;
+        message = typeof d.message === "string" ? d.message : "配置校验失败";
+        if (Array.isArray(d.errors)) {
+          fieldErrors = (d.errors as Array<Record<string, unknown>>).map((e) => ({
+            field: String(e.field ?? ""),
+            message: String(e.message ?? ""),
+            type: String(e.type ?? ""),
+          }));
+        }
+      } else {
+        message = "操作失败，请稍后重试";
       }
-    } else {
-      message = "操作失败，请稍后重试";
-    }
-    throw { message, status: response.status, fieldErrors } satisfies RuntimeConfigApiError;
-  }
-  return body as T;
+      return { message, status, fieldErrors };
+    },
+  });
 }
 
 // ── API ─────────────────────────────────────────────────────────────
@@ -309,10 +283,5 @@ export function updateTopLevelField(
 export function isRuntimeConfigApiError(
   err: unknown
 ): err is RuntimeConfigApiError {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "message" in err &&
-    "status" in err
-  );
+  return isGatewayApiError(err);
 }
