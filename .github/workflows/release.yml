@@ -9,9 +9,11 @@ on:
     tags:
       - "v*"
 
-# 创建 GitHub Release 需要 contents: write（GITHUB_TOKEN 默认只读）
+# 最小权限：默认只读；仅 publish job 声明 contents: write（创建 Release 需要）。
+# build 矩阵只构建和上传 artifact，不需要写权限——顶层收窄避免单个 runner
+# 被攻破时直接获得仓库写令牌（供应链防线）。
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -25,15 +27,15 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           enable-cache: true
       - run: pnpm install --frozen-lockfile
@@ -72,7 +74,7 @@ jobs:
                -o -name '*.blockmap' -o -name 'latest*.yml' \) \
             -exec cp {} dist-release/ \;
           ls -lh dist-release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: kstock-${{ matrix.os }}
           path: dist-release/**
@@ -85,13 +87,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist-release
           merge-multiple: true
       - name: 列出安装包
         run: ls -lh dist-release
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: dist-release/**
           generate_release_notes: true
