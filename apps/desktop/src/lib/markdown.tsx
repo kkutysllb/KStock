@@ -59,11 +59,3 @@ export const Markdown = memo(function Markdown({ children, components }: Markdow
     </div>
   );
 });
-
-/**
- * 纯文本场景的简单清洗：trim + 压缩连续空行。
- * 用于 ReportPanel `<pre>` 等需要显示源文本的地方（不解析语法）。
- */
-export function normalizeMarkdown(markdown: string): string {
-  return markdown.trim().replace(/\n{3,}/g, "\n\n");
-}

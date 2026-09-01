@@ -176,15 +176,6 @@ export async function setSkillEnabled(
   );
 }
 
-export async function deleteSkillState(
-  name: string
-): Promise<SkillActionResponse> {
-  return extensionsFetch<SkillActionResponse>(
-    `/api/v1/kstock/extensions/skills/${encodeURIComponent(name)}`,
-    { method: "DELETE" }
-  );
-}
-
 // ── MCP 模板（股票类预置 server）──
 
 /** MCP server 模板定义。选中后预填 command/args/env，用户仍可编辑。 */

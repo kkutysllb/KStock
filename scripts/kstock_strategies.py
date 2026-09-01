@@ -31,8 +31,6 @@ from qilin.runtime.user_context import get_effective_user_id
 
 router = APIRouter(prefix="/api/v1/kstock", tags=["kstock-strategies"])
 
-_SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
-
 # 容量上限：防止 agent 把超大 payload 灌进 sqlite / 磁盘。
 _MAX_CODE_BYTES = 512 * 1024
 _MAX_PARAMS_BYTES = 64 * 1024

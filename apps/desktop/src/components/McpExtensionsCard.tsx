@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, Plus, Trash2, Pencil, RotateCcw, Save, Sparkles, X } from "lucide-react";
+import { ChevronDown, Plus, Trash2, Pencil, Save, Sparkles, X } from "lucide-react";
 import {
   type ExtensionsConfig,
   type McpServerConfig,

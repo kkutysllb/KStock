@@ -37,10 +37,6 @@ def load_skill_manifest(manifest_path: Path = DEFAULT_MANIFEST) -> dict[str, Any
     return json.loads(manifest_path.read_text(encoding="utf-8"))
 
 
-def load_upstream_lock(lock_path: Path = DEFAULT_LOCK_PATH) -> dict[str, Any]:
-    return json.loads(lock_path.read_text(encoding="utf-8"))
-
-
 def build_skill_copy_plan(
     source_root: Path,
     vendor_root: Path,

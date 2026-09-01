@@ -23,7 +23,6 @@ import {
   type TitleConfig,
   getRuntimeConfig,
   updateRuntimeConfigSection,
-  isRuntimeConfigApiError,
 } from "../lib/runtimeConfigClient";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { RuntimeConfigCard, type FieldDef } from "./RuntimeConfigCard";

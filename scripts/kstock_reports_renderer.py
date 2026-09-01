@@ -457,16 +457,8 @@ def _validate_chart(chart: Any, index: int) -> None:
     _validate_args(tool, chart["args"], f"{path}.args")
 
 
-def _theme_invariant_args(args: dict[str, Any]) -> dict[str, Any]:
-    return dict(args)
-
-
 def _list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
-
-
-def _dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def _normalize_chart(chart: Any) -> dict[str, Any] | None:

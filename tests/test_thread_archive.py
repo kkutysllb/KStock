@@ -15,7 +15,6 @@ search 不过滤归档（过滤在 router），这是设计约定。
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 from typing import Any
 
 import pytest
@@ -120,10 +119,6 @@ def _run(coro):
         return loop.run_until_complete(coro)
     finally:
         loop.close()
-
-
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def test_update_metadata_with_archive_patch_does_not_bump_updated_at():

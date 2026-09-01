@@ -4443,26 +4443,6 @@ button.context-file-row:hover {
   }
 }
 
-/* 报告预览侧栏（floating-context-panel 内嵌的 markdown） */
-.context-report-preview {
-  max-height: 240px;
-  overflow-y: auto;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.18);
-  font-size: 12px;
-}
-
-.context-report-preview:empty::before {
-  content: "暂无报告";
-  color: #6b7280;
-}
-
-.report-empty {
-  color: #6b7280;
-  font-style: italic;
-}
-
 /* ── 记忆与配置管理面板 ─────────────────────────────── */
 .memory-settings {
   display: grid;
