@@ -1039,6 +1039,40 @@ def _fix_etf_kk_common(text: str) -> str | None:
     return text.replace(_ETF_KK_COMMON_ANCHOR, _ETF_KK_COMMON_INJECTION, 1)
 
 
+# ── cb-analysis 周度引擎 kk_common 同级解析补丁 ────────────────────────────
+# analyze_weekly_cb.py 只把自己所在 scripts/ 与技能根加入 sys.path，而
+# kk_common 在同级 common 技能的 src 下（public/common/src）——1.x 沙箱靠
+# pip 安装掩盖，2.0 preset 镜像下必然「kk_common 网关不可用」。补上正确
+# 的同级解析（analysis-engine → scripts → cb-analysis → public → common/src），
+# 与 cb_data.py（上游已正确）保持一致。
+_CB_WEEKLY_KK_SCRIPT = "public/cb-analysis/scripts/analysis-engine/analyze_weekly_cb.py"
+_CB_WEEKLY_KK_ANCHOR = """_script_dir = os.path.dirname(os.path.abspath(__file__))
+_scripts_root = os.path.dirname(_script_dir)
+for _p in (_scripts_root, os.path.dirname(_scripts_root)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)"""
+_CB_WEEKLY_KK_INJECTION = """_script_dir = os.path.dirname(os.path.abspath(__file__))
+_scripts_root = os.path.dirname(_script_dir)
+for _p in (_scripts_root, os.path.dirname(_scripts_root)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+# KStock patch: kk_common 由同级 common 技能提供（public/common/src）。
+_kk_common_src = os.path.normpath(
+    os.path.join(_script_dir, "..", "..", "..", "common", "src")
+)
+if os.path.isdir(_kk_common_src) and _kk_common_src not in sys.path:
+    sys.path.insert(0, _kk_common_src)"""
+
+
+def _fix_cb_weekly_kk_common(text: str) -> str | None:
+    """给 analyze_weekly_cb.py 补 kk_common 同级解析；已修复返回 None。"""
+    if "_kk_common_src" in text:
+        return None
+    if _CB_WEEKLY_KK_ANCHOR not in text:
+        return None
+    return text.replace(_CB_WEEKLY_KK_ANCHOR, _CB_WEEKLY_KK_INJECTION, 1)
+
+
 # ── KStock 自有技能 ensure（kstock/skills → vendor/skills/public）────────
 # 源码在 kstock/skills/<name>（上游同步整体覆盖 vendor 时不受影响），补丁器
 # 把它们 ensure 进 vendor 技能目录：html-report（自研渲染器）、market-linkage
@@ -1222,6 +1256,10 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
             continue
         if _patch_file(target, rel_path, _fix_etf_kk_common):
             changed.append(rel_path)
+    # cb-analysis 周度引擎 kk_common 同级解析（同因，注入层级算错）。
+    target = vendor_root / _CB_WEEKLY_KK_SCRIPT
+    if target.exists() and _patch_file(target, _CB_WEEKLY_KK_SCRIPT, _fix_cb_weekly_kk_common):
+        changed.append(_CB_WEEKLY_KK_SCRIPT)
     # KStock 自有技能 ensure（html-report / market-linkage / sandbox-path-guide…）。
     for rel_path in _ensure_owned_skills(vendor_root):
         changed.append(rel_path)
