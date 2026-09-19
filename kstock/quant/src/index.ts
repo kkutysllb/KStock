@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs'
 import { StoreError, factorStore, selectionStore, strategyStore, type LibraryStore } from './store.ts'
 import { ReportsStore } from './reports.ts'
 import { dataSourceStatus, landingNews } from './news.ts'
+import { dataSourcesView, saveDataSources } from './datasources.ts'
 
 /** 非 JSON 响应的直通形态（报告 HTML 正文等）。 */
 class RawResponse {
@@ -95,7 +96,7 @@ export function apply(ctx: { webServer: WebServerLike }): void {
     path: '/kstock-api',
     handler: async (req, res) => {
       try {
-        const result = await dispatch(stores, reports, req)
+        const result = await dispatch(stores, reports, req, dataRoot)
         if (result instanceof RawResponse) {
           res.writeHead(result.status, result.headers)
           res.end(result.body)
@@ -123,6 +124,7 @@ async function dispatch(
   stores: Record<string, LibraryStore>,
   reports: ReportsStore,
   req: RequestLike,
+  dataRoot: string,
 ): Promise<unknown> {
   const url = new URL(req.url ?? '/', 'http://local')
   const segments = decodeURIComponent(url.pathname).split('/').filter(Boolean)
@@ -133,6 +135,15 @@ async function dispatch(
   // 落地页公共增强接口（匿名可达，与 1.x gateway 公共路由同语义）。
   if (libraryKey === 'landing-news') return method === 'GET' ? landingNews() : throwMethod(method)
   if (libraryKey === 'data-source-status') return method === 'GET' ? dataSourceStatus() : throwMethod(method)
+  // 数据源凭据配置面（设置页）：GET 状态 / PUT 合并写 secrets.env。
+  if (libraryKey === 'data-sources') {
+    if (method === 'GET') return dataSourcesView(dataRoot)
+    if (method === 'PUT') {
+      const body = await readJson(req)
+      return saveDataSources(dataRoot, body.values)
+    }
+    throwMethod(method)
+  }
   if (libraryKey === 'reports') return dispatchReports(reports, req, url, method, segments.slice(2))
   const library = libraryKey ?? ''
   const store = stores[library]

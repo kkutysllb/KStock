@@ -35,7 +35,7 @@ UPSTREAM_EXE_BASE="deepseek-harness-sdk-runtime-$TARGET"
 
 # ── 1. KStock 插件包构建（宿主 + 四库界面 + 品牌 + 账户）──────────────
 echo "==> 构建 KStock 插件包"
-for pkg in accounts client-brand presets-ui web quant quant-strategies quant-factors quant-selections quant-reports; do
+for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports; do
   (cd "$REPO_ROOT/kstock/$pkg" && npx tsdown > /dev/null 2>&1)
 done
 
@@ -68,7 +68,7 @@ done
 # KStock 插件包：清单 + lib 产物 + 静态资源（不含 node_modules / ts 源配置）。
 rm -rf "$OUT_DIR/plugins"
 mkdir -p "$OUT_DIR/plugins"
-for pkg in accounts client-brand presets-ui web quant quant-strategies quant-factors quant-selections quant-reports; do
+for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports; do
   target="$OUT_DIR/plugins/$pkg"
   mkdir -p "$target"
   cp "$REPO_ROOT/kstock/$pkg/package.json" "$target/"

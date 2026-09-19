@@ -77,6 +77,7 @@ export function ensureKstockProfile(): string {
     ["@kstock/accounts-local", "accounts"],
     ["@kstock/client-brand", "client-brand"],
     ["@kstock/client-presets", "presets-ui"],
+    ["@kstock/client-datasources", "datasources-ui"],
     ["@kstock/quant", "quant"],
     ["@kstock/quant-strategies", "quant-strategies"],
     ["@kstock/quant-factors", "quant-factors"],

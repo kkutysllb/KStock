@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
-import { join, resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 //#region src/store.ts
 /**
 * KStock 量化三库存储：策略 / 因子 / 选股，一份泛化实现按配置实例化。
@@ -743,7 +744,7 @@ async function landingNews() {
 	return inflight;
 }
 /** 与 1.x scripts/kstock_data_sources.py 的 `_DATA_SOURCES` 一致。 */
-const DATA_SOURCES = [[
+const DATA_SOURCES$1 = [[
 	"tushare",
 	"Tushare Pro",
 	"TUSHARE_TOKEN"
@@ -753,12 +754,115 @@ const DATA_SOURCES = [[
 	"IWENCAI_API_KEY"
 ]];
 function dataSourceStatus() {
-	return { sources: DATA_SOURCES.map(([id, label, envName]) => ({
+	return { sources: DATA_SOURCES$1.map(([id, label, envName]) => ({
 		id,
 		label,
 		env_name: envName,
 		configured: Boolean(process.env[envName])
 	})) };
+}
+//#endregion
+//#region src/datasources.ts
+/**
+* 数据源凭据配置面（设置页「数据源」的后端）。
+*
+* 凭据落 `~/.kstock/config/secrets.env`（1.x 同一文件）：Electron 壳在启动
+* 引擎前把该文件并入引擎环境（不覆盖已有键），技能脚本经 bash 继承——
+* 因此运行时修改凭据需重启引擎生效，本模块的写入口负责原子合并并如实
+* 返回 restart_required。
+*/
+/** 受管数据源：id →（展示名，环境变量名）。 */
+const DATA_SOURCES = [[
+	"tushare",
+	"Tushare Pro",
+	"TUSHARE_TOKEN"
+], [
+	"iwencai",
+	"同花顺问财",
+	"IWENCAI_API_KEY"
+]];
+function secretsPath(dataRoot) {
+	return join(dataRoot, "config", "secrets.env");
+}
+/** 解析 secrets.env 为保序键值表（保留注释/空行结构以最小 diff 写回）。 */
+function parseSecrets(text) {
+	const lines = text.split(/\r?\n/);
+	const values = /* @__PURE__ */ new Map();
+	for (const line of lines) {
+		const match = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line.trim());
+		if (match !== null) values.set(match[1], match[2].trim().replace(/^["']|["']$/g, ""));
+	}
+	return {
+		lines,
+		values
+	};
+}
+function mask(value) {
+	if (value === "") return null;
+	if (value.length <= 6) return `${value.slice(0, 1)}****`;
+	return `${value.slice(0, 3)}****${value.slice(-2)}`;
+}
+function view(dataRoot, env) {
+	const persisted = existsSync(secretsPath(dataRoot)) ? parseSecrets(readFileSync(secretsPath(dataRoot), "utf8")).values : /* @__PURE__ */ new Map();
+	return { sources: DATA_SOURCES.map(([id, label, envName]) => {
+		const value = env[envName] ?? persisted.get(envName) ?? "";
+		return {
+			id,
+			label,
+			env_name: envName,
+			configured: Boolean(env[envName]),
+			persisted: persisted.has(envName),
+			masked: mask(value)
+		};
+	}) };
+}
+/** GET /kstock-api/data-sources。 */
+function dataSourcesView(dataRoot) {
+	return view(dataRoot, process.env);
+}
+/**
+* PUT /kstock-api/data-sources：合并写入 secrets.env。
+*
+* values 为「环境变量名 → 新值」表；空串表示清除该键；不在受管清单内的
+* 键拒绝（防止把任意环境变量写进文件）。保留文件中的注释与未知键。
+*/
+async function saveDataSources(dataRoot, values) {
+	if (typeof values !== "object" || values === null) throw new StoreError(422, "values 必须是「环境变量名 → 值」对象");
+	const managed = new Set(DATA_SOURCES.map(([, , envName]) => envName));
+	const input = /* @__PURE__ */ new Map();
+	for (const [key, raw] of Object.entries(values)) {
+		if (!managed.has(key)) throw new StoreError(422, `不受管理的数据源键：${key}`);
+		if (typeof raw !== "string") throw new StoreError(422, `${key} 的值必须是字符串`);
+		input.set(key, raw.trim());
+	}
+	if (input.size === 0) throw new StoreError(422, "values 为空");
+	const path = secretsPath(dataRoot);
+	const { lines, values: current } = parseSecrets(existsSync(path) ? readFileSync(path, "utf8") : "");
+	const written = /* @__PURE__ */ new Set();
+	const output = [];
+	for (const line of lines) {
+		const key = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=/.exec(line.trim())?.[1];
+		if (key === void 0 || !managed.has(key) || !input.has(key)) {
+			output.push(line);
+			continue;
+		}
+		written.add(key);
+		const next = input.get(key);
+		if (next !== "") output.push(`${key}=${next}`);
+	}
+	for (const [key, value] of input) if (!written.has(key) && value !== "") output.push(`${key}=${value}`);
+	const text = `${output.join("\n").replace(/\n*$/, "")}\n`;
+	await mkdir(dirname(path), { recursive: true });
+	const tmp = `${path}.tmp`;
+	await writeFile(tmp, text, "utf8");
+	await rename(tmp, path);
+	const merged = { ...process.env };
+	for (const [key, value] of input) if (value === "") delete merged[key];
+	else merged[key] = value;
+	return {
+		...view(dataRoot, merged),
+		restart_required: true
+	};
 }
 //#endregion
 //#region src/index.ts
@@ -819,7 +923,7 @@ function apply(ctx) {
 		path: "/kstock-api",
 		handler: async (req, res) => {
 			try {
-				const result = await dispatch(stores, reports, req);
+				const result = await dispatch(stores, reports, req, dataRoot);
 				if (result instanceof RawResponse) {
 					res.writeHead(result.status, result.headers);
 					res.end(result.body);
@@ -839,13 +943,18 @@ function entityText(libraryKey, body, create) {
 	if (body.criteria !== void 0 && libraryKey === "selections") text.criteria = String(body.criteria);
 	return text;
 }
-async function dispatch(stores, reports, req) {
+async function dispatch(stores, reports, req, dataRoot) {
 	const url = new URL(req.url ?? "/", "http://local");
 	const segments = decodeURIComponent(url.pathname).split("/").filter(Boolean);
 	const libraryKey = segments[1];
 	const method = (req.method ?? "GET").toUpperCase();
 	if (libraryKey === "landing-news") return method === "GET" ? landingNews() : throwMethod(method);
 	if (libraryKey === "data-source-status") return method === "GET" ? dataSourceStatus() : throwMethod(method);
+	if (libraryKey === "data-sources") {
+		if (method === "GET") return dataSourcesView(dataRoot);
+		if (method === "PUT") return saveDataSources(dataRoot, (await readJson(req)).values);
+		throwMethod(method);
+	}
 	if (libraryKey === "reports") return dispatchReports(reports, req, url, method, segments.slice(2));
 	const library = libraryKey ?? "";
 	const store = stores[library];

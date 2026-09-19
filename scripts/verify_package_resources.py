@@ -131,6 +131,13 @@ class Verifier:
                               f"source preset {preset}")
         self.require_path(root / "kstock" / "presets-ui" / "lib" / "client.cjs",
                           "source kstock presets-ui client build")
+        self.require_path(root / "kstock" / "datasources-ui" / "lib" / "client.cjs",
+                          "source kstock datasources-ui client build")
+        self.require_file_contains(
+            root / "kstock" / "quant" / "src" / "index.ts",
+            "source quant data-sources routes",
+            ["data-sources", "saveDataSources"],
+        )
 
         # 账户面挂载契约：禁用上游 accounts-local 行 + insert KStock fork 行
         # （1.x 账户迁移的挂载前提；组合器不允许替换行换包名）。

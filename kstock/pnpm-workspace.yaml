@@ -1,6 +1,7 @@
 packages:
   - "accounts"
   - "presets-ui"
+  - "datasources-ui"
   - "client-brand"
   - "web"
   - "quant"

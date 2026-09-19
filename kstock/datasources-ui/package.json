@@ -1,0 +1,28 @@
+{
+  "name": "@kstock/client-datasources",
+  "description": "KStock 数据源设置分区：Tushare / 问财凭据的脱敏录入与状态展示（PUT 合并写 secrets.env，重启引擎生效）",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.cjs",
+    "./package.json": "./package.json"
+  },
+  "qilin": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@qilin/client-locale",
+        "@qilin/client-ui-settings"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsdown"
+  },
+  "devDependencies": {
+    "tsdown": "0.22.2"
+  }
+}

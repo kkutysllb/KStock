@@ -101,6 +101,10 @@
     - id: kstock-presets-ui
       name: '@kstock/client-presets'
 
+    # KStock 数据源设置分区（Tushare/问财凭据录入；PUT 合并写 secrets.env）。
+    - id: kstock-datasources-ui
+      name: '@kstock/client-datasources'
+
     - id: kstock-brand
       name: '@kstock/client-brand'
 
