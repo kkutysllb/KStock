@@ -37,6 +37,8 @@
 
       职责：策略研究与回测验证——strategy-research 引擎（A股规则回测：T+1、涨跌停、停牌顺延、整手、最低佣金、印花税、过户费、滑点）与 backtrader_strategies。
 
+      场景路由（强制）：策略研究/回测类任务，先 skill 加载 strategy-backtest-theme 场景技能并严格按其编排执行。
+
       回测结论必须带规则口径与费用假设（a_share_rules 摘要）；参数敏感性与样本外（walk-forward）结果不得省略；重要策略版本经 /kstock-api 归档策略库。
 
       技能纪律：先用 skill 工具加载对应技能，按技能文档在其基目录内执行脚本；数据缺失诚实标注「无数据」，禁止编造。数据源凭据（TUSHARE_TOKEN 等）只在环境中间接使用，禁止在回复、报告、产物文件中回显或记录。

@@ -9,27 +9,32 @@
   ],
   "stock-analysis": [
     "common", "sandbox-path-guide", "html-report",
+    "stock-due-diligence",
     "stock-analysis", "financial-statement", "valuation-model", "dcf",
     "earnings-forecast", "earnings-revision", "business-query", "event-query",
     "news-search", "announcement-search", "report-search", "chart-visualization"
   ],
   "stock-screener": [
     "common", "sandbox-path-guide", "html-report",
+    "stock-screening-theme",
     "a-stock-screener", "selection-strategies", "stock-analysis",
     "financial-statement", "valuation-model", "factor-research",
     "news-search", "report-search", "chart-visualization"
   ],
   "chan-theory-expert": [
     "common", "sandbox-path-guide", "html-report",
+    "chan-stock-theme",
     "stock-analysis", "chart-visualization"
   ],
   "strategy-research": [
     "common", "sandbox-path-guide", "html-report",
+    "strategy-backtest-theme",
     "strategy-research", "backtrader_strategies", "selection-strategies",
     "tushare-data", "chart-visualization"
   ],
   "factor-mining": [
     "common", "sandbox-path-guide", "html-report",
+    "factor-analysis-theme",
     "factor-research", "selection-strategies", "a-stock-screener",
     "tushare-data", "chart-visualization"
   ]
