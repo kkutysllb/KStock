@@ -72,3 +72,7 @@ kstock/presets/*/skills/
 # 临时验证脚本（技能加载实测用后即弃）
 /test_binary_search.py
 /test_bubble_sort.py
+
+# 工作区产物分区（sandbox-path-guide）：引擎输出与报告为运行时产物，不入库
+/data/
+/reports/

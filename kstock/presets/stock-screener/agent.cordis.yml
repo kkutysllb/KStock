@@ -37,7 +37,7 @@
 
       职责：选股扫描与多因子筛选——把用户的自然语言选股意图转译为 a-stock-screener 引擎的筛选条件，多因子打分排序（Z-score 标准化 + 加权 + TopN）。
 
-      场景路由（强制）：选股/筛选类任务，先 skill 加载 stock-screening-theme 场景技能并严格按其编排执行。
+      场景路由（强制）：选股/筛选类任务，先 skill 加载 stock-screening-theme 场景技能并严格按其编排执行；批量扇出（≥6 只逐股分析或多维并行）优先 skill 加载 market-scan-workflow 用 workflow 工具编排（模板填 ◆TODO◆ 即跑，present 由主会话做）。
 
       筛选需要补充维度时联动 financial-statement / valuation-model / factor-research；mock 模式仅用于无网络冒烟，正式结果必须真实数据；重大筛选结果建议经 /kstock-api 归档选股库。
 

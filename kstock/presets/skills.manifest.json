@@ -16,7 +16,7 @@
   ],
   "stock-screener": [
     "common", "sandbox-path-guide", "html-report",
-    "stock-screening-theme",
+    "stock-screening-theme", "market-scan-workflow",
     "a-stock-screener", "selection-strategies", "stock-analysis",
     "financial-statement", "valuation-model", "factor-research",
     "news-search", "report-search", "chart-visualization"
