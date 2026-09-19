@@ -51,6 +51,16 @@ function LogoSvg({ size, className, title }: { size: number; className?: string 
   )
 }
 
+/**
+ * 侧栏品牌名槽位的 KStock 占位：替换 shell 的 QiLin 回退字标。
+ * 版本徽章仍由 shell 自绘（构建期烙入的版本号），此处只接管名字。
+ * 字号与 shell 回退字标（fallbackBrandName 17px/600）对齐，样式见
+ * windowChrome 注入的 `.kstock-brand-wordmark`。
+ */
+export function KStockWordmark() {
+  return <span className="kstock-brand-wordmark">KStock</span>
+}
+
 /** 侧栏品牌标记槽位的 KStock 占位。 */
 export function KStockMark({ size }: SidebarBrandMarkOwnerProps) {
   return <LogoSvg size={size} title="KStock" />

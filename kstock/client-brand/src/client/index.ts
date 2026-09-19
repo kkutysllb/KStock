@@ -10,9 +10,9 @@ import type {} from '@qilin/client-ui-conversation/client'
 import type {} from '@qilin/client-ui-sidebar/client'
 import type {} from '@qilin/client-ui-theme/client'
 import { applyBackgroundCss } from './background.ts'
-import { KStockArtistMark, KStockHeroMark, KStockMark } from './Marks.tsx'
+import { KStockArtistMark, KStockHeroMark, KStockMark, KStockWordmark } from './Marks.tsx'
 import { KSTOCK_THEME_SOURCE, KSTOCK_TOKENS } from './tokens.ts'
-import { applyWindowChromeCss } from './windowChrome.ts'
+import { applyUiFixesCss, applyWindowChromeCss } from './windowChrome.ts'
 
 /** 必需服务：槽位注册表（品牌标记）、主题注册表（token 覆盖）、locale 注册表（品牌文案）。 */
 export const inject = ['slots', 'theme', 'locale']
@@ -36,20 +36,25 @@ function applyBrandLocale(ctx: ClientContext): () => void {
 }
 
 /**
- * 挂载 KStock 品牌层。品牌标记的槽位注册方式与上游 @qilin/client-ui-brand
- * 相同：侧栏与 hero 标记共用一组嵌套注册，关于页标记独立注册。
+ * 挂载 KStock 品牌层。品牌标记与品牌名的槽位注册方式与上游
+ * @qilin/client-ui-brand 同构：侧栏标记/名字与 hero 标记共用一组嵌套
+ * 注册（slots.inject 等待 ui-sidebar 的声明），关于页标记独立注册。
  * @param ctx - 客户端根上下文。
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => {
     const disposeTokens = ctx.theme.overrideTokens(KSTOCK_THEME_SOURCE, KSTOCK_TOKENS)
     const disposeBackground = applyBackgroundCss()
+    const disposeUiFixes = applyUiFixesCss()
     const disposeWindowChrome = applyWindowChromeCss()
     const disposeMarks = ctx.slots.inject('sidebar.brand.mark', () =>
-      ctx.slots.inject('conversation.hero.brand.mark', function* () {
-        yield ctx.slots.register({ name: 'sidebar.brand.mark' }, KStockMark)
-        yield ctx.slots.register({ name: 'conversation.hero.brand.mark' }, KStockHeroMark)
-      }),
+      ctx.slots.inject('sidebar.brand.name', () =>
+        ctx.slots.inject('conversation.hero.brand.mark', function* () {
+          yield ctx.slots.register({ name: 'sidebar.brand.mark' }, KStockMark)
+          yield ctx.slots.register({ name: 'sidebar.brand.name' }, KStockWordmark)
+          yield ctx.slots.register({ name: 'conversation.hero.brand.mark' }, KStockHeroMark)
+        }),
+      ),
     )
     const disposeAbout = ctx.slots.inject('settings.about.mark', () =>
       ctx.slots.register({ name: 'settings.about.mark' }, KStockArtistMark),
@@ -60,6 +65,7 @@ export function apply(ctx: ClientContext): void {
       disposeAbout()
       disposeMarks()
       disposeWindowChrome()
+      disposeUiFixes()
       disposeBackground()
       disposeTokens()
     }

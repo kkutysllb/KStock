@@ -16,7 +16,7 @@ window.__ModuleLoader__.load({
 		* 变量覆盖，因此这里的品牌背景用样式表 + !important 声明，作为品牌层的
 		* 画布兜底；面板层级表面仍由 token 控制，渐变只在可见画布处透出。
 		*/
-		const STYLE_TAG_ID$1 = "kstock-brand-background";
+		const STYLE_TAG_ID = "kstock-brand-background";
 		const BACKGROUND_CSS = `
 /* KStock 品牌环境背景（亮色：薄荷纸衍生；暗色：1.x 深绿黑原案） */
 body {
@@ -46,10 +46,10 @@ body[data-ds-dark-theme] {
 		/** 注入品牌背景样式表；返回卸用 disposer（幂等：已存在则不再注入）。 */
 		function applyBackgroundCss() {
 			if (typeof document === "undefined") return () => {};
-			const existing = document.querySelector(`style[data-kstock="${STYLE_TAG_ID$1}"]`);
+			const existing = document.querySelector(`style[data-kstock="${STYLE_TAG_ID}"]`);
 			if (existing !== null) return () => existing.remove();
 			const tag = document.createElement("style");
-			tag.dataset.kstock = STYLE_TAG_ID$1;
+			tag.dataset.kstock = STYLE_TAG_ID;
 			tag.textContent = BACKGROUND_CSS;
 			document.head.appendChild(tag);
 			return () => tag.remove();
@@ -122,6 +122,18 @@ body[data-ds-dark-theme] {
 						strokeLinejoin: "round"
 					})
 				]
+			});
+		}
+		/**
+		* 侧栏品牌名槽位的 KStock 占位：替换 shell 的 QiLin 回退字标。
+		* 版本徽章仍由 shell 自绘（构建期烙入的版本号），此处只接管名字。
+		* 字号与 shell 回退字标（fallbackBrandName 17px/600）对齐，样式见
+		* windowChrome 注入的 `.kstock-brand-wordmark`。
+		*/
+		function KStockWordmark() {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+				className: "kstock-brand-wordmark",
+				children: "KStock"
 			});
 		}
 		/** 侧栏品牌标记槽位的 KStock 占位。 */
@@ -391,26 +403,59 @@ body[data-ds-dark-theme] {
 		//#endregion
 		//#region src/client/windowChrome.ts
 		/**
-		* 无框窗口的桌面壳适配（2.0 窗口回到 1.x 无标题栏形态后，引擎 UI 的避让层）。
+		* 桌面壳适配与上游 UI 修正，两层样式表分开发布：
 		*
-		* - macOS hiddenInset：红绿灯叠加在画布左上（trafficLightPosition {13,22}），
-		*   侧栏 logo 行加左肩留白并升级为窗口拖拽条（行内按钮以外区域可拖动）。
-		* - Windows/Linux titleBarOverlay：内容整体避开系统窗控条（env 回落 0 时无副作用）。
+		* 1. `kstock-ui-fixes`（全平台注入）：上游组件里影响浏览器端的布局修正。
+		*    目前一处：文件面板「自动换行」开关复用了 28px 定宽的图标按钮 `.tool`，
+		*    四字文本标签被逐字折行成竖排——放开定宽并禁止折行
+		*    （`data-file-wrap` 是上游模板上的稳定 data 钩子）。
+		*    侧栏品牌名 `.kstock-brand-wordmark` 的样式也在这层（浏览器同样渲染）。
+		*
+		* 2. `kstock-window-chrome`（仅 Electron）：无框窗口的桌面壳避让。
+		*    - macOS hiddenInset：红绿灯叠加在画布左上（trafficLightPosition
+		*      {13,18}，灯组占 y 18..30、x 13..65，中心正对 48px 顶栏带）。侧栏
+		*      品牌行收成 48px（与会话标题栏同高）并留 84px 左肩；折叠轨（56px
+		*      宽）容不下左肩，改为整体把轨内容压到灯组下方；设置弹层是全窗口
+		*      面板，导航标题行同样压到灯组下方。品牌行/标题行兼作拖拽条
+		*      （行内按钮除外）。
+		*    - Windows/Linux titleBarOverlay：内容整体避开系统窗控条
+		*      （env 回落 0 时无副作用）。
 		*
 		* 上游 UI 的类名是 CSS Modules 哈希产物（实测形如 `PBw8SG_logoRow`，前缀式
-		* 哈希），用 `[class*="logoRow"]` 属性包含匹配稳定命中本地名。仅 Electron 内
-		* 注入；浏览器直连引擎时不产生任何窗口适配样式。
+		* 哈希），用 `[class*="logoRow"]` 属性包含匹配稳定命中本地名；层级覆盖
+		* （折叠态、设置标题）用同等特异度的组合选择器并靠注入顺序取胜。
 		*/
-		const STYLE_TAG_ID = "kstock-window-chrome";
+		const UI_FIXES_TAG_ID = "kstock-ui-fixes";
+		const WINDOW_CHROME_TAG_ID = "kstock-window-chrome";
+		/** 全平台生效的上游布局修正 + KStock 品牌名样式。 */
+		const UI_FIXES_CSS = `
+button[data-file-wrap] {
+  width: auto;
+  min-width: 28px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.kstock-brand-wordmark {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+`;
+		/** Electron 内注入的窗口壳适配（拖拽条 + 窗控避让）。几何覆盖一律挂
+		* `#root` 前缀抬升特异度（ID+类 > 上游任意类组合），不依赖注入顺序。 */
 		const WINDOW_CHROME_CSS = `
-[class*="logoRow"] {
-  padding-left: 80px;
+#root [class*="logoRow"],
+#root [class*="navTitle"],
+#root [class*="header"]:has(> [class*="headerRight"]) {
   -webkit-app-region: drag;
 }
 
-[class*="logoRow"] button,
-[class*="logoRow"] a,
-[class*="logoRow"] input {
+#root [class*="logoRow"] :is(button, a, input),
+#root [class*="navTitle"] :is(button, a, input),
+#root [class*="header"]:has(> [class*="headerRight"]) :is(button, a, input) {
   -webkit-app-region: no-drag;
 }
 
@@ -419,17 +464,54 @@ body[data-ds-dark-theme] {
   box-sizing: border-box;
 }
 `;
-		/** 注入窗口壳适配样式表；返回卸用 disposer（幂等：已存在则不再注入）。 */
+		/** macOS 专属：红绿灯左上叠加的避让与顶栏 48px 统一。
+		* - 侧栏品牌行收成 48px 并吃掉侧栏列自带的 6px 顶部内边距（margin -6px），
+		*   品牌标记中心正对红绿灯中心（y=24）；84px 左肩让开灯组（x 13..65）。
+		* - 折叠轨（56px 宽）容不下左肩：轨内容整体压到灯组下方（灯组底 y=30，
+		*   折叠轨顶 padding 18 + margin 34 = y 52 起）。
+		* - 设置弹层是全窗口面板：导航标题行压到灯组下方（导航顶 padding 22
+		*   + margin 26 = y 48 起），标题行兼作拖拽条。 */
+		const MACOS_TRAFFIC_LIGHTS_CSS = `
+#root [class*="logoRow"] {
+  height: 48px;
+  padding: 0 0 0 84px;
+  margin: -6px 0 8px;
+}
+
+#root [class*="collapsed"] [class*="logoRow"] {
+  height: 36px;
+  padding: 0;
+  margin: 34px 0 12px;
+}
+
+#root [class*="navTitle"] {
+  margin-top: 26px;
+}
+`;
+		function injectStyleTag(tagId, css) {
+			const existing = document.querySelector(`style[data-kstock="${tagId}"]`);
+			if (existing !== null) return () => existing.remove();
+			const tag = document.createElement("style");
+			tag.dataset.kstock = tagId;
+			tag.textContent = css;
+			document.head.appendChild(tag);
+			return () => tag.remove();
+		}
+		/** 注入全平台 UI 修正样式表；返回卸用 disposer（幂等：已存在则不再注入）。 */
+		function applyUiFixesCss() {
+			if (typeof document === "undefined") return () => {};
+			return injectStyleTag(UI_FIXES_TAG_ID, UI_FIXES_CSS);
+		}
+		/**
+		* 注入窗口壳适配样式表；返回卸用 disposer（幂等：已存在则不再注入）。
+		* 仅 Electron 生效，浏览器直连引擎时不产生任何窗口适配样式；macOS
+		* 额外叠加红绿灯避让（Windows/Linux 的窗控条由 overlay env 让位）。
+		*/
 		function applyWindowChromeCss() {
 			if (typeof document === "undefined") return () => {};
 			if (!/Electron/.test(navigator.userAgent)) return () => {};
-			const existing = document.querySelector(`style[data-kstock="${STYLE_TAG_ID}"]`);
-			if (existing !== null) return () => existing.remove();
-			const tag = document.createElement("style");
-			tag.dataset.kstock = STYLE_TAG_ID;
-			tag.textContent = WINDOW_CHROME_CSS;
-			document.head.appendChild(tag);
-			return () => tag.remove();
+			const isMac = /Macintosh|Mac OS X/.test(navigator.userAgent);
+			return injectStyleTag(WINDOW_CHROME_TAG_ID, WINDOW_CHROME_CSS + (isMac ? MACOS_TRAFFIC_LIGHTS_CSS : ""));
 		}
 		//#endregion
 		//#region src/client/index.ts
@@ -454,19 +536,22 @@ body[data-ds-dark-theme] {
 			return () => {};
 		}
 		/**
-		* 挂载 KStock 品牌层。品牌标记的槽位注册方式与上游 @qilin/client-ui-brand
-		* 相同：侧栏与 hero 标记共用一组嵌套注册，关于页标记独立注册。
+		* 挂载 KStock 品牌层。品牌标记与品牌名的槽位注册方式与上游
+		* @qilin/client-ui-brand 同构：侧栏标记/名字与 hero 标记共用一组嵌套
+		* 注册（slots.inject 等待 ui-sidebar 的声明），关于页标记独立注册。
 		* @param ctx - 客户端根上下文。
 		*/
 		function apply(ctx) {
 			ctx.effect(() => {
 				const disposeTokens = ctx.theme.overrideTokens(KSTOCK_THEME_SOURCE, KSTOCK_TOKENS);
 				const disposeBackground = applyBackgroundCss();
+				const disposeUiFixes = applyUiFixesCss();
 				const disposeWindowChrome = applyWindowChromeCss();
-				const disposeMarks = ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.inject("conversation.hero.brand.mark", function* () {
+				const disposeMarks = ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.inject("sidebar.brand.name", () => ctx.slots.inject("conversation.hero.brand.mark", function* () {
 					yield ctx.slots.register({ name: "sidebar.brand.mark" }, KStockMark);
+					yield ctx.slots.register({ name: "sidebar.brand.name" }, KStockWordmark);
 					yield ctx.slots.register({ name: "conversation.hero.brand.mark" }, KStockHeroMark);
-				}));
+				})));
 				const disposeAbout = ctx.slots.inject("settings.about.mark", () => ctx.slots.register({ name: "settings.about.mark" }, KStockArtistMark));
 				const disposeLocale = applyBrandLocale(ctx);
 				return () => {
@@ -474,6 +559,7 @@ body[data-ds-dark-theme] {
 					disposeAbout();
 					disposeMarks();
 					disposeWindowChrome();
+					disposeUiFixes();
 					disposeBackground();
 					disposeTokens();
 				};

@@ -43,10 +43,11 @@ export function createMainWindow(targetUrl: string): BrowserWindow {
     minWidth: 1180,
     minHeight: 760,
     show: false,
-    // 无标题栏：macOS 红绿灯位置对齐 1.x（trafficLightPosition）；
+    // 无标题栏：macOS 红绿灯垂直居中于引擎 UI 的 48px 顶栏带（会话标题栏
+    // 与侧栏品牌行同高，避让样式由 @kstock/client-brand 注入）；
     // Windows/Linux 的 hidden + titleBarOverlay 由系统绘制窗控按钮。
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
-    trafficLightPosition: process.platform === "darwin" ? { x: 13, y: 22 } : undefined,
+    trafficLightPosition: process.platform === "darwin" ? { x: 13, y: 18 } : undefined,
     titleBarOverlay:
       process.platform === "darwin"
         ? undefined
