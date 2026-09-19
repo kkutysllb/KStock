@@ -1073,6 +1073,147 @@ def _fix_cb_weekly_kk_common(text: str) -> str | None:
     return text.replace(_CB_WEEKLY_KK_ANCHOR, _CB_WEEKLY_KK_INJECTION, 1)
 
 
+# ── stock-analysis 缠论脚本 kk_common 同级解析补丁 ─────────────────────────
+# analyze_stock_chan.py / run_chan_stock_selector.py 裸 `from kk_common import
+# ...`（chan-theory-expert 角色的核心脚本，2.0 preset 镜像下必炸
+# ModuleNotFoundError）。两脚本已把技能根注入 sys.path（chan_theory_v2 由此
+# 解析），补上同级 common/src（scripts → stock-analysis → public）。
+_CHAN_KK_SCRIPTS = (
+    "public/stock-analysis/scripts/analyze_stock_chan.py",
+    "public/stock-analysis/scripts/run_chan_stock_selector.py",
+)
+_CHAN_KK_ANCHOR = "from kk_common import get_finance_data_gateway"
+_CHAN_KK_INJECTION = '''# KStock patch: kk_common 由同级 common 技能提供（<skill>/../common/src）。
+_kk_common_src = os.path.normpath(
+    os.path.join(_script_dir, "..", "..", "common", "src")
+)
+if os.path.isdir(_kk_common_src) and _kk_common_src not in sys.path:
+    sys.path.insert(0, _kk_common_src)
+
+from kk_common import get_finance_data_gateway'''
+
+
+def _fix_chan_kk_common(text: str) -> str | None:
+    """给缠论脚本的 kk_common 导入注入同级解析；已修复返回 None。"""
+    if "_kk_common_src" in text:
+        return None
+    if _CHAN_KK_ANCHOR not in text:
+        return None
+    return text.replace(_CHAN_KK_ANCHOR, _CHAN_KK_INJECTION, 1)
+
+
+# ── kk_common 通用同级解析补丁（stock-analysis 引擎群 + 选股适配器）─────────
+# 这些脚本的 `from kk_common import get_finance_data_gateway` 是函数级懒导入
+# 或 try/except 降级：--help 能过、一取数就 ModuleNotFoundError（懒导入）或
+# 诚实报错无数据（降级）。统一在其导入语句前注入自包含的同级解析块
+# （别名 import 防止依赖外层名字；缩进随导入点自适应；上跳层数按文件
+# 在技能包内的深度计算）。futures-analysis / option-futures-linkage 的内部
+# analyzer 有直连取数兜底且实测可用，保守不动。
+_KK_GENERIC_ANCHOR = "from kk_common import get_finance_data_gateway"
+_KK_GENERIC_FILES = (
+    "public/stock-analysis/scripts/analysis-engine/analyze_elliott_wave.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_financial_report.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_harmonic_pattern.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_stock_chips.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_stock_company_info.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_stock_earnings_forecast.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_stock_institute_research.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_stock_margin.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_stock_news.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_stock_shareholder.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_stock_valuation.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_technical.py",
+    "public/stock-analysis/scripts/analysis-engine/technical_analyzer.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_financial_deep.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_social_media.py",
+    "public/stock-analysis/scripts/analysis-engine/analyze_valuation_models.py",
+    "public/a-stock-screener/scripts/data_adapter.py",
+)
+
+
+def _kk_common_levels(rel_path: str) -> int:
+    """文件到 public/ 的目录深度（'..' 个数）：public/a/b/c.py → 3。"""
+    parts = rel_path.split("/")
+    return len(parts) - 2  # 去掉 'public' 与文件名
+
+
+def _fix_kk_common_generic(text: str, levels: int) -> str | None:
+    """在每处 kk_common 导入语句前注入自包含同级解析；已修复返回 None。"""
+    if _KK_GENERIC_ANCHOR not in text or "_kstock_kk_common" in text:
+        return None
+    up = ", ".join(['".."'] * levels)
+    pattern = re.compile(r"^(\s*)" + re.escape(_KK_GENERIC_ANCHOR), re.MULTILINE)
+
+    def repl(m: re.Match[str]) -> str:
+        indent = m.group(1)
+        return (
+            f"{indent}import os as _kstock_kk_os, sys as _kstock_kk_sys  # KStock patch: kk_common 同级解析\n"
+            f"{indent}_kstock_kk_common = _kstock_kk_os.path.normpath(_kstock_kk_os.path.join("
+            f"_kstock_kk_os.path.dirname(_kstock_kk_os.path.abspath(__file__)), {up}, \"common\", \"src\"))\n"
+            f"{indent}if _kstock_kk_os.path.isdir(_kstock_kk_common) and _kstock_kk_common not in _kstock_kk_sys.path:\n"
+            f"{indent}    _kstock_kk_sys.path.insert(0, _kstock_kk_common)\n"
+            f"{indent}{_KK_GENERIC_ANCHOR}"
+        )
+
+    return pattern.sub(repl, text)
+
+
+# ── ENSURE 形态补丁（financial_cli / pe_band_cli）──────────────────────────
+# 这两个脚本的 `_ensure_kk_common` 在导入失败时尝试 pip install -e 候选路径
+# （含 1.x 硬编码开发机绝对路径）——2.0 沙箱必拒、干净机器路径不存在。
+# 在函数定义前注入模块级同级解析，让首个 import 直接命中。
+_KK_ENSURE_FILES = (
+    "public/financial-statement/scripts/financial_cli.py",
+    "public/valuation-model/scripts/pe_band_cli.py",
+)
+_KK_ENSURE_ANCHOR = "def _ensure_kk_common() -> None:"
+
+
+def _fix_kk_ensure(text: str, levels: int) -> str | None:
+    """给 _ensure_kk_common 前注入模块级同级解析；已修复返回 None。"""
+    if _KK_ENSURE_ANCHOR not in text or "_kstock_kk_common" in text:
+        return None
+    up = ", ".join(['".."'] * levels)
+    injection = (
+        "# KStock patch: kk_common 由同级 common 技能提供（<skill>/../common/src），\n"
+        "# 首个 import 直接命中，免去 pip install -e（2.0 沙箱必拒）。\n"
+        f"import os as _kstock_kk_os, sys as _kstock_kk_sys\n"
+        f"_kstock_kk_common = _kstock_kk_os.path.normpath(_kstock_kk_os.path.join("
+        f"_kstock_kk_os.path.dirname(_kstock_kk_os.path.abspath(__file__)), {up}, \"common\", \"src\"))\n"
+        f"if _kstock_kk_os.path.isdir(_kstock_kk_common) and _kstock_kk_common not in _kstock_kk_sys.path:\n"
+        f"    _kstock_kk_sys.path.insert(0, _kstock_kk_common)\n"
+        "\n"
+        "\n"
+        f"{_KK_ENSURE_ANCHOR}"
+    )
+    return text.replace(_KK_ENSURE_ANCHOR, injection, 1)
+
+
+# ── a-stock-screener data_adapter 补丁 ──────────────────────────────────────
+# 该模块 try/except 导入 kk_common 子模块，失败时降级 **Mock 数据模式**——
+# 选股器拿模拟数据比诚实报错更危险。在其 try 前注入模块级同级解析。
+_KK_DATA_ADAPTER = "public/a-stock-screener/scripts/data_adapter.py"
+_KK_DATA_ADAPTER_ANCHOR = "try:\n    from kk_common.iwencai_client import"
+
+
+def _fix_kk_data_adapter(text: str, levels: int) -> str | None:
+    """给 data_adapter 的 kk_common 导入注入同级解析；已修复返回 None。"""
+    if _KK_DATA_ADAPTER_ANCHOR not in text or "_kstock_kk_common" in text:
+        return None
+    up = ", ".join(['".."'] * levels)
+    injection = (
+        "# KStock patch: kk_common 由同级 common 技能提供（<skill>/../common/src）。\n"
+        f"import os as _kstock_kk_os, sys as _kstock_kk_sys\n"
+        f"_kstock_kk_common = _kstock_kk_os.path.normpath(_kstock_kk_os.path.join("
+        f"_kstock_kk_os.path.dirname(_kstock_kk_os.path.abspath(__file__)), {up}, \"common\", \"src\"))\n"
+        f"if _kstock_kk_os.path.isdir(_kstock_kk_common) and _kstock_kk_common not in _kstock_kk_sys.path:\n"
+        f"    _kstock_kk_sys.path.insert(0, _kstock_kk_common)\n"
+        "\n"
+        + _KK_DATA_ADAPTER_ANCHOR
+    )
+    return text.replace(_KK_DATA_ADAPTER_ANCHOR, injection, 1)
+
+
 # ── KStock 自有技能 ensure（kstock/skills → vendor/skills/public）────────
 # 源码在 kstock/skills/<name>（上游同步整体覆盖 vendor 时不受影响），补丁器
 # 把它们 ensure 进 vendor 技能目录：html-report（自研渲染器）、market-linkage
@@ -1260,6 +1401,35 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     target = vendor_root / _CB_WEEKLY_KK_SCRIPT
     if target.exists() and _patch_file(target, _CB_WEEKLY_KK_SCRIPT, _fix_cb_weekly_kk_common):
         changed.append(_CB_WEEKLY_KK_SCRIPT)
+    # stock-analysis 缠论脚本 kk_common 同级解析（chan-theory-expert 核心）。
+    for rel_path in _CHAN_KK_SCRIPTS:
+        target = vendor_root / rel_path
+        if not target.exists():
+            continue
+        if _patch_file(target, rel_path, _fix_chan_kk_common):
+            changed.append(rel_path)
+    # kk_common 通用同级解析（stock-analysis 引擎群懒导入/降级 + 选股适配器）。
+    for rel_path in _KK_GENERIC_FILES:
+        target = vendor_root / rel_path
+        if not target.exists():
+            continue
+        levels = _kk_common_levels(rel_path)
+        if _patch_file(target, rel_path, lambda t, lv=levels: _fix_kk_common_generic(t, lv)):
+            changed.append(rel_path)
+    # ENSURE 形态（pip install -e 兜底在 2.0 沙箱必拒）。
+    for rel_path in _KK_ENSURE_FILES:
+        target = vendor_root / rel_path
+        if not target.exists():
+            continue
+        levels = _kk_common_levels(rel_path)
+        if _patch_file(target, rel_path, lambda t, lv=levels: _fix_kk_ensure(t, lv)):
+            changed.append(rel_path)
+    # a-stock-screener data_adapter（降级 Mock 数据模式，比报错更危险）。
+    target = vendor_root / _KK_DATA_ADAPTER
+    if target.exists():
+        levels = _kk_common_levels(_KK_DATA_ADAPTER)
+        if _patch_file(target, _KK_DATA_ADAPTER, lambda t, lv=levels: _fix_kk_data_adapter(t, lv)):
+            changed.append(_KK_DATA_ADAPTER)
     # KStock 自有技能 ensure（html-report / market-linkage / sandbox-path-guide…）。
     for rel_path in _ensure_owned_skills(vendor_root):
         changed.append(rel_path)
