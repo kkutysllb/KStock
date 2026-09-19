@@ -435,6 +435,7 @@ export class EngineProcess {
       detached: platform() !== "win32",
       windowsHide: true,
     });
+    logMain(`引擎已拉起（${launch.label}），等待就绪…`);
 
     let tokenUrl: string | null = null;
     const capture = (chunk: Buffer) => {
@@ -469,10 +470,19 @@ export class EngineProcess {
         logMain(`引擎已就绪：${workspaceUrl}（token 引导已忽略，走账户门）`);
         return workspaceUrl;
       }
+      // 每 5s 打点：启动卡住时终端能看到 token/端口各自的状态。
+      if (i > 0 && i % 10 === 0) {
+        logMain(`等待引擎就绪… ${(i * 0.5).toFixed(0)}s（token ${tokenUrl !== null ? "已捕获" : "未捕获"}）`);
+      }
       await sleep(500);
     }
     this.child = child;
-    if (tokenUrl !== null) return workspaceUrl;
+    if (tokenUrl !== null) {
+      // 端口探测 60s 未过但 token 已出现：大概率是探测面问题而非引擎问题，
+      // 直接放行（引擎自身已声明就绪）。
+      logMain(`引擎 token 已就绪但端口探测 60s 未通过，直接放行：${workspaceUrl}`);
+      return workspaceUrl;
+    }
     throw new Error(
       `引擎启动超时，端口 ${ENGINE_PORT} 未就绪；请查看日志：` +
         `${join(appDataDirectory(), "logs", "desktop-engine.log")}`,

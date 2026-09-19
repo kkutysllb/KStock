@@ -48,6 +48,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
+    logMain("app ready：初始化更新器/图标/引擎…");
     initUpdater();
 
     // macOS dev 模式下 Dock 默认显示 Electron 图标；手动设置应用图标
