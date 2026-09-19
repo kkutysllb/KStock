@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { dirname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { mkdir, rename, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 //#region src/store.ts
 /**
 * KStock 量化三库存储：策略 / 因子 / 选股，一份泛化实现按配置实例化。
@@ -865,6 +866,95 @@ async function saveDataSources(dataRoot, values) {
 	};
 }
 //#endregion
+//#region src/deps.ts
+/**
+* 引擎 Python 依赖体检（`GET /kstock-api/dependencies`）。
+*
+* 与壳侧 deps.ts 引导闭环：壳负责装（pip --target 到 ``<dataRoot>/py-deps``
+* 并前置 PYTHONPATH），本模块负责「现在到底缺什么」的机器可读视图——
+* python 解释器/pip 可用性、逐依赖 import 探针与版本、就绪 marker。
+* 探针用与引擎子进程一致的环境（PYTHONPATH 含 py-deps）。
+*/
+/** 体检的依赖全集（import 名与展示名）。 */
+const PROBE_MODULES = [
+	"pandas",
+	"numpy",
+	"requests",
+	"dotenv",
+	"tushare",
+	"matplotlib"
+];
+function probeEnvironment(depsDir) {
+	const existing = process.env.PYTHONPATH;
+	return existing === void 0 ? {
+		...process.env,
+		PYTHONPATH: depsDir
+	} : {
+		...process.env,
+		PYTHONPATH: `${depsDir}:${existing}`
+	};
+}
+function resolvePythonBin() {
+	for (const bin of ["python3", "python"]) {
+		const probe = spawnSync(bin, ["--version"], {
+			encoding: "utf8",
+			timeout: 15e3
+		});
+		if (probe.status === 0) return {
+			bin,
+			version: (probe.stdout ?? probe.stderr ?? "").trim().split(/\s+/).pop() ?? ""
+		};
+	}
+	return {
+		bin: null,
+		version: null
+	};
+}
+/** 依赖体检视图：python/pip/逐依赖状态 + 引导层目录与 marker。 */
+function dependenciesView(dataRoot) {
+	const depsDir = join(dataRoot, "py-deps");
+	const env = probeEnvironment(depsDir);
+	const python = resolvePythonBin();
+	const pipOk = python.bin === null ? false : spawnSync(python.bin, [
+		"-m",
+		"pip",
+		"--version"
+	], {
+		encoding: "utf8",
+		timeout: 3e4
+	}).status === 0;
+	const deps = {};
+	if (python.bin !== null) for (const module of PROBE_MODULES) {
+		const probe = spawnSync(python.bin, ["-c", `import ${module}; v = getattr(${module}, '__version__', ''); print(v)`], {
+			encoding: "utf8",
+			timeout: 6e4,
+			env
+		});
+		if (probe.status === 0) deps[module] = {
+			ok: true,
+			version: (probe.stdout ?? "").trim() || null
+		};
+		else deps[module] = {
+			ok: false,
+			version: null,
+			error: (probe.stderr ?? "").trim().split("\n")[0]
+		};
+	}
+	const marker = python.version === null ? null : join(depsDir, `.ready-${python.version.split(".").slice(0, 2).join(".")}`);
+	return {
+		python: {
+			bin: python.bin,
+			version: python.version,
+			pip: pipOk
+		},
+		py_deps_dir: depsDir,
+		py_deps_present: existsSync(depsDir),
+		ready_marker: marker !== null && existsSync(marker),
+		deps,
+		install_hint: "缺失时由桌面壳启动引导自动安装（pip --target py-deps）；也可手动执行 python3 -m pip install --target ~/.kstock/py-deps pandas numpy tushare requests python-dotenv matplotlib"
+	};
+}
+//#endregion
 //#region src/index.ts
 /** 非 JSON 响应的直通形态（报告 HTML 正文等）。 */
 var RawResponse = class {
@@ -950,6 +1040,10 @@ async function dispatch(stores, reports, req, dataRoot) {
 	const method = (req.method ?? "GET").toUpperCase();
 	if (libraryKey === "landing-news") return method === "GET" ? landingNews() : throwMethod(method);
 	if (libraryKey === "data-source-status") return method === "GET" ? dataSourceStatus() : throwMethod(method);
+	if (libraryKey === "dependencies") {
+		if (method === "GET") return dependenciesView(dataRoot);
+		throwMethod(method);
+	}
 	if (libraryKey === "data-sources") {
 		if (method === "GET") return dataSourcesView(dataRoot);
 		if (method === "PUT") return saveDataSources(dataRoot, (await readJson(req)).values);

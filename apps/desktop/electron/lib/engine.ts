@@ -29,6 +29,7 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { homedir, platform } from "node:os";
+import { ensureEnginePythonDeps, enginePythonPath } from "./deps";
 import { logMain } from "./logger";
 
 /**
@@ -276,10 +277,13 @@ function legacySecretsEnvironment(): Record<string, string> {
  */
 function resolveEngineLaunch(): EngineLaunchSpec {
   const exeName = platform() === "win32" ? "kstock-engine.exe" : "kstock-engine";
+  const pythonPath = enginePythonPath();
   const baseEnv = {
     QILIN_HOME: qilinHomeDirectory(),
     KSTOCK_APP_DATA_DIR: appDataDirectory(),
     KSTOCK_PRESETS_DIR: presetsDirectory(),
+    // 引擎技能的 Python 依赖层（~/.kstock/py-deps，deps.ts 引导安装）。
+    ...(pythonPath === undefined ? {} : { PYTHONPATH: pythonPath }),
     // 1.x 迁移：老 secrets.env 的数据源凭据注入引擎环境（不覆盖已有键）。
     ...legacySecretsEnvironment(),
   };
@@ -422,6 +426,9 @@ export class EngineProcess {
           `其 1.x gateway 常驻此端口；也可能是其他程序）。请先退出占用进程（旧版请整个退出 KStock.app）后重试。`,
       );
     }
+
+    // 干净环境首次启动的 Python 依赖引导（探针通过/已装则零开销跳过）。
+    await ensureEnginePythonDeps();
 
     const launch = resolveEngineLaunch();
     const logFd = engineLogFd();

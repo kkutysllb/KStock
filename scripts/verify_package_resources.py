@@ -106,10 +106,11 @@ class Verifier:
         self.require_file_contains(
             root / "kstock" / "quant" / "src" / "index.ts",
             "source quant host routes",
-            ["/kstock-api", "reports", "strategies", "factors", "selections"],
+            ["/kstock-api", "reports", "strategies", "factors", "selections", "dependencies"],
         )
         self.require_path(root / "kstock" / "quant" / "src" / "store.ts", "source quant library store")
         self.require_path(root / "kstock" / "quant" / "src" / "reports.ts", "source quant report store")
+        self.require_path(root / "kstock" / "quant" / "src" / "deps.ts", "source quant dependencies probe")
         self.require_path(root / "kstock" / "web" / "public" / "kstock-landing.html",
                           "source kstock landing page")
         self.require_path(root / "kstock" / "web" / "public" / "kstock-auth.html",
@@ -149,7 +150,7 @@ class Verifier:
 
         # Electron 壳（引擎托管形态）
         for rel in ("electron/main.ts", "electron/lib/engine.ts", "electron/lib/window.ts",
-                    "electron/lib/menu.ts", "electron/lib/updater.ts"):
+                    "electron/lib/menu.ts", "electron/lib/updater.ts", "electron/lib/deps.ts"):
             self.require_path(root / "apps" / "desktop" / rel, f"source apps/desktop/{rel}")
         self.require_file_contains(
             root / "apps" / "desktop" / "electron" / "lib" / "engine.ts",

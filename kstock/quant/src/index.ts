@@ -13,6 +13,7 @@ import { StoreError, factorStore, selectionStore, strategyStore, type LibrarySto
 import { ReportsStore } from './reports.ts'
 import { dataSourceStatus, landingNews } from './news.ts'
 import { dataSourcesView, saveDataSources } from './datasources.ts'
+import { dependenciesView } from './deps.ts'
 
 /** 非 JSON 响应的直通形态（报告 HTML 正文等）。 */
 class RawResponse {
@@ -135,6 +136,11 @@ async function dispatch(
   // 落地页公共增强接口（匿名可达，与 1.x gateway 公共路由同语义）。
   if (libraryKey === 'landing-news') return method === 'GET' ? landingNews() : throwMethod(method)
   if (libraryKey === 'data-source-status') return method === 'GET' ? dataSourceStatus() : throwMethod(method)
+  // 引擎 Python 依赖体检（设置页/诊断用）：逐依赖 import 探针与版本。
+  if (libraryKey === 'dependencies') {
+    if (method === 'GET') return dependenciesView(dataRoot)
+    throwMethod(method)
+  }
   // 数据源凭据配置面（设置页）：GET 状态 / PUT 合并写 secrets.env。
   if (libraryKey === 'data-sources') {
     if (method === 'GET') return dataSourcesView(dataRoot)
