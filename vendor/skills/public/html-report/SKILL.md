@@ -1,7 +1,7 @@
 ---
 name: html-report
 description: KStock 研究报告看板生成与归档——把研究结论整理为结构化报告 JSON，用技能自带渲染器（纯标准库，内联 SVG 图表）产出单文件自包含 HTML 看板，并一键归档进 KStock 报告库。适用于个股/行业/因子/策略/选股等一切需要交付 HTML 看板的场景。
-version: 2.0.0
+version: 2.1.0
 author: kstock
 license: MIT
 category: report
@@ -22,8 +22,13 @@ URL 契约、没有 dark/light 双文件。
 
 ## 工作流（四步）
 
+以下命令都**从工作区根执行**；报告产物一律写 `reports/`（目录不存在先
+`mkdir -p reports`），渲染器脚本用 html-report 技能加载结果给出的基目录
+拼接全路径——**不要 cd 进技能目录执行**（技能目录只读，且 IO 文件应保持
+工作区相对路径）。
+
 1. **写报告 JSON**：把研究结论整理为报告 JSON（契约见
-   `references/report-schema.md`），保存到当前工作目录，如 `report.json`。
+   `references/report-schema.md`），保存到 `reports/report.json`。
    要求：
    - `title` 必填；每个数字都必须来自你的真实计算/检索结果，禁止编造
    - 图表数据用 `sections[].blocks[].chart` 内联给出（支持
@@ -31,20 +36,21 @@ URL 契约、没有 dark/light 双文件。
    - 关键结论同时给文字与图表；风险写进顶层 `risks`
 2. **渲染**：
    ```bash
-   python scripts/render_report.py report.json -o report.html
+   python3 "<html-report 基目录>/scripts/render_report.py" \
+     reports/report.json -o reports/<主题名>.html
    ```
    纯标准库，任何 Python ≥3.9 环境直接可跑。渲染器对缺字段宽容，
    但会在 stderr 打印告警——**有告警必须修正后重渲**。
 3. **自检**：确认输出无 stderr 告警；文件为单文件 HTML（约 20-200KB），
-   可直接 `file report.html` 粗检。
+   可直接 `file "reports/<主题名>.html"` 粗检。
 4. **归档进报告库**（让用户在「量化工作台 → 报告库」随时查看）：
    ```bash
    curl -s -X POST http://127.0.0.1:18001/kstock-api/reports \
      -H 'content-type: application/json' \
      -d "$(python3 - <<'PY'
    import json, pathlib
-   report = pathlib.Path("report.json")
-   html = pathlib.Path("report.html")
+   report = pathlib.Path("reports/report.json")
+   html = pathlib.Path("reports/<主题名>.html")
    payload = json.loads(report.read_text(encoding="utf-8"))
    print(json.dumps({
        "thread_id": "CURRENT_THREAD_ID",          # 替换为当前会话 id
@@ -63,6 +69,7 @@ URL 契约、没有 dark/light 双文件。
    ```
    归档成功返回 `report_id` 与 `content_url`。同一 `report_id` 重复
    归档是覆盖更新；不传 `report_id` 时按 thread+标题稳定派生。
+   归档后用 `present` 呈现 `reports/<主题名>.html`。
 
 ## 设计底线（渲染器已强制，内容端必须配合）
 

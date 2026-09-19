@@ -8,7 +8,7 @@ description: |
   与报告库归档。产出：单文件 HTML 联动看板（评分卡 + 8 维图表 + 结论）。
 license: MIT
 category: finance
-version: 2.0.0
+version: 2.1.0
 author: kk-quant
 tags:
   - A股
@@ -22,7 +22,7 @@ package:
 metadata:
   openclaw:
     emoji: "🔗"
-    version: "2.0.0"
+    version: "2.1.0"
     author: "kk-quant"
     category: "finance"
     tags:
@@ -53,18 +53,21 @@ metadata:
 
 ## 阶段一：数据采集（必做）
 
-1. 先用 `skill` 工具加载 `market-linkage-engine` 技能，按加载结果给出的
-   基目录（`Base directory for this skill: ...`）进入后执行；
-2. 采集命令（在 market-linkage-engine 加载结果给出的基目录内，相对路径按基目录解析）：
+1. 先用 `skill` 工具加载 `market-linkage-engine` 技能，记下加载结果给出的
+   基目录（`Base directory for this skill: ...`）；
+2. 采集命令（**从工作区根执行**：模块经 `PYTHONPATH` 指向引擎基目录免 cd，
+   输出相对工作区落 `data/`；引擎对 common 技能的依赖按自身位置解析）：
 
    ```bash
-   python3 -m market_linkage_engine daily -f json -o linkage.json
-   # 周度：python3 -m market_linkage_engine weekly -f json -o linkage.json
+   mkdir -p data reports
+   PYTHONPATH="<market-linkage-engine 基目录>" \
+     python3 -m market_linkage_engine daily -f json -o data/linkage.json
+   # 周度：python3 -m market_linkage_engine weekly -f json -o data/linkage.json
    ```
 
 3. **必须用 `-o` 参数落盘 JSON**，禁止 shell 重定向 `>` 生成文件（引擎日志
    走 stderr，重定向会把日志混入 JSON 导致解析失败）；
-4. 读取 `linkage.json`：8 大维度（主力资金 / 北向资金 / 两融 / 期指基差 /
+4. 读取 `data/linkage.json`：8 大维度（主力资金 / 北向资金 / 两融 / 期指基差 /
    期权波动率 / ETF 份额 / Shibor / 龙虎榜）各自的评分、偏向与明细，
    以及综合评分与市场总结。
 
@@ -93,16 +96,18 @@ metadata:
      维度偏向分布（pie）；
    - 分节正文：每维度小节 = 明细表格 + 2-3 条解读（带数据依据）；
    - 风险提示与参考来源（Tushare 接口名 + 数据日期）；
-2. 保存 `report.json` 后用 html-report 技能渲染器产出单文件 HTML：
+2. 保存为 `reports/report.json` 后用 html-report 技能渲染器产出单文件 HTML
+   （渲染器路径用 html-report 技能加载结果给出的基目录拼接，从工作区根执行）：
 
    ```bash
-   python3 <html-report 基目录>/scripts/render_report.py report.json -o market-linkage.html
-   # <html-report 基目录> = html-report 技能加载结果给出的 Base directory
+   python3 "<html-report 基目录>/scripts/render_report.py" \
+     reports/report.json -o reports/market-linkage.html
    ```
 
 3. 用 html-report 技能 SKILL.md 中的 curl 模板归档报告库：
-   `POST /kstock-api/reports`；
-4. `present` 呈现 HTML，消息区给出综合评分、偏向与关键信号摘要。
+   `POST /kstock-api/reports`（模板读取的是 `reports/` 下的两份产物）；
+4. `present` 呈现 `reports/market-linkage.html`，消息区给出综合评分、
+   偏向与关键信号摘要。
 
 ## 输出纪律（强约束）
 

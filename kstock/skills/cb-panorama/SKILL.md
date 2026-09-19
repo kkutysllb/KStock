@@ -5,7 +5,7 @@ description: |
   估值 / 双低策略池 / 转债周报」等可转债市场类问题时触发。编排 cb-analysis
   周度综合引擎（市场温度/规模结构/估值全景/资金情绪/双低池/综合研判）+
   可选正股联动补充 + html-report 看板交付。产出：单文件 HTML 全景看板。
-version: 2.0.0
+version: 2.1.0
 author: kk-quant
 license: MIT
 category: finance
@@ -34,13 +34,17 @@ package:
 
 ## 阶段一：数据采集（必做）
 
-1. `skill` 工具加载 `cb-analysis`，按加载结果给出的基目录进入；
-2. 周度主轴：`analyze_weekly_cb.py`（--weeks 2 可含上周对比，--json 落盘）：
+**产物分区纪律**（先 `mkdir -p data reports`）：引擎输出一律落 `data/`，
+从工作区根执行、脚本用 cb-analysis 加载结果给出的基目录拼接全路径。
+
+1. `skill` 工具加载 `cb-analysis`，记下加载结果给出的基目录；
+2. 周度主轴：`analyze_weekly_cb.py`（--weeks 2 可含上周对比，--json 输出
+   重定向/落盘到 `data/cb-weekly.json`）：
    市场温度（中证转债指数周涨跌/周均成交）、规模与结构（存续只数/余额/
    新上市/退市/条款事件）、估值全景（均价/溢价率/双低/价格分档/双低池 TOP10）、
    资金与情绪（周成交总额）、综合研判（0-100 分 + 积极/风险信号）；
 3. 日度补充：dashboard 引擎（16 模块，重点强赎/下修/龙虎榜/妖债监控）与
-   select 引擎（如「双低低于 XX」筛选）。
+   select 引擎（如「双低低于 XX」筛选），输出同样落 `data/`。
 
 ## 阶段二：解读与补充（可选）
 
@@ -51,7 +55,9 @@ package:
 ## 阶段三：报告交付（必做）
 
 html-report 契约构造：市场温度评分卡、指数与成交时间序列（line）、
-估值分档分布（bar）、双低池 TOP10 表、条款事件表；渲染归档并 present。
+估值分档分布（bar）、双低池 TOP10 表、条款事件表；报告 JSON 写
+`reports/report.json`，渲染输出 `reports/cb-panorama.html`，归档
+（POST /kstock-api/reports）并 present 该文件。
 
 ## 输出纪律
 

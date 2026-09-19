@@ -6,7 +6,7 @@ description: |
   内；技能经 skill 工具加载后按加载结果给出的基目录执行（相对路径按基目录
   解析，技能目录只读）；禁止探查宿主系统路径（会被沙箱拒绝并浪费一次
   工具调用）。
-version: 2.0.0
+version: 2.1.0
 author: kk-quant
 license: MIT
 category: environment
@@ -30,10 +30,31 @@ bash 在进程沙箱内执行，文件效果按模式约束：
 | workspace-write（常规） | 工作区根（= 当前会话工作目录）及其子路径、沙箱临时区 |
 | read-only | 禁止写入（仅 `/dev/null` 等必需出口） |
 
-1. 工作区根就是当前工作目录：脚本、JSON、HTML 等一切产物写在工作区内，
-   优先用相对路径；
+1. 工作区根就是当前工作目录：一切产物写在工作区内，优先用相对路径，
+   并按下节「工作区目录布局」分区，**不要把中间产物堆在工作区根下**；
 2. 长耗时命令（全样本回测、大批量数据拉取）用 bash 的 `run_in_background`
    后台化后经 jobs 收集，不要 `nohup` + `sleep/tail` 轮询。
+
+## 工作区目录布局（产物分区）
+
+产物按类型分三个目录，首个产物落盘前按需创建（`mkdir -p scripts data
+reports` 一次建齐亦可）：
+
+| 目录 | 放什么 |
+|------|--------|
+| `scripts/` | 任务执行中**自建的临时脚本**（数据加工、图表辅助、一次性验证脚本等） |
+| `data/` | **引擎输出与中间数据**（联动/期指等引擎的 JSON、下载的 CSV、加工半成品） |
+| `reports/` | **报告产物**（report.json 与渲染后的 HTML 看板） |
+
+- 引擎命令一律**从工作区根执行**、输出用相对路径写进 `data/`：
+  脚本式引擎直接用「`<引擎基目录>/scripts/...` 全路径 + `> data/xxx.json`
+  重定向」；模块式引擎（`python3 -m xxx`）用 `PYTHONPATH="<引擎基目录>"`
+  免 cd，`-o data/xxx.json` 相对工作区落盘（各场景技能的命令模板已按此
+  写好，照抄即可）；
+- 不要 cd 进技能目录再执行——那会把输出写进只读的技能目录或散落各处；
+- 最终交付 `present` 的是 `reports/` 下的 HTML；报告库归档口
+  （`POST /kstock-api/reports`）读取的也是 `reports/` 下的 report.json
+  与 HTML（见 html-report 技能）。
 
 ## 技能目录（只读参考，路径由加载结果给出）
 
@@ -53,7 +74,8 @@ bash 在进程沙箱内执行，文件效果按模式约束：
 
 ## 交付物
 
-- 最终交付物写在工作区内，用 `present` 呈现；
+- 最终交付物按「工作区目录布局」归位（HTML 看板在 `reports/`），用
+  `present` 呈现；
 - HTML 研究报告另按 html-report 技能渲染，并经报告库入库口归档
   （`POST /kstock-api/reports`）。
 

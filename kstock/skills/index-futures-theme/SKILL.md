@@ -8,7 +8,7 @@ description: |
   归档。产出：单文件 HTML 期指专题看板。
 license: MIT
 category: finance
-version: 2.1.0
+version: 2.2.0
 author: kk-quant
 tags:
   - 股指期货
@@ -21,7 +21,7 @@ package:
 metadata:
   openclaw:
     emoji: "📈"
-    version: "2.1.0"
+    version: "2.2.0"
     author: "kk-quant"
     category: "finance"
     tags:
@@ -56,28 +56,32 @@ metadata:
 
 ## 阶段一：数据采集（必做）
 
-1. 先用 `skill` 工具加载 `futures-analysis` 技能，按加载结果给出的
-   基目录（`Base directory for this skill: ...`）进入后执行，相对路径按
-   基目录解析；引擎实际入口在其 `scripts/analysis-engine/` 下；
+1. 先用 `skill` 工具加载 `futures-analysis` 技能，记下加载结果给出的基目录
+   （`Base directory for this skill: ...`）；引擎入口在其
+   `scripts/analysis-engine/` 下；
 
-2. 采集命令（引擎在 JSON 前会打一行采集日志，**必须 sed 截取**后落盘）：
+2. 采集命令（**从工作区根执行**，脚本用基目录拼接全路径、输出相对工作区
+   落 `data/`；引擎在 JSON 前会打一行采集日志，**必须 sed 截取**）：
 
    ```bash
+   mkdir -p data reports
+   B="<futures-analysis 基目录>/scripts/analysis-engine"
    # 日度（全品种四维：price / contango / holding + composite）
-   python3 scripts/analysis-engine/analyze_futures.py --json 2>/dev/null \
-     | sed -n '/^{/,$p' > futures.json
+   python3 "$B/analyze_futures.py" --json 2>/dev/null \
+     | sed -n '/^{/,$p' > data/futures.json
    # 周度（周涨跌 / 周 OI 变化 / 周持仓过滤 + 综合研判）
-   python3 scripts/analysis-engine/analyze_weekly_futures.py --json 2>/dev/null \
-     | sed -n '/^{/,$p' > futures.json
+   python3 "$B/analyze_weekly_futures.py" --json 2>/dev/null \
+     | sed -n '/^{/,$p' > data/futures.json
    ```
 
-3. **禁止裸 `>` 重定向**生成 JSON 文件：引擎在 JSON 前打印一行采集日志，
-   重定向会把日志混进文件导致解析失败；也不用 `--type` 局部口径冒充全量
-   （专题报告需要四维齐备，`--type` 仅用于用户点名单维追问时补充）；
+3. **禁止裸 `>` 直接生成 JSON 文件**（引擎在 JSON 前打印一行采集日志，
+   裸重定向会把日志混进文件导致解析失败），也不要 cd 进引擎目录执行
+   （会把产物写进只读技能目录）；`--type` 局部口径不冒充全量（专题报告
+   需要四维齐备，`--type` 仅用于用户点名单维追问时补充）；
 
 4. 常用收窄参数：`--symbols IF IC`（单/多品种）、`--days 15`（缩短回溯）；
 
-5. 读取 `futures.json`：`symbols[IF|IC|IH|IM].{price, contango, holding,
+5. 读取 `data/futures.json`：`symbols[IF|IC|IH|IM].{price, contango, holding,
    contracts}` 各维明细 + `composite.{avg_score(0-100), market_env,
    divergence_signal, suggestions, details}`（分品种评分与建议）。
 
@@ -91,7 +95,7 @@ token 时脚本明确报错——此时按「无数据」口径处理，禁止�
 
 | 交叉源 | 加载技能 | 用法与重点 |
 |---|---|---|
-| 期权隐含预期 | option-futures-linkage | 跑其日度联动引擎（`--json`，输出干净可直接重定向），取对应品种 PCR / ATM IV / 联动方向印证期指研判 |
+| 期权隐含预期 | option-futures-linkage | 从工作区根跑其日度联动引擎（脚本全路径 + `--json > data/of.json`，输出干净可直接重定向），取对应品种 PCR / ATM IV / 联动方向印证期指研判 |
 | 盘中/延时行情 | hithink-futures | `python3 scripts/cli.py --query "IF主力合约 最新行情"`（问财口径，需 IWENCAI_API_KEY，缺则跳过并注明） |
 | 大盘环境 | macro-query | Shibor 与宏观资金面背景 |
 
@@ -107,17 +111,18 @@ token 时脚本明确报错——此时按「无数据」口径处理，禁止�
    - 分节正文：每品种小节 = 行情趋势 + 基差与期限结构 + 持仓排名表
      （含中信 vs 其他机构多空变化）+ 2-3 条解读（带数据依据）；
    - 风险提示与参考来源（Tushare 接口名 + 数据日期）；
-2. 保存 `report.json` 后用 html-report 技能渲染器产出单文件 HTML：
+2. 保存为 `reports/report.json` 后用 html-report 技能渲染器产出单文件 HTML
+   （渲染器路径用 html-report 技能加载结果给出的基目录拼接，从工作区根执行）：
 
    ```bash
-   python3 <html-report 基目录>/scripts/render_report.py report.json -o index-futures.html
-   # <html-report 基目录> = html-report 技能加载结果给出的 Base directory
+   python3 "<html-report 基目录>/scripts/render_report.py" \
+     reports/report.json -o reports/index-futures.html
    ```
 
 3. 用 html-report 技能 SKILL.md 中的 curl 模板归档报告库：
-   `POST /kstock-api/reports`；
-4. `present` 呈现 HTML，消息区给出综合评分、市场环境、品种分化与
-   中信席位关键信号摘要。
+   `POST /kstock-api/reports`（模板读取的是 `reports/` 下的两份产物）；
+4. `present` 呈现 `reports/index-futures.html`，消息区给出综合评分、
+   市场环境、品种分化与中信席位关键信号摘要。
 
 ## 输出纪律（强约束）
 

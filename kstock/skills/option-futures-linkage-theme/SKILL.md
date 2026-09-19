@@ -8,7 +8,7 @@ description: |
   看板交付与报告库归档。产出：单文件 HTML 联动看板。
 license: MIT
 category: finance
-version: 2.1.0
+version: 2.2.0
 author: kk-quant
 tags:
   - 期指期权联动
@@ -20,7 +20,7 @@ package:
 metadata:
   openclaw:
     emoji: "🎯"
-    version: "2.1.0"
+    version: "2.2.0"
     author: "kk-quant"
     category: "finance"
     tags:
@@ -61,22 +61,25 @@ HTML 看板。被分派本场景的代理（主代理或子代理）按三阶段
 
 ## 阶段一：数据采集（必做）
 
-1. 先用 `skill` 工具加载 `option-futures-linkage` 技能，按加载结果给出的
-   基目录（`Base directory for this skill: ...`）进入后执行，引擎入口在其
+1. 先用 `skill` 工具加载 `option-futures-linkage` 技能，记下加载结果给出的
+   基目录（`Base directory for this skill: ...`）；引擎入口在其
    `scripts/analysis-engine/` 下；
 
-2. 采集命令（该引擎 `--json` 输出干净——进度日志被引擎自身 guard，
+2. 采集命令（**从工作区根执行**，脚本用基目录拼接全路径、输出相对工作区
+   落 `data/`；该引擎 `--json` 输出干净——进度日志被引擎自身 guard，
    可直接重定向；stderr 不会混入 JSON）：
 
    ```bash
+   mkdir -p data reports
+   B="<option-futures-linkage 基目录>/scripts/analysis-engine"
    # 日度（默认全部品种，回溯 30 天）
-   python3 scripts/analysis-engine/analyze_option_futures.py --json > of.json
+   python3 "$B/analyze_option_futures.py" --json > data/of.json
    # 周度（周均 PCR / 周 ATM IV / 周涨跌与周持仓变化）
-   python3 scripts/analysis-engine/analyze_weekly_option_futures.py --json > of.json
+   python3 "$B/analyze_weekly_option_futures.py" --json > data/of.json
    # 收窄：--symbols IF IM --days 5
    ```
 
-3. 读取 `of.json`：`symbols[IF|IH|IC|IM].{option(PCR/IV/IV斜率),
+3. 读取 `data/of.json`：`symbols[IF|IH|IC|IM].{option(PCR/IV/IV斜率),
    futures(基差/持仓), linkage}` 每品种联动方向（偏多/略偏多/中性/略偏空/
    偏空）与五维联动评分（-6..+6）+ `composite.{avg_score, market_env,
    symbol_scores}` 综合研判。
@@ -99,7 +102,7 @@ token 时脚本明确报错——此时按「无数据」口径处理，禁止�
 
    | 两翼 | 加载技能 | 用法与重点 |
    |---|---|---|
-   | 席位明细 | futures-analysis | `analyze_futures.py --type holding --json --symbols <品种>`（JSON 前有一行日志，需 `sed -n '/^{/,$p'` 截取），取前 20 席位与中信风向标印证期货维 |
+   | 席位明细 | futures-analysis | 从工作区根跑 `analyze_futures.py --type holding --json --symbols <品种>`（JSON 前有一行日志，需 `sed -n '/^{/,$p'` 截取到 `data/holding.json`），取前 20 席位与中信风向标印证期货维 |
    | 波动率环境 | options-volatility | 计算器（非取数器）：把联动输出的 ATM IV 喂 `--action iv-rv --iv X --rv-20d ... --json` 或 `--action regime`，判断 IV 相对历史分位与拥挤度 |
 
 3. 信号矛盾时明确标注「背离」并给出两种解读（情绪领先 vs 套保压制），
@@ -115,17 +118,18 @@ token 时脚本明确报错——此时按「无数据」口径处理，禁止�
    - 分节正文：每品种小节 = 期权维明细表 + 期货维明细表 + 联动信号
      矩阵 + 2-3 条交叉解读（带数据依据，背离显式标注）；
    - 风险提示与参考来源（Tushare 接口名 + 数据日期）；
-2. 保存 `report.json` 后用 html-report 技能渲染器产出单文件 HTML：
+2. 保存为 `reports/report.json` 后用 html-report 技能渲染器产出单文件 HTML
+   （渲染器路径用 html-report 技能加载结果给出的基目录拼接，从工作区根执行）：
 
    ```bash
-   python3 <html-report 基目录>/scripts/render_report.py report.json -o option-futures-linkage.html
-   # <html-report 基目录> = html-report 技能加载结果给出的 Base directory
+   python3 "<html-report 基目录>/scripts/render_report.py" \
+     reports/report.json -o reports/option-futures-linkage.html
    ```
 
 3. 用 html-report 技能 SKILL.md 中的 curl 模板归档报告库：
-   `POST /kstock-api/reports`；
-4. `present` 呈现 HTML，消息区给出综合评分、各品种联动方向与共振/背离
-   关键信号摘要。
+   `POST /kstock-api/reports`（模板读取的是 `reports/` 下的两份产物）；
+4. `present` 呈现 `reports/option-futures-linkage.html`，消息区给出综合
+   评分、各品种联动方向与共振/背离关键信号摘要。
 
 ## 输出纪律（强约束）
 
