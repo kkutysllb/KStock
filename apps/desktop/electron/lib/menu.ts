@@ -1,12 +1,14 @@
 /**
- * 中文化系统菜单 + 托盘（对齐原 ``src-tauri/src/main.rs`` 的 build_app_menu / build_tray）。
+ * 中文化系统菜单 + 托盘（2.0：导航归引擎 UI 侧栏，壳菜单只剩
+ * 应用级动作——数据目录 / 重启引擎 / 检查更新 / 视图 / 关于）。
  */
 
 import { app, BrowserWindow, Menu, MenuItemConstructorOptions, nativeImage, shell, Tray } from "electron";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { appDataDirectory } from "./gateway";
-import { adjustZoom, resetZoom, sendMenuCommand } from "./window";
+import { appDataDirectory, EngineProcess } from "./engine";
+import { adjustZoom, loadInMainWindow, resetZoom } from "./window";
+import { checkForUpdatesInteractive } from "./updater";
 import { logMain } from "./logger";
 
 let tray: Tray | null = null;
@@ -15,12 +17,21 @@ const PROJECT_HOME = "https://github.com/kkutysllb/KStock";
 const PROJECT_ISSUES = "https://github.com/kkutysllb/KStock/issues";
 
 function isDev(): boolean {
-  // vite/electron dev 模式下 MAIN_VITE_*/未打包；app.isPackaged 更可靠。
   return !app.isPackaged;
 }
 
-/** 构建中文化的系统菜单（macOS 菜单栏 + Windows/Linux 顶部菜单）。 */
-export function buildAppMenu(): Menu {
+/** 「重启引擎」：整树终止后重新拉起，并让主窗口带新 token 重载。 */
+async function restartEngine(engine: EngineProcess): Promise<void> {
+  try {
+    const url = await engine.restart();
+    loadInMainWindow(url);
+  } catch (err) {
+    logMain(`重启引擎失败: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/** 构建中文化的系统菜单（macOS 菜单栏；engine 供「重启引擎」用）。 */
+export function buildAppMenu(engine: EngineProcess): Menu {
   const isDarwin = process.platform === "darwin";
 
   const appMenu: MenuItemConstructorOptions = {
@@ -31,12 +42,7 @@ export function buildAppMenu(): Menu {
       {
         label: "检查更新…",
         accelerator: "CmdOrCtrl+Shift+U",
-        click: () => sendMenuCommand("check-update"),
-      },
-      {
-        label: "偏好设置…",
-        accelerator: "CmdOrCtrl+,",
-        click: () => sendMenuCommand("open-settings"),
+        click: () => void checkForUpdatesInteractive(),
       },
       { type: "separator" },
       { role: "hide", label: "隐藏 KStock" },
@@ -51,39 +57,18 @@ export function buildAppMenu(): Menu {
     label: "文件",
     submenu: [
       {
-        label: "新建任务",
-        accelerator: "CmdOrCtrl+N",
-        click: () => sendMenuCommand("new-task"),
-      },
-      {
-        label: "打开报告库",
-        accelerator: "CmdOrCtrl+Shift+L",
-        click: () => sendMenuCommand("open-reports"),
-      },
-      {
-        label: "打开策略库",
-        accelerator: "CmdOrCtrl+Shift+G",
-        click: () => sendMenuCommand("open-strategies"),
-      },
-      {
-        label: "打开因子库",
-        accelerator: "CmdOrCtrl+Shift+F",
-        click: () => sendMenuCommand("open-factors"),
-      },
-      {
-        label: "打开选股库",
-        accelerator: "CmdOrCtrl+Shift+S",
-        click: () => sendMenuCommand("open-selections"),
+        label: "重启引擎",
+        accelerator: "CmdOrCtrl+Shift+E",
+        click: () => void restartEngine(engine),
       },
       { type: "separator" },
       {
-        label: "打开交付文件目录",
-        accelerator: "CmdOrCtrl+Shift+O",
-        click: () => openPath(join(appDataDirectory(), "runtime", "qilin", "users")),
-      },
-      {
         label: "打开应用数据目录",
         click: () => openPath(appDataDirectory()),
+      },
+      {
+        label: "打开日志目录",
+        click: () => openPath(join(appDataDirectory(), "logs")),
       },
       { type: "separator" },
       { role: "close", label: "关闭窗口" },
@@ -142,7 +127,7 @@ export function buildAppMenu(): Menu {
   const helpMenu: MenuItemConstructorOptions = {
     label: "帮助",
     submenu: [
-      { label: "检查更新…", click: () => sendMenuCommand("check-update") },
+      { label: "检查更新…", click: () => void checkForUpdatesInteractive() },
       { type: "separator" },
       { label: "打开应用数据目录", click: () => openPath(appDataDirectory()) },
       { label: "打开日志目录", click: () => openPath(join(appDataDirectory(), "logs")) },
@@ -160,19 +145,18 @@ export function buildAppMenu(): Menu {
 }
 
 /** 托盘图标与菜单。 */
-export function buildTray(): void {
+export function buildTray(engine: EngineProcess): void {
   const icon = createTrayImage();
   if (!icon || icon.isEmpty()) {
-    // createTrayImage 内部已记录候选路径 / found 列表。此处仅写结论信号。
     logMain(`托盘未创建：iconFound=${Boolean(icon)} isEmpty=${icon?.isEmpty() ?? false}`);
     return;
   }
 
   tray = new Tray(icon);
   tray.setToolTip("KStock 量化助手");
-  // 无框平台没有应用菜单，托盘菜单承载全部菜单功能（对齐 buildAppMenu）。
+  // 无框平台没有应用菜单，托盘菜单承载全部菜单功能。
   // macOS 菜单栏已有完整菜单，托盘保持精简。
-  const menu = process.platform === "darwin" ? buildDarwinTrayMenu() : buildFullTrayMenu();
+  const menu = process.platform === "darwin" ? buildDarwinTrayMenu(engine) : buildFullTrayMenu(engine);
   tray.setContextMenu(Menu.buildFromTemplate(menu));
 
   // Windows 习惯：左键点托盘图标切换主窗口显隐（右键才弹菜单）。
@@ -182,23 +166,20 @@ export function buildTray(): void {
   logMain("托盘已创建");
 }
 
-/** macOS 托盘菜单：菜单栏已覆盖全部功能，只留窗口开关与退出。 */
-function buildDarwinTrayMenu(): MenuItemConstructorOptions[] {
+/** macOS 托盘菜单：菜单栏已覆盖全部功能，只留窗口开关、更新与退出。 */
+function buildDarwinTrayMenu(engine: EngineProcess): MenuItemConstructorOptions[] {
   return [
     { label: "显示窗口", click: () => showMainWindow() },
     { label: "隐藏窗口", click: () => activeWindow()?.hide() },
     { type: "separator" },
-    { label: "检查更新…", click: () => sendMenuCommand("check-update") },
+    { label: "检查更新…", click: () => void checkForUpdatesInteractive() },
     { type: "separator" },
     { label: "退出", click: () => app.quit() },
   ];
 }
 
-/**
- * Windows/Linux 托盘菜单：无框窗口没有菜单栏，原「文件/视图/帮助」
- * 菜单的全部入口都在这里（快捷键由 registerFramelessShortcuts 兑底）。
- */
-function buildFullTrayMenu(): MenuItemConstructorOptions[] {
+/** Windows/Linux 托盘菜单：无菜单栏平台的全部入口。 */
+function buildFullTrayMenu(engine: EngineProcess): MenuItemConstructorOptions[] {
   return [
     { label: "显示窗口", click: () => showMainWindow() },
     { label: "隐藏窗口", click: () => activeWindow()?.hide() },
@@ -213,18 +194,10 @@ function buildFullTrayMenu(): MenuItemConstructorOptions[] {
       },
     },
     { type: "separator" },
-    { label: "新建任务", click: () => sendMenuCommand("new-task") },
-    { label: "打开报告库", click: () => sendMenuCommand("open-reports") },
-    { label: "打开策略库", click: () => sendMenuCommand("open-strategies") },
-    { label: "打开因子库", click: () => sendMenuCommand("open-factors") },
-    { label: "打开选股库", click: () => sendMenuCommand("open-selections") },
-    { type: "separator" },
-    { label: "偏好设置…", click: () => sendMenuCommand("open-settings") },
-    { label: "检查更新…", click: () => sendMenuCommand("check-update") },
-    { type: "separator" },
+    { label: "重启引擎", click: () => void restartEngine(engine) },
+    { label: "检查更新…", click: () => void checkForUpdatesInteractive() },
     { label: "重新加载", click: () => activeWindow()?.webContents.reload() },
     { type: "separator" },
-    { label: "打开交付文件目录", click: () => openPath(join(appDataDirectory(), "runtime", "qilin", "users")) },
     { label: "打开应用数据目录", click: () => openPath(appDataDirectory()) },
     { label: "打开日志目录", click: () => openPath(join(appDataDirectory(), "logs")) },
     { type: "separator" },
@@ -239,10 +212,7 @@ function buildFullTrayMenu(): MenuItemConstructorOptions[] {
  * 构建托盘图标 ``nativeImage``。
  *
  * macOS 菜单栏高度约 22pt，必须用小尺寸图标并标记为 template image，
- * 系统才能自动适配深色/浅色外观。直接用 128×128 的原图会导致缩放后
- * 变成模糊黑色方块。
- *
- * Windows/Linux 任务栏托盘用彩色 ``icon.png`` 缩放到 32×32。
+ * 系统才能自动适配深色/浅色外观。Windows/Linux 任务栏托盘用彩色缩放。
  */
 function createTrayImage(): Electron.NativeImage | null {
   const darwin = process.platform === "darwin";
@@ -259,7 +229,6 @@ function createTrayImage(): Electron.NativeImage | null {
       ];
   const iconPath = candidates.find((p) => existsSync(p));
   if (!iconPath) {
-    // 打包态 build/ 未打入 asar 会走到这里（electron-builder.yml files 漏 build/）。
     const found = candidates.filter((p) => existsSync(p));
     logMain(
       `createTrayImage 无可用图标：appPath=${app.getAppPath()} ` +
@@ -270,8 +239,6 @@ function createTrayImage(): Electron.NativeImage | null {
 
   const size = darwin ? { width: 22, height: 22 } : { width: 32, height: 32 };
   const icon = nativeImage.createFromPath(iconPath).resize(size);
-  // macOS：tray.png 是黑色透明线条（设计为 template image），标记后
-  // 系统自动适配深色/浅色菜单栏。
   if (darwin) icon.setTemplateImage(true);
   logMain(`托盘图标加载：${iconPath} size=${JSON.stringify(size)} isEmpty=${icon.isEmpty()}`);
   return icon;

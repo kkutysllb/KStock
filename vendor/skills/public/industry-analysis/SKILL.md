@@ -193,15 +193,12 @@ python3 scripts/industry-query-cli.py --query "新能源板块行情"
 - **饼图** — 产业链各环节占比
 - **桑基图** — 产业链上下游流转
 
-### 阶段四：报告生成（内置 render_html_report 工具）
 
-本技能**不自行编写报告或绘图代码**，而是调用内置 `render_html_report` 工具统一渲染。流程：
+### 阶段四：报告生成（html-report 技能）
 
-1. 将行业画像、估值排名、研报观点、实时资讯、产业链解读、宏观周期评估、风险与跟踪指标整理为报告 JSON，顶层字段：`title` / `generated_at` / `summary` / `assessment` / `risk_level` / `data_overview` / `core_analysis` / `risks` / `references` / `charts`。
-2. 为每个图表按 `charts[].{tool, title, alt, args}` 结构构造，图表以内嵌 SVG 渲染，**禁止使用远程图片 URL**。至少 3 个图表。args 的完整字段规范以工具描述中的契约说明为准。
-3. 调用 `render_html_report(report_json, filename="report.html")`；若完整 JSON 已保存为 `/mnt/user-data/workspace/*.json`，改用 `render_html_report_from_file(report_json_path="/mnt/user-data/workspace/report.json", filename="report.html")`，禁止先把大 JSON 读入上下文；渲染成功后用 `present_files` 交付。
+本技能**不自行手写 HTML**，而是把结论整理为报告 JSON，用 html-report 技能自带的渲染器（`skills/public/html-report/scripts/render_report.py`，纯标准库）产出单文件自包含看板。流程：
 
-报告覆盖：行业画像（五维雷达图 + 最新动态）、行业估值排名（柱状图）、投研观点摘要、行业实时资讯、产业链深度解读（桑基图/饼图）、宏观周期评估、风险与需跟踪指标。报告只给研究结论、情景条件、风险等级和需跟踪指标，**不给出买入/卖出/持有等交易建议**。
+1. 按报告 JSON 契约（html-report 技能 `references/report-schema.md`）整理数据：标题/摘要/指标卡/分节正文/图表（line / area / bar / scatter / pie / radar）/风险/参考来源，图表以内嵌 SVG 渲染，**禁止使用远程图片 URL**；2. 保存为 `report.json` 后执行`python skills/public/html-report/scripts/render_report.py report.json -o report.html`，stderr 出现告警必须修正数据后重渲；3. 用 html-report 技能 SKILL.md 中的 curl 模板把 report.html 归档进报告库（POST /kstock-api/reports），交付时给出报告标题。
 
 ## 参考文档
 

@@ -1,0 +1,13 @@
+packages:
+  - "accounts"
+  - "presets-ui"
+  - "client-brand"
+  - "web"
+  - "quant"
+  - "quant-ui"
+  - "quant-strategies"
+  - "quant-factors"
+  - "quant-selections"
+  - "quant-reports"
+allowBuilds:
+  esbuild: true

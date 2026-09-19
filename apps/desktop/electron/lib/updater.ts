@@ -1,40 +1,31 @@
 /**
- * 自动更新（electron-updater）—— 后台静默下载模式。
+ * 自动更新（electron-updater）—— 后台静默下载 + 系统通知/菜单交互。
  *
- * 流程：
- * 1. check 发现新版本 → 主进程立即触发后台下载（autoDownload = true），
- *    渲染进程无感知，不显示任何 UI；
- * 2. 下载完成后主进程主动推 IPC.updateReady 事件到渲染进程，
- *    渲染进程此时才显示"新版本已就绪，点击重启安装"图标；
- * 3. 用户点击 → IPC.updateInstall → 同步终止 gateway 进程树 →
- *    quitAndInstall 退出主进程并由安装器替换文件后重启。
+ * 2.0 起渲染层是引擎 web 工作区（无 KStock IPC 桥），更新交互全部收归
+ * 主进程：
+ * 1. 启动后台静默检查，发现新版本立即下载（用户无感知）；
+ * 2. 下载完成弹系统通知；点击通知或菜单「检查更新…」弹出确认对话框；
+ * 3. 确认安装：同步终止引擎进程树 → quitAndInstall（安装器替换文件后重启）。
  *
- * 安装重启的关键时序：gateway 若未彻底退出，Windows 安装器会因 .exe
- * 被占用导致替换失败、macOS 会因进程残留导致重启后端口冲突。
+ * 安装重启的关键时序：引擎若未彻底退出，Windows 安装器会因 .exe 被占用
+ * 导致替换失败、macOS 会因进程残留导致重启后端口冲突。
  */
 
-import { app, ipcMain, type BrowserWindow } from "electron";
+import { app, dialog, Notification, type BrowserWindow } from "electron";
 import { autoUpdater } from "electron-updater";
-import { IPC, type UpdateCheckResult } from "./ipc-channels";
 import { logMain } from "./logger";
 import { getMainWindow } from "./window";
 
-/** 安装前终止 gateway 的注册句柄，由 main.ts 在进程初始化后注入。 */
-let shutdownGateway: (() => Promise<void>) | null = null;
+/** 安装前终止引擎的注册句柄，由 main.ts 注入。 */
+let shutdownEngine: (() => Promise<void>) | null = null;
 
-/**
- * 注入 gateway 终止函数。
- *
- * main.ts 持有 ``GatewayProcess`` 实例，但 updater 初始化早于 gateway 创建。
- * 用回调注入避免循环依赖，同时保证安装重启前能同步调用 gateway 的终止逻辑。
- */
-export function setGatewayShutdownHandler(fn: () => Promise<void>): void {
-  shutdownGateway = fn;
+export function setEngineShutdownHandler(fn: () => Promise<void>): void {
+  shutdownEngine = fn;
 }
 
 let initialized = false;
 
-/** 最近一次 checkForUpdates 发现的版本号（用于 update-ready 推送）。 */
+/** 最近一次 checkForUpdates 发现的版本号。 */
 let pendingVersion: string | null = null;
 
 /** 按版本缓存发布说明（含 null，避免对 GitHub API 重复请求）。 */
@@ -87,10 +78,7 @@ async function fetchGitHubReleaseNotes(tag: string): Promise<string | null> {
   }
 }
 
-/**
- * 解析新版本发布说明：优先 updater 自带的 releaseNotes，缺失时回退
- * GitHub Release body，结果按版本缓存。
- */
+/** 解析新版本发布说明：优先 updater 自带，缺失回退 GitHub Release body，按版本缓存。 */
 async function resolveReleaseNotes(
   version: string,
   primary: string | null,
@@ -107,20 +95,86 @@ async function resolveReleaseNotes(
   return notes;
 }
 
-/** 向主窗口推送"更新已就绪"事件（携带发布说明，供图标悬停展示）。 */
-function notifyUpdateReady(
-  window: BrowserWindow | null,
-  version: string,
-  releaseNotes?: string,
-): void {
-  if (!window || window.isDestroyed()) return;
-  window.webContents.send(
-    IPC.updateReady,
-    releaseNotes ? { version, releaseNotes } : { version },
-  );
+/** 发布说明 → 确认对话框 detail（截断，markdown 源文直接展示）。 */
+function notesForDialog(notes: string | null): string {
+  if (!notes) return "";
+  return notes.length > 800 ? `${notes.slice(0, 800)}\n…（完整说明见发布页）` : notes;
 }
 
-/** 初始化 autoUpdater 全局行为与 IPC。 */
+/** 对话框包装：有父窗口时挂父窗口（模态），否则独立弹窗。 */
+function showBox(
+  parent: BrowserWindow | null | undefined,
+  options: Electron.MessageBoxOptions,
+): Promise<Electron.MessageBoxReturnValue> {
+  return parent && !parent.isDestroyed()
+    ? dialog.showMessageBox(parent, options)
+    : dialog.showMessageBox(options);
+}
+
+/** 重启并安装：终止引擎进程树 → quitAndInstall。 */
+async function installUpdate(): Promise<void> {
+  if (shutdownEngine) {
+    try {
+      await shutdownEngine();
+    } catch (err) {
+      logMain(
+        `[updater] 引擎终止失败，继续安装: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+  setTimeout(() => {
+    autoUpdater.quitAndInstall(false, true);
+  }, 200);
+}
+
+/**
+ * 手动检查更新（菜单/托盘入口）：阻塞式对话框反馈结果；
+ * 有新版本时二次确认后安装。
+ */
+export async function checkForUpdatesInteractive(parent?: BrowserWindow): Promise<void> {
+  if (!app.isPackaged) {
+    await showBox(parent, {
+      type: "info",
+      title: "检查更新",
+      message: "开发模式不支持检查更新",
+    });
+    return;
+  }
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    const info = result?.updateInfo;
+    const version = info?.version ?? app.getVersion();
+    if (!info || version === app.getVersion()) {
+      await showBox(parent, {
+        type: "info",
+        title: "检查更新",
+        message: `已是最新版本（v${app.getVersion()}）`,
+      });
+      return;
+    }
+    pendingVersion = version;
+    const notes = await resolveReleaseNotes(version, normalizeUpdaterReleaseNotes(info));
+    const choice = await showBox(parent ?? getMainWindow(), {
+      type: "info",
+      title: "发现新版本",
+      message: `新版本 v${version} 可用（当前 v${app.getVersion()}）`,
+      detail: notesForDialog(notes),
+      buttons: ["重启并安装", "稍后"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (choice.response === 0) await installUpdate();
+  } catch (err) {
+    await showBox(parent, {
+      type: "error",
+      title: "检查更新",
+      message: "检查更新失败",
+      detail: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/** 初始化 autoUpdater：feed / 事件 / 启动后台静默检查。 */
 export function initUpdater(): void {
   if (initialized) return;
   initialized = true;
@@ -146,16 +200,12 @@ export function initUpdater(): void {
     );
   });
 
-  // 已是最新版本（或运行版领先于 feed）：明确记录，不再静默。
   autoUpdater.on("update-not-available", (info) => {
     logMain(
       `[updater] 无可用更新（feed 最新 v${info.version}，当前 v${app.getVersion()}）`,
     );
   });
 
-  // 检测到新版本时记录版本号，渲染进程不主动通知（保持后台静默）。
-  // 顺手预热发布说明解析（latest.yml 缺失时预取 GitHub Release body），
-  // 让下载完成推送时说明通常已就绪。
   autoUpdater.on("update-available", (info) => {
     pendingVersion = info.version || null;
     logMain(`[updater] 发现新版本 v${pendingVersion}，后台下载中…`);
@@ -164,78 +214,32 @@ export function initUpdater(): void {
     }
   });
 
-  // 下载完成：主动推送到渲染进程，此时才让 UI 显示"已就绪"图标，
-  // 并附上新版本发布说明（图标悬停展示）。
+  // 下载完成：系统通知（点击进入安装确认），用户不点也不丢——
+  // autoInstallOnAppQuit 保证退出时兜底安装。
   autoUpdater.on("update-downloaded", (info) => {
     const version = info.version || pendingVersion || "unknown";
-    logMain(`[updater] 新版本 v${version} 下载完成，通知渲染进程`);
-    void (async () => {
-      const releaseNotes = await resolveReleaseNotes(
-        version,
-        normalizeUpdaterReleaseNotes(info),
-      );
-      notifyUpdateReady(getMainWindow(), version, releaseNotes ?? undefined);
-    })();
+    logMain(`[updater] 新版本 v${version} 下载完成，弹系统通知`);
+    void resolveReleaseNotes(version, normalizeUpdaterReleaseNotes(info));
+    if (!Notification.isSupported()) return;
+    const notification = new Notification({
+      title: "KStock 新版本已就绪",
+      body: `v${version} 下载完成，点击查看并安装。退出应用时也会自动安装。`,
+      silent: true,
+    });
+    notification.on("click", () => {
+      const win = getMainWindow();
+      if (win) {
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+      }
+      void checkForUpdatesInteractive(win ?? undefined);
+    });
+    notification.show();
   });
 
-  // 渲染进程（菜单"检查更新"）触发：返回结构化结果（已最新 / 有新版本 /
-  // 检查失败），不等下载完成；下载完成后由 update-downloaded 事件主动推送。
-  ipcMain.handle(IPC.updateCheck, async (): Promise<UpdateCheckResult> => {
-    logMain(
-      `[updater] 收到手动检查更新请求：packaged=${app.isPackaged} ` +
-        `currentVersion=${app.getVersion()}`,
-    );
-    if (!app.isPackaged) {
-      logMain("[updater] 未打包环境，跳过检查更新");
-      return { status: "error", message: "开发模式不支持检查更新" };
-    }
-    try {
-      const result = await autoUpdater.checkForUpdates();
-      const info = result?.updateInfo;
-      if (!info) {
-        logMain(`[updater] 检查完成：已是最新版本 v${app.getVersion()}`);
-        return { status: "latest", version: app.getVersion() };
-      }
-      if (info.version === app.getVersion()) {
-        logMain(`[updater] 检查完成：已是最新版本 v${info.version}`);
-        return { status: "latest", version: info.version };
-      }
-      pendingVersion = info.version;
-      const releaseNotes = await resolveReleaseNotes(
-        info.version,
-        normalizeUpdaterReleaseNotes(info),
-      );
-      logMain(`[updater] 发现新版本 v${info.version}，后台下载中`);
-      return releaseNotes
-        ? { status: "available", version: info.version, releaseNotes }
-        : { status: "available", version: info.version };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logMain(`[updater] 检查更新失败：${message}`);
-      return { status: "error", message };
-    }
-  });
-
-  // 用户点击"重启安装"时：终止 gateway → 延迟退出 → 安装器替换文件 → 重启。
-  ipcMain.handle(IPC.updateInstall, async () => {
-    // 1. 同步终止 gateway 进程树（等待子进程真正退出，否则 Windows
-    //    安装器替换 .exe 时因文件占用失败、macOS 重启后端口冲突）。
-    if (shutdownGateway) {
-      try {
-        await shutdownGateway();
-      } catch (err) {
-        logMain(
-          `[updater] gateway 终止失败，继续安装: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-      }
-    }
-    // 2. 短延迟让渲染进程完成 IPC 返回与资源释放。
-    // 3. quitAndInstall(isSilent=false, isForceRunAfterQuit=true)：关闭所有
-    //    窗口 → 退出主进程 → 运行安装器替换文件 → 重启应用。
-    setTimeout(() => {
-      autoUpdater.quitAndInstall(false, true);
-    }, 200);
-  });
+  // 启动后台静默检查（打包态）。失败静默——日志已记录。
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdates().catch(() => {});
+  }
 }

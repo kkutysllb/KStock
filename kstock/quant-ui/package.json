@@ -1,0 +1,16 @@
+{
+  "name": "@kstock/quant-ui",
+  "description": "KStock 量化客户端共享件：四库数据层（/kstock-api fetch）、通用小件、图标与 ksq 样式。源码型共享包——四个量化库客户端插件经 tsdown 内联打包，不单独构建产物",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "typescript": "^6.0.3"
+  }
+}

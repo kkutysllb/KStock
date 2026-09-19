@@ -1,0 +1,22 @@
+{
+  "name": "@kstock/quant",
+  "description": "KStock 量化库数据宿主：策略/因子/选股/报告四库存储（node:sqlite）+ /kstock-api 路由；四个库的界面由 @kstock/quant-strategies/-factors/-selections/-reports 客户端插件承载",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch",
+    "test": "node --import tsx/esm --test tests/*.test.ts"
+  },
+  "devDependencies": {
+    "tsdown": "0.22.2",
+    "typescript": "^6.0.3",
+    "tsx": "^4.22.4"
+  }
+}

@@ -1,44 +1,32 @@
 /**
- * KStock Electron 主进程入口。
+ * KStock Electron 主进程入口（2.0）。
  *
- * 串联：app:// 协议 → 内置 gateway 子进程 → 主窗口 → 系统菜单/托盘 → 自动更新。
- * 退出时联动终止 gateway 进程树（对齐原 Tauri ``RunEvent::Exit`` 行为）。
+ * 职责只剩进程托管与系统集成的最小集：单实例锁 → 拉起内置引擎
+ * （kstock profile，stdout 捕获启动 token）→ 主窗口加载引擎地址 →
+ * 菜单/托盘 → 自动更新。退出/更新安装前联动终止引擎进程树。
+ * 业务面（对话/四库/报告/公共页）全部在引擎内，壳无协议、无代理、无 IPC 桥。
  */
 
 import {
   app,
   BrowserWindow,
   dialog,
-  ipcMain,
   Menu,
   nativeImage,
-  Notification,
-  shell,
 } from "electron";
-import { writeFile } from "node:fs/promises";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
-import {
-  appDataDirectory,
-  GatewayProcess,
-} from "./lib/gateway";
-import {
-  buildAppMenu,
-  buildTray,
-} from "./lib/menu";
-import { registerAppProtocol, registerPrivilegedScheme } from "./lib/protocol";
-import { initUpdater, setGatewayShutdownHandler } from "./lib/updater";
+import { ENGINE_PORT, EngineProcess } from "./lib/engine";
+import { buildAppMenu, buildTray } from "./lib/menu";
+import { initUpdater, setEngineShutdownHandler } from "./lib/updater";
 import {
   createMainWindow,
   getMainWindow,
-  registerWindowIpc,
 } from "./lib/window";
 import { logMain } from "./lib/logger";
-import { IPC } from "./lib/ipc-channels";
 
 // Windows GPU 硬件加速在部分显卡驱动 / 远程桌面（RDP）/ 虚拟机下会导致
-// 渲染黑屏（窗口显示但内容空白，Chromium GPU 进程崩溃）。金融桌面应用
-// 无 3D / 视频负载，禁用 GPU 加速改用软件渲染兜底，稳定优先于性能。
+// 渲染黑屏。金融桌面应用无 3D / 视频负载，禁用 GPU 加速改用软件渲染兜底。
 // macOS / Linux 不受此问题影响，保留硬件加速。
 if (process.platform === "win32") {
   app.disableHardwareAcceleration();
@@ -46,10 +34,7 @@ if (process.platform === "win32") {
 
 logMain(`启动：platform=${process.platform} version=${app.getVersion()} packaged=${app.isPackaged}`);
 
-// 必须在 app.ready 之前注册 privileged scheme。
-registerPrivilegedScheme();
-
-// 单实例锁：避免多开各自拉起 gateway 抢 18001 端口。
+// 单实例锁：避免多开各自拉起引擎抢 18001 端口。
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -63,10 +48,6 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
-    registerAppProtocol();
-    registerWindowIpc();
-    registerGatewayIpc();
-    registerShellIpc();
     initUpdater();
 
     // macOS dev 模式下 Dock 默认显示 Electron 图标；手动设置应用图标
@@ -75,27 +56,34 @@ if (!app.requestSingleInstanceLock()) {
       setDockIcon();
     }
 
-    // 自动拉起内置 gateway（开发态和打包态统一由主进程托管）。
-    try {
-      const started = await gateway.ensureStarted();
-      logMain(`gateway: ${started}`);
-    } catch (err) {
-      logMain(`gateway 启动失败: ${err instanceof Error ? err.message : String(err)}`);
-    }
-    // 注册安装前 gateway 终止回调：更新安装时先同步 kill gateway，
+    // 注册安装前引擎终止回调：更新安装时先同步 kill 引擎，
     // 避免 .exe 占用 / 端口冲突导致安装失败。
-    setGatewayShutdownHandler(() => gateway.killAndWait());
+    setEngineShutdownHandler(() => engine.killAndWait());
 
-    // macOS 保留原生菜单栏（Cmd 加速器 / 红绿灯配套菜单）；
-    // Windows/Linux 无框窗口没有菜单栏，菜单功能全部迁入托盘
-    // （buildTray），窗口级快捷键由 registerFramelessShortcuts 兑底。
-    Menu.setApplicationMenu(process.platform === "darwin" ? buildAppMenu() : null);
+    // 拉起内置引擎并取引导地址（带启动 token 的工作台 URL；
+    // 端口被外部实例占用时回落到 /workspace，由引擎决定登录跳转）。
+    let entryUrl: string;
+    try {
+      entryUrl = await engine.ensureStarted();
+      logMain(`engine: 引导地址 ${entryUrl}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logMain(`引擎启动失败: ${message}`);
+      // 可视化报错：端口被旧版 KStock 占用等场景若只静默加载，窗口里就是
+      // 旧进程的错误文本，用户无从知道原因。弹窗说明后仍建窗口兜底，
+      // 用户可经托盘「重启引擎」重试。
+      dialog.showErrorBox("KStock 引擎启动失败", message);
+      entryUrl = `http://127.0.0.1:${ENGINE_PORT}/workspace`;
+    }
+
+    // macOS 保留原生菜单栏；Windows/Linux 无菜单栏，功能在托盘。
+    Menu.setApplicationMenu(process.platform === "darwin" ? buildAppMenu(engine) : null);
     logMain("ready：创建主窗口");
-    createMainWindow();
-    buildTray();
+    createMainWindow(entryUrl);
+    buildTray(engine);
 
     app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+      if (BrowserWindow.getAllWindows().length === 0) createMainWindow(entryUrl);
     });
   });
 
@@ -103,124 +91,32 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== "darwin") app.quit();
   });
 
-  // 应用退出时联动终止内置 gateway 进程树。
-  // 仅发 SIGTERM 不够：uvicorn graceful shutdown 会等待未断开的 SSE 长连接，
-  // 且 gateway 子进程 detached（独立进程组），主进程退出后成为孤儿进程
-  // 继续占用 18001 端口（macOS 无类似 Windows Job Object 的进程回收机制）。
-  // 因此退出时 preventDefault 一次：先销毁窗口断开 SSE，再同步等待
-  // killAndWait（SIGTERM + 5s 超时 SIGKILL 兜底）完成后真正退出。
-  let gatewayShutdownDone = false;
+  // 应用退出时联动终止内置引擎进程树。
+  // 仅发 SIGTERM 不够：引擎 detached（独立进程组），主进程退出后成为
+  // 孤儿进程继续占用 18001 端口。因此退出时 preventDefault 一次：先销毁
+  // 窗口断开连接，再同步等待 killAndWait（SIGTERM + 5s 超时 SIGKILL 兜底）。
+  let engineShutdownDone = false;
   app.on("before-quit", (event) => {
-    if (gatewayShutdownDone) return;
+    if (engineShutdownDone) return;
     event.preventDefault();
     for (const win of BrowserWindow.getAllWindows()) win.destroy();
-    gateway
+    engine
       .killAndWait(5000)
       .catch(() => {})
       .finally(() => {
-        gatewayShutdownDone = true;
+        engineShutdownDone = true;
         app.quit();
       });
   });
 }
 
-const gateway = new GatewayProcess();
-
-/** 注册 gateway 进程管理 IPC（渲染层实际消费的只有重启通道）。 */
-function registerGatewayIpc(): void {
-  ipcMain.handle(IPC.gatewayRestart, async () => gateway.restart());
-}
-
-/** 注册宿主能力 IPC（打开外链、保存文件、系统通知）。 */
-function registerShellIpc(): void {
-  ipcMain.handle(IPC.shellOpenExternal, async (_event, url: string) => {
-    if (!/^https?:\/\//i.test(url)) {
-      throw new Error("仅允许打开 http(s) 链接");
-    }
-    await shell.openExternal(url);
-  });
-
-  // 白名单路径解析：渲染层只能请求 "logs" / "app-data" 两个固定目标，
-  // 由主进程映射到 ~/.kstock/logs 与 ~/.kstock，绝对不接受任意路径入参。
-  // 这样 logo 下拉「打开日志目录」不会变成任意本地文件读取的通道。
-  ipcMain.handle(IPC.shellOpenPath, async (_event, target: unknown) => {
-    if (target !== "logs" && target !== "app-data") {
-      return { ok: false, error: `unsupported target: ${String(target)}` };
-    }
-    const base = appDataDirectory();
-    const absolute = target === "logs" ? join(base, "logs") : base;
-    mkdirSync(absolute, { recursive: true });
-    const errorMessage = await shell.openPath(absolute);
-    return errorMessage ? { ok: false, error: errorMessage } : { ok: true };
-  });
-
-  // 应用元信息。version 来自 package.json (`app.getVersion`),
-  // name 来自 productName（electron-builder.yml 配 KStock），platform 是 process.platform。
-  ipcMain.handle(IPC.appInfo, () => ({
-    version: app.getVersion(),
-    name: app.getName(),
-    platform: process.platform,
-  }));
-
-  ipcMain.handle(IPC.showNotification, (_event, title: string, body: string) => {
-    if (!Notification.isSupported()) {
-      return { ok: false, reason: "unsupported" };
-    }
-    // 窗口聚焦时用户正在看应用，弹系统通知只会打扰。
-    const win = getMainWindow();
-    if (win?.isFocused()) {
-      return { ok: false, reason: "focused" };
-    }
-    const notification = new Notification({
-      title: String(title ?? "KStock").slice(0, 120),
-      body: String(body ?? "").slice(0, 200),
-    });
-    notification.on("click", () => {
-      const w = getMainWindow();
-      if (w) {
-        if (w.isMinimized()) w.restore();
-        w.show();
-        w.focus();
-      }
-    });
-    notification.show();
-    return { ok: true };
-  });
-
-  ipcMain.handle(
-    IPC.shellSaveArtifact,
-    async (_event, name: string, bytes: Uint8Array) => {
-      const filename = safeArtifactFilename(name);
-      const parent = getMainWindow();
-      const { canceled, filePath } = parent
-        ? await dialog.showSaveDialog(parent, { defaultPath: filename })
-        : await dialog.showSaveDialog({ defaultPath: filename });
-      if (canceled || !filePath) return { saved: false };
-      await writeFile(filePath, Buffer.from(bytes));
-      return { saved: true, path: filePath };
-    },
-  );
-}
-
-/** 对齐 Rust safe_artifact_filename：剥离路径分隔符与非法字符。 */
-function safeArtifactFilename(name: string): string {
-  const filename =
-    name
-      .split(/[\\/]/)
-      .filter((part) => part.length > 0)
-      .pop() ?? name;
-  const cleaned = filename
-    .trim()
-    .replace(/[\\/:"*?<>|]/g, "_");
-  return cleaned.length > 0 ? cleaned : "artifact";
-}
+const engine = new EngineProcess();
 
 /**
  * macOS dev 模式下设置 Dock 图标。
  *
  * 打包后的 .app 由 electron-builder 注入 icon.icns 作为 Dock 图标；
- * 开发态走 ``electron .`` 时 Dock 仍显示 Electron 默认图标，需手动调
- * ``app.dock.setIcon`` 注入应用图标 png。
+ * 开发态走 ``electron .`` 时 Dock 仍显示 Electron 默认图标，需手动注入。
  */
 function setDockIcon(): void {
   const candidates = [
@@ -230,7 +126,5 @@ function setDockIcon(): void {
   const iconPath = candidates.find((p) => existsSync(p));
   if (!iconPath) return;
   const icon = nativeImage.createFromPath(iconPath);
-  if (!icon.isEmpty()) app.dock.setIcon(icon);
+  if (!icon.isEmpty()) app.dock?.setIcon(icon);
 }
-
-

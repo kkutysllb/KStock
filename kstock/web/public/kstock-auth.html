@@ -1,0 +1,64 @@
+<!doctype html>
+<!-- KStock 登录 / 首启初始化页：1.x AuthPage 设计的 1:1 静态移植。
+     类名与 1.x 完全一致（auth-shell / auth-panel / auth-form / hero-primary.full），
+     行为见 /kstock/kstock-auth.js：模式由路径决定（/setup = 初始化管理员，/login = 登录），
+     对齐上游 apps/web/src/auth/auth.ts 的 API 契约（POST /api/auth/setup|login，
+     成功后跳 ?next= 校验后的同站路径）。 -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KStock — 登录</title>
+  <link rel="stylesheet" href="/kstock/kstock-pages.css" />
+  <link rel="icon" href="/kstock/kstock-logo.svg" type="image/svg+xml" />
+</head>
+<body>
+  <main class="auth-shell">
+    <!-- 无框窗口拖拽带（默认 display:none，仅部分平台启用） -->
+    <div class="titlebar-drag-strip" aria-hidden="true"></div>
+    <a class="back-button" id="auth-back" href="/">
+      <span aria-hidden="true">←</span>
+      <span>返回首页</span>
+    </a>
+    <section class="auth-panel" aria-label="账户">
+      <div>
+        <div class="auth-brand" aria-label="KStock 账户">
+          <svg class="logo-mark compact" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+            <rect x="4" y="4" width="56" height="56" rx="14" />
+            <path class="logo-stem" d="M21 16h9c2 0 4 2 4 4v24c0 2-2 4-4 4h-9z" />
+            <path class="logo-arm" d="M34 31 50 16h9L41 34l18 14H47L34 38z" />
+            <path class="logo-line" d="M15 43 28 38l8 4 12-11 9 3" />
+          </svg>
+          <span>KStock</span>
+        </div>
+        <h1 id="auth-title">登录工作台</h1>
+        <p id="auth-subtitle">本地账户由内置 QiLin 引擎管理。</p>
+      </div>
+      <form id="auth-form" class="auth-form" novalidate>
+        <label>
+          <span id="auth-identifier-label">用户名或邮箱</span>
+          <input id="auth-identifier" name="identifier" type="text" autocomplete="username"
+                 placeholder="请输入用户名或邮箱" />
+        </label>
+        <label id="auth-email-field" hidden>
+          <span>邮箱（可选）</span>
+          <input id="auth-email" name="email" type="email" autocomplete="email" placeholder="用于账户识别，可留空" />
+        </label>
+        <label>
+          <span>密码</span>
+          <input id="auth-password" name="password" type="password" autocomplete="current-password"
+                 placeholder="请输入密码" />
+        </label>
+        <label id="auth-confirm-field" hidden>
+          <span>确认密码</span>
+          <input id="auth-confirm" name="confirm" type="password" autocomplete="new-password"
+                 placeholder="再次输入密码" />
+        </label>
+        <p class="auth-error" id="auth-error" role="alert" hidden></p>
+        <button class="hero-primary full" id="auth-submit" type="submit"><span>登录并进入</span></button>
+      </form>
+    </section>
+  </main>
+  <script src="/kstock/kstock-auth.js"></script>
+</body>
+</html>

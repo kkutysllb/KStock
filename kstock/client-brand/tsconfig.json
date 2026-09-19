@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@qilin/kylin": ["../../vendor/qilin/vendor/cordis/src/index.ts"],
+      "@qilin/client-locale": ["../../vendor/qilin/packages/client/locale/src/index.ts"],
+      "@qilin/client-ui-theme/client": ["../../vendor/qilin/packages/client/ui-theme/src/client/index.ts"],
+      "@qilin/client-ui-theme": ["../../vendor/qilin/packages/client/ui-theme/src/index.ts"],
+      "@qilin/client-ui-sidebar/client": ["../../vendor/qilin/packages/client/ui-sidebar/src/client/index.ts"],
+      "@qilin/client-ui-conversation/client": ["../../vendor/qilin/packages/client/ui-conversation/src/client/index.ts"],
+      "@qilin/client-ui-settings/client": ["../../vendor/qilin/packages/client/ui-settings/src/client/index.ts"],
+      "@qilin/client-ui-slots": ["../../vendor/qilin/packages/client/ui-slots/src/index.ts"]
+    }
+  },
+  "include": ["src", "tsdown.config.ts"]
+}

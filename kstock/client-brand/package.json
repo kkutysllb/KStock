@@ -1,0 +1,34 @@
+{
+  "name": "@kstock/client-brand",
+  "description": "KStock 品牌层客户端插件：主题 token 覆盖、五层渐变环境背景与品牌标记槽位",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.cjs",
+    "./package.json": "./package.json"
+  },
+  "qilin": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@qilin/client-locale",
+        "@qilin/client-ui-theme",
+        "@qilin/client-ui-renderer",
+        "@qilin/client-ui-sidebar",
+        "@qilin/client-ui-conversation"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "tsdown": "0.22.2",
+    "typescript": "^6.0.3"
+  }
+}

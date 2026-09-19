@@ -1,0 +1,36 @@
+{
+  "_comment": "KStock 角色 preset 的技能绑定清单：preset id → 随行技能目录名（发布进 <preset>/skills/）。patch_vendor_skills.py 按此把 vendor/skills/public 的最终语料镜像进各 preset；清单里的技能名必须存在于 vendor/skills/public。",
+  "market-analysis": [
+    "common", "sandbox-path-guide", "html-report",
+    "market-linkage", "index-futures-theme", "option-futures-linkage-theme", "option-etf-theme", "cb-panorama",
+    "market-linkage-engine", "futures-analysis", "option-futures-linkage", "options-volatility",
+    "etf-analysis", "cb-analysis", "hithink-futures", "macro-query", "zhishu-query",
+    "industry-analysis", "news-search", "announcement-search", "report-search", "chart-visualization"
+  ],
+  "stock-analysis": [
+    "common", "sandbox-path-guide", "html-report",
+    "stock-analysis", "financial-statement", "valuation-model", "dcf",
+    "earnings-forecast", "earnings-revision", "business-query", "event-query",
+    "news-search", "announcement-search", "report-search", "chart-visualization"
+  ],
+  "stock-screener": [
+    "common", "sandbox-path-guide", "html-report",
+    "a-stock-screener", "selection-strategies", "stock-analysis",
+    "financial-statement", "valuation-model", "factor-research",
+    "news-search", "report-search", "chart-visualization"
+  ],
+  "chan-theory-expert": [
+    "common", "sandbox-path-guide", "html-report",
+    "stock-analysis", "chart-visualization"
+  ],
+  "strategy-research": [
+    "common", "sandbox-path-guide", "html-report",
+    "strategy-research", "backtrader_strategies", "selection-strategies",
+    "tushare-data", "chart-visualization"
+  ],
+  "factor-mining": [
+    "common", "sandbox-path-guide", "html-report",
+    "factor-research", "selection-strategies", "a-stock-screener",
+    "tushare-data", "chart-visualization"
+  ]
+}

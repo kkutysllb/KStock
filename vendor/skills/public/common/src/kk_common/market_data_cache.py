@@ -7,11 +7,15 @@
 「接口 + 参数」落盘复用；跨任务、跨线程共享。
 
 存储：CSV + meta.json（不引入 pyarrow 依赖，打包 runtime 只有 pandas）。
-目录解析顺序：
-  1. KSTOCK_MARKET_DATA_CACHE_DIR 显式指定（测试用）；
-  2. /mnt/cache/market-data（沙箱挂载视图，LocalSandbox 把它映射回
-     ~/.kstock/cache/market-data，与 gateway 进程视图同一物理目录）；
-  3. ~/.kstock/cache/market-data（gateway / 开发态直跑视图）。
+目录解析顺序（2.0 / QiLin 3.x 沙箱口径）：
+  1. KSTOCK_MARKET_DATA_CACHE_DIR 显式指定（测试/部署覆盖，不做探测）；
+  2. ~/.kstock/cache/market-data（宿主直跑视图：非沙箱进程可写时启用，
+     持久复用）；
+  3. <系统临时目录>/kstock-market-data（agent 沙箱保底：3.x workspace-write
+     沙箱只承诺工作区与临时区可写，宿主目录越界不可写；跨任务复用以临时
+     区为界，系统周期清理后自动重建）。
+  探测方式：mkdir -p + 探针写；全部不可用返回 None（缓存整体旁路，数据
+  请求直连，绝不因缓存目录问题失败）。1.x 的 /mnt/cache 挂载视图已废弃。
 
 开关：KSTOCK_MARKET_DATA_CACHE=0/false 关闭（默认开启）。该变量不含
 scrub 关键字（KEY/TOKEN/SECRET/PASS），经沙箱 env 继承机制自动透传给
@@ -95,20 +99,48 @@ def _env_flag_disabled() -> bool:
     return os.getenv(_ENV_DISABLE, "").strip().lower() in ("0", "false", "no", "off")
 
 
+_resolved_dir: Optional[str] = None
+_resolved_done = False
+
+
+def _probe_writable_dir(path: str) -> Optional[str]:
+    """mkdir -p + 探针写验证可写；任一步 OSError 返回 None。"""
+    try:
+        os.makedirs(path, exist_ok=True)
+        probe = os.path.join(path, ".probe")
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write("")
+        os.unlink(probe)
+        return path
+    except OSError:
+        return None
+
+
 def cache_dir() -> Optional[str]:
-    """解析缓存目录；不可用返回 None（缓存整体旁路）。"""
+    """解析缓存目录；不可用返回 None（缓存整体旁路）。
+
+    解析顺序见模块头。默认候选按「宿主持久目录 → 系统临时区」探测：
+    沙箱进程（QiLin 3.x workspace-write 写边界=会话工作区+临时区）在宿主
+    候选上探测失败后落到临时区；全部不可用返回 None。结果按进程记忆，
+    探针写不随每次数据请求重复。
+    """
     explicit = os.getenv(_ENV_DIR, "").strip()
     if explicit:
         return explicit
-    for candidate in ("/mnt/cache/market-data",):
-        if os.path.isdir(candidate):
-            return candidate
-    home = os.path.expanduser("~")
-    if home and home != "~":
-        default = os.path.join(home, ".kstock", "cache", "market-data")
-        if os.path.isdir(os.path.dirname(default)):
-            return default
-    return None
+    global _resolved_dir, _resolved_done
+    if not _resolved_done:
+        _resolved_done = True
+        home = os.path.expanduser("~")
+        _resolved_dir = None
+        if home and home != "~":
+            _resolved_dir = _probe_writable_dir(
+                os.path.join(home, ".kstock", "cache", "market-data")
+            )
+        if _resolved_dir is None:
+            _resolved_dir = _probe_writable_dir(
+                os.path.join(tempfile.gettempdir(), "kstock-market-data")
+            )
+    return _resolved_dir
 
 
 def handles(endpoint: str) -> bool:
@@ -149,17 +181,22 @@ def _read_cache(key_dir: str) -> Optional[Tuple[pd.DataFrame, Dict[str, Any]]]:
 
 
 def _atomic_write(path: str, content: bytes) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".tmp-")
+    # makedirs/mkstemp 均在 try 内：目录不可写（如沙箱写边界外的宿主路径）
+    # 时静默跳过落盘，缓存退化为旁路而非把 PermissionError 抛进数据请求
+    # 路径。tmp 预置 None：创建临时文件前失败时 except 分支不引用未绑定名。
+    tmp: Optional[str] = None
     try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".tmp-")
         with os.fdopen(fd, "wb") as f:
             f.write(content)
         os.replace(tmp, path)
     except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
+        if tmp is not None:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 
 def _store_df(key_dir: str, endpoint: str, df: pd.DataFrame, meta_extra: Dict[str, Any]) -> None:

@@ -1,0 +1,12 @@
+{
+  "name": "@kstock/workspace-root",
+  "private": true,
+  "version": "2.0.0",
+  "description": "KStock 自有 QiLin 插件包工作区（品牌层 / 产品 bundle / 量化客户端），与 vendor/qilin 引擎快照解耦。",
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "build": "pnpm -r --filter './client-brand' --filter './web' run build",
+    "typecheck": "tsc -b tsconfig.json"
+  }
+}

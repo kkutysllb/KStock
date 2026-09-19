@@ -47,6 +47,16 @@ KStock 对上游技能包的全部本地修复：同步完成后自动重放，�
    ``import kk_common.tushare_client`` 即崩，拖垮依赖它的数据网关与测试。
    修复：软导入 + ``_TUSHARE_AVAILABLE`` 标志，TushareClient 实例化时
    才抛明确的 ImportError（沙箱运行时装了 tushare，行为不变）。
+7. **preset 随行技能目录发布**（vendor/skills/public → 各角色
+   preset/skills/，按 skills.manifest.json 子集）：技能随 preset 分发（cordis preset 模式，
+   skill-filesystem 行以 baseUrl 指向 preset 自身 skills/ 子目录）。技能
+   路径解析由 skill 工具加载结果内建（"Base directory for this skill" +
+   相对路径按基目录解析），上游 SKILL.md 文本不做路径改写。
+8. **KStock 自有技能 ensure**（kstock/skills/ → vendor/skills/public/）：
+   html-report（自研渲染器）、market-linkage（市场联动场景编排手册）、
+   sandbox-path-guide（2.0 工作区路径纪律整体重写版，替换上游 1.x 虚拟
+   路径版）。源码在 kstock/skills 下不受上游同步影响，每次补丁执行时
+   与 vendor 比对并按需覆盖；ensure 后一并发布进 preset 随行目录。
 
 幂等性：每个补丁应用前检查目标状态，已修复则跳过，可重复执行。
 """
@@ -941,6 +951,152 @@ def _fix_pywencai_hint(text: str) -> str | None:
     return pattern.sub("", text)
 
 
+def _fix_render_html_report_refs(text: str) -> str | None:
+    """把旧内置工具 render_html_report 的引用改写为 2.0 html-report 技能流程。"""
+    if 'render_html_report' not in text:
+        return None
+    replacement = (
+        "### 阶段四：报告生成（html-report 技能）\n\n"
+        "本技能**不自行手写 HTML**，而是把结论整理为报告 JSON，用 html-report 技能自带的渲染器"
+        "（`skills/public/html-report/scripts/render_report.py`，纯标准库）产出单文件自包含看板。流程：\n\n"
+        "1. 按报告 JSON 契约（html-report 技能 `references/report-schema.md`）整理数据："
+        "标题/摘要/指标卡/分节正文/图表（line / area / bar / scatter / pie / radar）/风险/参考来源，"
+        "图表以内嵌 SVG 渲染，**禁止使用远程图片 URL**；"
+        "2. 保存为 `report.json` 后执行"
+        "`python skills/public/html-report/scripts/render_report.py report.json -o report.html`，"
+        "stderr 出现告警必须修正数据后重渲；"
+        "3. 用 html-report 技能 SKILL.md 中的 curl 模板把 report.html 归档进报告库"
+        "（POST /kstock-api/reports），交付时给出报告标题。"
+    )
+    # 整段替换「阶段四」小节（从标题到下一个二级标题/参考文档之间）
+    pattern = re.compile(
+        r"### 阶段四：报告生成（内置 render_html_report 工具）.*?(?=\n## )",
+        re.DOTALL,
+    )
+    if pattern.search(text):
+        return pattern.sub("\n" + replacement + "\n", text)
+    # 行内引用（如能力清单 description）逐句改写
+    inline = re.compile(r"调用内置 render_html_report 工具生成离线 HTML 看板")
+    if inline.search(text):
+        return inline.sub("用 html-report 技能生成自包含 HTML 看板并归档报告库", text)
+    return None
+
+
+_RENDER_REF_SKILLS = (
+    "public/industry-analysis/SKILL.md",
+    "public/a-stock-screener/SKILL.md",
+)
+
+# ── KStock 自有技能 ensure（kstock/skills → vendor/skills/public）────────
+# 源码在 kstock/skills/<name>（上游同步整体覆盖 vendor 时不受影响），补丁器
+# 把它们 ensure 进 vendor 技能目录：html-report（自研渲染器）、market-linkage
+# （市场联动场景编排手册）、sandbox-path-guide（2.0 工作区路径纪律整体重写，
+# 替换上游 1.x 虚拟路径版）。
+_OWNED_SKILLS_SOURCE = REPO_ROOT / "kstock" / "skills"
+
+
+def _ensure_owned_skills(vendor_root: Path) -> list[str]:
+    """把 kstock/skills/<name> ensure 进 vendor/skills/public/<name>，返回改动目录。"""
+    import shutil
+
+    changed: list[str] = []
+    if not _OWNED_SKILLS_SOURCE.is_dir():
+        return changed
+    for source in sorted(_OWNED_SKILLS_SOURCE.iterdir()):
+        if not source.is_dir():
+            continue
+        target = vendor_root / "public" / source.name
+        source_files = sorted(p.relative_to(source) for p in source.rglob("*") if p.is_file())
+        if target.is_dir():
+            target_files = sorted(p.relative_to(target) for p in target.rglob("*") if p.is_file())
+            if source_files == target_files and all(
+                (source / rel).read_bytes() == (target / rel).read_bytes() for rel in source_files
+            ):
+                continue
+            shutil.rmtree(target)
+        shutil.copytree(source, target)
+        changed.append(f"public/{source.name}")
+    return changed
+
+
+# ── preset 随行技能目录发布（vendor/skills/public → 各角色 preset/skills）─
+# 技能随 preset 分发（cordis preset 模式）：每个角色 preset 的 skill-
+# filesystem 行以 baseUrl 指向自身 skills/ 子目录。技能路径解析由 skill 工具
+# 加载结果内建（"Base directory for this skill: <path>" + 相对路径按基目录
+# 解析），上游 SKILL.md 文本不做路径改写；此处按 skills.manifest.json 把
+# 最终语料子集发布进各 preset（preset id → 技能目录名列表）。
+_PRESETS_ROOT = REPO_ROOT / "kstock" / "presets"
+_PRESET_SKILLS_MANIFEST = _PRESETS_ROOT / "skills.manifest.json"
+
+
+# 发布排除：上游同步残留的构建/字节码产物不进 preset 随行目录
+# （build/ 为上游打包残留，__pycache__/*.pyc 为本地运行残留，均非技能内容）。
+_PUBLISH_EXCLUDE_DIRS = frozenset({"__pycache__", "build", ".pytest_cache", ".mypy_cache"})
+_PUBLISH_EXCLUDE_SUFFIXES = (".pyc", ".pyo")
+
+
+def _publish_preset_skills(vendor_root: Path) -> bool:
+    """按 skills.manifest.json 把技能子集镜像进各 preset 随行 skills/。
+
+    逐文件比对（清单 + 字节），只写差异、删多余，无差异零改动（幂等）；
+    构建产物与字节码缓存（见 _PUBLISH_EXCLUDE_*）不参与发布。manifest
+    引用的技能在 vendor/skills/public 缺失时抛错（fail loud，防止静默
+    裁剪角色技能面）。
+    """
+    import json
+    import shutil
+
+    source_root = vendor_root / "public"
+    if not source_root.is_dir():
+        return False
+    manifest = json.loads(_PRESET_SKILLS_MANIFEST.read_text(encoding="utf-8"))
+
+    def _publishable(path: Path) -> bool:
+        rel = path.relative_to(source_root)
+        if any(part in _PUBLISH_EXCLUDE_DIRS for part in rel.parts[:-1]):
+            return False
+        return not rel.suffix in _PUBLISH_EXCLUDE_SUFFIXES
+
+    changed = False
+    for preset_id, skill_names in manifest.items():
+        if preset_id.startswith("_"):
+            continue
+        target_root = _PRESETS_ROOT / preset_id / "skills"
+        target_root.mkdir(parents=True, exist_ok=True)
+        desired: dict[Path, Path] = {}
+        for name in skill_names:
+            skill_dir = source_root / name
+            if not skill_dir.is_dir():
+                raise SystemExit(
+                    f"preset 技能清单引用了不存在的技能：{preset_id} → {name}"
+                    f"（vendor/skills/public 下无此目录）"
+                )
+            for src in sorted(skill_dir.rglob("*")):
+                if src.is_file() and _publishable(src):
+                    desired[src.relative_to(source_root)] = src
+        existing: dict[Path, Path] = {}
+        for dst in sorted(target_root.rglob("*")):
+            if dst.is_file():
+                existing[dst.relative_to(target_root)] = dst
+        for rel in sorted(set(desired) - set(existing)):
+            (target_root / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(desired[rel], target_root / rel)
+            changed = True
+        for rel in sorted(set(desired) & set(existing)):
+            if desired[rel].read_bytes() != existing[rel].read_bytes():
+                shutil.copy2(desired[rel], existing[rel])
+                changed = True
+        for rel in sorted(set(existing) - set(desired)):
+            existing[rel].unlink()
+            changed = True
+            # 清掉因此变空的目录（只删空目录，向上至 target_root）。
+            parent = existing[rel].parent
+            while parent != target_root and next(parent.iterdir(), None) is None:
+                parent.rmdir()
+                parent = parent.parent
+    return changed
+
+
 def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     """应用全部技能补丁，返回本次发生改动的文件列表（相对 vendor_root）。
 
@@ -1001,6 +1157,18 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     for rel_path in (_PARAM_SWEEP_PATH, _WALK_FORWARD_PATH):
         if _ensure_skill_script_from_canonical(vendor_root, rel_path):
             changed.append(rel_path)
+    for rel_path in _RENDER_REF_SKILLS:
+        target = vendor_root / rel_path
+        if not target.exists():
+            continue
+        if _patch_file(target, rel_path, _fix_render_html_report_refs):
+            changed.append(rel_path)
+    # KStock 自有技能 ensure（html-report / market-linkage / sandbox-path-guide…）。
+    for rel_path in _ensure_owned_skills(vendor_root):
+        changed.append(rel_path)
+    # preset 随行技能目录发布（技能随 preset 分发，cordis 模式）。
+    if _publish_preset_skills(vendor_root):
+        changed.append("kstock/presets/*/skills")
     return changed
 
 

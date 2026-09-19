@@ -1,0 +1,5 @@
+- banner:
+  - navigation "Session hierarchy":
+    - button "Use the read tool twice" [disabled]
+  - button "Open right sidebar":
+    - img

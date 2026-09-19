@@ -1,0 +1,36 @@
+{
+  "name": "@kstock/quant-reports",
+  "description": "KStock 量化库客户端插件：Reports（workspace 侧栏「报告库」）",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.cjs",
+    "./package.json": "./package.json"
+  },
+  "qilin": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@qilin/client-locale",
+        "@qilin/client-ui-renderer",
+        "@qilin/client-ui-layout",
+        "@qilin/client-ui-sidebar"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch"
+  },
+  "dependencies": {
+    "@kstock/quant-ui": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "tsdown": "0.22.2",
+    "typescript": "^6.0.3"
+  }
+}

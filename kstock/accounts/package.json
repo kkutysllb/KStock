@@ -1,0 +1,24 @@
+{
+  "name": "@kstock/accounts-local",
+  "description": "KStock 账户面插件：fork 自 @qilin/accounts-local 3.0.0，叠加 1.x（Python gateway）账户迁移——启动/登录时从旧引擎 users 表导入账户，bcrypt 旧哈希可登录并在成功后透明升级为 scrypt",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown && node scripts/fix-builtin-imports.mjs",
+    "watch": "tsdown --watch",
+    "test": "node --import tsx/esm --test tests/*.test.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "tsdown": "0.22.2",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "bcryptjs": "^3.0.2"
+  }
+}

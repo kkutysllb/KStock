@@ -1,0 +1,113 @@
+# KStock 浏览器表面 bundle patch：KStock 产品人格与品牌层叠加在
+# qilin web 表面（@qilin/base + @qilin/web-app）之上。profile 的 bundles
+# 顺序为 [@qilin/base, @qilin/web-app, @kstock/web]，本层在 web-app 之后
+# 生效，profile 自己的 cordis.patch.yml 仍可替换下面任何一行。
+#
+# patch 语义：按 id 命中即整行替换 config，因此每行都完整复述它拥有的
+# 全部键（对照 @qilin/web-app / @qilin/web-brand 的同名行）。
+
+# 模型侧产品人格。web-app 对 qilin 表面声明了同两键，这里改写为 KStock。
+# 1.x 的 lead_soul.md 运行守则深度绑定旧 Python 引擎工具（/mnt/user-data
+# 虚拟路径、render_html_report、旧 task 子代理表），3.x 工具面不同，
+# 待量化客户端插件落地后按新工具面重推；此处先落最小量化人格。
+- id: system-prompt
+  config:
+    personaPrefix: >-
+      You are KStock, an A-share stock quant research agent powered by the {{model}} model.
+      You help users research market data, analyze stocks and industries, test trading
+      strategies, study factors, and produce grounded investment research reports.
+    personaSuffix: Your working directory is {{cwd}}.
+
+# 产品标签：启动 URL 行、浏览器交接行与启动失败提示。
+# openBrowser 沿用 web 启动旗标（桌面端以 --no-open 启动，由 Electron 加载）。
+- id: web-runtime
+  config:
+    label: kstock
+    openBrowser: !!js ctx.webStartup.openBrowser
+    printUrl: true
+    surfaceContext: true
+    trustedHosts: !!js ctx.webStartup.trustedHosts
+
+# 账户门：桌面单用户产品关闭自助注册。web-app 挂载的上游 accounts 行
+# （@qilin/accounts-local）禁用——patch 替换行只许改 config 不许换包名
+# （组合器按 name 校验），因此「禁用上游行 + insert 挂 KStock fork 行」：
+# @kstock/accounts-local 是上游 3.0.0 的逐字 fork，叠加 1.x 账户迁移
+# （老 bcrypt 哈希可登录，首次登录成功后透明升级为 scrypt），包经 profile
+# 的 node_modules 链接解析。注册关闭后仍保留首启管理员初始化
+# （/setup 由 needsSetup 门控）。
+- id: accounts
+  name: '@qilin/accounts-local'
+  disabled: true
+  config:
+    enabled: true
+    registration: closed
+    sessionMaxAgeDays: 7
+
+# KStock preset 名册：产品态（KSTOCK_PRESETS_DIR 注入）关闭上游 shipped
+# root（standard/ptc/minimal/cordis 四预设全部下架），只挂本地 kstock/presets
+# 根——standard 为本地 fork 的隐形默认基座 + 6 个投研角色；用户自建根亦
+# 关闭（固定角色集产品）。裸 CLI（未注入 env）回退上游出厂行为。
+- id: agent-presets
+  name: '@qilin/agent-presets'
+  config:
+    default: standard
+    roots: !!js "process.env.KSTOCK_PRESETS_DIR ? [{ path: process.env.KSTOCK_PRESETS_DIR, trust: 'system' }] : []"
+    includeShippedRoot: !!js "!process.env.KSTOCK_PRESETS_DIR"
+    includeUserRoot: false
+
+# ── KStock 浏览器插件名单 ────────────────────────────────────────────────
+#
+# qilin.client 行会被扫描进浏览器模块名单。KStock 品牌层（token + 背景 +
+# 标记）替换上游 qilin 产品档的 ui-brand/ui-theme-brand 组合——本 profile
+# 不叠 @qilin/web-brand，因此引擎默认印记不会出现。
+#
+# 裸包名经 profile 的 node_modules 解析（@kstock/web 的 file: 依赖把它
+# 带进 web 包自身的 node_modules）。
+- insert:
+    # 本包的 node 半端：注册 KStock 公共页路由（/、/login、/setup、/kstock/*）。
+    # bundle 包的 patch 会被组装器应用，但包自身的插件体不加载——
+    # 只有显式的行才会被 Loader 导入（对照 @qilin/web-brand 的空 apply 说明）。
+    - id: kstock-web
+      name: '@kstock/web'
+
+    # 账户面（KStock fork）：/api/auth/* + 会话门 + 1.x 账户迁移。
+    - id: kstock-accounts
+      name: '@kstock/accounts-local'
+      config:
+        enabled: true
+        registration: closed
+        sessionMaxAgeDays: 7
+
+    # 量化数据宿主插件：/kstock-api/* 数据路由 + agent 工具（无界面）。
+    - id: kstock-quant
+      name: '@kstock/quant'
+
+    # 量化四库客户端插件：各自注册 workspace 侧栏菜单项 + main 面板
+    # （策略库 / 因子库 / 选股库 / 报告库）。
+    - id: kstock-quant-strategies
+      name: '@kstock/quant-strategies'
+
+    - id: kstock-quant-factors
+      name: '@kstock/quant-factors'
+
+    - id: kstock-quant-selections
+      name: '@kstock/quant-selections'
+
+    - id: kstock-quant-reports
+      name: '@kstock/quant-reports'
+
+    # KStock 角色 preset 选择器（只列 6 个投研角色；standard 为隐形默认
+    # 基座）。上游 ui-agent-preset 选择器被下面的 disabled 行下架。
+    - id: kstock-presets-ui
+      name: '@kstock/client-presets'
+
+    - id: kstock-brand
+      name: '@kstock/client-brand'
+
+# 上游 preset 选择器：选项 = preset 名册全量（无隐藏机制），无法满足
+# 「standard 隐形基座 + 只列角色」的产品口径，由 @kstock/client-presets
+# 在同一 hero 槽位替代（其设置区的 preset 管理 UI 一并下架——KStock 为
+# 固定角色集产品，不需要 copy/delete/default 管理）。
+- id: ui-agent-preset
+  name: '@qilin/client-ui-agent-preset'
+  disabled: true

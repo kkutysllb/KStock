@@ -1,0 +1,29 @@
+{
+  "name": "@kstock/client-presets",
+  "description": "KStock 角色 preset 选择器：只列出 6 个投研角色预设；standard 为隐形默认基座（不在选择器展示）。替代上游 ui-agent-preset 选择器（其选项 = 名册全量，无法隐藏默认基座）",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.cjs",
+    "./package.json": "./package.json"
+  },
+  "qilin": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@qilin/api-remotes",
+        "@qilin/api-session-controller",
+        "@qilin/client-ui-conversation"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsdown"
+  },
+  "devDependencies": {
+    "tsdown": "0.22.2"
+  }
+}

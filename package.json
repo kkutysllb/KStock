@@ -1,16 +1,19 @@
 {
   "name": "kstock",
   "private": true,
-  "version": "1.1.0",
+  "version": "2.0.0",
+  "description": "KStock — A股量化分析 Super Agent（QiLin 3.x 引擎插件形态）",
   "packageManager": "pnpm@9.15.0",
   "workspaces": [
     "apps/*"
   ],
   "scripts": {
-    "dev:desktop": "node scripts/run_with_log.mjs desktop -- pnpm -C apps/desktop electron:dev",
-    "dev:web": "node scripts/run_with_log.mjs frontend -- pnpm -C apps/desktop dev",
-    "test:desktop": "pnpm -C apps/desktop test",
-    "build:web": "pnpm -C apps/desktop build",
-    "build:desktop": "bash scripts/build-desktop.sh"
+    "dev": "pnpm -C apps/desktop electron:dev",
+    "dev:desktop": "pnpm -C apps/desktop electron:dev",
+    "build:engine": "bash scripts/build-engine-bundle.sh",
+    "build:desktop": "bash scripts/build-desktop.sh",
+    "check:ci": "bash scripts/check-ci.sh",
+    "check:release": "bash scripts/check-release.sh",
+    "sync:upstream": "python3 scripts/sync_upstreams.py"
   }
 }

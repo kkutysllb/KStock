@@ -1,0 +1,27 @@
+{
+  "name": "@kstock/web",
+  "description": "KStock 桌面产品的浏览器表面 bundle：KStock 人格与品牌层叠加在 qilin web 表面之上",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "qilin": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "tsdown"
+  },
+  "dependencies": {
+    "@kstock/client-brand": "file:../client-brand"
+  },
+  "devDependencies": {
+    "tsdown": "0.22.2"
+  }
+}

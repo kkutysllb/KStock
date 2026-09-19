@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -31,27 +31,20 @@ jobs:
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
-        with:
-          enable-cache: true
+          node-version: 24
       - run: pnpm install --frozen-lockfile
-      # Python 运行时依赖（vendor/qilin + gateway 运行面）由 uv 统一管理
-      - run: uv sync
-      - name: 校验并构建（check-release.sh）
-        timeout-minutes: 60
+      - name: 校验并构建（check-release.sh：CI 门禁 + 引擎分发束 + 桌面打包）
+        timeout-minutes: 90
         env:
           # macOS 双层签名 + 公证（两层签名密钥分工不同）：
-          # 1) gateway 预签：build-gateway-bundle.sh 读取 APPLE_SIGNING_IDENTITY
+          # 1) 引擎预签：build-engine-bundle.sh 读取 APPLE_SIGNING_IDENTITY
           #    （格式 "Developer ID Application: 名字 (TeamID)"），用 codesign
-          #    预签 PyInstaller gateway 内嵌的全部 Mach-O 二进制。electron-builder
-          #    不会递归签 extraResources，未预签会导致 Apple 公证 HARDFAIL。
+          #    预签引擎 Mach-O 二进制（kstock-engine{,-rg,-spawn-helper}）。
+          #    electron-builder 不会递归签 extraResources，未预签会导致
+          #    Apple 公证 HARDFAIL。
           # 2) .app 外壳签名：electron-builder 原生读取 CSC_LINK（base64 .p12）+
           #    CSC_KEY_PASSWORD，签 KStock.app 主体。
-          # 3) 公证：electron-builder v25 在 APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD /
+          # 3) 公证：electron-builder 在 APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD /
           #    APPLE_TEAM_ID 三者齐全时自动提交 notarytool 公证。
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}

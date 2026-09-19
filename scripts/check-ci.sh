@@ -1,10 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
+cd "$(dirname "$0")/.."
 
-# 测试已随「内置 gateway 架构」迁移到根目录 tests/（uv 管理，见 pyproject.toml）
-uv run pytest tests -q
-python scripts/verify_skill_pack.py
-python scripts/verify_package_resources.py --source-only
-pnpm -C apps/desktop test
-pnpm -C apps/desktop exec tsc -p tsconfig.json --noEmit
+# CI 检查（2.0：QiLin 3.x 引擎插件形态）。
+# 引擎与量化数据面都是 TypeScript 插件；Python 面只剩技能包与打包资源契约校验。
+
+# KStock 插件包可构建（tsdown 产物：宿主 lib/index.js + 客户端 lib/client.cjs）。
+# quant-ui 是源码型共享包（被四个量化库界面包内联），不单独构建。
+for pkg in accounts client-brand web quant quant-strategies quant-factors quant-selections quant-reports; do
+  pnpm -C "kstock/$pkg" exec tsdown > /dev/null
+done
+# 类型检查：quant（宿主全量）、quant-ui（共享件）、四个量化库界面包。
+pnpm -C kstock/quant exec tsc --noEmit -p tsconfig.json
+pnpm -C kstock/accounts exec tsc --noEmit -p tsconfig.json
+for pkg in quant-ui quant-strategies quant-factors quant-selections quant-reports; do
+  pnpm -C "kstock/$pkg" exec tsc --noEmit -p tsconfig.json
+done
+# quant 存储层单测（node:test + tsx）。
+pnpm -C kstock/quant test
+# accounts 包 1.x 账户迁移单测（bcrypt 兼容 / 按需导入 / 登录迁移分支）。
+pnpm -C kstock/accounts test
+
+# Electron 壳：主进程打包 + 类型检查。
+pnpm -C apps/desktop build:electron-main
 pnpm -C apps/desktop exec tsc -p electron/tsconfig.json --noEmit
+
+# 打包资源契约（源形态）：插件清单 / bundle patch / 技能接线 / 壳模块 / 无遗留模块。
+python3 scripts/verify_package_resources.py --source-only
+python3 scripts/verify_skill_pack.py
+
+# 引擎单文件冒烟（产物存在时）：--help 快速失败验证可执行完整性。
+# 完整启动冒烟由发布流水线的引擎束构建 + 桌面打包覆盖。
+if [ -f dist-exe/kstock-engine ]; then
+  dist-exe/kstock-engine --help > /dev/null
+fi
