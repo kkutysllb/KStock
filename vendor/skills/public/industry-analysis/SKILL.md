@@ -196,9 +196,9 @@ python3 scripts/industry-query-cli.py --query "新能源板块行情"
 
 ### 阶段四：报告生成（html-report 技能）
 
-本技能**不自行手写 HTML**，而是把结论整理为报告 JSON，用 html-report 技能自带的渲染器（`skills/public/html-report/scripts/render_report.py`，纯标准库）产出单文件自包含看板。流程：
+本技能**不自行手写 HTML**，而是把结论整理为报告 JSON，用 html-report 技能自带的渲染器（纯标准库）产出单文件自包含看板。流程：
 
-1. 按报告 JSON 契约（html-report 技能 `references/report-schema.md`）整理数据：标题/摘要/指标卡/分节正文/图表（line / area / bar / scatter / pie / radar）/风险/参考来源，图表以内嵌 SVG 渲染，**禁止使用远程图片 URL**；2. 保存为 `report.json` 后执行`python skills/public/html-report/scripts/render_report.py report.json -o report.html`，stderr 出现告警必须修正数据后重渲；3. 用 html-report 技能 SKILL.md 中的 curl 模板把 report.html 归档进报告库（POST /kstock-api/reports），交付时给出报告标题。
+1. 按报告 JSON 契约（html-report 技能 `references/report-schema.md`）整理数据：标题/摘要/指标卡/分节正文/图表（line / area / bar / scatter / pie / radar）/风险/参考来源，图表以内嵌 SVG 渲染，**禁止使用远程图片 URL**；2. 保存为 `reports/report.json` 后从工作区根执行`python3 "<html-report 基目录>/scripts/render_report.py" reports/report.json -o reports/<主题名>.html`（基目录 = html-report 技能加载结果给出的 Base directory；产物分区见 sandbox-path-guide），stderr 出现告警必须修正数据后重渲；3. 用 html-report 技能 SKILL.md 中的 curl 模板把 reports/ 下的两份产物归档进报告库（POST /kstock-api/reports），交付时给出报告标题。
 
 ## 参考文档
 

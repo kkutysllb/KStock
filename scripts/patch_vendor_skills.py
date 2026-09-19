@@ -953,19 +953,23 @@ def _fix_pywencai_hint(text: str) -> str | None:
 
 def _fix_render_html_report_refs(text: str) -> str | None:
     """把旧内置工具 render_html_report 的引用改写为 2.0 html-report 技能流程。"""
-    if 'render_html_report' not in text:
+    # 已打旧版补丁的文件不含 render_html_report，但残留旧相对路径命令——
+    # 以旧路径为第二触发条件，交给 legacy_swaps 升级。
+    if 'render_html_report' not in text \
+            and "skills/public/html-report/scripts/render_report.py" not in text:
         return None
     replacement = (
         "### 阶段四：报告生成（html-report 技能）\n\n"
         "本技能**不自行手写 HTML**，而是把结论整理为报告 JSON，用 html-report 技能自带的渲染器"
-        "（`skills/public/html-report/scripts/render_report.py`，纯标准库）产出单文件自包含看板。流程：\n\n"
+        "（纯标准库）产出单文件自包含看板。流程：\n\n"
         "1. 按报告 JSON 契约（html-report 技能 `references/report-schema.md`）整理数据："
         "标题/摘要/指标卡/分节正文/图表（line / area / bar / scatter / pie / radar）/风险/参考来源，"
         "图表以内嵌 SVG 渲染，**禁止使用远程图片 URL**；"
-        "2. 保存为 `report.json` 后执行"
-        "`python skills/public/html-report/scripts/render_report.py report.json -o report.html`，"
+        "2. 保存为 `reports/report.json`，从工作区根执行"
+        "`python3 \"<html-report 基目录>/scripts/render_report.py\" reports/report.json -o reports/<主题名>.html`"
+        "（基目录 = html-report 技能加载结果给出的 Base directory；产物分区见 sandbox-path-guide），"
         "stderr 出现告警必须修正数据后重渲；"
-        "3. 用 html-report 技能 SKILL.md 中的 curl 模板把 report.html 归档进报告库"
+        "3. 用 html-report 技能 SKILL.md 中的 curl 模板把 reports/ 下的两份产物归档进报告库"
         "（POST /kstock-api/reports），交付时给出报告标题。"
     )
     # 整段替换「阶段四」小节（从标题到下一个二级标题/参考文档之间）
@@ -979,6 +983,25 @@ def _fix_render_html_report_refs(text: str) -> str | None:
     inline = re.compile(r"调用内置 render_html_report 工具生成离线 HTML 看板")
     if inline.search(text):
         return inline.sub("用 html-report 技能生成自包含 HTML 看板并归档报告库", text)
+    # 旧替换文本升级：产物分区纪律（基目录拼接 + reports/ 落盘）。
+    # 旧文本把 1/2/3 步拼成单行段落，这里按子串精确替换，两种拼接形态通吃。
+    legacy_swaps = (
+        ("渲染器（`skills/public/html-report/scripts/render_report.py`，纯标准库）",
+         "渲染器（纯标准库）"),
+        ("保存为 `report.json` 后执行",
+         "保存为 `reports/report.json` 后从工作区根执行"),
+        ("`python skills/public/html-report/scripts/render_report.py report.json -o report.html`，",
+         "`python3 \"<html-report 基目录>/scripts/render_report.py\" reports/report.json"
+         " -o reports/<主题名>.html`（基目录 = html-report 技能加载结果给出的"
+         " Base directory；产物分区见 sandbox-path-guide），"),
+        ("curl 模板把 report.html 归档进报告库",
+         "curl 模板把 reports/ 下的两份产物归档进报告库"),
+    )
+    upgraded = text
+    for old, new in legacy_swaps:
+        upgraded = upgraded.replace(old, new)
+    if upgraded != text:
+        return upgraded
     return None
 
 
@@ -986,6 +1009,35 @@ _RENDER_REF_SKILLS = (
     "public/industry-analysis/SKILL.md",
     "public/a-stock-screener/SKILL.md",
 )
+
+# ── etf-analysis kk_common 同级解析补丁 ───────────────────────────────────
+# etf_analyzer.py 裸 `from kk_common import ...`：1.x 沙箱靠 pip 安装 common，
+# 2.0 preset 镜像无安装层，从工作区根直跑必然 ModuleNotFoundError（cli.py
+# 经 subprocess 调用同样命中）。按脚本自身位置注入同级 common/src
+# （<skill>/../common/src），与 market-linkage fetcher 同款机制，cwd 无关。
+_ETF_KK_COMMON_SCRIPTS = (
+    "public/etf-analysis/scripts/etf_analyzer.py",
+)
+_ETF_KK_COMMON_ANCHOR = "from kk_common import get_finance_data_gateway"
+_ETF_KK_COMMON_INJECTION = '''# KStock patch: kk_common 由同级 common 技能提供（<skill>/../common/src），
+# 1.x 沙箱靠 pip 安装；2.0 preset 镜像下无安装层，按脚本自身位置解析注入。
+_KK_COMMON_SRC = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "common", "src")
+)
+if os.path.isdir(_KK_COMMON_SRC) and _KK_COMMON_SRC not in sys.path:
+    sys.path.insert(0, _KK_COMMON_SRC)
+
+from kk_common import get_finance_data_gateway'''
+
+
+def _fix_etf_kk_common(text: str) -> str | None:
+    """给 etf_analyzer.py 的 kk_common 导入注入同级解析；已修复返回 None。"""
+    if "_KK_COMMON_SRC" in text:
+        return None
+    if _ETF_KK_COMMON_ANCHOR not in text:
+        return None
+    return text.replace(_ETF_KK_COMMON_ANCHOR, _ETF_KK_COMMON_INJECTION, 1)
+
 
 # ── KStock 自有技能 ensure（kstock/skills → vendor/skills/public）────────
 # 源码在 kstock/skills/<name>（上游同步整体覆盖 vendor 时不受影响），补丁器
@@ -1162,6 +1214,13 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
         if not target.exists():
             continue
         if _patch_file(target, rel_path, _fix_render_html_report_refs):
+            changed.append(rel_path)
+    # etf-analysis kk_common 同级解析（2.0 preset 镜像无 pip 安装层）。
+    for rel_path in _ETF_KK_COMMON_SCRIPTS:
+        target = vendor_root / rel_path
+        if not target.exists():
+            continue
+        if _patch_file(target, rel_path, _fix_etf_kk_common):
             changed.append(rel_path)
     # KStock 自有技能 ensure（html-report / market-linkage / sandbox-path-guide…）。
     for rel_path in _ensure_owned_skills(vendor_root):
