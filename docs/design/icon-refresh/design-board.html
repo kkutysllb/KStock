@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KStock 图标重构 · 视觉方案提案</title>
+<style>
+  :root{
+    --ink:#030d0b; --layer1:#0e1513; --layer2:#141a18; --layer3:#1b1e22;
+    --line:rgba(232,234,237,.10); --line2:rgba(232,234,237,.18);
+    --fg:#e8eaed; --fg2:#aeb7bf; --fg3:#7a828c;
+    --green:#31c7a2; --green-l:#5fd3b0; --green-d:#178267; --mint:#eafff8;
+    --amber:#e8b64c;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--ink);color:var(--fg)}
+  body{
+    font:15px/1.7 -apple-system,"PingFang SC","Helvetica Neue",Arial,sans-serif;
+    background-image:
+      radial-gradient(circle at 78% 4%, rgba(36,132,104,.10), transparent 34%),
+      radial-gradient(circle at 12% 92%, rgba(22,76,61,.09), transparent 32%),
+      linear-gradient(rgba(129,205,178,.024) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(129,205,178,.020) 1px, transparent 1px),
+      linear-gradient(180deg,#061511 0%, #020a08 100%);
+    background-size:auto,auto,52px 52px,52px 52px,auto;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:56px 32px 120px}
+  h1{font-size:32px;line-height:1.3;margin:0 0 10px;letter-spacing:.2px}
+  h2{font-size:21px;margin:64px 0 6px;padding-top:22px;border-top:1px solid var(--line);letter-spacing:.2px}
+  h3{font-size:16px;margin:26px 0 8px}
+  h4{font-size:13px;margin:0 0 8px;color:var(--fg3);font-weight:600;letter-spacing:.6px;text-transform:uppercase}
+  p{margin:8px 0;color:var(--fg2)}
+  .lead{color:var(--fg);font-size:16px}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 0}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:1;
+    padding:7px 11px;border:1px solid var(--line2);border-radius:999px;color:var(--fg2);background:rgba(255,255,255,.02)}
+  .chip b{color:var(--fg);font-weight:600}
+  a{color:var(--green-l)}
+  code{font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:rgba(255,255,255,.06);
+    padding:2px 6px;border-radius:6px;color:var(--mint)}
+  .card{background:linear-gradient(180deg,rgba(20,26,24,.92),rgba(14,21,19,.92));
+    border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media (max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
+  table{width:100%;border-collapse:collapse;margin:14px 0 4px;font-size:13.5px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--fg3);font-weight:600;font-size:12px;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap}
+  td b{color:var(--fg)}
+  .ok{color:var(--green)}.warn{color:var(--amber)}.bad{color:#e8736a}
+  .mono{font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--fg2)}
+  img{display:block;max-width:100%}
+  .px{border-radius:8px;border:1px solid var(--line)}
+  .px32{width:32px;height:32px;image-rendering:pixelated;border-radius:7px}
+  .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  /* 菜单栏模拟条 */
+  .bar{display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;border-radius:6px}
+  .bar.light{background:#ececec;color:#111}
+  .bar.dark{background:#1c1c1e;color:#f2f2f7}
+  .bar .sys{width:13px;height:13px;border-radius:3px;background:currentColor;opacity:.28}
+  .bar .sys.circle{border-radius:50%}
+  .bar img{height:16px;width:16px}
+  .bar img.inv{filter:invert(1)}
+  .dir{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:rgba(255,255,255,.015)}
+  .dir > header{display:flex;align-items:baseline;gap:12px;padding:16px 22px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(49,199,162,.07),transparent)}
+  .dir > header .tag{font-size:11px;letter-spacing:1.4px;color:var(--green);border:1px solid rgba(49,199,162,.4);
+    border-radius:6px;padding:3px 7px;text-transform:uppercase}
+  .dir > header h3{margin:0;font-size:18px}
+  .dir > header .sub{color:var(--fg3);font-size:13px}
+  .dir .body{padding:20px 22px;display:grid;grid-template-columns:300px 1fr;gap:24px}
+  @media (max-width:900px){.dir .body{grid-template-columns:1fr}}
+  .hero-ico{width:240px;height:240px;border-radius:24px}
+  .stack{display:flex;flex-direction:column;gap:14px}
+  .swatches{display:flex;gap:8px;flex-wrap:wrap}
+  .sw{width:76px}
+  .sw i{display:block;height:34px;border-radius:8px;border:1px solid var(--line)}
+  .sw span{display:block;font:11px/1.5 ui-monospace,Menlo,monospace;color:var(--fg3);margin-top:5px}
+  .callout{border-left:3px solid var(--green);background:rgba(49,199,162,.055);padding:12px 16px;border-radius:0 10px 10px 0}
+  .risk{border-left-color:var(--amber);background:rgba(232,182,76,.06)}
+  ul{margin:8px 0 8px 20px;padding:0;color:var(--fg2)}
+  li{margin:5px 0}
+  .lgw-l{display:grid;grid-template-columns:180px 1fr;gap:18px;align-items:center;
+    padding:14px 0;border-bottom:1px solid var(--line)}
+  @media (max-width:760px){.lgw-l{grid-template-columns:1fr}}
+  footer{margin-top:80px;padding-top:22px;border-top:1px solid var(--line);color:var(--fg3);font-size:12.5px}
+  .sticky-nav{position:sticky;top:0;z-index:5;margin:0 -32px 0;padding:10px 32px;
+    background:rgba(3,13,11,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
+    display:flex;gap:18px;flex-wrap:wrap;font-size:13px}
+  .sticky-nav a{color:var(--fg2);text-decoration:none}
+  .sticky-nav a:hover{color:var(--green-l)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="sticky-nav">
+    <a href="#diag">现状诊断</a>
+    <a href="#dirs">方向 A–D</a>
+    <a href="#seal">方向 E · 麒麟印章</a>
+    <a href="#tray">托盘规范</a>
+    <a href="#assets">落地清单</a>
+    <a href="#decide">决策与推荐</a>
+  </nav>
+
+  <h1>KStock 图标重构 · 视觉方案提案</h1>
+  <p class="lead">范围：应用图标（Dock / 任务栏 / 窗口 / 安装器）+ 系统托盘图标。本页是<b>选型用提案稿</b>，
+  不覆盖 <code>apps/desktop/build/</code> 下的生产资产；选定方向后再落地为矢量源 + 生成脚本 + 全尺寸资产。</p>
+  <div class="meta">
+    <span class="chip">方向 <b>5</b> · <b>11 张候选图</b>（A–D + E 三执行 + 双品牌三版式）</span>
+    <span class="chip">已渲染尺寸 <b>1024 / 512 / 256 / 128 / 64 / 32</b></span>
+    <span class="chip">托盘已出 <b>16 / 22 / 32（模板图）</b></span>
+    <span class="chip">品牌底色 <b>#030d0b · #31c7a2</b></span>
+    <span class="chip">状态 <b>篆书出稿 · 待定版式与授权</b></span>
+  </div>
+
+  <h2 id="diag">1 · 现状诊断：为什么必须重构</h2>
+  <p>现有图标不是「不好看」，而是<b>在它必须工作的两个尺寸上都失效了</b>，并且仓库里没有可再生的矢量源。
+  下面每条都给了可复核的证据。</p>
+
+  <div class="grid2" style="margin-top:18px">
+    <div class="card">
+      <h4>现有应用图标</h4>
+      <div class="row" style="margin-top:6px">
+        <img class="hero-ico" style="width:200px;height:200px;border-radius:20px" src="current/app-256.png" alt="现有 KStock 应用图标">
+        <div class="stack">
+          <div>
+            <div class="mono" style="margin-bottom:6px">真实尺寸 32px（Windows 任务栏 / 窗口图标）</div>
+            <img class="px32" src="current/app-32.png" alt="现有图标 32px">
+          </div>
+          <div class="mono">32×32 全出血，无留白<br>（alpha bbox = 0,0→32,32）</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h4>现有托盘图标</h4>
+      <div class="stack" style="margin-top:6px">
+        <div class="bar light"><img src="current/tray-128.png" alt="现有托盘图标"><span class="sys"></span><span class="sys circle"></span></div>
+        <div class="bar dark"><img class="inv" src="current/tray-128.png" alt="现有托盘图标（深色）"><span class="sys"></span><span class="sys circle"></span></div>
+        <div class="mono">唯一资产：<code>build/tray.png</code> 单张 128×128<br>
+        <code>menu.ts:231-241</code> 载入后 <code>resize(22)</code>，无 2x 供图</div>
+      </div>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th>#</th><th>问题</th><th>证据</th><th>影响</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>小尺寸糊成一团</b></td><td>32px 下「K」由 4 类形状（青色圆头竖条 / 白斜条 / 白折线 / 琥珀折线）拼成，笔画互相咬合</td><td class="bad">任务栏、窗口标题、通知里认不出</td></tr>
+      <tr><td>2</td><td><b>色彩与形状过多</b></td><td>4 色（深绿底 + 青 + 白 + 琥珀）+ 网格线；1024px 好看，16–32px 变成噪点</td><td class="warn">Dock 里抓不住眼，缩小后脏</td></tr>
+      <tr><td>3</td><td><b>尺寸档位互相矛盾</b></td><td><code>icons/128x128@2x.png</code> 内容占 82%（有留白，合规）；<code>icons/32x32.png</code> alpha 全出血占 100%</td><td class="bad">同一应用在 Dock 与任务栏里视觉大小差一圈</td></tr>
+      <tr><td>4</td><td><b>托盘无 @2x、靠运行时缩放</b></td><td><code>menu.ts:217-244</code>：单张 128px → <code>resize()</code> 到 22（macOS）/32（Win/Linux），再 <code>setTemplateImage(true)</code></td><td class="bad">Retina 菜单栏二次重采样，边缘发虚、笔画发灰</td></tr>
+      <tr><td>5</td><td><b>托盘图形本身过密</b></td><td>128px 源图里折线横穿「K」的干支与两臂，交叉处形成 3 个细碎尖角</td><td class="bad">16pt 下 K 与折线互相吃笔画</td></tr>
+      <tr><td>6</td><td><b>Dock 图标在开发态被降级</b></td><td><code>main.ts:119-132</code> 用 256px PNG 覆盖；而打包态 AppKit 用 <code>.icns</code>（含 1024）</td><td class="warn">开发态 Dock 图标比打包态糊</td></tr>
+      <tr><td>7</td><td><b>没有矢量源，不可再生</b></td><td>全仓无图标生成脚本（<code>grep iconutil/sips/rsvg scripts/ → 0</code>）；<code>icon.icns / icon.ico / *.png</code> 均为二进制孤本</td><td class="bad">改一版要手搓全部尺寸，无法保证一致</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout" style="margin-top:16px">
+    <b>重构的核心命题</b>：把「一个 1024px 的复杂图形」拆成<b>两套各自为尺寸优化过的图形</b>——
+    应用图标可以有色、有层次；托盘图标必须是<b>单色重墨、笔画数 ≤3 的模板图</b>。
+    现有资产的根因是「同一张图硬缩到所有尺寸」。
+  </div>
+
+  <h2 id="dirs">2 · 四个视觉方向</h2>
+  <p>四个方向刻意在<b>视觉语言</b>上分开（不是同一图形的配色变体），这样才有得比：
+  字母体 vs 市场语义 vs 实色场 vs 去字母化。每张图都按 macOS 图标网格绘制
+  （1024 画布 / 824 内容区 / 连续曲率圆角），下面同时给出 32px 真实像素与托盘双底色效果。
+  <b>方向 C 有两种调性</b>（品牌亮绿 C1 / 深绿保对比 C2），合计 5 张候选图。</p>
+
+  <div class="grid2" style="margin:18px 0 8px">
+    <div class="card">
+      <h4>256px 四方向对照</h4>
+      <img src="contact-sheet-256.png" alt="四方向 256px 对照">
+    </div>
+    <div class="card">
+      <h4>32px 真实像素 + 放大</h4>
+      <img src="sheet-app-32.png" alt="四方向 32px 真实尺寸对照">
+      <p class="mono" style="margin-top:10px">左＝真实 32px，右＝4× 放大（看笔画是否相融）</p>
+    </div>
+  </div>
+
+  <!-- A -->
+  <div class="dir" style="margin-top:22px">
+    <header><span class="tag">方向 A</span><h3>一笔 K</h3><span class="sub">Monoline · 延续 1.x 的字母标，最克制</span></header>
+    <div class="body">
+      <img class="hero-ico" src="png/a-monoline-512.png" alt="方向 A 主图">
+      <div class="stack">
+        <p><b>概念</b>：把 1.x 那个「拼出来的 K」收成<b>一笔等宽字</b>。深空底 + 单色品牌绿描边，
+        顶部收笔处放一个薄荷色数据点——它既收住了字形，又点了「最新一个数据」的含义。
+        网格、琥珀折线、多重色块全部去掉。</p>
+        <div class="swatches">
+          <div class="sw"><i style="background:#030d0b"></i><span>#030d0b 墨底</span></div>
+          <div class="sw"><i style="background:#31c7a2"></i><span>#31c7a2 品牌绿</span></div>
+          <div class="sw"><i style="background:#eafff8"></i><span>#eafff8 数据点</span></div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="mono" style="margin-bottom:6px">32px 真实</div>
+            <img class="px32" src="png/a-monoline-32.png" alt="方向 A 32px">
+          </div>
+          <div style="flex:1;min-width:260px">
+            <div class="mono" style="margin-bottom:6px">托盘 16pt（浅 / 深菜单栏）</div>
+            <div class="bar light"><img src="png/a-monoline-tray-16.png" alt="方向 A 托盘浅色"><span class="sys"></span><span class="sys circle"></span></div>
+            <div class="bar dark" style="margin-top:6px"><img class="inv" src="png/a-monoline-tray-16.png" alt="方向 A 托盘深色"><span class="sys"></span><span class="sys circle"></span></div>
+          </div>
+        </div>
+        <p><b>小尺寸表现</b>：32px 字形清晰；16pt 托盘把笔画从 <span class="mono">84/824（10.2%）</span>
+        加重到 <span class="mono">3.7/26（14.2%）</span>，并砍掉数据点——这是模板图的标准做法（下节详述）。
+        品牌绿与墨底对比实测 <span class="mono">9.21:1</span>，四个方向里笔画的对比冗余最大。</p>
+        <div class="callout"><b>取舍</b>：改动最小、与现有 DOM 里的
+        <code>Marks.tsx</code> 侧栏标记同源，用户无迁移感；但「深色底 + 单色字母」是量化/开发工具的通用脸，
+        放进 Dock 里与一堆深色终端图标区分度一般。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B -->
+  <div class="dir" style="margin-top:22px">
+    <header><span class="tag">方向 B</span><h3>蜡烛 K</h3><span class="sub">Candlestick · 行业语义最重：K 由蜡烛构成</span></header>
+    <div class="body">
+      <img class="hero-ico" src="png/b-candle-512.png" alt="方向 B 主图">
+      <div class="stack">
+        <p><b>概念</b>：干支就是一根<b>竖蜡烛</b>（受光最亮的实体 + 上下影线），两臂是一笔折线。
+        远看是 KStock 的 K，近看是一根 K 线——把「名字」和「行业」压进同一个字形。</p>
+        <div class="swatches">
+          <div class="sw"><i style="background:#030d0b"></i><span>#030d0b 墨底</span></div>
+          <div class="sw"><i style="background:#5fd3b0"></i><span>#5fd3b0 影线/受光</span></div>
+          <div class="sw"><i style="background:#24a884"></i><span>#24a884 折臂</span></div>
+          <div class="sw"><i style="background:#1d8a6e"></i><span>#1d8a6e 实体下缘</span></div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="mono" style="margin-bottom:6px">32px 真实</div>
+            <img class="px32" src="png/b-candle-32.png" alt="方向 B 32px">
+          </div>
+          <div style="flex:1;min-width:260px">
+            <div class="mono" style="margin-bottom:6px">托盘 16pt（浅 / 深菜单栏）</div>
+            <div class="bar light"><img src="png/b-candle-tray-16.png" alt="方向 B 托盘浅色"><span class="sys"></span><span class="sys circle"></span></div>
+            <div class="bar dark" style="margin-top:6px"><img class="inv" src="png/b-candle-tray-16.png" alt="方向 B 托盘深色"><span class="sys"></span><span class="sys circle"></span></div>
+          </div>
+        </div>
+        <p><b>小尺寸表现（已实测）</b>：32px 时上下影线已接近消失，蜡烛语义丢失但字形还在；
+        16pt 托盘里影线（<span class="mono">2/32 → 1px</span>）与实体糊成一个疙瘩，
+        必须依赖「去掉影线」的托盘简化版，此时它退化回方向 A 的观感。</p>
+        <div class="callout risk"><b>取舍</b>：行业辨识度最高，一眼知道是行情/量化；代价是
+        <b>语义密度与最小可用尺寸天然冲突</b>——它是四个方向里唯一「大尺寸最好、小尺寸最差」的，
+        需要接受「图标在 16–32px 与 1024px 不是同一张图」。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C -->
+  <div class="dir" style="margin-top:22px">
+    <header><span class="tag">方向 C</span><h3>实色场 K</h3><span class="sub">Color Field · 品牌绿整块场 + 白色 K，最接近 macOS 原生观感</span></header>
+    <div class="body">
+      <img class="hero-ico" src="png/c-field-512.png" alt="方向 C 主图">
+      <div class="stack">
+        <p><b>概念</b>：去掉深色底，整块<b>品牌绿渐变场</b>填满 squircle，K 用平口（butt cap）几何字形直接压在上面，
+        左上一束极淡的受光。它不靠细节辨认，靠<b>色块的轮廓</b>辨认——这与 macOS 原生图标（股票/新闻/邮件）的记法一致。</p>
+        <div class="swatches">
+          <div class="sw"><i style="background:#2ec39f"></i><span>#2ec39f 场上缘（C1）</span></div>
+          <div class="sw"><i style="background:#31c7a2"></i><span>#31c7a2 场中段</span></div>
+          <div class="sw"><i style="background:#157a60"></i><span>#157a60 场下缘（C1）</span></div>
+          <div class="sw"><i style="background:#ffffff"></i><span>#ffffff 字形</span></div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="mono" style="margin-bottom:6px">32px 真实</div>
+            <img class="px32" src="png/c-field-32.png" alt="方向 C 32px">
+          </div>
+          <div style="flex:1;min-width:260px">
+            <div class="mono" style="margin-bottom:6px">托盘 16pt（浅 / 深菜单栏）</div>
+            <div class="bar light"><img src="png/c-field-tray-16.png" alt="方向 C 托盘浅色"><span class="sys"></span><span class="sys circle"></span></div>
+            <div class="bar dark" style="margin-top:6px"><img class="inv" src="png/c-field-tray-16.png" alt="方向 C 托盘深色"><span class="sys"></span><span class="sys circle"></span></div>
+          </div>
+        </div>
+        <p><b>小尺寸表现（已实测，四者最佳）</b>：32px 下白字踩在纯色场上，字形不依赖细节，
+        辨识度明显高于另外三个；16pt 托盘用同字形加重到 <span class="mono">3.6/32</span>，笔画不糊。</p>
+        <div class="callout risk"><b>实测发现（需要你拍板的一个点）</b>：白色字形与场色的对比度<b>随场色明暗变化</b>，
+        实测为 <span class="mono">1.93:1（场上缘最亮处）～ 5.13:1（场下缘）</span>。
+        场最亮处低于 WCAG 非文本图形 3:1 门槛——图标不受该条款强制约束，但在 16px 下会让字形边缘发飘。
+        因此我把 C 做成<b>两种调性</b>，请一并选：</div>
+        <h4 style="margin-top:16px">C1 品牌亮绿 / C2 深绿保对比</h4>
+        <img src="sheet-c-tones.png" alt="C1 与 C2 调性对照" style="border-radius:10px;border:1px solid var(--line)">
+        <table style="margin-top:10px">
+          <thead><tr><th>调性</th><th>场色</th><th>白字对比（实测）</th><th>取舍</th></tr></thead>
+          <tbody>
+            <tr><td><b>C1 品牌亮绿</b></td><td><span class="mono">#2ec39f → #31c7a2 → #157a60</span></td>
+              <td class="warn">1.93 : 1 ～ 5.13 : 1</td><td>忠于 tokens.ts 的暗色品牌绿，Dock 里最亮眼；浅端字形略飘</td></tr>
+            <tr><td><b>C2 深绿保对比</b></td><td><span class="mono">#1e9a79 → #14775e → #0c5a45</span></td>
+              <td class="ok">2.96 : 1 ～ 8.08 : 1</td><td>全图≈3:1，字形任何位置都实；色调更沉稳，亮度低于亮绿</td></tr>
+          </tbody>
+        </table>
+        <div class="callout"><b>取舍</b>：Dock 里最跳、最像原生应用，且天然适配「深色工作区里唯一亮色块」的对比需求；
+        代价是它<b>放弃了「深绿终端感」</b>——Dock 图标与深色工作区界面的材质不再连续，属于刻意的取舍。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- D -->
+  <div class="dir" style="margin-top:22px">
+    <header><span class="tag">方向 D</span><h3>数据地平线</h3><span class="sub">Abstract · 去字母化：只留趋势与节点</span></header>
+    <div class="body">
+      <img class="hero-ico" src="png/d-horizon-512.png" alt="方向 D 主图">
+      <div class="stack">
+        <p><b>概念</b>：完全不出现「K」。深空底 + 横向发丝网格（呼应 <code>client-brand/background.ts</code> 里的
+        52px 环境网格）+ 一条<b>带回调的上升折线</b>，末端一个薄荷节点表示「智能体正看着的那个点」。</p>
+        <div class="swatches">
+          <div class="sw"><i style="background:#030d0b"></i><span>#030d0b 墨底</span></div>
+          <div class="sw"><i style="background:#1d8a6e"></i><span>#1d8a6e 线起</span></div>
+          <div class="sw"><i style="background:#5fd3b0"></i><span>#5fd3b0 线止</span></div>
+          <div class="sw"><i style="background:#eafff8"></i><span>#eafff8 节点</span></div>
+        </div>
+        <div class="row">
+          <div>
+            <div class="mono" style="margin-bottom:6px">32px 真实</div>
+            <img class="px32" src="png/d-horizon-32.png" alt="方向 D 32px">
+          </div>
+          <div style="flex:1;min-width:260px">
+            <div class="mono" style="margin-bottom:6px">托盘 16pt（浅 / 深菜单栏）</div>
+            <div class="bar light"><img src="png/d-horizon-tray-16.png" alt="方向 D 托盘浅色"><span class="sys"></span><span class="sys circle"></span></div>
+            <div class="bar dark" style="margin-top:6px"><img class="inv" src="png/d-horizon-tray-16.png" alt="方向 D 托盘深色"><span class="sys"></span><span class="sys circle"></span></div>
+          </div>
+        </div>
+        <p><b>小尺寸表现</b>：折线在任何尺寸都能读，16pt 下去掉网格与光晕、只留折线 + 端点，是四个方向里
+        托盘最省事的一个；但 32px 下它与市面上大量「上升折线」图标无法区分。</p>
+        <div class="callout risk"><b>取舍</b>：与上游 QiLin 等字母标彻底区隔、最适合做「智能体 + 数据」的品牌叙事；
+        代价是<b>放弃字形记忆点</b>，且与通用金融科技图标高度撞脸。另外要提醒：现有图标本质上就是这个家族的失败版本
+        （抽象几何 + 折线），它证明了「没有明确轮廓的抽象图形」在小尺寸上会输给字母。</div>
+      </div>
+    </div>
+  </div>
+
+  <h2 id="seal">3 · 追加方向 E：麒麟印章（你指定的方向）</h2>
+  <p class="lead">要求：用「麒麟」两个汉字做成印章。这个方向在<b>大尺寸</b>上最有力（辨识度、文化语义、与
+  <code>--dsw-specific-brand-seal-fill</code>「品牌印记」的既有词汇完全一致），但在<b>小尺寸</b>上撞到两个字面意义上的物理下限。
+  下面把所有约束实测出来，再给出可落地的分档方案。</p>
+  <div class="callout" style="margin-top:10px">
+    <b>阅读提示（本节有先后两稿）</b>：下面「三个执行」与「32px 实测」是<b>黑体字形占位稿</b>，
+    用于先定版式；再往下的「双品牌结构」与「<b>篆书出稿</b>」是拿到篆书字形后的<b>最新稿</b>，
+    字形、排法、版式都以最新稿为准（并且推翻了本节一处判断，见「约束 3」）。
+  </div>
+
+  <div class="grid3" style="margin-top:18px">
+    <div class="card">
+      <h4>约束 1 · 字体</h4>
+      <p style="margin-top:4px"><code>fc-list</code> 实测本机可用中文字体只有
+      <b>Noto Sans CJK SC（含 Black）</b>、<b>Songti SC</b>、<b>Heiti SC</b>、Hiragino 系列——
+      <b class="bad">没有篆书/隶书</b>。</p>
+      <p>所以本稿是「现代粗黑体印」。真正的篆书印章需要<b>字体授权或手工描形</b>。</p>
+      <p class="mono">附注：篆书（尤其缪篆）笔画等宽、布白均匀，小尺寸表现明显优于黑体——
+      字体不只是风格问题，也直接决定 16–32px 能不能看。</p>
+    </div>
+    <div class="card">
+      <h4>约束 2 · 笔画数下限</h4>
+      <p style="margin-top:4px">「麟」<b>23 画</b>。16pt 托盘里一个字只有约
+      <span class="mono">12–16px</span> 见方，平均每画不足 <span class="mono">0.7px</span>——
+      <b class="bad">两个汉字在 16pt 托盘里不可能读出来</b>。</p>
+      <p>这不是设计取舍，是物理下限。证据见下方托盘实测最后一格（单字「麟」直接进 16pt）。</p>
+    </div>
+    <div class="card">
+      <h4>约束 3 · 排版（已实测修正）</h4>
+      <p style="margin-top:4px">我先前判断「2 字方印只能竖排」，<b>拿到篆书字形后实测推翻了这个判断</b>：
+      小篆字形本身瘦长，实测墨迹宽高比 <span class="mono">0.644（麒）/ 0.675（麟）</span>，
+      所以方印里<b>横排才填得满</b>（右麒左麟，篆印自右向左读）；竖排反而两侧留白一大片。</p>
+      <p>「横排会压扁字形」只对楷书／黑体这类<b>方正字形</b>成立，对篆书不成立——见下方篆书实测。</p>
+    </div>
+  </div>
+
+  <h3>三个执行（256px）</h3>
+  <img src="sheet-seal-256.png" alt="方向 E 三个执行" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
+  <div class="grid3" style="margin-top:8px">
+    <div class="card">
+      <h4>E1 · 朱红白文印</h4>
+      <p style="margin-top:4px">朱砂底 + 宣纸白印文 + 白印边（白文印）。最传统的读法，Dock 里最抓眼。</p>
+      <div class="swatches">
+        <div class="sw"><i style="background:#d94a3a"></i><span>#d94a3a</span></div>
+        <div class="sw"><i style="background:#ce3b2e"></i><span>#ce3b2e 朱砂</span></div>
+        <div class="sw"><i style="background:#a62a20"></i><span>#a62a20</span></div>
+        <div class="sw"><i style="background:#fff8f2"></i><span>#fff8f2 宣纸</span></div>
+      </div>
+      <p class="mono">取舍：与现有品牌绿完全脱钩，是一枚「朱印」而不是 KStock 的绿。</p>
+    </div>
+    <div class="card">
+      <h4>E2 · 墨底朱印</h4>
+      <p style="margin-top:4px">深墨底上盖一方朱印（印面内缩、带白内框）。
+      印章本体只有 <span class="mono">564px</span> 见方，像真的盖在深色桌面上。</p>
+      <div class="swatches">
+        <div class="sw"><i style="background:#030d0b"></i><span>#030d0b 墨底</span></div>
+        <div class="sw"><i style="background:#d94436"></i><span>#d94436</span></div>
+        <div class="sw"><i style="background:#b02f22"></i><span>#b02f22</span></div>
+        <div class="sw"><i style="background:#fff8f2"></i><span>#fff8f2 印文</span></div>
+      </div>
+      <p class="mono">取舍：与深色工作区界面最连贯；但印面小，字符更小，小尺寸最先糊。</p>
+    </div>
+    <div class="card">
+      <h4>E3 · 品牌绿白文印</h4>
+      <p style="margin-top:4px">同样的白文印结构，底色换成品牌绿（沿用 C2 的深绿梯度，
+      白字对比更高）。</p>
+      <div class="swatches">
+        <div class="sw"><i style="background:#1e9a79"></i><span>#1e9a79</span></div>
+        <div class="sw"><i style="background:#178267"></i><span>#178267</span></div>
+        <div class="sw"><i style="background:#0c5a45"></i><span>#0c5a45</span></div>
+        <div class="sw"><i style="background:#ffffff"></i><span>#ffffff 印文</span></div>
+      </div>
+      <p class="mono">取舍：与品牌色板同源，不会引入新色；「绿印」的文化联想弱于朱红。</p>
+    </div>
+  </div>
+
+  <h3>32px 实测：到底还能读出什么</h3>
+  <img src="sheet-seal-32.png" alt="方向 E 32px 实测" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
+  <p class="mono">每格左＝真实 32px，右＝4× 放大。依次为：E1 带印框 / E3 带印框 / 小尺寸疏排版（朱红）/ 小尺寸疏排版（绿）/ 满格版（朱红）。</p>
+  <table>
+    <thead><tr><th>执行</th><th>32px 读出的东西</th><th>结论</th></tr></thead>
+    <tbody>
+      <tr><td>E1 / E3（带印框）</td><td>一个带双边框的方块 + 内部花纹</td>
+        <td class="warn">「印章」可辨，「麒麟」不可辨；绿版因白框贴边比红版更碎</td></tr>
+      <tr><td>小尺寸疏排版（去印框、字放大）</td><td>一块干净的印章底色 + 两个白色记号</td>
+        <td class="ok">三者中最好：读得出「这是印章」，字作纹理</td></tr>
+      <tr><td>满格版（字铺满印面）</td><td>一块底色 + 一片连成整块的白纹</td>
+        <td class="warn">印章感最强，但两字糊成一体，反而更像随机图案</td></tr>
+    </tbody>
+  </table>
+
+  <h3>建议的落地方式：三档形制</h3>
+  <p>「麒麟印章」不能靠一张图打天下。按档位分形制，是大尺寸印章方向唯一能同时成立的解法：</p>
+  <table>
+    <thead><tr><th>档位</th><th>用在哪</th><th>图形</th><th>读出来的东西</th></tr></thead>
+    <tbody>
+      <tr><td><b>Tier 1</b> 128–1024px</td><td>Dock / 启动台 / 关于页 / 安装器 / 物料</td>
+        <td>完整两字印章（E1/E2/E3 任一）</td><td class="ok">「麒麟」两字 + 印章形制，完全可读</td></tr>
+      <tr><td><b>Tier 2</b> 16–64px</td><td>Windows 任务栏 / 窗口标题 / 通知 / 文件图标</td>
+        <td>无印框、字放大疏排版（<span class="mono">small-*</span>）</td><td class="warn">「一枚印章」可辨，字作纹理</td></tr>
+      <tr><td><b>Tier 3</b> 菜单栏 16pt</td><td>系统托盘（单色模板图）</td>
+        <td>印章外框 + K（<span class="mono">tray_frame + K</span>）</td><td class="ok">「带印框的 K」，字形可读</td></tr>
+    </tbody>
+  </table>
+  <div class="grid2" style="margin-top:14px">
+    <div class="card">
+      <h4>Tier 3 托盘实测（浅 / 深菜单栏）</h4>
+      <img src="sheet-seal-tray.png" alt="方向 E 托盘实测">
+      <p class="mono" style="margin-top:10px">前 3 格：印章框 + K（三种执行共用同一托盘图形）。
+      最后一格是反例证据：把单字「麟」直接塞进 16pt 的后果。</p>
+    </div>
+    <div class="card">
+      <h4>为什么托盘必须是另一个图形</h4>
+      <ul>
+        <li>托盘是<b>单色模板图</b>：朱红/品牌绿在这里全部消失，只剩轮廓。</li>
+        <li>汉字在 16pt 无解（约束 2），所以托盘换用拉丁 <span class="mono">K</span>：
+          3 笔、等宽、任意尺寸可读，且与 <code>Marks.tsx</code> 的 K 字标同源。</li>
+        <li>外框保留「印」的形制——这是托盘上唯一还能承载品牌的部分。</li>
+        <li>若你不接受托盘出现英文字母，唯一可读的替代是<b>放弃字形</b>，
+          只留印章轮廓（会与「KStock 是个什么应用」脱钩），或退回方向 A/C 的 K 模板图。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout risk" style="margin-top:16px">
+    <b>一个品牌层面的问题，需要你确认</b>：<code>麒麟</code> 在本项目里是<b>引擎</b>的名字
+    （README：「构建在 QiLin 3.x 引擎『一切皆插件』平台之上」，代码目录 <code>vendor/qilin</code>），
+    而产品名是 <b>KStock</b>。把「麒麟」放到应用图标与托盘上，等于让<b>应用图标承载引擎品牌</b>。
+    两种都是成立的选择，但含义不同：<br>
+    · <b>(a) 有意为之</b>——把中文品牌统一为「麒麟」，KStock 只作英文名/发行名（图标 = 麒麟印章，最干净）；<br>
+    · <b>(b) 双品牌</b>——KStock 是产品、麒麟是引擎，图标上同时出现（印章 + 小字 KSTOCK 或角标 K，代价是 1024 以下小字先糊）。<br>
+    本稿按 <b>(a)</b> 出图。选 (b) 我再补一版合印稿。
+  </div>
+
+  <h3>双品牌结构（按你的决定：麒麟 = 引擎／中文品牌，KStock = 产品）</h3>
+  <p>走双品牌之后，前面「一张图两张面孔」的问题反而消失了：<b>这不是同一品牌的两张脸，而是两个品牌各自的脸</b>。
+  而且双色分工天然成立——<b>朱红 = 麒麟</b>（传统、引擎、篆印），<b>品牌绿 = KStock</b>（产品、现代、几何 K）。
+  三个 Tier 1 版式如下（篆书字形位置当前用黑体占位，见下一节）。</p>
+  <img src="sheet-dual-256.png" alt="双品牌三个执行" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
+  <div class="grid3" style="margin-top:8px">
+    <div class="card">
+      <h4>DB1 · 印下字标</h4>
+      <p style="margin-top:4px">朱印居中偏上 + 底部 <span class="mono">KSTOCK</span> 字标（宽字距、宣纸白）。
+      最像标准品牌锁定（lockup），适合关于页 / 官网 / 物料。</p>
+      <p class="mono">风险：字标是拉丁字母，缩到 128px 就成一条糊线，且消失后什么都不剩。</p>
+    </div>
+    <div class="card">
+      <h4>DB2 · 角标 K 印</h4>
+      <p style="margin-top:4px">朱印（麒麟）为主，右下角压一枚<b>品牌绿 K 小印</b>（带墨色分离环，像骑缝 / 落款）。
+      产品标识与引擎标识同时在场，且不占版面。</p>
+      <p class="mono">风险：两印相接，1024 下有分离环啃掉朱印白印边的观感问题，需再微调 2–3px。</p>
+    </div>
+    <div class="card">
+      <h4>DB3 · 对印</h4>
+      <p style="margin-top:4px">上朱印（麒麟）+ 下绿印（K）居中对齐，像「对章」。
+      版式对称、层级清楚，绿印带白内框，与朱印共用同一套印边语言。</p>
+      <p class="mono">风险：主印被压到 520px，麒麟两字相应变小。</p>
+    </div>
+  </div>
+
+  <h4 style="margin-top:22px">降级实测：双色结构会自己「退化成 K」</h4>
+  <img src="sheet-dual-degrade.png" alt="双品牌三执行的尺寸降级实测" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
+  <table>
+    <thead><tr><th>尺寸</th><th>DB1 印下字标</th><th>DB2 角标 K 印</th><th>DB3 对印</th></tr></thead>
+    <tbody>
+      <tr><td>256px</td><td class="ok">印章 + 字标均可读</td><td class="ok">麒麟 + 绿 K 印均可读</td><td class="ok">两印均可读</td></tr>
+      <tr><td>128px</td><td class="bad">字标糊成一条线，等于什么都没有</td><td class="ok">麒麟成纹理，<b>绿 K 印仍可辨</b></td><td class="ok">麒麟成纹理，<b>绿 K 印仍可辨</b></td></tr>
+      <tr><td>64px</td><td class="bad">字标成噪点</td><td class="ok">绿 K 印仍可辨（一小块绿 + 白 K）</td><td class="ok">绿 K 印仍可辨</td></tr>
+      <tr><td>32px</td><td class="bad">红色块 + 底部噪点</td><td class="warn">整体糊，但绿角仍可辨</td><td class="warn">整体糊，但绿印仍可辨</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <b>证据结论：DB2 / DB3 优于 DB1。</b>原因是<b>双色结构的降级是连续的</b>——
+    尺寸变小时，朱印里的汉字先退成纹理，而品牌绿的 K 印能撑到 32px。
+    于是同一张图在 1024→32 的过程中，视觉重心自然从「麒麟」滑向「K」，
+    正好等于品牌的主次关系；而 DB1 的字标一消失，图标就只剩一块红。
+    若你只要一枚主印，<b>我推荐 DB3（对印）</b>：对称、两个品牌都完整、印边语言统一。
+  </div>
+
+  <h3>篆书出稿：横排 vs 竖排（实测）</h3>
+  <p>我已把「麒麟」两个<b>篆书</b>字形合成进朱印（不是黑体占位了）。
+  字形取自 Wikimedia Commons 的《说文》小篆描摹轮廓，用「同色 stroke 补厚」把双钩空心笔画实体化，
+  再按渲染 10× 量出的<b>真实墨迹包围盒</b>定标定位——所有间距都是算出来的，不靠肉眼调参。</p>
+  <img src="sheet-zhuan-256.png" alt="篆书竖排/横排 对照" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
+  <table>
+    <thead><tr><th>版式</th><th>印面利用</th><th>观感</th></tr></thead>
+    <tbody>
+      <tr><td>单印 · 竖排 640</td><td class="bad">差：字瘦长，两侧留白一大片</td>
+        <td>像两个窄条挂在印面上，不像刻出来的章</td></tr>
+      <tr><td><b>单印 · 横排 620</b></td><td class="ok">好：两字并排正好铺满印面</td>
+        <td>标准小篆方印的观感，字与印边呼吸合适</td></tr>
+      <tr><td>对印 · 竖排 520</td><td class="bad">差：字更小，留白更多</td><td>被主印尺寸拖累，最弱</td></tr>
+      <tr><td><b>对印 · 横排 560（推荐）</b></td><td class="ok">好</td>
+        <td>篆印饱满 + 下方品牌绿 K 印，双品牌同时在场</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <b>结论：走「方印 + 横排（右麒左麟）」+ 下方品牌绿 K 印</b>（本页记作 <span class="mono">DB5 · 对印横排</span>）。
+    横排不只是好看：小篆字形实测宽高比 0.64–0.68，横排是<b>字形本身的自然排法</b>；
+    「2 字印必须竖排」是楷/黑体方字的经验，套到篆书上不成立。<br>
+    注：横排顺序按篆印传统<b>自右向左</b>读（右麒左麟）。若你更希望现代读者一眼读对，
+    我可以出一版左→右（左麒右麟）对比——这是唯一需要你拍板的排法细节。
+  </div>
+  <h4>篆书版的尺寸降级（实测）</h4>
+  <img src="sheet-zhuan-degrade.png" alt="篆书版降级实测" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
+  <p>128px 起篆书笔画开始粘连、变成「纹样」；64px 仍有印章形制；32px 只剩色块。
+  整条下降曲线与双品牌规则一致：<b>朱印先糊、绿色 K 印撑到最后</b>。</p>
+
+  <h3>篆书字形：来源与授权（出稿用的是 Commons 字形，落地前必须确认授权）</h3>
+  <p>本机没有篆书字体，我把可用来源逐个核实了一遍。<b>结论：没有一款能「下载即用」且授权干净的篆体覆盖「麒麟」两字。</b></p>
+  <table>
+    <thead><tr><th>来源</th><th>覆盖「麒 / 麟」</th><th>授权</th><th>可得性（已实测）</th></tr></thead>
+    <tbody>
+      <tr><td><b>霞鹜篆书</b> LXGW Seal</td><td class="bad">否</td>
+        <td class="ok">SIL OFL 1.1（可商用、可改作）</td>
+        <td>可下载；但字表实测<b>不含麒 / 麟</b>，作者亦明确不再大扩字数</td></tr>
+      <tr><td><b>全字库说文解字</b>（CNS11643 篆体）</td><td class="ok">是</td>
+        <td class="ok">政府资料开放授权（可商用，需署名）</td>
+        <td class="bad">官方下载页已失效、moedict 镜像 404、Wayback 逾时——目前拿不到</td></tr>
+      <tr><td><b>方正小篆体 / 汉仪篆书</b></td><td class="ok">是</td>
+        <td class="warn">字库商业授权（个人免费，商用需购买）</td>
+        <td>网上有未授权副本，<b>不可用于产品</b></td></tr>
+      <tr><td><b>崇羲篆体</b>（中研院小学堂）</td><td class="ok">是</td>
+        <td class="warn">CC BY-ND 3.0：可商用但<b>禁止改作</b></td>
+        <td>把字形转成图标轮廓＝改作，有法律风险，需先取得作者同意</td></tr>
+      <tr><td><b>北师大说文小篆 / 华瑞小篆体</b></td><td class="ok">是</td>
+        <td class="bad">授权不明（多标「个人使用免费」）</td><td>风险不可控，不建议</td></tr>
+      <tr><td><b>Wikimedia Commons</b>「&lt;字&gt;-seal.svg」小篆字形</td><td class="ok">是</td>
+        <td class="warn">Commons 自由授权（具体协议<b>待确认</b>）</td>
+        <td class="ok">已下载并合成出稿（见下）；<b>落地前必须打开文件页确认授权</b></td></tr>
+      <tr><td><b>自绘 / 委托字形</b>（以《说文》篆形为依据）</td><td class="ok">是</td>
+        <td class="ok">完全自有</td>
+        <td>需要字体设计师；<b>但这是 logo 的正确做法</b></td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <b>现状</b>：出稿用的是 Wikimedia Commons 的小篆字形（已下载到
+    <span class="mono">glyphs/</span>，来源与授权状态见 <span class="mono">glyphs/README.md</span>），
+    两字结构已人工核对无误；<b>但文件页的具体协议与署名要求尚未取到</b>（本机到 Commons 的连接时通时断），
+    落地前必须打开那两个文件页确认。若协议为 ND 或 SA，则不能改造成产品轮廓。<br><br>
+    <b>生产建议：仍走自绘／委托，把「麒麟」两字做成自有轮廓（SVG path）。</b><br>
+    理由有三：① 图标是 logo，logo 应该<b>拥有字形轮廓</b>而不是内嵌字体（字体授权会牵连到图标本身的使用范围）；
+    ② 只有自有轮廓才能针对 16–64px 做<b>笔画简化与配重</b>——这恰恰是本项目要解决的核心问题，字体文件给不了这个自由度；
+    ③ 两个字成本可控，一次投入永久可用、无授权风险。<br><br>
+    在你定这条路之前，本页所有「麒麟」字样都是 <b>Noto Sans CJK SC Black 占位</b>：
+    版式、印框比例、色彩、降级规则都已定稿，换字形不需要重排版面。
+  </div>
+
+  <h2 id="tray">4 · 托盘图标专项规范</h2>
+  <p>托盘是这次重构里最容易翻车的一半（方向 E 的「印章框 + K」同样受本节全部规则约束）：它<b>不能是应用图标的缩小版</b>。下面是本次四个方向共同遵守的规则，
+  也是落地时要写进生成脚本的硬约束。</p>
+
+  <div class="grid2" style="margin-top:16px">
+    <div class="card">
+      <h4>规则</h4>
+      <ul>
+        <li><b>纯黑 + alpha</b>：macOS 模板图只允许纯黑不透明像素，出现灰度/彩色会被系统反色成脏灰。</li>
+        <li><b>光学配重 +40%</b>：同一字形在 16pt 下需比 1024 图标加粗约 <span class="mono">40%</span>
+          （本例：<span class="mono">10.2% → 14.2%</span> 字重占比），否则细得像没描边。</li>
+        <li><b>笔画数 ≤3、无细节</b>：小于 <span class="mono">1.5pt</span> 的线、小于 <span class="mono">2pt</span> 的点一律删除
+          （所以 A 去掉数据点、B 去掉影线、D 去掉网格与光晕）。</li>
+        <li><b>供 1x + 2x 两张</b>：<code>trayTemplate.png</code>(16) + <code>trayTemplate@2x.png</code>(32)，
+          交给 Electron 合成，不再运行时 <code>resize()</code>。</li>
+        <li><b>安全区</b>：字形四周留 <span class="mono">≥1pt</span>（32 画布里 ≥2px），避免贴边被菜单栏裁切。</li>
+        <li><b>视觉重量对齐系统图标</b>：把图标贴进真实菜单栏与 Wi-Fi/电池并排比对，而不是只看放大图。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>四方向托盘 16pt 实测（浅 / 深菜单栏）</h4>
+      <img src="sheet-tray.png" alt="四方向托盘 16pt 实测">
+      <p class="mono" style="margin-top:10px">每格：16pt 真实 / 22pt 真实 / 16pt 2× 放大。
+      深色行已按系统模板反色规则还原。</p>
+      <p><b>结论</b>：A 与 C 在 16pt 下字形最稳；B 的蜡烛干支在 16pt 会糊（需简化版）；
+      D 可读但无字形记忆。</p>
+    </div>
+  </div>
+
+  <h2 id="assets">5 · 落地清单：资产矩阵与代码改动</h2>
+  <p>重构不只是换图。<b>尺寸齐、命名对、加载路径对</b>，图标才不会在某个平台上被拉伸或降级。
+  下表左列是仓库现状（已逐一实测），右列是目标。</p>
+
+  <table>
+    <thead><tr><th>用途</th><th>现状</th><th>目标</th></tr></thead>
+    <tbody>
+      <tr><td><b>macOS App / Dock</b></td><td><code>build/icon.icns</code> 实测 11 档（含 1024/512/256 及 @2x），覆盖完整</td>
+        <td>保留 .icns 为唯一真源；<b>打包态不要用 256px PNG 覆盖</b>（<code>main.ts:119-132</code> 限定 dev 态）</td></tr>
+      <tr><td><b>macOS 菜单栏托盘</b></td><td><code>build/tray.png</code> 单张 128px → <code>resize(22)</code></td>
+        <td><code>build/trayTemplate.png</code>(16) + <code>trayTemplate@2x.png</code>(32)，<code>nativeImage.createFromPath</code> 直接取（Electron 自动识别 <code>@2x</code>）</td></tr>
+      <tr><td><b>Windows 窗口 / 任务栏</b></td><td><code>icons/32x32.png</code>（全出血、无留白）</td>
+        <td><code>icons/</code> 补齐 16/24/32/48/64/128/256/512/1024，统一 82% 留白；<code>resolveWindowIcon</code> 优先取 256</td></tr>
+      <tr><td><b>Windows 托盘</b></td><td>回落用彩色全出血的 <code>icons/32x32.png</code></td>
+        <td>专用彩色多尺寸 <code>tray.ico</code>(16/20/24/32)，或 <code>tray-16/32.png</code></td></tr>
+      <tr><td><b>Windows 安装器</b></td><td><code>build/icon.ico</code> 实测 6 档：16/32/48/64/128/256（<b>缺 24</b>）</td>
+        <td>重出 16/24/32/48/64/128/256（共 7 档，256 用 PNG 压层）</td></tr>
+      <tr><td><b>Linux</b></td><td><code>icons/</code> 仅 32/128/256，缺 <code>icon.png</code></td>
+        <td>补齐 16→1024 + <code>icon.png</code>（512）</td></tr>
+      <tr><td><b>矢量源 / 再生</b></td><td class="bad">无生成脚本，二进制孤本</td>
+        <td>以 <code>docs/design/icon-refresh/generate.py</code> 升级为真源：一处改形 → 全尺寸重出 + 进 <code>check-ci.sh</code> 校验</td></tr>
+    </tbody>
+  </table>
+
+  <h3>需要改的代码点（选型后一并提交）</h3>
+  <ul>
+    <li><code>apps/desktop/electron/lib/menu.ts:217-244</code> — 托盘改为读 <code>trayTemplate</code> 系列，删除运行时 <code>resize()</code> 与单文件回落链。</li>
+    <li><code>apps/desktop/electron/lib/window.ts:210-217</code> — <code>resolveWindowIcon</code> 首选 256/512，避免任务栏用小图放大。</li>
+    <li><code>apps/desktop/electron/main.ts:119-132</code> — <code>setDockIcon</code> 仅 dev 态生效（当前逻辑已如此，重构时保持并注释因果）。</li>
+    <li><code>apps/desktop/electron-builder.yml:21-22,36,62,85</code> — <code>files</code> 与各平台 <code>icon</code> 路径随新资产同步。</li>
+    <li><code>kstock/client-brand/src/client/Marks.tsx</code> + <code>--dsw-specific-brand-seal-fill</code> — 若选 C，把侧栏/hero 标记的渐变同步为场色，保证「角标 → 图标 → 印记」三处同源。</li>
+  </ul>
+
+  <h2 id="decide">6 · 决策表与推荐</h2>
+  <table>
+    <thead><tr><th>维度</th><th>A 一笔 K</th><th>B 蜡烛 K</th><th>C 实色场 K</th><th>D 数据地平线</th></tr></thead>
+    <tbody>
+      <tr><td>Dock 识别度</td><td>中</td><td>中高</td><td class="ok">高</td><td>中低</td></tr>
+      <tr><td>32px 清晰度</td><td class="ok">好</td><td class="warn">中（影线丢失）</td><td class="ok">好</td><td>中</td></tr>
+      <tr><td>16pt 托盘清晰度</td><td class="ok">好</td><td class="bad">差（需简化版）</td><td class="ok">好</td><td>中</td></tr>
+      <tr><td>与 1.x / 现有 K 的延续</td><td class="ok">最强</td><td>强</td><td>中（字形保留、材质换）</td><td class="bad">弱（去字母）</td></tr>
+      <tr><td>行业语义</td><td>弱（靠数据点暗示）</td><td class="ok">最强</td><td>弱</td><td>中（趋势）</td></tr>
+      <tr><td>与深色终端风 UI 的连续性</td><td class="ok">最强</td><td class="ok">强</td><td class="warn">弱（刻意对比）</td><td class="ok">强</td></tr>
+      <tr><td>需要额外拍板的点</td><td>—</td><td>是否接受小尺寸语义丢失</td><td>选 C1 亮绿还是 C2 深绿</td><td>是否接受无字形记忆</td></tr>
+      <tr><td>主要风险</td><td>Dock 里不够跳</td><td>小尺寸语义丢失</td><td>与前两者材质不连续</td><td>撞脸通用金融图标</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout" style="margin-top:18px">
+    <b>推荐：C 作主方案 + A 作为「保守版」备选。</b><br>
+    理由：重构要解决的<b>首要问题是 32px 与 16pt 的清晰度</b>（诊断第 1、4、5 条），C 在这两个尺寸上都是四者最佳，
+    且与 macOS 原生图标的记法一致（大色块 + 简单字形）；A 则是风险最低的「只治清晰度、不动品牌感」路线，
+    适合不希望 Dock 观感变化的场景。B 建议只在「行业辨识度优先」且接受能力退化时选用；
+    D 更适合网站/物料等大尺寸场景，不建议作为应用与托盘图标。
+    <br><br>
+    <b>若选 C，还要定一件事</b>：<span class="mono">C1 品牌亮绿</span>（忠于现有 token，Dock 最跳，浅端字形对比 1.93:1）
+    还是 <span class="mono">C2 深绿保对比</span>（全图≈3:1，字形最实，色调更沉稳）。我倾向 <b>C2</b>：
+    图标要在 16px 任务栏与 32px 窗口标题里工作，字形的实感优先于色相亮度；品牌亮绿仍保留在界面 token 里。
+  </div>
+
+  <h3>方向 E（麒麟印章）的定位</h3>
+  <table>
+    <thead><tr><th>维度</th><th>E 的实测结果</th></tr></thead>
+    <tbody>
+      <tr><td>Dock / 大尺寸识别度</td><td class="ok">最高——「汉字印章」在一排字母标里几乎不可能被认错</td></tr>
+      <tr><td>128px 以上可读性</td><td class="ok">「麒麟」两字完整可读（见 256px 三执行图）</td></tr>
+      <tr><td>32px 可读性</td><td class="warn">只能读出「一枚印章」，字作纹理（已实测）</td></tr>
+      <tr><td>16pt 托盘可读性</td><td class="bad">汉字无解，必须换成印章框 + K</td></tr>
+      <tr><td>文化 / 品牌语义</td><td class="ok">最强，且与代码里既有的「品牌印记」词汇一致</td></tr>
+      <tr><td>落地成本</td><td class="warn">多一项：字体授权或篆书描形；且必须维护三档形制</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout" style="margin-top:16px">
+    <b>结论：E 与 C 不是二选一，而是分工。</b><br>
+    推荐组合 <b>「E1 或 E2 作 Tier 1 大尺寸印章 + C2 深绿实色场 K 作 Tier 2 / Tier 3 小尺寸与托盘」</b>：
+    Dock 里是朱印（文化身份），任务栏与菜单栏里是绿底白 K（清晰度优先）。
+    代价是同一应用在系统里有两张面孔——这是印章类图标（受汉字笔画数约束）的必然结果，
+    成败取决于两张面孔<b>共用一个字标（麒麟 / K）与同一套圆角方轮廓</b>，视觉上仍属同一家族。<br><br>
+    如果你要的是「一枚图打通所有尺寸」，那 <b>E 不成立，应选 C2</b>：它的 32px 与 16pt 都是四者最佳。
+  </div>
+
+  <h3>已定 / 待拍板</h3>
+  <p><b class="ok">已定</b>：① 主方向 = E 麒麟印章（接受三档形制）；② 朱红白文印（E1）作 Tier 1；
+  ③ 托盘使用拉丁「K」；④ 走双品牌（麒麟 = 引擎，KStock = 产品）；⑤ 先上篆书。</p>
+  <p><b>待你拍板（3 项）</b>：</p>
+  <ol>
+    <li><b>版式</b>：<span class="mono">DB5 · 对印横排</span>（推荐：方印横排右麒左麟 + 下方品牌绿 K 印）
+      还是 <span class="mono">DB1/DB2/DB3</span> 之一？</li>
+    <li><b>篆书横排的左右顺序</b>：篆印传统<b>自右向左</b>（右麒左麟，当前稿）；
+      若希望现代读者一眼读对，可出左→右版（左麒右麟）对比。</li>
+    <li><b>篆书字形的授权路径</b>：先让我去确认 Commons 那两个文件页的协议（够用就直接用），
+      还是直接按「自绘 / 委托自有轮廓」推进（更稳，但要设计师）？</li>
+  </ol>
+  <p class="mono">另：Tier 2 图形（C2 深绿实色场 K）与 Tier 3 托盘（印章框 + K）已定稿，不受上述决定影响。</p>
+
+  <h3>选定方向后我会做什么</h3>
+  <ul>
+    <li>把该方向的 SVG 源定稿（含 1024 主图 + 托盘模板图 + Windows 彩色托盘图），写进设计 spec 并提交。</li>
+    <li>升级 <code>generate.py</code> 为生产生成器：一次产出 <code>icon.icns / icon.ico / icons/*.png / trayTemplate*.png</code>，并在 <code>check-ci.sh</code> 里加「尺寸齐全 + 命名正确」校验。</li>
+    <li>改上述 5 个代码点，跑一遍打包链路，最后给出真实 Dock / 菜单栏 / 任务栏的截图验收（含浅色与深色菜单栏）。</li>
+  </ul>
+
+  <footer>
+    提案稿 · 生成物位于 <span class="mono">docs/design/icon-refresh/</span>：<br>
+    A–D：<span class="mono">generate.py</span> · <span class="mono">contact_sheets.py</span> · <span class="mono">src/*.svg</span> · <span class="mono">png/</span>　
+    E 麒麟印章：<span class="mono">generate_seal.py</span> · <span class="mono">seal_sheets.py</span> · <span class="mono">seal-src/*.svg</span> · <span class="mono">seal-png/</span>　
+    <span class="mono">current/</span> 现状资产快照<br>
+    本页所有图标均为提案稿，未覆盖 <span class="mono">apps/desktop/build/</span> 生产资产。
+  </footer>
+</div>
+</body>
+</html>

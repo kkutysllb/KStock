@@ -446,12 +446,29 @@ window.__ModuleLoader__.load({
 			});
 		}
 		/**
-		* 分层附件归一（agent 自由形状 → 图表序列）：支持
+		* 分层附件归一（agent 自由形状 → 图表序列）：支持引擎原生产出
+		* （factor-research analyze：{dates, group_nav: {group_1..n}, ls_nav}）、
 		* {groups:{G1:[...]}, long_short:[...]}、{G1:[...],多空:[...]}、
-		* [{label|group|name:'G1', values|equity|nav:[...]}] 三形态；值兼容
-		* number[] 与 {date,value}[]。返回按标签排序的序列（G1..Gn 在前，
-		* 多空/long_short 压轴高亮）。
+		* [{label|group|name:'G1', values|equity|nav:[...]}] 四形态；值兼容
+		* number[] 与 {date,value|nav|equity}[]。返回 G 序在前、多空压轴红。
 		*/
+		/** 序列容器键（值为 {名字: 序列} 的都算）。 */
+		const LAYER_CONTAINER_KEYS = [
+			"group_nav",
+			"groups",
+			"layers",
+			"group_returns",
+			"group_equity"
+		];
+		/** 多空序列键/标签识别。 */
+		const LS_LABEL = /多空|long.?short|^ls(_nav|_returns)?$|^ls$/i;
+		/** 标签归一：group_1/G1/第1组 → G1；ls_nav/long_short → 多空（统一展示）。 */
+		function normalizeLayerLabel(label) {
+			if (LS_LABEL.test(label)) return "多空";
+			const match = label.match(/(?:group[_\s-]?|^G\s*|第\s*)(\d+)/i);
+			if (match !== null) return `G${Number(match[1])}`;
+			return label;
+		}
 		function layersToSeries(raw) {
 			let entries = [];
 			if (Array.isArray(raw)) for (const item of raw) {
@@ -474,24 +491,24 @@ window.__ModuleLoader__.load({
 			}
 			else if (typeof raw === "object" && raw !== null) {
 				const record = raw;
-				const containerKeys = ["groups", "layers"];
-				for (const containerKey of containerKeys) {
+				for (const containerKey of LAYER_CONTAINER_KEYS) {
 					const inner = record[containerKey];
 					if (typeof inner === "object" && inner !== null && !Array.isArray(inner)) entries.push(...Object.entries(inner));
 				}
 				for (const [key, value] of Object.entries(record)) {
-					if (containerKeys.includes(key)) continue;
+					if (LAYER_CONTAINER_KEYS.includes(key)) continue;
 					entries.push([key, value]);
 				}
 			}
 			const series = entries.map(([label, values]) => ({
-				label,
+				label: normalizeLayerLabel(label),
 				values: toNumbers(values)
 			})).filter((item) => item.values.length >= 2);
 			const groupOrder = (label) => {
-				const match = label.match(/G\s*(\d+)/i);
+				if (LS_LABEL.test(label)) return 99;
+				const match = label.match(/^G\s*(\d+)$/i);
 				if (match !== null) return Number(match[1]);
-				return /多空|long.?short|ls/i.test(label) ? 99 : 50;
+				return 50;
 			};
 			return series.sort((a, b) => groupOrder(a.label) - groupOrder(b.label)).map((item, index) => ({
 				...item,
