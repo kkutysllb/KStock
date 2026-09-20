@@ -6,15 +6,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   compareFactorRuns,
+  fetchReportHtml,
   getFactorRunIcSeries,
+  getFactorRunLayers,
   listFactors,
   listFactorRuns,
   listFactorVersions,
+  reportBlobUrl,
   type Factor,
   type FactorRunComparison,
   type FactorRunIcSeries,
+  type FactorRunLayers,
   type FactorRunSummary,
   type FactorVersion,
+  type OverlaySeries,
 } from '@kstock/quant-ui'
 import { IconCopy, IconFlask, IconPlay } from '@kstock/quant-ui'
 import {
@@ -23,6 +28,7 @@ import {
   ErrorLine,
   LineOverlay,
   Loading,
+  PreviewDialog,
   RefreshButton,
   RUN_COLORS,
   formatDateTime,
@@ -88,9 +94,88 @@ const INGEST_PROMPT =
   '请把本工作区最近一次因子检验任务的结果归档进 KStock 因子库（引擎 http://127.0.0.1:18001，不可达则跳过并明说）。三步：' +
   '1) POST /kstock-api/factors，body {name: 因子名, hypothesis: 一句话逻辑假设, category: value/momentum/quality/low_vol/size/growth/custom 之一}；' +
   '2) POST /kstock-api/factors/{factor_id}/versions，body {code: 因子构造代码全文, params: 窗口/分组参数 JSON, change_note}；' +
-  '3) POST /kstock-api/factors/{factor_id}/runs，body {version, data_start, data_end, rules（含 report_id 报告库看板链）, ' +
+  '3) POST /kstock-api/factors/{factor_id}/runs，body {version, universe: 股票池, config: {n_groups, data_start, data_end, report_id 报告库看板链}, ' +
   'metrics: {ic_mean, ir, ic_positive_pct, long_short_spread_pct, n_periods}, ic_series: IC 序列 JSON, layers: 分层数据 JSON}。' +
   '数据取自工作区 data/ 与 reports/ 下的真实产物，禁止编造。'
+
+/** run 的 config.report_id（阶段五看板建链；有则「看板」直嵌 HTML）。 */
+function runReportId(run: FactorRunSummary | undefined): string | null {
+  const value = run?.config?.report_id
+  return typeof value === 'string' && value !== '' ? value : null
+}
+
+/** 区间展示：列值优先，回落 config（当前表结构无此列）。 */
+function runRange(run: FactorRunSummary): string {
+  const start = run.data_start ?? (typeof run.config?.data_start === 'string' ? run.config.data_start : '')
+  const end = run.data_end ?? (typeof run.config?.data_end === 'string' ? run.config.data_end : '')
+  return start || end ? `${start || '?'} ~ ${end || '?'}` : '—'
+}
+
+/** 序列值提取：number[] / {value|nav|equity|ret}[] → number[]。 */
+function toNumbers(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap(item => {
+    if (typeof item === 'number' && Number.isFinite(item)) return [item]
+    if (typeof item === 'object' && item !== null) {
+      const record = item as Record<string, unknown>
+      for (const key of ['value', 'nav', 'equity', 'ret', 'ic']) {
+        const value = record[key]
+        if (typeof value === 'number' && Number.isFinite(value)) return [value]
+      }
+    }
+    return []
+  })
+}
+
+/**
+ * 分层附件归一（agent 自由形状 → 图表序列）：支持
+ * {groups:{G1:[...]}, long_short:[...]}、{G1:[...],多空:[...]}、
+ * [{label|group|name:'G1', values|equity|nav:[...]}] 三形态；值兼容
+ * number[] 与 {date,value}[]。返回按标签排序的序列（G1..Gn 在前，
+ * 多空/long_short 压轴高亮）。
+ */
+function layersToSeries(raw: unknown): OverlaySeries[] {
+  let entries: Array<[string, unknown]> = []
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (typeof item !== 'object' || item === null) continue
+      const record = item as Record<string, unknown>
+      const label = ['label', 'group', 'name', 'layer'].find(key => typeof record[key] === 'string')
+      const values = ['values', 'equity', 'nav', 'series', 'cum'].find(key => record[key] !== undefined)
+      if (label !== undefined && values !== undefined) entries.push([String(record[label]), record[values]])
+    }
+  } else if (typeof raw === 'object' && raw !== null) {
+    const record = raw as Record<string, unknown>
+    // {groups: {...}} / {layers: {...}} 容器键先解一层；其余顶层键
+    // （如平级的 long_short/多空）照收，不能因容器命中而丢弃。
+    const containerKeys = ['groups', 'layers']
+    for (const containerKey of containerKeys) {
+      const inner = record[containerKey]
+      if (typeof inner === 'object' && inner !== null && !Array.isArray(inner)) {
+        entries.push(...Object.entries(inner as Record<string, unknown>))
+      }
+    }
+    for (const [key, value] of Object.entries(record)) {
+      if (containerKeys.includes(key)) continue
+      entries.push([key, value])
+    }
+  }
+  const series = entries
+    .map(([label, values]) => ({ label, values: toNumbers(values) }))
+    .filter(item => item.values.length >= 2)
+  // 排序：G 组按数字序在前；多空/long_short 压轴。
+  const groupOrder = (label: string): number => {
+    const match = label.match(/G\s*(\d+)/i)
+    if (match !== null) return Number(match[1])
+    return /多空|long.?short|ls/i.test(label) ? 99 : 50
+  }
+  return series
+    .sort((a, b) => groupOrder(a.label) - groupOrder(b.label))
+    .map((item, index) => ({
+      ...item,
+      color: groupOrder(item.label) === 99 ? '#e64646' : RUN_COLORS[index % RUN_COLORS.length]!,
+    }))
+}
 
 export function FactorsSection() {
   const [factors, setFactors] = useState<Factor[]>([])
@@ -104,6 +189,8 @@ export function FactorsSection() {
   const [comparison, setComparison] = useState<FactorRunComparison | null>(null)
   const [icSeries, setIcSeries] = useState<FactorRunIcSeries[]>([])
   const [refreshing, setRefreshing] = useState(false)
+  const [detailView, setDetailView] = useState<{ runId: string; ic: FactorRunIcSeries | null; layers: FactorRunLayers | null } | null>(null)
+  const [reportView, setReportView] = useState<{ runId: string; htmlUrl: string | null; text: string } | null>(null)
   const { copy, toast } = useCopyPrompt()
 
   const reload = useCallback(async () => {
@@ -148,6 +235,8 @@ export function FactorsSection() {
     setCompareIds([])
     setComparison(null)
     setIcSeries([])
+    setDetailView(null)
+    closeReportView()
     setError(null)
     let active = true
     void (async () => {
@@ -178,6 +267,51 @@ export function FactorsSection() {
     )
   }
 
+  /** 关闭报告视图并释放 blob URL（函数式 setState 避免闭包过期）。 */
+  const closeReportView = useCallback(() => {
+    setReportView(current => {
+      if (current?.htmlUrl) URL.revokeObjectURL(current.htmlUrl)
+      return null
+    })
+  }, [])
+
+  /** 展开单 run 检验详情（IC 曲线 + 分层曲线；附件缺失各自降级）。 */
+  const toggleDetail = useCallback(async (runId: string) => {
+    if (!selectedId) return
+    if (detailView?.runId === runId) {
+      setDetailView(null)
+      return
+    }
+    setDetailView({ runId, ic: null, layers: null })
+    const [ic, layers] = await Promise.all([
+      getFactorRunIcSeries(selectedId, runId).catch(() => null),
+      getFactorRunLayers(selectedId, runId).catch(() => null),
+    ])
+    setDetailView({ runId, ic, layers })
+  }, [selectedId, detailView])
+
+  /** 看板优先（config.report_id 建链 → 报告库 HTML iframe），失败回退提示。 */
+  const showReport = useCallback(async (runId: string) => {
+    if (!selectedId) return
+    if (reportView?.runId === runId) {
+      closeReportView()
+      return
+    }
+    const run = runs.find(item => item.run_id === runId)
+    const reportId = runReportId(run)
+    closeReportView()
+    if (reportId !== null) {
+      try {
+        const html = await fetchReportHtml(reportId)
+        setReportView({ runId, htmlUrl: reportBlobUrl(html), text: '' })
+        return
+      } catch {
+        // 看板不可用（被删/引擎不可达）→ 落回提示
+      }
+    }
+    setError(reportId !== null ? '看板加载失败（报告可能已删除）' : '该 run 未链接报告看板（config 缺 report_id）')
+  }, [selectedId, reportView, runs, closeReportView])
+
   useEffect(() => {
     if (!selectedId || compareIds.length < 2) {
       setComparison(null)
@@ -206,7 +340,7 @@ export function FactorsSection() {
     `（change_note：${version.change_note || '无'}），股票池与检验配置参照该版本最近一次检验` +
     `（无历史记录则用中证 800 + 近 2 年月度调仓）。跑完后把结果入库：` +
     `POST /kstock-api/factors/${selectedId}/runs，version=${version.version}，` +
-    `附 data_start/data_end/rules（含 report_id 看板链）/metrics` +
+    `附 universe/config（含 n_groups/data_start/data_end/report_id 看板链）/metrics` +
     `（ic_mean/ir/ic_positive_pct/long_short_spread_pct/n_periods）/ic_series/layers。`
 
   const icCurves = useMemo(
@@ -330,6 +464,7 @@ export function FactorsSection() {
                           <th>IC&gt;0 %</th>
                           <th>多空差 %</th>
                           <th>时间</th>
+                          <th>详情 / 看板</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -346,18 +481,81 @@ export function FactorsSection() {
                             <td className="ksq-mono" title={run.run_id}>{run.run_id.slice(5, 13)}</td>
                             <td>v{run.version}</td>
                             <td>{run.universe || '?'}</td>
-                            <td>{run.data_start || '?'} ~ {run.data_end || '?'}</td>
+                            <td>{runRange(run)}</td>
                             <td className={`num ${factorMetricClass('ic_mean', run.metrics?.ic_mean)}`}>{metric(run, 'ic_mean')}</td>
                             <td className={`num ${factorMetricClass('ir', run.metrics?.ir)}`}>{metric(run, 'ir')}</td>
                             <td className={`num ${factorMetricClass('ic_positive_pct', run.metrics?.ic_positive_pct)}`}>{metric(run, 'ic_positive_pct')}</td>
                             <td className={`num ${factorMetricClass('long_short_spread_pct', run.metrics?.long_short_spread_pct)}`}>{metric(run, 'long_short_spread_pct')}</td>
                             <td>{formatDateTime(run.created_at)}</td>
+                            <td>
+                              <button className="ksq-linkbtn" type="button" onClick={() => void toggleDetail(run.run_id)}>
+                                {detailView?.runId === run.run_id ? '收起' : '详情'}
+                              </button>
+                              {runReportId(run) !== null && (
+                                <>
+                                  {' '}
+                                  <button className="ksq-linkbtn" type="button" onClick={() => void showReport(run.run_id)}>
+                                    {reportView?.runId === run.run_id ? '收起' : '看板'}
+                                  </button>
+                                </>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   )}
                 </div>
+
+                {detailView !== null && (() => {
+                  const run = runs.find(item => item.run_id === detailView.runId)
+                  if (run === undefined) return null
+                  const cumulative = cumulativeIc(detailView.ic?.ic_series)
+                  const layerSeries = layersToSeries(detailView.layers?.layers)
+                  return (
+                    <div className="ksq-compare">
+                      <h3>
+                        检验详情（{run.run_id.slice(5, 13)} · v{run.version} · {run.universe || '?'} · {runRange(run)}）
+                        <button className="ksq-linkbtn" type="button" onClick={() => setDetailView(null)}>收起</button>
+                      </h3>
+                      <table className="ksq-table">
+                        <tbody>
+                          <tr>
+                            {METRIC_KEYS.map(([key, label]) => (
+                              <td key={key}>{label}：<strong className={`num ${factorMetricClass(key, run.metrics?.[key])}`}>{metric(run, key)}</strong></td>
+                            ))}
+                          </tr>
+                        </tbody>
+                      </table>
+                      {cumulative.length >= 2 ? (
+                        <div className="ksq-chart">
+                          <h4>累计 IC 曲线</h4>
+                          <LineOverlay
+                            series={[{ label: `v${run.version} 累计IC`, values: cumulative, color: RUN_COLORS[0]! }]}
+                            baseline={0}
+                            title="累计 IC 曲线"
+                          />
+                        </div>
+                      ) : (
+                        <p className="ksq-note">该 run 未存 IC 序列附件（record_run 未附 ic_series）。</p>
+                      )}
+                      {layerSeries.length >= 2 ? (
+                        <div className="ksq-chart">
+                          <h4>分层净值曲线（低估值组 G1 ↔ 高估值组 Gn，多空红线上压轴）</h4>
+                          <LineOverlay series={layerSeries} baseline={1} title="分层净值曲线" />
+                        </div>
+                      ) : (
+                        <p className="ksq-note">该 run 未存分层附件或形状不可识别（record_run 未附 layers）。</p>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {reportView?.htmlUrl !== null && reportView !== null && (
+                  <PreviewDialog title="因子研究看板" onClose={closeReportView}>
+                    <iframe title="因子研究看板" src={reportView.htmlUrl ?? undefined} sandbox="allow-scripts" />
+                  </PreviewDialog>
+                )}
 
                 {comparison && (
                   <div className="ksq-compare">

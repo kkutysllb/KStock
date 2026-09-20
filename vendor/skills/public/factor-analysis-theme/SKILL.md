@@ -116,13 +116,14 @@ curl -s -X POST http://127.0.0.1:18001/kstock-api/factors/$FACTOR_ID/versions \
  "change_note":"初版：20日动量，5分组月度"}
 EOF
 
-# 3 存检验结果（data_start/data_end=面板区间；metrics=面板渲染五键；
-#    ic_series/layers=analyze 的原始 JSON 附件；rules.report_id 建看板链）
+# 3 存检验结果（config=检验配置 JSON，含 universe/n_groups/data_start/
+#    data_end/report_id 看板链；metrics=面板渲染五键；ic_series/layers=
+#    analyze 的原始 JSON 附件）
 curl -s -X POST http://127.0.0.1:18001/kstock-api/factors/$FACTOR_ID/runs \
   -H 'content-type: application/json' -d @- <<'EOF'
-{"version":1,"data_start":"2024-09-20","data_end":"2026-09-18",
- "rules":{"universe":"中证800","n_groups":5,
-          "report_id":"report-xxxxxxxxxxxx（阶段四归档返回的 id）"},
+{"version":1,"universe":"中证800",
+ "config":{"n_groups":5,"data_start":"2024-09-20","data_end":"2026-09-18",
+           "report_id":"report-xxxxxxxxxxxx（阶段四归档返回的 id）"},
  "metrics":{"ic_mean":0.052,"ir":1.31,"ic_positive_pct":61.3,
             "long_short_spread_pct":8.7,"n_periods":24},
  "ic_series":"（data/ic.json 的 ic 序列 JSON 贴入，≤2MB）",

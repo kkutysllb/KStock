@@ -108,10 +108,13 @@ export interface FactorRunSummary {
   factor_id: string
   version: number
   universe: string
-  data_start: string
-  data_end: string
+  /** 1.x 类型残留字段：当前表结构无此列（区间在 config 里），可选。 */
+  data_start?: string
+  data_end?: string
   config: Record<string, unknown>
   metrics: Record<string, unknown>
+  ic_series_path?: string | null
+  layers_path?: string | null
   created_at: string
 }
 
@@ -154,6 +157,15 @@ export interface FactorRunIcSeries {
   ic_series: unknown
 }
 
+/** 分层回测附件（layers.json，形状由 agent 写入，宽松 unknown）。 */
+export interface FactorRunLayers {
+  run_id: string
+  version: number
+  data_start: string
+  data_end: string
+  layers: unknown
+}
+
 export const listFactors = () => get<Factor[]>('/kstock-api/factors')
 export const listFactorVersions = (id: string) => get<FactorVersion[]>(`/kstock-api/factors/${encodeURIComponent(id)}/versions`)
 export const listFactorRuns = (id: string) => get<FactorRunSummary[]>(`/kstock-api/factors/${encodeURIComponent(id)}/runs`)
@@ -161,6 +173,8 @@ export const compareFactorRuns = (id: string, runIds: string[]) =>
   get<FactorRunComparison>(`/kstock-api/factors/${encodeURIComponent(id)}/compare?runs=${runIds.map(encodeURIComponent).join(',')}`)
 export const getFactorRunIcSeries = (id: string, runId: string) =>
   get<FactorRunIcSeries>(`/kstock-api/factors/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/ic_series`)
+export const getFactorRunLayers = (id: string, runId: string) =>
+  get<FactorRunLayers>(`/kstock-api/factors/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/layers`)
 export const patchFactor = (id: string, patch: { name?: string; status?: string; hypothesis?: string }) =>
   request<Factor>(`/kstock-api/factors/${encodeURIComponent(id)}`, { ...jsonBody(patch), method: 'PATCH' })
 

@@ -45,6 +45,16 @@ window.__ModuleLoader__.load({
 		const listFactorRuns = (id) => get(`/kstock-api/factors/${encodeURIComponent(id)}/runs`);
 		const compareFactorRuns = (id, runIds) => get(`/kstock-api/factors/${encodeURIComponent(id)}/compare?runs=${runIds.map(encodeURIComponent).join(",")}`);
 		const getFactorRunIcSeries = (id, runId) => get(`/kstock-api/factors/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/ic_series`);
+		const getFactorRunLayers = (id, runId) => get(`/kstock-api/factors/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/layers`);
+		async function fetchReportHtml(reportId) {
+			const response = await fetch(`/kstock-api/reports/${encodeURIComponent(reportId)}/content`);
+			if (!response.ok) throw new KsqError(response.status, `报告加载失败（${response.status}）`);
+			return response.text();
+		}
+		/** 报告 HTML 的 blob 预览地址。显式带 utf-8 charset——blob 文档不继承响应头，缺失时中文会被按 windows-1252 解码。 */
+		function reportBlobUrl(html) {
+			return URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+		}
 		//#endregion
 		//#region ../quant-ui/src/task-target.tsx
 		/**
@@ -103,6 +113,12 @@ window.__ModuleLoader__.load({
 					height: "12",
 					rx: "2"
 				}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" })]
+			});
+		}
+		function IconClose(props) {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(Svg, {
+				...props,
+				children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M18 6 6 18M6 6l12 12" })
 			});
 		}
 		/** 烧杯（因子库入口）。 */
@@ -298,6 +314,27 @@ window.__ModuleLoader__.load({
 				]
 			});
 		}
+		/** 全屏预览浮层（报告 HTML iframe）。 */
+		function PreviewDialog({ title, onClose, children }) {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+				className: "ksq-overlay",
+				role: "dialog",
+				"aria-modal": "true",
+				"aria-label": title,
+				children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "ksq-dialog",
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						className: "ksq-dialog-bar",
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: title }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+							type: "button",
+							className: "ksq-btn",
+							onClick: onClose,
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconClose, { size: 13 }), " 关闭"]
+						})]
+					}), children]
+				})
+			});
+		}
 		//#endregion
 		//#region ../quant-ui/src/index.ts
 		/**
@@ -375,7 +412,92 @@ window.__ModuleLoader__.load({
 			["n_periods", "检验期数"]
 		];
 		/** 空态引导：让 agent 把最近一次因子检验结果归档进因子库的复制提示词。 */
-		const INGEST_PROMPT = "请把本工作区最近一次因子检验任务的结果归档进 KStock 因子库（引擎 http://127.0.0.1:18001，不可达则跳过并明说）。三步：1) POST /kstock-api/factors，body {name: 因子名, hypothesis: 一句话逻辑假设, category: value/momentum/quality/low_vol/size/growth/custom 之一}；2) POST /kstock-api/factors/{factor_id}/versions，body {code: 因子构造代码全文, params: 窗口/分组参数 JSON, change_note}；3) POST /kstock-api/factors/{factor_id}/runs，body {version, data_start, data_end, rules（含 report_id 报告库看板链）, metrics: {ic_mean, ir, ic_positive_pct, long_short_spread_pct, n_periods}, ic_series: IC 序列 JSON, layers: 分层数据 JSON}。数据取自工作区 data/ 与 reports/ 下的真实产物，禁止编造。";
+		const INGEST_PROMPT = "请把本工作区最近一次因子检验任务的结果归档进 KStock 因子库（引擎 http://127.0.0.1:18001，不可达则跳过并明说）。三步：1) POST /kstock-api/factors，body {name: 因子名, hypothesis: 一句话逻辑假设, category: value/momentum/quality/low_vol/size/growth/custom 之一}；2) POST /kstock-api/factors/{factor_id}/versions，body {code: 因子构造代码全文, params: 窗口/分组参数 JSON, change_note}；3) POST /kstock-api/factors/{factor_id}/runs，body {version, universe: 股票池, config: {n_groups, data_start, data_end, report_id 报告库看板链}, metrics: {ic_mean, ir, ic_positive_pct, long_short_spread_pct, n_periods}, ic_series: IC 序列 JSON, layers: 分层数据 JSON}。数据取自工作区 data/ 与 reports/ 下的真实产物，禁止编造。";
+		/** run 的 config.report_id（阶段五看板建链；有则「看板」直嵌 HTML）。 */
+		function runReportId(run) {
+			const value = run?.config?.report_id;
+			return typeof value === "string" && value !== "" ? value : null;
+		}
+		/** 区间展示：列值优先，回落 config（当前表结构无此列）。 */
+		function runRange(run) {
+			const start = run.data_start ?? (typeof run.config?.data_start === "string" ? run.config.data_start : "");
+			const end = run.data_end ?? (typeof run.config?.data_end === "string" ? run.config.data_end : "");
+			return start || end ? `${start || "?"} ~ ${end || "?"}` : "—";
+		}
+		/** 序列值提取：number[] / {value|nav|equity|ret}[] → number[]。 */
+		function toNumbers(raw) {
+			if (!Array.isArray(raw)) return [];
+			return raw.flatMap((item) => {
+				if (typeof item === "number" && Number.isFinite(item)) return [item];
+				if (typeof item === "object" && item !== null) {
+					const record = item;
+					for (const key of [
+						"value",
+						"nav",
+						"equity",
+						"ret",
+						"ic"
+					]) {
+						const value = record[key];
+						if (typeof value === "number" && Number.isFinite(value)) return [value];
+					}
+				}
+				return [];
+			});
+		}
+		/**
+		* 分层附件归一（agent 自由形状 → 图表序列）：支持
+		* {groups:{G1:[...]}, long_short:[...]}、{G1:[...],多空:[...]}、
+		* [{label|group|name:'G1', values|equity|nav:[...]}] 三形态；值兼容
+		* number[] 与 {date,value}[]。返回按标签排序的序列（G1..Gn 在前，
+		* 多空/long_short 压轴高亮）。
+		*/
+		function layersToSeries(raw) {
+			let entries = [];
+			if (Array.isArray(raw)) for (const item of raw) {
+				if (typeof item !== "object" || item === null) continue;
+				const record = item;
+				const label = [
+					"label",
+					"group",
+					"name",
+					"layer"
+				].find((key) => typeof record[key] === "string");
+				const values = [
+					"values",
+					"equity",
+					"nav",
+					"series",
+					"cum"
+				].find((key) => record[key] !== void 0);
+				if (label !== void 0 && values !== void 0) entries.push([String(record[label]), record[values]]);
+			}
+			else if (typeof raw === "object" && raw !== null) {
+				const record = raw;
+				const containerKeys = ["groups", "layers"];
+				for (const containerKey of containerKeys) {
+					const inner = record[containerKey];
+					if (typeof inner === "object" && inner !== null && !Array.isArray(inner)) entries.push(...Object.entries(inner));
+				}
+				for (const [key, value] of Object.entries(record)) {
+					if (containerKeys.includes(key)) continue;
+					entries.push([key, value]);
+				}
+			}
+			const series = entries.map(([label, values]) => ({
+				label,
+				values: toNumbers(values)
+			})).filter((item) => item.values.length >= 2);
+			const groupOrder = (label) => {
+				const match = label.match(/G\s*(\d+)/i);
+				if (match !== null) return Number(match[1]);
+				return /多空|long.?short|ls/i.test(label) ? 99 : 50;
+			};
+			return series.sort((a, b) => groupOrder(a.label) - groupOrder(b.label)).map((item, index) => ({
+				...item,
+				color: groupOrder(item.label) === 99 ? "#e64646" : RUN_COLORS[index % RUN_COLORS.length]
+			}));
+		}
 		function FactorsSection() {
 			const [factors, setFactors] = (0, react.useState)([]);
 			const [loading, setLoading] = (0, react.useState)(true);
@@ -388,6 +510,8 @@ window.__ModuleLoader__.load({
 			const [comparison, setComparison] = (0, react.useState)(null);
 			const [icSeries, setIcSeries] = (0, react.useState)([]);
 			const [refreshing, setRefreshing] = (0, react.useState)(false);
+			const [detailView, setDetailView] = (0, react.useState)(null);
+			const [reportView, setReportView] = (0, react.useState)(null);
 			const { copy, toast } = useCopyPrompt();
 			const reload = (0, react.useCallback)(async () => {
 				setError(null);
@@ -426,6 +550,8 @@ window.__ModuleLoader__.load({
 				setCompareIds([]);
 				setComparison(null);
 				setIcSeries([]);
+				setDetailView(null);
+				closeReportView();
 				setError(null);
 				let active = true;
 				(async () => {
@@ -447,6 +573,57 @@ window.__ModuleLoader__.load({
 			const toggleCompare = (runId) => {
 				setCompareIds((current) => current.includes(runId) ? current.filter((id) => id !== runId) : current.length >= 4 ? current : [...current, runId]);
 			};
+			/** 关闭报告视图并释放 blob URL（函数式 setState 避免闭包过期）。 */
+			const closeReportView = (0, react.useCallback)(() => {
+				setReportView((current) => {
+					if (current?.htmlUrl) URL.revokeObjectURL(current.htmlUrl);
+					return null;
+				});
+			}, []);
+			/** 展开单 run 检验详情（IC 曲线 + 分层曲线；附件缺失各自降级）。 */
+			const toggleDetail = (0, react.useCallback)(async (runId) => {
+				if (!selectedId) return;
+				if (detailView?.runId === runId) {
+					setDetailView(null);
+					return;
+				}
+				setDetailView({
+					runId,
+					ic: null,
+					layers: null
+				});
+				const [ic, layers] = await Promise.all([getFactorRunIcSeries(selectedId, runId).catch(() => null), getFactorRunLayers(selectedId, runId).catch(() => null)]);
+				setDetailView({
+					runId,
+					ic,
+					layers
+				});
+			}, [selectedId, detailView]);
+			/** 看板优先（config.report_id 建链 → 报告库 HTML iframe），失败回退提示。 */
+			const showReport = (0, react.useCallback)(async (runId) => {
+				if (!selectedId) return;
+				if (reportView?.runId === runId) {
+					closeReportView();
+					return;
+				}
+				const reportId = runReportId(runs.find((item) => item.run_id === runId));
+				closeReportView();
+				if (reportId !== null) try {
+					const html = await fetchReportHtml(reportId);
+					setReportView({
+						runId,
+						htmlUrl: reportBlobUrl(html),
+						text: ""
+					});
+					return;
+				} catch {}
+				setError(reportId !== null ? "看板加载失败（报告可能已删除）" : "该 run 未链接报告看板（config 缺 report_id）");
+			}, [
+				selectedId,
+				reportView,
+				runs,
+				closeReportView
+			]);
 			(0, react.useEffect)(() => {
 				if (!selectedId || compareIds.length < 2) {
 					setComparison(null);
@@ -468,7 +645,7 @@ window.__ModuleLoader__.load({
 					active = false;
 				};
 			}, [selectedId, compareIds]);
-			const rerunPrompt = (version) => `请重跑因子库中的「${selected?.name ?? ""}」（${selectedId}）：因子代码与参数采用 v${version.version} 版本（change_note：${version.change_note || "无"}），股票池与检验配置参照该版本最近一次检验（无历史记录则用中证 800 + 近 2 年月度调仓）。跑完后把结果入库：POST /kstock-api/factors/${selectedId}/runs，version=${version.version}，附 data_start/data_end/rules（含 report_id 看板链）/metrics（ic_mean/ir/ic_positive_pct/long_short_spread_pct/n_periods）/ic_series/layers。`;
+			const rerunPrompt = (version) => `请重跑因子库中的「${selected?.name ?? ""}」（${selectedId}）：因子代码与参数采用 v${version.version} 版本（change_note：${version.change_note || "无"}），股票池与检验配置参照该版本最近一次检验（无历史记录则用中证 800 + 近 2 年月度调仓）。跑完后把结果入库：POST /kstock-api/factors/${selectedId}/runs，version=${version.version}，附 universe/config（含 n_groups/data_start/data_end/report_id 看板链）/metrics（ic_mean/ir/ic_positive_pct/long_short_spread_pct/n_periods）/ic_series/layers。`;
 			const icCurves = (0, react.useMemo)(() => icSeries.map((item, index) => ({
 				label: `v${item.version}`,
 				values: cumulativeIc(item.ic_series),
@@ -653,7 +830,8 @@ window.__ModuleLoader__.load({
 										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "IR" }),
 										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "IC>0 %" }),
 										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "多空差 %" }),
-										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "时间" })
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "时间" }),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "详情 / 看板" })
 									] }) }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("tbody", { children: runs.map((run) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("tr", {
 										className: compareIds.includes(run.run_id) ? "selected" : "",
 										children: [
@@ -670,11 +848,7 @@ window.__ModuleLoader__.load({
 											}),
 											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("td", { children: ["v", run.version] }),
 											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: run.universe || "?" }),
-											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("td", { children: [
-												run.data_start || "?",
-												" ~ ",
-												run.data_end || "?"
-											] }),
+											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: runRange(run) }),
 											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
 												className: `num ${factorMetricClass("ic_mean", run.metrics?.ic_mean)}`,
 												children: metric(run, "ic_mean")
@@ -691,10 +865,95 @@ window.__ModuleLoader__.load({
 												className: `num ${factorMetricClass("long_short_spread_pct", run.metrics?.long_short_spread_pct)}`,
 												children: metric(run, "long_short_spread_pct")
 											}),
-											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: formatDateTime(run.created_at) })
+											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: formatDateTime(run.created_at) }),
+											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("td", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+												className: "ksq-linkbtn",
+												type: "button",
+												onClick: () => void toggleDetail(run.run_id),
+												children: detailView?.runId === run.run_id ? "收起" : "详情"
+											}), runReportId(run) !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [" ", /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+												className: "ksq-linkbtn",
+												type: "button",
+												onClick: () => void showReport(run.run_id),
+												children: reportView?.runId === run.run_id ? "收起" : "看板"
+											})] })] })
 										]
 									}, run.run_id)) })]
 								})] }),
+								detailView !== null && (() => {
+									const run = runs.find((item) => item.run_id === detailView.runId);
+									if (run === void 0) return null;
+									const cumulative = cumulativeIc(detailView.ic?.ic_series);
+									const layerSeries = layersToSeries(detailView.layers?.layers);
+									return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+										className: "ksq-compare",
+										children: [
+											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("h3", { children: [
+												"检验详情（",
+												run.run_id.slice(5, 13),
+												" · v",
+												run.version,
+												" · ",
+												run.universe || "?",
+												" · ",
+												runRange(run),
+												"）",
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+													className: "ksq-linkbtn",
+													type: "button",
+													onClick: () => setDetailView(null),
+													children: "收起"
+												})
+											] }),
+											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("table", {
+												className: "ksq-table",
+												children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("tbody", { children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("tr", { children: METRIC_KEYS.map(([key, label]) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("td", { children: [
+													label,
+													"：",
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", {
+														className: `num ${factorMetricClass(key, run.metrics?.[key])}`,
+														children: metric(run, key)
+													})
+												] }, key)) }) })
+											}),
+											cumulative.length >= 2 ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+												className: "ksq-chart",
+												children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("h4", { children: "累计 IC 曲线" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(LineOverlay, {
+													series: [{
+														label: `v${run.version} 累计IC`,
+														values: cumulative,
+														color: RUN_COLORS[0]
+													}],
+													baseline: 0,
+													title: "累计 IC 曲线"
+												})]
+											}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+												className: "ksq-note",
+												children: "该 run 未存 IC 序列附件（record_run 未附 ic_series）。"
+											}),
+											layerSeries.length >= 2 ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+												className: "ksq-chart",
+												children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("h4", { children: "分层净值曲线（低估值组 G1 ↔ 高估值组 Gn，多空红线上压轴）" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(LineOverlay, {
+													series: layerSeries,
+													baseline: 1,
+													title: "分层净值曲线"
+												})]
+											}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+												className: "ksq-note",
+												children: "该 run 未存分层附件或形状不可识别（record_run 未附 layers）。"
+											})
+										]
+									});
+								})(),
+								reportView?.htmlUrl !== null && reportView !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(PreviewDialog, {
+									title: "因子研究看板",
+									onClose: closeReportView,
+									children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("iframe", {
+										title: "因子研究看板",
+										src: reportView.htmlUrl ?? void 0,
+										sandbox: "allow-scripts"
+									})
+								}),
 								comparison && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 									className: "ksq-compare",
 									children: [
