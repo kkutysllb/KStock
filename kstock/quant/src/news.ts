@@ -14,6 +14,8 @@ export interface LandingNewsItem {
   published_at: string
   url: string
   summary: string
+  /** 标的识别标注（工作台 feed 专用：字典命中的 A 股标的，≤3 个）。 */
+  stocks?: Array<{ code: string; name: string; industry?: string }>
 }
 
 export interface LandingNewsPayload {
@@ -137,8 +139,11 @@ async function refreshNews(limit: number): Promise<LandingNewsPayload> {
   return { items, updated_at: new Date().toISOString() }
 }
 
-/** 读缓存工厂：60 秒 TTL + 并发合并；成功才写缓存（失败不缓存）。 */
-function createFeed(limit: number): () => Promise<LandingNewsPayload> {
+/**
+ * 读缓存工厂：60 秒 TTL + 并发合并；成功才写缓存（失败不缓存）。
+ * tag=true 时每条附带标的识别（字典失败则静默跳过，不阻塞新闻流）。
+ */
+function createFeed(limit: number, options?: { tag?: boolean }): () => Promise<LandingNewsPayload> {
   let cache: { at: number; payload: LandingNewsPayload } | null = null
   let inflight: Promise<LandingNewsPayload> | null = null
   return async (): Promise<LandingNewsPayload> => {
@@ -147,8 +152,18 @@ function createFeed(limit: number): () => Promise<LandingNewsPayload> {
     }
     if (inflight === null) {
       inflight = refreshNews(limit)
-        .then((payload) => {
+        .then(async (payload) => {
           if (payload.items.length > 0) cache = { at: Date.now(), payload }
+          if (options?.tag === true && payload.items.length > 0) {
+            const { stockUniverse, matchStocks } = await import('./stocks.ts')
+            const universe = await stockUniverse()
+            if (universe !== null) {
+              for (const item of payload.items) {
+                item.stocks = matchStocks(`${item.title}\n${item.summary}`, universe)
+              }
+              cache = { at: Date.now(), payload }
+            }
+          }
           return payload
         })
         .finally(() => {
@@ -165,11 +180,11 @@ function createFeed(limit: number): () => Promise<LandingNewsPayload> {
 export const landingNews: () => Promise<LandingNewsPayload> = createFeed(MAX_ITEMS)
 
 /**
- * 工作台财经新闻面板 feed（30 条，独立缓存）：侧栏「财经新闻」菜单的
- * 数据源（@kstock/client-news 经 GET /kstock-api/workspace-news 消费）。
- * 与落地页同一条主备源流水线，仅条数与缓存槽不同。
+ * 工作台财经新闻面板 feed（30 条，独立缓存 + 标的识别标注）：侧栏
+ * 「财经新闻」菜单的数据源（@kstock/client-news 经
+ * GET /kstock-api/workspace-news 消费）。
  */
-export const workspaceNews: () => Promise<LandingNewsPayload> = createFeed(WORKSPACE_MAX_ITEMS)
+export const workspaceNews: () => Promise<LandingNewsPayload> = createFeed(WORKSPACE_MAX_ITEMS, { tag: true })
 
 /** 数据源连接状态（1.x data-source-status：只报是否配置，绝不回传密钥）。 */
 export interface DataSourceStatus {

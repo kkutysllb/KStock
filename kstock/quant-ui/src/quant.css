@@ -739,3 +739,202 @@ a.ksq-news-title:hover {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+.ksq-news-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 22px 0;
+  flex: none;
+}
+
+.ksq-news-toolbar .ksq-tabs { margin-bottom: 0; }
+
+.ksq-news-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ksq-news-toolbar-right .ksq-search { margin-bottom: 0; flex: 1; min-width: 200px; max-width: 340px; }
+
+.ksq-news-watchedit {
+  padding: 8px 22px 0;
+  flex: none;
+}
+
+.ksq-news-watchedit input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 40%, var(--dsw-alias-border-l2));
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+/* 双栏：主列表 + 统计侧栏（窄面板时侧栏隐藏）。 */
+.ksq-news-split {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.ksq-news-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ksq-news-item.read { opacity: .58; }
+.ksq-news-item.read:hover { opacity: 1; }
+
+.ksq-news-item.watched {
+  border-color: color-mix(in srgb, #f59e0b 45%, var(--dsw-alias-border-l2));
+  background: color-mix(in srgb, #f59e0b 5%, var(--dsw-alias-bg-layer-2));
+}
+
+.ksq-news-item.watched::before {
+  background: #f59e0b;
+}
+
+.ksq-news-watchflag {
+  padding: 1px 7px;
+  border-radius: 99px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  color: #f59e0b;
+  background: color-mix(in srgb, #f59e0b 16%, transparent);
+}
+
+.ksq-news-stocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ksq-news-stocktag {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
+  border: 1px solid var(--dsw-alias-border-l2);
+  transition: border-color .12s ease, background .12s ease;
+}
+
+.ksq-news-stocktag:hover {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
+}
+
+.ksq-news-actions {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 12.5px;
+}
+
+/* 统计侧栏 */
+.ksq-news-stats {
+  flex: none;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 0;
+}
+
+@media (max-width: 980px) {
+  .ksq-news-stats { display: none; }
+  .ksq-news-split { display: block; }
+}
+
+.ksq-news-stats-block {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  padding: 12px 14px;
+}
+
+.ksq-news-stats-head {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.ksq-news-stats-head span {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.ksq-news-stats-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.ksq-news-trending {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ksq-news-trendword {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2.5px 9px;
+  border-radius: 99px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 6%, transparent);
+  border: 1px solid var(--dsw-alias-border-l2);
+}
+
+.ksq-news-trendword:hover {
+  color: var(--dsw-alias-brand-primary);
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.ksq-news-trendword em {
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ksq-news-freq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 50px;
+}
+
+.ksq-news-freq-bar {
+  flex: 1;
+  min-width: 3px;
+  border-radius: 2px 2px 0 0;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent);
+}
+
+.ksq-news-freq-bar:hover {
+  background: var(--dsw-alias-brand-primary);
+}

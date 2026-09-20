@@ -4,6 +4,18 @@ import { dirname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+//#region \0rolldown/runtime.js
+var __defProp = Object.defineProperty;
+var __exportAll = (all, no_symbols) => {
+	let target = {};
+	for (var name in all) __defProp(target, name, {
+		get: all[name],
+		enumerable: true
+	});
+	if (!no_symbols) __defProp(target, Symbol.toStringTag, { value: "Module" });
+	return target;
+};
+//#endregion
 //#region src/store.ts
 /**
 * KStock 量化三库存储：策略 / 因子 / 选股，一份泛化实现按配置实例化。
@@ -623,12 +635,12 @@ function now() {
 //#endregion
 //#region src/news.ts
 /** 缓存时长与 1.x gateway 一致。 */
-const CACHE_TTL_MS = 6e4;
+const CACHE_TTL_MS$1 = 6e4;
 /** 落地页最多展示 10 条（1.x LandingPage slice(0, 10)）。 */
 const MAX_ITEMS = 10;
 /** 工作台「财经新闻」面板条数（主源 pageSize 50 内，30 条滚动浏览）。 */
 const WORKSPACE_MAX_ITEMS = 30;
-const HTTP_TIMEOUT_MS = 8e3;
+const HTTP_TIMEOUT_MS$1 = 8e3;
 /** 部分公开接口会拒绝非常规 UA（requests/fetch 默认值），带浏览器 UA。 */
 const BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 /** 东方财富全球财经快讯（akshare stock_info_global_em 的同源接口）。 */
@@ -646,7 +658,7 @@ async function fetchEastmoney(limit) {
 			accept: "application/json",
 			"user-agent": BROWSER_UA
 		},
-		signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
+		signal: AbortSignal.timeout(HTTP_TIMEOUT_MS$1)
 	});
 	if (!response.ok) throw new Error(`eastmoney ${response.status}`);
 	const payload = await response.json();
@@ -692,7 +704,7 @@ async function fetchCctv(limit) {
 					accept: "application/json",
 					"user-agent": BROWSER_UA
 				},
-				signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
+				signal: AbortSignal.timeout(HTTP_TIMEOUT_MS$1)
 			});
 			if (!response.ok) continue;
 			const payload = await response.json();
@@ -726,17 +738,31 @@ async function refreshNews(limit) {
 		updated_at: (/* @__PURE__ */ new Date()).toISOString()
 	};
 }
-/** 读缓存工厂：60 秒 TTL + 并发合并；成功才写缓存（失败不缓存）。 */
-function createFeed(limit) {
+/**
+* 读缓存工厂：60 秒 TTL + 并发合并；成功才写缓存（失败不缓存）。
+* tag=true 时每条附带标的识别（字典失败则静默跳过，不阻塞新闻流）。
+*/
+function createFeed(limit, options) {
 	let cache = null;
 	let inflight = null;
 	return async () => {
-		if (cache !== null && Date.now() - cache.at < CACHE_TTL_MS) return cache.payload;
-		if (inflight === null) inflight = refreshNews(limit).then((payload) => {
+		if (cache !== null && Date.now() - cache.at < CACHE_TTL_MS$1) return cache.payload;
+		if (inflight === null) inflight = refreshNews(limit).then(async (payload) => {
 			if (payload.items.length > 0) cache = {
 				at: Date.now(),
 				payload
 			};
+			if (options?.tag === true && payload.items.length > 0) {
+				const { stockUniverse, matchStocks } = await Promise.resolve().then(() => stocks_exports);
+				const universe = await stockUniverse();
+				if (universe !== null) {
+					for (const item of payload.items) item.stocks = matchStocks(`${item.title}\n${item.summary}`, universe);
+					cache = {
+						at: Date.now(),
+						payload
+					};
+				}
+			}
 			return payload;
 		}).finally(() => {
 			inflight = null;
@@ -749,11 +775,11 @@ function createFeed(limit) {
 */
 const landingNews = createFeed(MAX_ITEMS);
 /**
-* 工作台财经新闻面板 feed（30 条，独立缓存）：侧栏「财经新闻」菜单的
-* 数据源（@kstock/client-news 经 GET /kstock-api/workspace-news 消费）。
-* 与落地页同一条主备源流水线，仅条数与缓存槽不同。
+* 工作台财经新闻面板 feed（30 条，独立缓存 + 标的识别标注）：侧栏
+* 「财经新闻」菜单的数据源（@kstock/client-news 经
+* GET /kstock-api/workspace-news 消费）。
 */
-const workspaceNews = createFeed(WORKSPACE_MAX_ITEMS);
+const workspaceNews = createFeed(WORKSPACE_MAX_ITEMS, { tag: true });
 /** 与 1.x scripts/kstock_data_sources.py 的 `_DATA_SOURCES` 一致。 */
 const DATA_SOURCES$1 = [[
 	"tushare",
@@ -771,6 +797,249 @@ function dataSourceStatus() {
 		env_name: envName,
 		configured: Boolean(process.env[envName])
 	})) };
+}
+//#endregion
+//#region src/news-store.ts
+var NewsStore = class {
+	db;
+	constructor(dataRoot) {
+		this.db = new DatabaseSync(join(dataRoot, "news.db"));
+		this.db.exec("PRAGMA journal_mode = WAL");
+		this.db.exec(`
+      CREATE TABLE IF NOT EXISTS news (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL UNIQUE,
+        source TEXT NOT NULL,
+        published_at TEXT NOT NULL DEFAULT '',
+        url TEXT NOT NULL DEFAULT '',
+        summary TEXT NOT NULL DEFAULT '',
+        stocks TEXT NOT NULL DEFAULT '[]',
+        archived_at INTEGER NOT NULL
+      )
+    `);
+		this.db.exec("CREATE INDEX IF NOT EXISTS idx_news_archived ON news(archived_at)");
+	}
+	/** 留档一批条目（标题去重幂等）；返回新插入条数。 */
+	archive(items) {
+		if (items.length === 0) return 0;
+		const statement = this.db.prepare("INSERT OR IGNORE INTO news (title, source, published_at, url, summary, stocks, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+		let inserted = 0;
+		const now = Date.now();
+		this.db.exec("BEGIN");
+		try {
+			for (const item of items) {
+				const result = statement.run(item.title, item.source, item.published_at, item.url, item.summary, JSON.stringify(item.stocks ?? []), now);
+				inserted += Number(result.changes);
+			}
+			this.db.exec("COMMIT");
+		} catch (error) {
+			this.db.exec("ROLLBACK");
+			throw error;
+		}
+		return inserted;
+	}
+	/** 历史检索：时间窗内 LIKE 匹配（标题+摘要），新在前。 */
+	search(query, hours, limit) {
+		const since = Date.now() - hours * 36e5;
+		const pattern = `%${query.replace(/[%_]/g, " $&")}%`;
+		return this.db.prepare("SELECT title, source, published_at, url, summary, stocks, archived_at FROM news WHERE archived_at >= ? AND (title LIKE ? ESCAPE ' ' OR summary LIKE ? ESCAPE ' ') ORDER BY archived_at DESC LIMIT ?").all(since, pattern, pattern, limit).map((row) => ({
+			title: String(row.title),
+			source: String(row.source),
+			published_at: String(row.published_at),
+			url: String(row.url),
+			summary: String(row.summary),
+			stocks: JSON.parse(String(row.stocks)),
+			archived_at: new Date(Number(row.archived_at)).toISOString()
+		}));
+	}
+	/** 热词榜：时间窗内标题对字典词的命中计数（确定性字典匹配）。 */
+	trending(spanMs, limit, dictionary) {
+		const since = Date.now() - spanMs;
+		const rows = this.db.prepare("SELECT title FROM news WHERE archived_at >= ?").all(since);
+		const counts = /* @__PURE__ */ new Map();
+		for (const word of dictionary) {
+			let count = 0;
+			for (const row of rows) if (row.title.includes(word)) count += 1;
+			if (count > 0) counts.set(word, count);
+		}
+		return [...counts.entries()].map(([word, count]) => ({
+			word,
+			count
+		})).sort((left, right) => right.count - left.count).slice(0, limit);
+	}
+	/** 频率分布：span 按 bucket 分桶计数（时间桶起点毫秒，旧→新）。 */
+	frequency(spanMs, bucketMs) {
+		const since = Date.now() - spanMs;
+		const rows = this.db.prepare("SELECT archived_at FROM news WHERE archived_at >= ?").all(since);
+		const buckets = Math.max(1, Math.ceil(spanMs / bucketMs));
+		const counts = new Array(buckets).fill(0);
+		for (const row of rows) {
+			const index = Math.min(buckets - 1, Math.max(0, Math.floor((Number(row.archived_at) - since) / bucketMs)));
+			counts[index] += 1;
+		}
+		return counts.map((count, index) => ({
+			bucket: since + index * bucketMs,
+			count
+		}));
+	}
+};
+//#endregion
+//#region src/stocks.ts
+var stocks_exports = /* @__PURE__ */ __exportAll({
+	MACRO_WORDS: () => MACRO_WORDS,
+	dictionaryWords: () => dictionaryWords,
+	matchStocks: () => matchStocks,
+	stockUniverse: () => stockUniverse
+});
+const CACHE_TTL_MS = 24 * 36e5;
+const HTTP_TIMEOUT_MS = 15e3;
+let cache = null;
+let inflight = null;
+/**
+* 宏观/主题热词表（字典匹配用，确定性无分词依赖；行业词另有
+* stock_basic 的 industry 字段动态补充）。
+*/
+const MACRO_WORDS = [
+	"美联储",
+	"加息",
+	"降息",
+	"缩表",
+	"通胀",
+	"通缩",
+	"CPI",
+	"PPI",
+	"PMI",
+	"GDP",
+	"关税",
+	"制裁",
+	"出口管制",
+	"汇率",
+	"降准",
+	"LPR",
+	"国债",
+	"地方债",
+	"注册制",
+	"IPO",
+	"回购",
+	"增持",
+	"减持",
+	"并购",
+	"重组",
+	"分红",
+	"财报",
+	"业绩预告",
+	"产能",
+	"涨价",
+	"降价",
+	"新能源",
+	"半导体",
+	"人工智能",
+	"机器人",
+	"算力",
+	"芯片",
+	"锂矿",
+	"光伏",
+	"储能",
+	"电动车",
+	"智能驾驶",
+	"医药",
+	"创新药",
+	"白酒",
+	"地产",
+	"券商",
+	"银行",
+	"保险",
+	"军工",
+	"黄金",
+	"原油",
+	"铜",
+	"稀土",
+	"数据要素",
+	"低空经济",
+	"商业航天"
+];
+/**
+* 读取标的字典（按名称长度降序——贪心匹配先吃长名，避免「中国平安」
+* 被「平安」类短名截断）。失败返回 null。
+*/
+async function stockUniverse() {
+	const token = process.env.TUSHARE_TOKEN;
+	if (typeof token !== "string" || token === "") return null;
+	if (cache !== null && Date.now() - cache.at < CACHE_TTL_MS) return cache.stocks;
+	if (inflight !== null) return inflight;
+	inflight = (async () => {
+		try {
+			const response = await fetch("https://api.tushare.pro", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					api_name: "stock_basic",
+					token,
+					params: { list_status: "L" },
+					fields: "ts_code,name,industry"
+				}),
+				signal: AbortSignal.timeout(HTTP_TIMEOUT_MS)
+			});
+			if (!response.ok) return null;
+			const payload = await response.json();
+			if (payload.code !== 0 || !Array.isArray(payload.data?.items)) return null;
+			const stocks = [];
+			for (const row of payload.data?.items ?? []) {
+				const [code, name, industry] = row;
+				if (typeof code !== "string" || typeof name !== "string" || name === "") continue;
+				stocks.push({
+					code,
+					name,
+					industry: typeof industry === "string" ? industry : ""
+				});
+			}
+			if (stocks.length === 0) return null;
+			stocks.sort((left, right) => right.name.length - left.name.length);
+			cache = {
+				at: Date.now(),
+				stocks
+			};
+			return stocks;
+		} catch {
+			return null;
+		} finally {
+			inflight = null;
+		}
+	})();
+	return inflight;
+}
+/** 字典词全集（标的名 + 行业 + 宏观词，去重），热词统计用。 */
+function dictionaryWords(stocks) {
+	const words = new Set(MACRO_WORDS);
+	for (const stock of stocks) {
+		if (stock.name.length >= 2) words.add(stock.name);
+		if (stock.industry !== "") words.add(stock.industry);
+	}
+	return [...words];
+}
+/**
+* 歧义简称排除表：与日常用语/行业词完全重合的证券简称（标题命中是
+* 普通词而非指代公司）——如「机器人」既是 300024 的简称也是行业常用
+* 词，标注会大量误报，识别侧跳过（热词榜仍作为行业词统计）。
+*/
+const AMBIGUOUS_NAMES = /* @__PURE__ */ new Set(["机器人"]);
+/**
+* 在文本中识别标的（标题+摘要联合匹配；长名优先；每条最多 cap 个，
+* 跳过被更长已命中名完全覆盖的短名——如「中国平安」命中后不再报
+* 「平安银行」之外的伪子串）。
+*/
+function matchStocks(text, stocks, cap = 3) {
+	const hits = [];
+	let consumed = "";
+	for (const stock of stocks) {
+		if (hits.length >= cap) break;
+		if (AMBIGUOUS_NAMES.has(stock.name)) continue;
+		if (!text.includes(stock.name)) continue;
+		if (consumed !== "" && consumed.includes(stock.name)) continue;
+		hits.push(stock);
+		consumed += stock.name;
+	}
+	return hits;
 }
 //#endregion
 //#region src/datasources.ts
@@ -1018,12 +1287,13 @@ function apply(ctx) {
 		selections: selectionStore(dataRoot)
 	};
 	const reports = new ReportsStore(dataRoot);
+	const newsArchive = new NewsStore(dataRoot);
 	ctx.webServer.register({
 		kind: "prefix",
 		path: "/kstock-api",
 		handler: async (req, res) => {
 			try {
-				const result = await dispatch(stores, reports, req, dataRoot);
+				const result = await dispatch(stores, reports, req, dataRoot, newsArchive);
 				if (result instanceof RawResponse) {
 					res.writeHead(result.status, result.headers);
 					res.end(result.body);
@@ -1043,13 +1313,47 @@ function entityText(libraryKey, body, create) {
 	if (body.criteria !== void 0 && libraryKey === "selections") text.criteria = String(body.criteria);
 	return text;
 }
-async function dispatch(stores, reports, req, dataRoot) {
+async function dispatch(stores, reports, req, dataRoot, newsArchive) {
 	const url = new URL(req.url ?? "/", "http://local");
 	const segments = decodeURIComponent(url.pathname).split("/").filter(Boolean);
 	const libraryKey = segments[1];
 	const method = (req.method ?? "GET").toUpperCase();
 	if (libraryKey === "landing-news") return method === "GET" ? landingNews() : throwMethod(method);
-	if (libraryKey === "workspace-news") return method === "GET" ? workspaceNews() : throwMethod(method);
+	if (libraryKey === "workspace-news") {
+		if (method !== "GET") throwMethod(method);
+		const payload = await workspaceNews();
+		try {
+			newsArchive.archive(payload.items);
+		} catch (error) {
+			console.error("[kstock-news] archive failed:", error);
+		}
+		return payload;
+	}
+	if (libraryKey === "news-archive") {
+		if (method === "GET") {
+			const query = (url.searchParams.get("q") ?? "").trim();
+			const hours = Math.min(720, Math.max(1, Number(url.searchParams.get("hours")) || 24));
+			const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 50));
+			return {
+				items: newsArchive.search(query, hours, limit),
+				hours,
+				limit
+			};
+		}
+		throwMethod(method);
+	}
+	if (libraryKey === "news-stats") {
+		if (method === "GET") {
+			const universe = await stockUniverse();
+			const dictionary = universe !== null ? dictionaryWords(universe) : [];
+			return {
+				trending: newsArchive.trending(6 * 36e5, 12, dictionary),
+				frequency: newsArchive.frequency(24 * 36e5, 36e5),
+				dictionary_size: dictionary.length
+			};
+		}
+		throwMethod(method);
+	}
 	if (libraryKey === "data-source-status") return method === "GET" ? dataSourceStatus() : throwMethod(method);
 	if (libraryKey === "dependencies") {
 		if (method === "GET") return dependenciesView(dataRoot);

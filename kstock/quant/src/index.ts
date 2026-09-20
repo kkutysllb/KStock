@@ -12,6 +12,8 @@ import { readFileSync } from 'node:fs'
 import { StoreError, factorStore, selectionStore, strategyStore, type LibraryStore } from './store.ts'
 import { ReportsStore } from './reports.ts'
 import { dataSourceStatus, landingNews, workspaceNews } from './news.ts'
+import { NewsStore } from './news-store.ts'
+import { dictionaryWords, stockUniverse } from './stocks.ts'
 import { dataSourcesView, saveDataSources } from './datasources.ts'
 import { dependenciesView } from './deps.ts'
 
@@ -91,13 +93,14 @@ export function apply(ctx: { webServer: WebServerLike }): void {
     selections: selectionStore(dataRoot),
   }
   const reports = new ReportsStore(dataRoot)
+  const newsArchive = new NewsStore(dataRoot)
 
   ctx.webServer.register({
     kind: 'prefix',
     path: '/kstock-api',
     handler: async (req, res) => {
       try {
-        const result = await dispatch(stores, reports, req, dataRoot)
+        const result = await dispatch(stores, reports, req, dataRoot, newsArchive)
         if (result instanceof RawResponse) {
           res.writeHead(result.status, result.headers)
           res.end(result.body)
@@ -126,6 +129,7 @@ async function dispatch(
   reports: ReportsStore,
   req: RequestLike,
   dataRoot: string,
+  newsArchive: NewsStore,
 ): Promise<unknown> {
   const url = new URL(req.url ?? '/', 'http://local')
   const segments = decodeURIComponent(url.pathname).split('/').filter(Boolean)
@@ -135,8 +139,41 @@ async function dispatch(
 
   // 落地页公共增强接口（匿名可达，与 1.x gateway 公共路由同语义）。
   if (libraryKey === 'landing-news') return method === 'GET' ? landingNews() : throwMethod(method)
-  // 工作台「财经新闻」面板 feed（侧栏菜单，30 条独立缓存槽）。
-  if (libraryKey === 'workspace-news') return method === 'GET' ? workspaceNews() : throwMethod(method)
+  // 工作台「财经新闻」面板 feed（侧栏菜单，30 条独立缓存槽 + 标的标注）；
+  // 每次读取顺手滚动留档（INSERT OR IGNORE 幂等，30 行毫秒级）。
+  if (libraryKey === 'workspace-news') {
+    if (method !== 'GET') throwMethod(method)
+    const payload = await workspaceNews()
+    try {
+      newsArchive.archive(payload.items)
+    } catch (error) {
+      console.error('[kstock-news] archive failed:', error)
+    }
+    return payload
+  }
+  // 历史检索：?q=关键词&hours=24&limit=50（留档库 LIKE 匹配）。
+  if (libraryKey === 'news-archive') {
+    if (method === 'GET') {
+      const query = (url.searchParams.get('q') ?? '').trim()
+      const hours = Math.min(720, Math.max(1, Number(url.searchParams.get('hours')) || 24))
+      const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 50))
+      return { items: newsArchive.search(query, hours, limit), hours, limit }
+    }
+    throwMethod(method)
+  }
+  // 面板统计：热词榜（6h 字典词频 Top12）+ 24h 逐小时频率。
+  if (libraryKey === 'news-stats') {
+    if (method === 'GET') {
+      const universe = await stockUniverse()
+      const dictionary = universe !== null ? dictionaryWords(universe) : []
+      return {
+        trending: newsArchive.trending(6 * 3_600_000, 12, dictionary),
+        frequency: newsArchive.frequency(24 * 3_600_000, 3_600_000),
+        dictionary_size: dictionary.length,
+      }
+    }
+    throwMethod(method)
+  }
   if (libraryKey === 'data-source-status') return method === 'GET' ? dataSourceStatus() : throwMethod(method)
   // 引擎 Python 依赖体检（设置页/诊断用）：逐依赖 import 探针与版本。
   if (libraryKey === 'dependencies') {
