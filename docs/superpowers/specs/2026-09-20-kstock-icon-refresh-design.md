@@ -176,19 +176,22 @@
 4. `apps/desktop/electron-builder.yml`（files 段）—— **已实施**
    - `files` 增补 `build/trayTemplate*.png`、`build/tray*.png` / `tray.ico`；各平台 `icon` 路径随新资产同步。
 5. `kstock/client-brand/src/client/Marks.tsx` + `src/client/marks/geometry.ts` —— **已实施**
-   - 侧栏（`sidebar.brand.mark`，24px）、hero（`conversation.hero.brand.mark`，34px）、
-     设置·关于（`settings.about.mark`，72px）三处商标改为与应用图标**同源**的标记，
-     并按 `SEAL_MIN_SIZE = 48` 自动选形制：≥48 用朱红白文方印（篆书「麒麟」横排），
-     <48 用品牌绿实色场 K（笔画按小尺寸配重 `strokeSmall`）。
+   - 三处商标（`sidebar.brand.mark` 24px / `conversation.hero.brand.mark` 34px /
+     `settings.about.mark` 72px）与应用图标**同源**，按 `SEAL_MIN_SIZE = 48` 切形制：
+     - `size >= 48` → `SEAL_ON_INK`：墨底 squircle + 内嵌朱印（= 应用图标 Tier 1b）
+     - `size <  48` → `SEAL_FULL`：朱印**直填满**徽标
+     两者都是朱红白文印 + 篆书「麒麟」横排（右麒左麟）。
+   - **为什么不沿用「品牌绿场 K」**：它在 24px 下与 1.x 旧徽标（同为绿底白 K）几乎无法区分，
+     用户实测反馈「顶部商标没换过来」（像素级复核证实新标记已生效，只是观感未变）。
+     绿场 K 仍是**应用图标** 16–48px 档的形制（见 §4.3 与 `build_assets.py`），只是不再用于 UI。
    - 几何常量由 `docs/design/icon-refresh/gen_client_marks.py` 从设计源生成，**禁止手改**；
-     生成器同时输出镜像 SVG 供像素级等价验证（`sheet-client-marks.png`）。
-   - 篆书路径 1 位小数压缩：22.1KB → 11.5KB；`lib/client.cjs` 24.5KB → 42.6KB（gzip 15.8KB）。
-   - 该文件同时是 `lib/*` 构建产物的来源，改动后需 `pnpm -C kstock/client-brand build`。
-   - **验证记录**（2026-09-20）：`pnpm -C kstock/client-brand build` 通过；改动文件 `tsc --noEmit` 零报错；
-     `bash scripts/check-ci.sh` 全绿；另做了一次**组件级渲染验证**——用 `react-dom/server` 实际渲染三个槽位，
-     24px 输出与生成器镜像**逐像素完全一致**（最大通道差 0），72px 与设计源 SVG 的差异仅
-     1.66% 边缘抗锯齿像素（源于篆书路径 1 位小数压缩，无可见影响）。
-     可重复的等价性检查由 `gen_client_marks.py` 输出的镜像 SVG 承担。
+     篆书路径**只存一份**（`GLYPH_PATHS`，两种形制共用放置变换），1 位小数压缩后 11.3KB；
+     `lib/client.cjs` 42.4KB（gzip 15.7KB）。若不做去重会白涨到 53.7KB。
+   - **验证**：组件级渲染（`react-dom/server`）与生成器镜像
+     **24 / 34px 逐像素完全一致（最大通道差 0）**；72px 最大差 2；
+     与 B2 设计稿零显著差异像素。`tsc --noEmit` 改动文件零报错。
+   - 改动后需 `pnpm -C kstock/client-brand build` 更新 `lib/*`（入库产物）。
+
 6. `scripts/build-icons.sh` **已建**；图标断言已落在 `build_assets.py`（下一步可挂进 `check-ci.sh` 的 `--check` 模式）：
    尺寸齐全、命名正确（`trayTemplate.png` / `@2x`）、`ico` 含 7 档、icns 含 1024。
 
@@ -205,6 +208,14 @@
 2. **打包视觉验收**（§8 第 10 条）：需要真实构建产物上的截图——Dock、菜单栏（浅/深）、
    任务栏托盘、安装器图标。本机可直接 `pnpm dev:desktop` 或 `scripts/build-desktop.sh`。
 3. （可选）把 `build_assets.py --check` 挂进 `scripts/check-ci.sh`，让图标断进入 CI 门禁。
+
+> **手动打包的注意事项（本轮实测踩到）**：`dist-exe/plugins/` 是 `build-engine-bundle.sh`
+> 产出的**快照**，打包态 App 从 `resources/engine/plugins` 加载插件，因此
+> **任何插件改动都必须先重建引擎束再打包**，否则会带上旧插件（实测 10 个插件里 6 个漂移，
+> 含 `client-brand` → 打包态侧栏会显示旧商标）。
+> 正式发布安全：`scripts/check-release.sh` 的顺序是
+> `check-ci → build-engine-bundle → verify_package_resources → build-desktop` ✓；
+> 直接跑 `build-desktop.sh`（或手动 electron-builder）则**不会**重建，需自行先跑引擎束。
 
 ## 8. 验收标准与验收记录
 

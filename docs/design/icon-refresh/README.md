@@ -33,6 +33,7 @@ python3 docs/design/icon-refresh/generate_zhuan.py      # ★ 篆书定稿（DB1
 python3 docs/design/icon-refresh/contact_sheets.py     # A–D 的小尺寸/托盘对照
 python3 docs/design/icon-refresh/seal_sheets.py        # 印章对照
 python3 docs/design/icon-refresh/gen_client_marks.py   # ★ 客户端商标几何常量 + 镜像校验图
+python3 docs/design/icon-refresh/generate_uimarks.py   # UI 小尺寸商标候选（B0/B1/B2 选型用）
 ```
 
 `gen_client_marks.py` 会写入源码文件（`kstock/client-brand/src/client/marks/geometry.ts`），
@@ -41,6 +42,20 @@ python3 docs/design/icon-refresh/gen_client_marks.py   # ★ 客户端商标几�
 ```bash
 pnpm -C kstock/client-brand build      # 更新 lib/client.cjs（lib/ 是入库产物）
 ```
+
+## 重要：插件改动必须先重建引擎束
+
+打包态 App 从 `resources/engine/plugins`（由 `build-engine-bundle.sh` 打入 `dist-exe/`）
+加载插件，`kstock/*/lib/` 的改**不会**自动进包。实测 `dist-exe/plugins/` 与仓库构建
+存在漂移（10 个插件里 6 个），因此：
+
+```bash
+bash scripts/build-engine-bundle.sh   # 先重建引擎束（含插件快照）
+bash scripts/build-desktop.sh         # 再打包
+```
+
+正式发布安全：`scripts/check-release.sh` 就是按这个顺序跑的；
+但直接 `build-desktop.sh` 或手动 electron-builder **不会**重建，会带上旧插件。
 
 ## 落地为生产图标
 

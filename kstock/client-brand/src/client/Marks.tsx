@@ -2,30 +2,47 @@
  * KStock 品牌标记：**与应用图标同源**，几何常量由脚本从设计源算出
  * （见 `./marks/geometry.ts` 与 `docs/design/icon-refresh/gen_client_marks.py`）。
  *
- * 尺寸规则（与图标系统同一套「按尺寸分形制」，不是两套设计）：
- *   `size >= 48` → 朱红白文方印：篆书「麒麟」横排（右麒左麟，篆印自右向左读）
- *   `size <  48` → 品牌绿实色场 K：笔画按小尺寸光学配重加粗
- * 依据是实测：小篆两字在 48px 以下退化为纹理，朱印只剩色块；而几何 K 在 24px 仍可辨。
+ * 两种形制（按尺寸切换，用户 2026-09-20 选定）：
+ *   `size >= 48` → 墨底 squircle + 内嵌朱印（= 应用图标 Tier 1b，关于页 72px）
+ *   `size <  48` → 朱印直填满徽标（侧栏 24 / hero 34）
+ * 两者都是**朱红白文印 + 篆书「麒麟」横排（右麒左麟）**，只是印面占比不同。
+ *
+ * 为什么小尺寸不是「品牌绿场 K」：那一版在 24px 下与 1.x 旧徽标（同为绿底白 K）
+ * 几乎无法区分，实测反馈「顶部商标没换过来」。绿场 K 仍是**应用图标** 16–48px 档的形制
+ * （`scripts/build-icons.sh`），只是不再用于 UI 商标。
  *
  * 与上游印记同策略：标记自带颜色（品牌图章而非主题图标），明暗表面呈现一致，
  * 挂入引擎的品牌槽位（sidebar.brand.mark / conversation.hero.brand.mark /
  * settings.about.mark，尺寸分别为 24 / 34 / 72）。
- *
- * 历史沿革：1.x 的方形青底 + K 三笔（stem/arm/line）已废弃——它在 24px 下笔画互咬，
- * 与「app 图标在 32px 不可辨」是同一个病根。
  */
 
 import { useId } from 'react'
 import type { HeroBrandMarkOwnerProps } from '@qilin/client-ui-conversation/client'
 import type { SidebarBrandMarkOwnerProps } from '@qilin/client-ui-sidebar/client'
 import {
+  GLYPH_PATHS,
   GLYPH_STROKE_FIX,
-  K_MARK,
   MARK_COLORS,
-  SEAL_LOCKUP,
+  SEAL_FULL,
   SEAL_MIN_SIZE,
+  SEAL_ON_INK,
   SQUIRCLE_PATH,
 } from './marks/geometry.ts'
+
+/**
+ * 印面参数。两种形制结构相同、只是数值不同，所以用**结构化接口**声明，
+ * 不能写 `typeof SEAL_FULL`——生成物带 `as const`，字面量类型之间互不兼容。
+ */
+interface SealLockup {
+  readonly x: number
+  readonly y: number
+  readonly size: number
+  readonly rx: number
+  readonly frameInset: number
+  readonly frameR: number
+  readonly frameStroke: number
+  readonly glyphs: readonly { readonly key: 'qi' | 'lin'; readonly place: string }[]
+}
 
 /** 标记的公共入参：尺寸 + 外部类名（由各槽位 owner props 传入）。 */
 interface BrandMarkProps {
@@ -38,7 +55,7 @@ function useMarkId(): string {
   return `kstock-mark-${useId().replace(/[^A-Za-z0-9_-]/gu, '')}`
 }
 
-/** 三套渐变（墨底 / 品牌绿场 / 朱砂印面），与设计源色值一一对应。 */
+/** 两套渐变（墨底 / 朱砂印面），与设计源色值一一对应。 */
 function MarkDefs({ uid }: { uid: string }) {
   const c = MARK_COLORS
   return (
@@ -46,10 +63,6 @@ function MarkDefs({ uid }: { uid: string }) {
       <linearGradient id={`${uid}-ink`} x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stopColor={c.inkTop} />
         <stop offset="1" stopColor={c.ink} />
-      </linearGradient>
-      <linearGradient id={`${uid}-green`} x1="0.15" y1="0" x2="0.85" y2="1">
-        <stop offset="0" stopColor={c.greenTop} />
-        <stop offset="1" stopColor={c.green} />
       </linearGradient>
       <linearGradient id={`${uid}-stamp`} x1="0.2" y1="0" x2="0.8" y2="1">
         <stop offset="0" stopColor={c.stampTop} />
@@ -59,21 +72,12 @@ function MarkDefs({ uid }: { uid: string }) {
   )
 }
 
-/** 大尺寸形制：墨底 + 朱红白文方印 + 篆书「麒麟」横排（Tier 1b，无字标）。 */
-function SealMark({ uid }: { uid: string }) {
-  const { x, y, size, rx, frameInset, frameR, frameStroke, glyphs } = SEAL_LOCKUP
+/** 印边 + 篆书「麒麟」（横排，右麒左麟）。两种形制共用。 */
+function SealImprint({ lockup }: { lockup: SealLockup }) {
+  const { x, y, size, frameInset, frameR, frameStroke, glyphs } = lockup
   const inner = size - frameInset * 2
   return (
     <>
-      <path d={SQUIRCLE_PATH} fill={`url(#${uid}-ink)`} />
-      <path
-        d={SQUIRCLE_PATH}
-        fill="none"
-        stroke={MARK_COLORS.white}
-        strokeOpacity={0.1}
-        strokeWidth={2.5}
-      />
-      <rect x={x} y={y} width={size} height={size} rx={rx} fill={`url(#${uid}-stamp)`} />
       <rect
         x={x + frameInset}
         y={y + frameInset}
@@ -85,51 +89,53 @@ function SealMark({ uid }: { uid: string }) {
         strokeWidth={frameStroke}
         strokeOpacity={0.95}
       />
-      {glyphs.map((glyph) => (
-        <g key={glyph.place} transform={glyph.place}>
-          {glyph.pre === '' ? (
-            <path
-              d={glyph.d}
-              fill={MARK_COLORS.rice}
-              stroke={MARK_COLORS.rice}
-              strokeWidth={GLYPH_STROKE_FIX}
-            />
-          ) : (
-            // 双钩字形自带一层平移（Inkscape 的图层变换），必须保留
-            <g transform={glyph.pre}>
-              <path
-                d={glyph.d}
-                fill={MARK_COLORS.rice}
-                stroke={MARK_COLORS.rice}
-                strokeWidth={GLYPH_STROKE_FIX}
-              />
-            </g>
-          )}
-        </g>
-      ))}
+      {glyphs.map((glyph) => {
+        // 字形路径只存一份（GLYPH_PATHS），两种形制共用；这里按 key 取用
+        const source = GLYPH_PATHS[glyph.key]
+        const shape = (
+          <path
+            d={source.d}
+            fill={MARK_COLORS.rice}
+            stroke={MARK_COLORS.rice}
+            strokeWidth={GLYPH_STROKE_FIX}
+          />
+        )
+        return (
+          <g key={glyph.place} transform={glyph.place}>
+            {/* 双钩字形自带一层平移（Inkscape 的图层变换），必须保留 */}
+            {source.pre === '' ? shape : <g transform={source.pre}>{shape}</g>}
+          </g>
+        )
+      })}
     </>
   )
 }
 
-/** 小尺寸形制：品牌绿实色场 + 白色几何 K（平口），笔画按尺寸配重。 */
-function KBadge({ uid, size }: { uid: string; size: number }) {
-  const { left, top, box, stroke, strokeSmall } = K_MARK
-  const width = size >= SEAL_MIN_SIZE ? stroke : strokeSmall
-  const mid = top + box / 2
+/** 小尺寸：朱印直填满徽标（侧栏 24 / hero 34）。 */
+function SealFullMark({ uid }: { uid: string }) {
   return (
     <>
-      <path d={SQUIRCLE_PATH} fill={`url(#${uid}-green)`} />
-      <g
-        stroke={MARK_COLORS.white}
-        strokeWidth={width}
-        strokeLinecap="butt"
-        strokeLinejoin="round"
+      <path d={SQUIRCLE_PATH} fill={`url(#${uid}-stamp)`} />
+      <SealImprint lockup={SEAL_FULL} />
+    </>
+  )
+}
+
+/** 大尺寸：墨底 squircle + 内嵌朱印（设置·关于 72，= 应用图标 Tier 1b）。 */
+function SealOnInkMark({ uid }: { uid: string }) {
+  const { x, y, size, rx } = SEAL_ON_INK
+  return (
+    <>
+      <path d={SQUIRCLE_PATH} fill={`url(#${uid}-ink)`} />
+      <path
+        d={SQUIRCLE_PATH}
         fill="none"
-      >
-        <path d={`M${left} ${top}V${top + box}`} />
-        <path d={`M${left} ${mid}L${left + box} ${top}`} />
-        <path d={`M${left} ${mid}L${left + box} ${top + box}`} />
-      </g>
+        stroke={MARK_COLORS.white}
+        strokeOpacity={0.1}
+        strokeWidth={2.5}
+      />
+      <rect x={x} y={y} width={size} height={size} rx={rx} fill={`url(#${uid}-stamp)`} />
+      <SealImprint lockup={SEAL_ON_INK} />
     </>
   )
 }
@@ -148,7 +154,7 @@ function BrandMark({ size, className }: BrandMarkProps) {
       aria-label="KStock"
     >
       <MarkDefs uid={uid} />
-      {size >= SEAL_MIN_SIZE ? <SealMark uid={uid} /> : <KBadge uid={uid} size={size} />}
+      {size >= SEAL_MIN_SIZE ? <SealOnInkMark uid={uid} /> : <SealFullMark uid={uid} />}
     </svg>
   )
 }
@@ -163,17 +169,17 @@ export function KStockWordmark() {
   return <span className="kstock-brand-wordmark">KStock</span>
 }
 
-/** 侧栏品牌标记槽位（24px → 绿场 K）。 */
+/** 侧栏品牌标记槽位（24px → 朱印直填）。 */
 export function KStockMark({ size }: SidebarBrandMarkOwnerProps) {
   return <BrandMark size={size} />
 }
 
-/** 会话 hero 品牌标记槽位（34px → 绿场 K）。 */
+/** 会话 hero 品牌标记槽位（34px → 朱印直填）。 */
 export function KStockHeroMark({ size, className }: HeroBrandMarkOwnerProps) {
   return <BrandMark size={size} className={className} />
 }
 
-/** 设置 · 关于页品牌标记槽位（72px → 朱印篆书「麒麟」）。 */
+/** 设置 · 关于页品牌标记槽位（72px → 墨底 + 内嵌朱印）。 */
 export function KStockArtistMark({ size = 24, className }: { size?: number; className?: string | undefined }) {
   return <BrandMark size={size} className={className} />
 }

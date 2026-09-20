@@ -661,28 +661,36 @@
     <li><code>kstock/client-brand/src/client/Marks.tsx</code> — UI 内三处商标（**已实施**，见下）。</li>
   </ul>
 
-  <h3>关联改动：UI 内的品牌标记（已实施）</h3>
-  <p>侧栏顶部、会话 hero、设置·关于页三处商标位原先共用同一张「青底 + K 三笔」SVG，
-  它的病根与应用图标在 32px 糊掉完全一样：<b>K 的三笔在 24px 下互相咬合</b>。
-  现在三处改为<u>与应用图标同源</u>的标记，并按同一套「按尺寸分形制」规则自动选形：</p>
+  <h3>关联改动：UI 内的品牌标记（已实施，B2 口径）</h3>
+  <p>侧栏顶部、会话 hero、设置·关于页三处商标位原先共用一张「青底 + K 三笔」SVG。
+  第一版实现按「&lt;48px 用品牌绿场 K」切形制，结果<b>在 24px 下与旧徽标几乎无法区分</b>——
+  用户实测反馈「顶部商标没换过来」（像素级复核证实新标记已生效：截图徽标<b>没有旧版那条贯通折线</b>，
+  与新版差 37.8、与旧版差 63.9）。现改为<b>三处统一朱印形制</b>：</p>
   <table>
-    <thead><tr><th>槽位</th><th>尺寸</th><th>形制</th><th>原因（实测）</th></tr></thead>
+    <thead><tr><th>槽位</th><th>尺寸</th><th>形制</th></tr></thead>
     <tbody>
-      <tr><td><code>sidebar.brand.mark</code> 侧栏顶部</td><td>24px</td><td>品牌绿实色场 K</td>
-        <td>篆书两字在此尺寸退化为纹理；几何 K 可辨（笔画按小尺寸配重 +25%）</td></tr>
-      <tr><td><code>conversation.hero.brand.mark</code> 会话 hero</td><td>34px</td><td>品牌绿实色场 K</td><td>同上</td></tr>
-      <tr><td><code>settings.about.mark</code> 设置·关于</td><td><b>72px</b></td><td>朱红白文方印（篆书「麒麟」横排）</td>
-        <td>该尺寸下印章形制完整，与应用图标同形制，回答「这个应用长什么样」</td></tr>
+      <tr><td><code>sidebar.brand.mark</code> 侧栏顶部</td><td>24px</td><td rowspan="2"><b>朱印直填满徽标</b>（<span class="mono">SEAL_FULL</span>）——篆书「麒麟」横排，右麒左麟</td></tr>
+      <tr><td><code>conversation.hero.brand.mark</code> 会话 hero</td><td>34px</td></tr>
+      <tr><td><code>settings.about.mark</code> 设置·关于</td><td>72px</td><td><b>墨底 + 内嵌朱印</b>（<span class="mono">SEAL_ON_INK</span>，= 应用图标 Tier 1b）</td></tr>
     </tbody>
   </table>
+  <h4>选型过程：三个候选在 24px 下的差别</h4>
+  <img src="sheet-uimarks.png" alt="UI 商标候选 B0/B1/B2" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
+  <p class="mono">B0 现状（绿场 K，与旧徽标几乎无差别）→ B1 印框 K（保留 K 可辨）→ B2 朱印（选定，与应用图标同形制）。</p>
   <img src="sheet-client-marks.png" alt="UI 商标实测" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
-  <p class="mono">左二为「设计源 72px」与「客户端标记 72px」的逐像素对照——两者几何完全一致，
-  说明 <span class="mono">marks/geometry.ts</span> 的常量确实由设计源算出，而不是手抄一份。</p>
   <div class="callout">
-    <b>实现要点</b>：几何常量由脚本生成（<span class="mono">docs/design/icon-refresh/gen_client_marks.py</span>
-    → <span class="mono">kstock/client-brand/src/client/marks/geometry.ts</span>），
-    篆书路径按 1 位小数压缩（22.1KB → 11.5KB），客户端 bundle 由 24.5KB 增至 42.6KB（gzip 15.8KB）。
-    生成器同时输出逐字对应的镜像 SVG，用于与设计稿做像素级等价验证。
+    <b>实现要点</b>：几何常量由脚本生成（<span class="mono">gen_client_marks.py</span> →
+    <span class="mono">marks/geometry.ts</span>）；篆书路径<b>只存一份</b>（<span class="mono">GLYPH_PATHS</span>，
+    两种形制共用放置变换），1 位小数压缩后 11.3KB，<span class="mono">client.cjs</span> 42.4KB（gzip 15.7KB）——
+    不做去重会白涨到 53.7KB。<br>
+    <b>验证</b>：组件级渲染与生成器镜像 24/34px <b>逐像素完全一致（最大差 0）</b>，与 B2 设计稿零显著差异像素。
+  </div>
+  <div class="callout risk">
+    <b>手动打包注意事项</b>：<span class="mono">dist-exe/plugins/</span> 是引擎束<b>快照</b>，
+    打包态从 <span class="mono">resources/engine/plugins</span> 加载插件；实测 10 个插件里 6 个漂移
+    （含 <span class="mono">client-brand</span>）。<b>插件改动后必须先重建引擎束再打包</b>，
+    否则打包态仍显示旧商标。正式发布安全（<span class="mono">check-release.sh</span> 会先跑
+    <span class="mono">build-engine-bundle.sh</span>）。
   </div>
 
   <h2 id="decide">6 · 决策表与推荐</h2>
