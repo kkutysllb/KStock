@@ -6,11 +6,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   compareSelectionRuns,
+  fetchReportHtml,
   getSelectionRunPicks,
   getSelectionRunReport,
   listSelectionRuns,
   listSelectionVersions,
   listSelections,
+  reportBlobUrl,
   type Selection,
   type SelectionRunComparison,
   type SelectionRunPicks,
@@ -22,6 +24,7 @@ import {
   CopyToast,
   ErrorLine,
   Loading,
+  PreviewDialog,
   RefreshButton,
   formatDateTime,
   metric,
@@ -68,6 +71,15 @@ const INGEST_PROMPT =
   'picks 每项含 code（必须带 .SH/.SZ/.BJ 后缀）/name/score 等报告总表字段。' +
   '数据取自工作区 data/ 与 reports/ 下的真实产物，禁止编造。'
 
+/** 运行报告视图：优先报告库 HTML 看板（blob iframe），无链或加载失败回退纯文本。 */
+type ReportView = { runId: string; text: string; htmlUrl: string | null }
+
+/** run 的 rules.report_id（阶段三报告库归档返回的看板链，有则直嵌）。 */
+function runReportId(run: SelectionRunSummary | undefined): string | null {
+  const value = run?.rules?.report_id
+  return typeof value === 'string' && value ? value : null
+}
+
 export function SelectionsSection() {
   const [selections, setSelections] = useState<Selection[]>([])
   const [loading, setLoading] = useState(true)
@@ -79,7 +91,7 @@ export function SelectionsSection() {
   const [compareIds, setCompareIds] = useState<string[]>([])
   const [comparison, setComparison] = useState<SelectionRunComparison | null>(null)
   const [picksList, setPicksList] = useState<SelectionRunPicks[]>([])
-  const [reportView, setReportView] = useState<{ runId: string; text: string } | null>(null)
+  const [reportView, setReportView] = useState<ReportView | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const { copy, toast } = useCopyPrompt()
 
@@ -119,13 +131,21 @@ export function SelectionsSection() {
 
   const selected = selections.find(item => item.selection_id === selectedId) ?? null
 
+  /** 关闭报告视图并释放 blob URL（函数式 setState 避免闭包过期）。 */
+  const closeReportView = useCallback(() => {
+    setReportView(current => {
+      if (current?.htmlUrl) URL.revokeObjectURL(current.htmlUrl)
+      return null
+    })
+  }, [])
+
   useEffect(() => {
     if (!selectedId) return
     setDetailLoading(true)
     setCompareIds([])
     setComparison(null)
     setPicksList([])
-    setReportView(null)
+    closeReportView()
     setError(null)
     let active = true
     void (async () => {
@@ -182,16 +202,31 @@ export function SelectionsSection() {
   const showReport = useCallback(async (runId: string) => {
     if (!selectedId) return
     if (reportView?.runId === runId) {
-      setReportView(null)
+      closeReportView()
       return
     }
+    const run = runs.find(item => item.run_id === runId)
+    const reportId = runReportId(run)
+    closeReportView()
+    // 优先直嵌报告库 HTML 看板（rules.report_id 建链）；无链或看板
+    // 不可用（被删/引擎不可达）回退 run 附件纯文本。
+    if (reportId) {
+      try {
+        const html = await fetchReportHtml(reportId)
+        setReportView({ runId, text: '', htmlUrl: reportBlobUrl(html) })
+        return
+      } catch {
+        // 落回文本附件
+      }
+    }
+    if (!run?.report_path) return
     try {
       const detail = await getSelectionRunReport(selectedId, runId)
-      setReportView({ runId, text: detail.report })
+      setReportView({ runId, text: detail.report, htmlUrl: null })
     } catch (err) {
       setError(err instanceof Error ? err.message : '报告加载失败')
     }
-  }, [selectedId, reportView])
+  }, [selectedId, reportView, runs, closeReportView])
 
   const rerunPrompt = (version: SelectionVersion) =>
     `请重跑选股库中的「${selected?.name ?? ''}」（${selectedId}）：选股口径采用 v${version.version} 版本` +
@@ -349,9 +384,9 @@ export function SelectionsSection() {
                             <td className="num">{metric(run, 'top_n')}</td>
                             <td>{formatDateTime(run.created_at)}</td>
                             <td>
-                              {run.report_path ? (
+                              {(run.report_path || runReportId(run)) ? (
                                 <button className="ksq-linkbtn" type="button" onClick={() => void showReport(run.run_id)}>
-                                  {reportView?.runId === run.run_id ? '收起' : '查看'}
+                                  {reportView?.runId === run.run_id ? '收起' : runReportId(run) ? '看板' : '查看'}
                                 </button>
                               ) : '—'}
                             </td>
@@ -362,12 +397,16 @@ export function SelectionsSection() {
                   )}
                 </div>
 
-                {reportView && (
+                {reportView?.htmlUrl ? (
+                  <PreviewDialog title="运行报告看板" onClose={closeReportView}>
+                    <iframe title="运行报告看板" src={reportView.htmlUrl} sandbox="allow-scripts" />
+                  </PreviewDialog>
+                ) : reportView ? (
                   <div className="ksq-compare">
-                    <h3>运行报告（{reportView.runId.slice(7, 15)}）</h3>
+                    <h3>运行报告（{reportView.runId.slice(7, 15)} · 纯文本附件）</h3>
                     <pre className="ksq-criteria" style={{ maxHeight: 320 }}>{reportView.text}</pre>
                   </div>
-                )}
+                ) : null}
 
                 {comparison && (
                   <div className="ksq-compare">

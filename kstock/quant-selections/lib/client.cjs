@@ -46,6 +46,15 @@ window.__ModuleLoader__.load({
 		const compareSelectionRuns = (id, runIds) => get(`/kstock-api/selections/${encodeURIComponent(id)}/compare?runs=${runIds.map(encodeURIComponent).join(",")}`);
 		const getSelectionRunPicks = (id, runId) => get(`/kstock-api/selections/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/picks`);
 		const getSelectionRunReport = (id, runId) => get(`/kstock-api/selections/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/report`);
+		async function fetchReportHtml(reportId) {
+			const response = await fetch(`/kstock-api/reports/${encodeURIComponent(reportId)}/content`);
+			if (!response.ok) throw new KsqError(response.status, `报告加载失败（${response.status}）`);
+			return response.text();
+		}
+		/** 报告 HTML 的 blob 预览地址。显式带 utf-8 charset——blob 文档不继承响应头，缺失时中文会被按 windows-1252 解码。 */
+		function reportBlobUrl(html) {
+			return URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+		}
 		//#endregion
 		//#region ../quant-ui/src/icons.tsx
 		function Svg({ size = 16, className, children }) {
@@ -89,6 +98,12 @@ window.__ModuleLoader__.load({
 					height: "12",
 					rx: "2"
 				}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" })]
+			});
+		}
+		function IconClose(props) {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(Svg, {
+				...props,
+				children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M18 6 6 18M6 6l12 12" })
 			});
 		}
 		/** 靶心（选股库入口）。 */
@@ -210,6 +225,27 @@ window.__ModuleLoader__.load({
 				children: text
 			});
 		}
+		/** 全屏预览浮层（报告 HTML iframe）。 */
+		function PreviewDialog({ title, onClose, children }) {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+				className: "ksq-overlay",
+				role: "dialog",
+				"aria-modal": "true",
+				"aria-label": title,
+				children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "ksq-dialog",
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						className: "ksq-dialog-bar",
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: title }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+							type: "button",
+							className: "ksq-btn",
+							onClick: onClose,
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconClose, { size: 13 }), " 关闭"]
+						})]
+					}), children]
+				})
+			});
+		}
 		//#endregion
 		//#region ../quant-ui/src/index.ts
 		/**
@@ -271,6 +307,11 @@ window.__ModuleLoader__.load({
 		];
 		/** 空态引导：让 agent 把最近一次选股任务结果归档进选股库的复制提示词。 */
 		const INGEST_PROMPT = "请把本工作区最近一次选股任务的结果归档进 KStock 选股库（引擎 http://127.0.0.1:18001，不可达则跳过并明说）。三步：1) POST /kstock-api/selections，body {name: 方案名, criteria: 一句话口径}；2) POST /kstock-api/selections/{selection_id}/versions，body {criteria: 结构化口径 JSON, change_note}；3) POST /kstock-api/selections/{selection_id}/runs，body {version, trade_date, universe, rules, metrics, report: 报告全文, picks: 命中清单数组}。picks 每项含 code（必须带 .SH/.SZ/.BJ 后缀）/name/score 等报告总表字段。数据取自工作区 data/ 与 reports/ 下的真实产物，禁止编造。";
+		/** run 的 rules.report_id（阶段三报告库归档返回的看板链，有则直嵌）。 */
+		function runReportId(run) {
+			const value = run?.rules?.report_id;
+			return typeof value === "string" && value ? value : null;
+		}
 		function SelectionsSection() {
 			const [selections, setSelections] = (0, react.useState)([]);
 			const [loading, setLoading] = (0, react.useState)(true);
@@ -316,13 +357,20 @@ window.__ModuleLoader__.load({
 				}
 			}, [selectedId]);
 			const selected = selections.find((item) => item.selection_id === selectedId) ?? null;
+			/** 关闭报告视图并释放 blob URL（函数式 setState 避免闭包过期）。 */
+			const closeReportView = (0, react.useCallback)(() => {
+				setReportView((current) => {
+					if (current?.htmlUrl) URL.revokeObjectURL(current.htmlUrl);
+					return null;
+				});
+			}, []);
 			(0, react.useEffect)(() => {
 				if (!selectedId) return;
 				setDetailLoading(true);
 				setCompareIds([]);
 				setComparison(null);
 				setPicksList([]);
-				setReportView(null);
+				closeReportView();
 				setError(null);
 				let active = true;
 				(async () => {
@@ -368,19 +416,38 @@ window.__ModuleLoader__.load({
 			const showReport = (0, react.useCallback)(async (runId) => {
 				if (!selectedId) return;
 				if (reportView?.runId === runId) {
-					setReportView(null);
+					closeReportView();
 					return;
 				}
+				const run = runs.find((item) => item.run_id === runId);
+				const reportId = runReportId(run);
+				closeReportView();
+				if (reportId) try {
+					const html = await fetchReportHtml(reportId);
+					setReportView({
+						runId,
+						text: "",
+						htmlUrl: reportBlobUrl(html)
+					});
+					return;
+				} catch {}
+				if (!run?.report_path) return;
 				try {
 					const detail = await getSelectionRunReport(selectedId, runId);
 					setReportView({
 						runId,
-						text: detail.report
+						text: detail.report,
+						htmlUrl: null
 					});
 				} catch (err) {
 					setError(err instanceof Error ? err.message : "报告加载失败");
 				}
-			}, [selectedId, reportView]);
+			}, [
+				selectedId,
+				reportView,
+				runs,
+				closeReportView
+			]);
 			const rerunPrompt = (version) => `请重跑选股库中的「${selected?.name ?? ""}」（${selectedId}）：选股口径采用 v${version.version} 版本（${criteriaSummary(version)}），股票池与执行口径与该版本最近一次 run 保持一致（无历史 run 则按口径默认执行）。跑完后把结果入库：POST /kstock-api/selections/${selectedId}/runs，version=${version.version}，附 trade_date/universe/rules/metrics/report（报告全文）/picks（命中清单）。`;
 			/** 命中重合分析：以所选第一个运行为基准，统计其余运行的保留/新增/剔除。 */
 			const overlapRows = (0, react.useMemo)(() => {
@@ -600,27 +667,35 @@ window.__ModuleLoader__.load({
 												children: metric(run, "top_n")
 											}),
 											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: formatDateTime(run.created_at) }),
-											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: run.report_path ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: run.report_path || runReportId(run) ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 												className: "ksq-linkbtn",
 												type: "button",
 												onClick: () => void showReport(run.run_id),
-												children: reportView?.runId === run.run_id ? "收起" : "查看"
+												children: reportView?.runId === run.run_id ? "收起" : runReportId(run) ? "看板" : "查看"
 											}) : "—" })
 										]
 									}, run.run_id)) })]
 								})] }),
-								reportView && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+								reportView?.htmlUrl ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(PreviewDialog, {
+									title: "运行报告看板",
+									onClose: closeReportView,
+									children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("iframe", {
+										title: "运行报告看板",
+										src: reportView.htmlUrl,
+										sandbox: "allow-scripts"
+									})
+								}) : reportView ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 									className: "ksq-compare",
 									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("h3", { children: [
 										"运行报告（",
 										reportView.runId.slice(7, 15),
-										"）"
+										" · 纯文本附件）"
 									] }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("pre", {
 										className: "ksq-criteria",
 										style: { maxHeight: 320 },
 										children: reportView.text
 									})]
-								}),
+								}) : null,
 								comparison && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 									className: "ksq-compare",
 									children: [

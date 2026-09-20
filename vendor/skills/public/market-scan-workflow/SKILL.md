@@ -61,8 +61,9 @@ package:
 5. 交付后主会话**归档选股库**（三步 POST 契约见
    [stock-screening-theme](../stock-screening-theme/SKILL.md) 阶段四）：
    初筛 QUERY 与 `strategies_used` 进口径版本，Top 清单逐股进 `picks`
-   （code 带交易所后缀），报告全文进 `report`。同一方案重跑不建新方案
-   （PATCH + 新版本 + 新 run），否则面板跨期重合对比失效。
+   （code 带交易所后缀），报告全文进 `report`，阶段三归档返回的
+   `report_id` 进 `rules.report_id`（面板「看板」直嵌 HTML）。同一方案
+   重跑不建新方案（PATCH + 新版本 + 新 run），否则面板跨期重合对比失效。
 
 ## 三阶段契约
 

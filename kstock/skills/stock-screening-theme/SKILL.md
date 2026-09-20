@@ -100,7 +100,8 @@ curl -s -X POST http://127.0.0.1:18001/kstock-api/selections/$SELECTION_ID/versi
 curl -s -X POST http://127.0.0.1:18001/kstock-api/selections/$SELECTION_ID/runs \
   -H 'content-type: application/json' -d @- <<'EOF'
 {"version":1,"trade_date":"2026-09-18","universe":"问财初筛 214 只",
- "rules":{"strategies":["value_dividend"]},
+ "rules":{"strategies":["value_dividend"],
+          "report_id":"report-xxxxxxxxxxxx（阶段三报告库归档返回的 id）"},
  "metrics":{"hit_count":20,"strategy_count":1,"top_n":20},
  "report":"（阶段三报告全文 markdown 贴入此处）",
  "picks":[{"code":"002170.SZ","name":"芭田股份","industry":"农药化肥","score":1.3694,
@@ -111,6 +112,9 @@ EOF
 - **重跑同一方案**：不要 POST 新方案——`PATCH /kstock-api/selections/{id}`
   更新 criteria 摘要；口径变化时 POST 新版本（change_note 说明差异）；
   run 一律挂当前版本。这样面板的跨期重合对比才成立；
+- `rules.report_id`（**有则必填**）= 阶段三报告库归档返回的 report_id
+  ——选股库「看板」按钮直接内嵌该 HTML 看板弹窗；缺链或报告已删自动
+  回退纯文本附件，不影响功能；
 - picks 的 `code` 必须带交易所后缀（`002170.SZ`）——重合分析按 code
   精确匹配，无后缀会对不上；Top20 建议全量入库（≤4MB 上限）；
 - metrics 面板渲染键：**`hit_count`（命中数，必填 = picks 条数）**/
