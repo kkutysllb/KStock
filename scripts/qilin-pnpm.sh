@@ -20,5 +20,19 @@ if [[ ! -f "$PNPM_CJS" ]]; then
   npm i --prefix "$REPO_ROOT/.tools/pnpm11" pnpm@11.7.0 >&2
 fi
 
+# vendor/qilin 的构建脚本（build-exe-for-python-sdk.ts 的 pnpmInvocation）
+# 在 Windows 上强制要求 npm_execpath 指向 pnpm 的 JS 入口（.js/.cjs/.mjs），
+# 否则抛「pnpm must expose a JavaScript entrypoint」。pnpm exec 的子进程
+# 不总继承该变量，这里显式导出兜底；Git Bash（MSYS）下 env 值不做路径
+# 自动转换，/c/... 形态 node.exe 打不开——用 cygpath 转 Windows 原生形。
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    export npm_execpath="$(cygpath -w "$PNPM_CJS")"
+    ;;
+  *)
+    export npm_execpath="$PNPM_CJS"
+    ;;
+esac
+
 cd "$REPO_ROOT/vendor/qilin"
 exec node "$PNPM_CJS" "$@"
