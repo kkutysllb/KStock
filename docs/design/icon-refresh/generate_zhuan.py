@@ -215,16 +215,17 @@ def build() -> None:
               f'dominant-baseline="central">KSTOCK</text>'
         )
 
-    db1_white = db1(RICE, "db1")
-    db1_green = db1("#31c7a2", "db1g")
+    # 字标颜色：品牌绿为定稿（用户 2026-09-20 决定），宣纸白作为备选保留
+    db1_green = db1("#31c7a2", "db1")
+    db1_white = db1(RICE, "db1w")
 
     for name, body, tag in (
         ("db3-zhuan", db3, "db3"),
         ("e1-zhuan", e1, "e1"),
         ("db5-side", db5, "db5"),
         ("e1-side-zhuan", e1side, "e2"),
-        ("db1-zhuan", db1_white, "db1"),
-        ("db1-zhuan-greenmark", db1_green, "db1g"),
+        ("db1-zhuan", db1_green, "db1"),
+        ("db1-zhuan-whitemark", db1_white, "db1w"),
     ):
         svg = app_svg(body, defs_common(tag))
         p = SRC / f"{name}.svg"

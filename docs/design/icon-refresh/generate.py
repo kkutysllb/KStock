@@ -258,11 +258,49 @@ def direction_c_deep() -> tuple[str, str]:
     return svg(body, defs), tray_svg(tray)
 
 
+def direction_c_bold() -> tuple[str, str]:
+    """C2 的小尺寸加重版：场色不变，K 描边 96 → 112（光学配重 +17%）。
+
+    16 / 24px 下 96/1024 的笔画只有 1.5–2.3px，小像素抗锯齿会把笔画磨灰；
+    加重版按 spec §4.3 用于 Windows 16/24 与托盘彩色版。
+    """
+    defs = f'''
+    <linearGradient id="c3-field" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#1e9a79"/><stop offset="0.55" stop-color="{GREEN_DARK}"/>
+      <stop offset="1" stop-color="#0c5a45"/>
+    </linearGradient>
+    <radialGradient id="c3-sheen" cx="0.28" cy="0.16" r="0.92">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0.015"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="c3-clip"><path d="{SQ}"/></clipPath>'''
+    body = f'''
+    <path d="{SQ}" fill="url(#c3-field)"/>
+    <g clip-path="url(#c3-clip)">
+      <rect x="{INSET}" y="{INSET}" width="{BOX}" height="{BOX}" fill="url(#c3-sheen)"/>
+    </g>
+    {edge_light()}
+    <g stroke="#ffffff" stroke-width="112">
+      <path d="M368 272 V 752"/>
+      <path d="M368 512 L652 272"/>
+      <path d="M368 512 L652 752"/>
+    </g>'''
+    tray = '''
+    <g stroke="#000000" stroke-width="3.6">
+      <path d="M11.6 3.6 V 28.4"/>
+      <path d="M11.6 16 L24.6 3.6"/>
+      <path d="M11.6 16 L24.6 28.4"/>
+    </g>'''
+    return svg(body, defs), tray_svg(tray)
+
+
 DIRECTIONS = {
     "a-monoline": direction_a,
     "b-candle": direction_b,
     "c-field": direction_c,
     "c2-field-deep": direction_c_deep,
+    "c2-field-deep-bold": direction_c_bold,
     "d-horizon": direction_d,
 }
 

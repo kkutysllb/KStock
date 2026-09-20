@@ -116,14 +116,17 @@ const engine = new EngineProcess();
 /**
  * macOS dev 模式下设置 Dock 图标。
  *
- * 打包后的 .app 由 electron-builder 注入 icon.icns 作为 Dock 图标；
+ * 打包后的 .app 由 electron-builder 注入 icon.icns（含 1024）作为 Dock 图标；
  * 开发态走 ``electron .`` 时 Dock 仍显示 Electron 默认图标，需手动注入。
+ *
+ * 只在**非打包态**调用（见 app.whenReady 的判断）：打包态若用 PNG 覆盖，
+ * Dock 会拿到比 .icns 更低分辨率的图（旧实现注入 256px PNG，Retina Dock 上发虚）。
+ * 候选从大到小取第一个可用档，保证开发态与打包态观感一致。
  */
 function setDockIcon(): void {
-  const candidates = [
-    join(app.getAppPath(), "build", "icons", "128x128@2x.png"),
-    join(app.getAppPath(), "build", "icons", "128x128.png"),
-  ];
+  const candidates = ["512x512.png", "256x256.png", "128x128@2x.png"].map((name) =>
+    join(app.getAppPath(), "build", "icons", name),
+  );
   const iconPath = candidates.find((p) => existsSync(p));
   if (!iconPath) return;
   const icon = nativeImage.createFromPath(iconPath);

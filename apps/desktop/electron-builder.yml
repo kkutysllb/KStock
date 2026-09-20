@@ -18,7 +18,15 @@ files:
   - package.json
   # 托盘图标 + macOS Dock 图标：打包态 createTrayImage/setDockIcon
   # 从 app.getAppPath()/build/... 读取，必须显式打入 asar。
-  - build/tray.png
+  # 逐档形制由 scripts/build-icons.sh 生成（设计源 docs/design/icon-refresh/）：
+  #   macOS 托盘 trayTemplate.png（+@2x，Electron 自动合并）
+  #   Windows/Linux 托盘 tray-32.png / tray-16.png / tray.ico（彩色）
+  #   icons/ 16→1024 全档
+  - build/trayTemplate.png
+  - build/trayTemplate@2x.png
+  - build/tray-*.png
+  - build/tray.ico
+  - build/icon.png
   - build/icons/*.png
   - "!**/*.map"
   - "!**/*.ts"

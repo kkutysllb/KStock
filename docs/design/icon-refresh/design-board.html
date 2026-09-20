@@ -112,7 +112,7 @@
     <span class="chip">已渲染尺寸 <b>1024 / 512 / 256 / 128 / 64 / 32</b></span>
     <span class="chip">托盘已出 <b>16 / 22 / 32（模板图）</b></span>
     <span class="chip">品牌底色 <b>#030d0b · #31c7a2</b></span>
-    <span class="chip">状态 <b>Tier 1 定稿（DB1 篆书横排 + 字标）</b></span>
+    <span class="chip">状态 <b>已实施 · 生产资产已生成</b></span>
   </div>
 
   <h2 id="diag">1 · 现状诊断：为什么必须重构</h2>
@@ -735,14 +735,20 @@
   </div>
 
   <h3>已定 / 待定</h3>
-  <p><b class="ok">已定</b>：① Tier 1 = 篆书朱印（白文印）；② 版式 = <b>DB1 印下字标</b>；
-  ③ 去掉绿 K 印；④ 篆书「麒麟」<b>横排、右麒左麟</b>；⑤ 篆书字形直接使用 Commons 字形
-  （产品不商用，见 §3 字形来源说明）；⑥ 托盘使用拉丁「K」；⑦ Tier 2 = C2 绿场 K、Tier 3 = 印章框 + K。</p>
-  <p><b>待定（1 项）</b>：<span class="mono">KSTOCK</span> 字标用<b>宣纸白</b>还是<b>品牌绿</b>？
-  我倾向品牌绿（去掉绿 K 印后，Tier 1 里只剩它承载产品色）。这是 1 行改动。</p>
-  <p class="mono">另需你确认的两件小事：① git 里我那 98 个设计产物（含 <span class="mono">zhuan-tmp/</span> 中间渲染）
-  被卷进了你的 <span class="mono">25ea1757</span> 提交，要不要我瘦身整理；② 篆书授权的记录方式（我已按「不商用」记为可用，
-  并在 <span class="mono">glyphs/README.md</span> 写明「若产品转为商用需重新评估」的触发条件）。</p>
+  <p><b class="ok">已定并实施</b>：① Tier 1 = 篆书朱印（白文印）；② 版式 = <b>DB1 印下字标</b>；
+  ③ 去掉绿 K 印；④ 篆书「麒麟」<b>横排、右麒左麟</b>；⑤ 篆书字形直接使用 Commons 字形（产品不商用）；
+  ⑥ 托盘使用拉丁「K」；⑦ Tier 2 = C2 绿场 K、Tier 3 = 印章框 + K；⑧ <b>KSTOCK 用品牌绿</b>（1 行改动已落）。</p>
+  <p><b>已生成的生产资产</b>（<span class="mono">bash scripts/build-icons.sh</span> 一次产出）：
+  <span class="mono">icon.icns</span>（11 项含 1024）、<span class="mono">icon.ico</span>（7 档含 24，逐档取形制）、
+  <span class="mono">icons/</span> 10 档 + <span class="mono">icon.png</span>、
+  托盘 <span class="mono">trayTemplate.png</span> + <span class="mono">@2x</span> 与彩色
+  <span class="mono">tray.ico</span> / <span class="mono">tray-16/20/24/32.png</span>；
+  旧的 <span class="mono">build/tray.png</span> 已删。断言全过：留白一致 / 模板图纯黑 / icns 含 1024 / ico 7 档 / 字标分档正确。</p>
+  <p><b>Electron 四处代码已改</b>：托盘改读模板图与彩色档并删除运行时 resize；窗口图标首选 256；
+  Dock 仅 dev 态注入且取最大档；builder 的 files 段同步新资产。</p>
+  <p class="mono">待你确认：① <b>是否推送</b>（本轮 6 个本地提交，main 是共享分支且有发布流水线）；
+  ② 打包产物上的视觉验收（本机可跑 <span class="mono">pnpm dev:desktop</span> 或
+  <span class="mono">scripts/build-desktop.sh</span>）。</p>
 
   <h3>选定方向后我会做什么</h3>
   <ul>

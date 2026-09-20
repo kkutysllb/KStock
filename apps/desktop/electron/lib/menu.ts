@@ -211,21 +211,25 @@ function buildFullTrayMenu(engine: EngineProcess): MenuItemConstructorOptions[] 
 /**
  * 构建托盘图标 ``nativeImage``。
  *
- * macOS 菜单栏高度约 22pt，必须用小尺寸图标并标记为 template image，
- * 系统才能自动适配深色/浅色外观。Windows/Linux 任务栏托盘用彩色缩放。
+ * macOS 菜单栏必须用**模板图**（纯黑 + alpha）并标记 template image，系统才能自动
+ * 适配深色/浅色外观；Windows/Linux 用彩色图标。三处与旧实现的差异（图标重构）：
+ *
+ * 1. macOS 读 `trayTemplate.png`，Electron 自动合并同目录的 `trayTemplate@2x.png`，
+ *    因此 Retina 菜单栏拿到的是**原生 32px 素材**；
+ * 2. 不再运行时 `resize()`——旧实现把单张 128px 缩到 22pt，二次重采样让笔画发灰；
+ * 3. Windows/Linux 读逐档出好的彩色 `tray-32.png`（Tier 2 加重版 K），
+ *    不再回落到全出血的应用图标。
+ *
+ * 资产由 `scripts/build-icons.sh` 生成（设计源在 `docs/design/icon-refresh/`）。
  */
 function createTrayImage(): Electron.NativeImage | null {
   const darwin = process.platform === "darwin";
   const candidates = darwin
-    ? [
-        join(app.getAppPath(), "build", "tray.png"),
-        join(app.getAppPath(), "build", "icons", "32x32.png"),
-        join(app.getAppPath(), "build", "icon.png"),
-      ]
+    ? [join(app.getAppPath(), "build", "trayTemplate.png")]
     : [
-        join(app.getAppPath(), "build", "icons", "32x32.png"),
-        join(app.getAppPath(), "build", "tray.png"),
-        join(app.getAppPath(), "build", "icon.png"),
+        join(app.getAppPath(), "build", "tray-32.png"),
+        join(app.getAppPath(), "build", "tray-16.png"),
+        join(app.getAppPath(), "build", "tray.ico"),
       ];
   const iconPath = candidates.find((p) => existsSync(p));
   if (!iconPath) {
@@ -237,10 +241,12 @@ function createTrayImage(): Electron.NativeImage | null {
     return null;
   }
 
-  const size = darwin ? { width: 22, height: 22 } : { width: 32, height: 32 };
-  const icon = nativeImage.createFromPath(iconPath).resize(size);
+  // 不做 resize：尺寸已在资产生成阶段按档出好（macOS 16/@2x，Win/Linux 32/16）。
+  const icon = nativeImage.createFromPath(iconPath);
   if (darwin) icon.setTemplateImage(true);
-  logMain(`托盘图标加载：${iconPath} size=${JSON.stringify(size)} isEmpty=${icon.isEmpty()}`);
+  logMain(
+    `托盘图标加载：${iconPath} size=${JSON.stringify(icon.getSize())} isEmpty=${icon.isEmpty()}`,
+  );
   return icon;
 }
 

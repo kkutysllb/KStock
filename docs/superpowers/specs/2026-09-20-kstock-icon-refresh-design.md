@@ -1,7 +1,7 @@
 # KStock 应用图标与系统托盘图标重构 · 设计
 
 日期：2026-09-20
-状态：**Tier 1 版式已定稿（DB1 篆书横排 + KSTOCK 字标）**，待实施
+状态：**已实施**——设计定稿（DB1 篆书横排 + KSTOCK 品牌绿字标）、生产资产已生成并通过断言、Electron 四处代码已改；待打包视觉验收与推送
 提案稿与全部出图：[`docs/design/icon-refresh/design-board.html`](../design/icon-refresh/design-board.html)
 矢量源与渲染脚本：
 [`generate.py`](../design/icon-refresh/generate.py)（方向 A–D）·
@@ -156,19 +156,24 @@
 | Windows 托盘 | 回落用彩色全出血 `icons/32x32.png` | `build/tray.ico`（16/20/24/32）或 `build/tray-16.png` + `tray-32.png`（彩色） |
 | Windows 安装器 | `build/icon.ico` 6 档（缺 24） | 7 档：16/24/32/48/64/128/256（256 用 PNG 压层） |
 | Linux | `icons/` 仅 32/128/128@2x | 齐 16→1024 + `icon.png`(512) |
-| 矢量真源 | 无 | 新增 `scripts/build-icons.sh`（bash 入口，内部调用 `docs/design/icon-refresh/` 的设计源渲染），产出上表全部资产；进 CI 校验 |
+| 矢量真源 | 无 | **已建**：`scripts/build-icons.sh` → `docs/design/icon-refresh/build_assets.py`，逐档取形制出图并跑断言 |
+
+**已实施（2026-09-20）**：`bash scripts/build-icons.sh` 一次产出
+`icon.icns`（11 项含 ic10/1024）、`icon.ico`（7 档含 24，逐档取形制）、`icons/` 10 档 + `icon.png`、
+`trayTemplate.png` + `@2x`、彩色 `tray.ico` + `tray-16/20/24/32.png`；旧的 `build/tray.png` 已删除。
+断言全部通过：留白一致（16px 因抗锯齿放宽到 90%）、模板图纯黑且有实心核、icns 含 1024、ico 7 档、字标分档正确。
 
 ## 6. 代码改动
 
-1. `apps/desktop/electron/lib/menu.ts:217-244` `createTrayImage()`
+1. `apps/desktop/electron/lib/menu.ts` `createTrayImage()` —— **已实施**
    - macOS：读 `build/trayTemplate.png`（Electron 自动合并 `@2x`），**删除 `.resize()`** 与单文件回落链。
    - Windows/Linux：读彩色 `build/tray-16.png` / `tray-32.png`（或 `tray.ico`）。
    - 保留 `setTemplateImage(true)`（macOS）与现有日志。
-2. `apps/desktop/electron/lib/window.ts:210-217` `resolveWindowIcon()`
+2. `apps/desktop/electron/lib/window.ts` `resolveWindowIcon()` —— **已实施**
    - 候选顺序改为 `icons/256x256.png` → `icons/128x128.png` → `icons/32x32.png`。
-3. `apps/desktop/electron/main.ts:119-132` `setDockIcon()`
+3. `apps/desktop/electron/main.ts` `setDockIcon()` —— **已实施**
    - 维持「仅 `!app.isPackaged` 时设置」，补注释说明打包态必须由 `.icns` 提供。
-4. `apps/desktop/electron-builder.yml:21-22,36,62,85`
+4. `apps/desktop/electron-builder.yml`（files 段）—— **已实施**
    - `files` 增补 `build/trayTemplate*.png`、`build/tray*.png` / `tray.ico`；各平台 `icon` 路径随新资产同步。
 5. `kstock/client-brand/src/client/Marks.tsx` + `src/client/marks/geometry.ts` —— **已实施**
    - 侧栏（`sidebar.brand.mark`，24px）、hero（`conversation.hero.brand.mark`，34px）、
@@ -184,24 +189,27 @@
      24px 输出与生成器镜像**逐像素完全一致**（最大通道差 0），72px 与设计源 SVG 的差异仅
      1.66% 边缘抗锯齿像素（源于篆书路径 1 位小数压缩，无可见影响）。
      可重复的等价性检查由 `gen_client_marks.py` 输出的镜像 SVG 承担。
-6. 新增 `scripts/build-icons.sh` 与 `scripts/check-ci.sh` 中的图标校验：
+6. `scripts/build-icons.sh` **已建**；图标断言已落在 `build_assets.py`（下一步可挂进 `check-ci.sh` 的 `--check` 模式）：
    尺寸齐全、命名正确（`trayTemplate.png` / `@2x`）、`ico` 含 7 档、icns 含 1024。
 
 ## 7. 待决项
 
-已定：Tier 1 版式 = DB1（去绿 K 印）；篆书横排右麒左麟；篆书字形直接使用（产品不商用）；
-托盘使用拉丁 K；Tier 2 = C2、Tier 3 = 印章框 + K。
+已定：Tier 1 = DB1 篆书横排朱印 + **KSTOCK 品牌绿字标**（用户 2026-09-20 决定）；
+去掉绿 K 印；篆书字形直接使用（产品不商用）；托盘使用拉丁 K；Tier 2 = C2、Tier 3 = 印章框 + K；
+生产资产已生成，Electron 四处代码已改。
 
-仍需回复：
+仍需处理：
 
-1. **`KSTOCK` 字标颜色**：宣纸白 `#fff8f2` 还是品牌绿 `#31c7a2`？（两版已出图；1 行改动）
-2. **git 整理**：现有的 98 个设计产物（含可再生的 `zhuan-tmp/` 中间渲染，共 4.3MB）
-   被卷入了提交 `25ea1757`。是否要我瘦身：只留源脚本 + 关键对照图，
-   全量 PNG 产物与 `zhuan-tmp/` 加 `.gitignore` 并移出跟踪？
+1. **推送**：本轮共 6 个本地提交（设计与瘦身 + UI 商标 + 生产资产与 Electron 改动），
+   尚未推送；`main` 是共享分支且有发布流水线，需用户确认后再推。
+2. **打包视觉验收**（§8 第 10 条）：需要真实构建产物上的截图——Dock、菜单栏（浅/深）、
+   任务栏托盘、安装器图标。本机可直接 `pnpm dev:desktop` 或 `scripts/build-desktop.sh`。
+3. （可选）把 `build_assets.py --check` 挂进 `scripts/check-ci.sh`，让图标断进入 CI 门禁。
 
 ## 8. 验收标准
 
-1. `bash scripts/build-icons.sh` 可在干净环境一次性重出全部资产，重复执行结果幂等（字节级稳定）。
+1. `bash scripts/build-icons.sh` 可在干净环境一次性重出全部资产，重复执行结果幂等（字节级稳定）。✅ 已可跑通
+   （其中第 2/3/4/5/6 条的断言已实现在 `build_assets.py` 的 `verify()` 里，已通过）。
 2. 资产齐全：`icon.icns`（11 档含 1024）、`icon.ico`（7 档含 24）、`icons/` 16→1024 + `icon.png`、
    `trayTemplate.png` + `trayTemplate@2x.png`、Windows 彩色托盘图。
 3. **留白一致**：`icons/` 全部 PNG 的 alpha bbox 内容占比 80%±2%（当前 `32x32.png` 为 100%，必须修正）。

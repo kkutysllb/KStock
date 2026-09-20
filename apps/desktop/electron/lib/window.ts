@@ -206,12 +206,17 @@ export function resetZoom(): void {
  * electron-builder 打包后 macOS 用 ``icon.icns``、Windows 用 ``icon.ico``，
  * 由构建流程注入；开发态需手动指定 png，否则 Windows 任务栏、Linux dock
  * 会回退到 Electron 默认图标。
+ *
+ * 档位顺序由大到小（图标重构）：任务栏/窗口图标会被系统按 DPI 放大，
+ * 首选 16px 或 32px 素材必然糊；`icons/` 现在含 16→1024 全档且逐档形制不同
+ * （详见 spec §4），因此优先取 256。
  */
 function resolveWindowIcon(): string | undefined {
   const base = join(app.getAppPath(), "build");
   const candidates = [
-    join(base, "icons", "32x32.png"),
+    join(base, "icons", "256x256.png"),
     join(base, "icons", "128x128.png"),
+    join(base, "icons", "32x32.png"),
   ];
   return candidates.find((p) => existsSync(p));
 }
