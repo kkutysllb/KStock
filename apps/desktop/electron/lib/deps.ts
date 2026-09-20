@@ -14,7 +14,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { platform } from "node:os";
 import { appDataDirectory } from "./engine";
@@ -93,10 +93,15 @@ function pythonVersionKey(launcher: PythonLauncher): string | null {
   return match === null ? null : match[0];
 }
 
-/** import 探针：全部依赖可导入返回 true。 */
+/** import 探针：全部依赖可导入返回 true。
+ *
+ * `-s` 隔离 user-site：PYTHONPATH（py-deps）照常生效，但用户站点包
+ * 不再泄漏进探针——否则 user-site 里恰好装过 numpy 会让「py-deps 未
+ * 安装/ABI 错位」被误探通过、写出假 marker（3.9/3.14 错位实录根因）。
+ */
 function dependenciesImportable(launcher: PythonLauncher): boolean {
   const script = `import ${DEPENDENCIES.map((d) => d.module).join(", ")}`;
-  const probe = spawnSync(launcher.bin, [...launcher.prefix, "-c", script], {
+  const probe = spawnSync(launcher.bin, [...launcher.prefix, "-s", "-c", script], {
     encoding: "utf8",
     timeout: 120_000,
     env: pythonEnv(),
@@ -122,11 +127,31 @@ export async function ensureEnginePythonDeps(): Promise<void> {
   const versionKey = pythonVersionKey(launcher);
   const depsDir = pythonDepsDirectory();
   const marker = versionKey === null ? null : join(depsDir, `.ready-${versionKey}`);
-  if (marker !== null && existsSync(marker)) return;
+  // 解释器版本 pin：marker 只证明「装过」，pin 证明「用当前解释器装的」。
+  // py-deps 是 pip --target 的扁平目录，多解释器先后安装会留下混 ABI 的
+  // .so（3.9/3.14 错位实录：marker 命中跳过探针，二进制包全挂）。
+  // pin 与当前版本不一致 → marker 作废，重走探针/安装（--upgrade 覆盖）。
+  const pinPath = join(depsDir, ".python-version-pin");
+  let pinMatches = false;
+  if (existsSync(pinPath)) {
+    try {
+      pinMatches = readFileSync(pinPath, "utf8").trim() === versionKey;
+    } catch {
+      pinMatches = false;
+    }
+  }
+  if (marker !== null && existsSync(marker) && pinMatches) return;
+  if (marker !== null && existsSync(marker) && !pinMatches) {
+    logMain(
+      `Python 依赖引导：marker 与解释器 pin 不一致（当前 ${versionKey ?? "?"}），` +
+        "py-deps 可能是其他 Python 版本安装的（ABI 错位）——重新探针并按需重装…",
+    );
+  }
 
   if (dependenciesImportable(launcher)) {
     mkdirSync(depsDir, { recursive: true });
     if (marker !== null) writeFileSync(marker, `${new Date().toISOString()}\n`);
+    if (versionKey !== null) writeFileSync(pinPath, `${versionKey}\n`);
     logMain(`Python 依赖引导：环境已有全部依赖（${binLabel}），无需安装`);
     return;
   }
@@ -174,5 +199,6 @@ export async function ensureEnginePythonDeps(): Promise<void> {
     return;
   }
   if (marker !== null) writeFileSync(marker, `${new Date().toISOString()}\n`);
-  logMain("Python 依赖引导：依赖就绪（marker 已写入，后续启动零开销）");
+  if (versionKey !== null) writeFileSync(pinPath, `${versionKey}\n`);
+  logMain("Python 依赖引导：依赖就绪（marker + 解释器 pin 已写入，后续启动零开销）");
 }
