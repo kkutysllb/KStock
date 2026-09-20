@@ -35,4 +35,11 @@ case "$(uname -s)" in
 esac
 
 cd "$REPO_ROOT/vendor/qilin"
+
+# pnpm 11 在跑脚本前做 deps 自检，判定不同步就自动执行 `pnpm install
+# --production`——该模式省略 devDependencies，vendor 根 postinstall
+# （install-lefthook，静态导入 lefthook）即随之失败并连带 build 失败
+# （Windows 实机）。我们的流程总是显式 install，自检只带来这类副作用。
+export npm_config_verify_deps_before_run=false
+
 exec node "$PNPM_CJS" "$@"

@@ -1312,6 +1312,38 @@ def _fix_qilin_staging_scope(text: str) -> str | None:
     return patched
 
 
+# ── 补丁 15：install-lefthook 容忍缺 lefthook（production 安装不炸）────────
+# 实机（Windows）：`pnpm run build` 前 pnpm 11 的 deps 自检判定不同步，自动
+# 跑 `pnpm install --production`；vendor 根 postinstall 静态
+# `import lefthook/package.json`（lefthook 是 devDependency，--production 不
+# 安装）→ ERR_MODULE_NOT_FOUND → install exit 1 → 连带 build 失败。
+# 修法：静态导入改可选动态导入（缺失即 undefined），main() 里的守卫同步改
+# 可选链——该场景本就不装 git hooks，静默降级是正确行为。锚点失配静默跳过。
+_LEFTHOOK_SCRIPT_REL = "qilin/scripts/install-lefthook.mjs"
+_LEFTHOOK_MARKER = "KStock patch: 生产安装"
+_LEFTHOOK_IMPORT_ANCHOR = "import lefthookPackage from 'lefthook/package.json' with { type: 'json' }"
+_LEFTHOOK_IMPORT_REPLACEMENT = '''let lefthookPackage
+try {
+  lefthookPackage = (await import('lefthook/package.json', { with: { type: 'json' } })).default
+} catch {
+  // KStock patch: 生产安装（--production）省略 devDependency lefthook；
+  // 该场景不装 git hooks，静默降级而非让整次安装失败。
+  lefthookPackage = undefined
+}'''
+_LEFTHOOK_GUARD_ANCHOR = "  if (typeof lefthookPackage.bin?.lefthook !== 'string') return"
+_LEFTHOOK_GUARD_REPLACEMENT = "  if (typeof lefthookPackage?.bin?.lefthook !== 'string') return"
+
+
+def _fix_qilin_lefthook_optional(text: str) -> str | None:
+    """install-lefthook.mjs 的 lefthook 导入改可选；已修/锚点失配返回 None。"""
+    if _LEFTHOOK_MARKER in text:
+        return None
+    if _LEFTHOOK_IMPORT_ANCHOR not in text or _LEFTHOOK_GUARD_ANCHOR not in text:
+        return None
+    patched = text.replace(_LEFTHOOK_IMPORT_ANCHOR, _LEFTHOOK_IMPORT_REPLACEMENT, 1)
+    return patched.replace(_LEFTHOOK_GUARD_ANCHOR, _LEFTHOOK_GUARD_REPLACEMENT, 1)
+
+
 # ── KStock 自有技能 ensure（kstock/skills → vendor/skills/public）────────
 # 源码在 kstock/skills/<name>（上游同步整体覆盖 vendor 时不受影响），补丁器
 # 把它们 ensure 进 vendor 技能目录：html-report（自研渲染器）、market-linkage
@@ -1536,6 +1568,11 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     if qilin_script.exists():
         if _patch_file(qilin_script, _QIILIN_EXE_SCRIPT_REL, _fix_qilin_staging_scope):
             changed.append(_QIILIN_EXE_SCRIPT_REL)
+    # qilin git hooks 安装脚本（production 安装容忍缺 lefthook，补丁 15）。
+    lefthook_script = REPO_ROOT / "vendor" / "qilin" / "scripts" / "install-lefthook.mjs"
+    if lefthook_script.exists():
+        if _patch_file(lefthook_script, _LEFTHOOK_SCRIPT_REL, _fix_qilin_lefthook_optional):
+            changed.append(_LEFTHOOK_SCRIPT_REL)
     # preset 随行技能目录发布（技能随 preset 分发，cordis 模式）。
     if _publish_preset_skills(vendor_root):
         changed.append("kstock/presets/*/skills")
