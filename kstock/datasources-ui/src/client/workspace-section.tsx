@@ -1,8 +1,10 @@
 /**
  * 量化工作区设置分区：新闻/选股库联动任务（解读按钮）的目标工作区。
  *
- * 数据经静态控制器（同源 fetch /kstock-api/quant-workspace）拉取与写回，
- * 与组件生命周期解耦（设置页开合不丢已编辑内容）。保存即时生效——
+ * 交互为主按钮「选择目录…」——经注入的 pick()（uiWorkspace.pickDirectory
+ * 宿主原生 OS 目录对话框，取消返回 null）选中后立即保存，无手输路径；
+ * 已配置时提供「清除」回退「跟当前会话」语义。数据经静态控制器
+ * （同源 fetch /kstock-api/quant-workspace）写回，保存即时生效——
  * 客户端 sendRouted 每次发送前读取，无需重启引擎。
  */
 
@@ -11,8 +13,9 @@ import { Button } from '@qilin/client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@qilin/client-ui-slots'
 
 type QuantWorkspaceKey =
-  | 'title' | 'desc' | 'placeholder' | 'current' | 'notConfigured'
-  | 'save' | 'saving' | 'saved' | 'saveFailed'
+  | 'title' | 'desc' | 'current' | 'notConfigured'
+  | 'pick' | 'picking' | 'clear' | 'clearing'
+  | 'saved' | 'cleared' | 'pickFailed' | 'cancelled'
 
 /** 服务端视图（未配置时 path=null）。 */
 interface QuantWorkspaceView {
@@ -25,6 +28,8 @@ export interface QuantWorkspaceSectionInjected {
   load: () => Promise<QuantWorkspaceView | { error: string }>
   /** 保存工作区路径（null=清除，回退「跟当前会话」语义）。 */
   save: (path: string | null) => Promise<QuantWorkspaceView | { error: string }>
+  /** 宿主原生目录选择（取消返回 null）。 */
+  pick: () => Promise<string | null>
 }
 
 /** 分区 props（设置壳 owner 只给 close）。 */
@@ -39,8 +44,6 @@ const STYLE_CSS = `
 .kstock-qws{display:flex;flex-direction:column;gap:12px}
 .kstock-qws-head p{margin:4px 0 0;font-size:13px;opacity:.75}
 .kstock-qws-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.kstock-qws-input{flex:1;min-width:260px;height:32px;padding:0 10px;border-radius:8px;
-  border:1px solid rgba(148,163,184,.4);background:transparent;color:inherit;font-size:13px}
 .kstock-qws-note{font-size:13px;margin:0}
 .kstock-qws-ok{color:#22c55e}
 .kstock-qws-err{color:#ef4444}
@@ -82,7 +85,7 @@ async function apiPut(path: string | null): Promise<QuantWorkspaceView | { error
   }
 }
 
-/** 静态控制器：与组件生命周期解耦。 */
+/** 静态控制器：与组件生命周期解耦（目录选择由注册侧注入）。 */
 const controller = {
   load: apiGet,
   save: apiPut,
@@ -93,19 +96,17 @@ const controller = {
  * @param props - 注入面 + 设置壳 owner props。
  * @returns 分区内容。
  */
-export function QuantWorkspaceSection({ load, save, t }: QuantWorkspaceSectionProps) {
+export function QuantWorkspaceSection({ load, save, pick, t }: QuantWorkspaceSectionProps) {
   const [current, setCurrent] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<'pick' | 'clear' | null>(null)
 
   useEffect(() => {
     ensureStyle()
     void load().then((result) => {
       if ('path' in result) {
         setCurrent(result.path)
-        setDraft(result.path ?? '')
         setStatus('ready')
       } else {
         setNote({ ok: false, text: result.error })
@@ -114,17 +115,38 @@ export function QuantWorkspaceSection({ load, save, t }: QuantWorkspaceSectionPr
     })
   }, [load])
 
-  const dirty = draft.trim() !== (current ?? '')
+  /** 选择目录 → 立即保存（取消无副作用）。 */
+  const onPick = (): void => {
+    setBusy('pick'); setNote(null)
+    void pick().then((picked) => {
+      if (picked === null) {
+        // 用户取消系统对话框：静默回位，不动现有配置。
+        setBusy(null); setNote({ ok: false, text: t('cancelled') })
+        return
+      }
+      void save(picked).then((result) => {
+        setBusy(null)
+        if ('path' in result) {
+          setCurrent(result.path)
+          setNote({ ok: true, text: t('saved') })
+        } else {
+          setNote({ ok: false, text: result.error })
+        }
+      })
+    }).catch((error: unknown) => {
+      setBusy(null)
+      setNote({ ok: false, text: error instanceof Error ? error.message : t('pickFailed') })
+    })
+  }
 
-  const onSave = (): void => {
-    setBusy(true)
-    const next = draft.trim() === '' ? null : draft.trim()
-    void save(next).then((result) => {
-      setBusy(false)
+  /** 清除配置 → 回退「跟当前会话」语义。 */
+  const onClear = (): void => {
+    setBusy('clear'); setNote(null)
+    void save(null).then((result) => {
+      setBusy(null)
       if ('path' in result) {
-        setCurrent(result.path)
-        setDraft(result.path ?? '')
-        setNote({ ok: true, text: t('saved') })
+        setCurrent(null)
+        setNote({ ok: true, text: t('cleared') })
       } else {
         setNote({ ok: false, text: result.error })
       }
@@ -144,14 +166,14 @@ export function QuantWorkspaceSection({ load, save, t }: QuantWorkspaceSectionPr
         </p>
       </div>
       <div className="kstock-qws-row">
-        <input
-          className="kstock-qws-input"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder={t('placeholder')}
-          spellCheck={false}
-        />
-        <Button disabled={!dirty || busy} onClick={onSave}>{busy ? t('saving') : t('save')}</Button>
+        <Button disabled={busy !== null} onClick={onPick}>
+          {busy === 'pick' ? t('picking') : t('pick')}
+        </Button>
+        {current !== null && (
+          <Button variant="ghost" disabled={busy !== null} onClick={onClear}>
+            {busy === 'clear' ? t('clearing') : t('clear')}
+          </Button>
+        )}
         {note !== null && (
           <p className={`kstock-qws-note ${note.ok ? 'kstock-qws-ok' : 'kstock-qws-err'}`}>{note.text}</p>
         )}

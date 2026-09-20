@@ -200,8 +200,10 @@ window.__ModuleLoader__.load({
 		/**
 		* 量化工作区设置分区：新闻/选股库联动任务（解读按钮）的目标工作区。
 		*
-		* 数据经静态控制器（同源 fetch /kstock-api/quant-workspace）拉取与写回，
-		* 与组件生命周期解耦（设置页开合不丢已编辑内容）。保存即时生效——
+		* 交互为主按钮「选择目录…」——经注入的 pick()（uiWorkspace.pickDirectory
+		* 宿主原生 OS 目录对话框，取消返回 null）选中后立即保存，无手输路径；
+		* 已配置时提供「清除」回退「跟当前会话」语义。数据经静态控制器
+		* （同源 fetch /kstock-api/quant-workspace）写回，保存即时生效——
 		* 客户端 sendRouted 每次发送前读取，无需重启引擎。
 		*/
 		/** 样式：一次性幂等注入（独立于数据源分区的样式位）。 */
@@ -210,8 +212,6 @@ window.__ModuleLoader__.load({
 .kstock-qws{display:flex;flex-direction:column;gap:12px}
 .kstock-qws-head p{margin:4px 0 0;font-size:13px;opacity:.75}
 .kstock-qws-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.kstock-qws-input{flex:1;min-width:260px;height:32px;padding:0 10px;border-radius:8px;
-  border:1px solid rgba(148,163,184,.4);background:transparent;color:inherit;font-size:13px}
 .kstock-qws-note{font-size:13px;margin:0}
 .kstock-qws-ok{color:#22c55e}
 .kstock-qws-err{color:#ef4444}
@@ -246,7 +246,7 @@ window.__ModuleLoader__.load({
 				return { error: error instanceof Error ? error.message : String(error) };
 			}
 		}
-		/** 静态控制器：与组件生命周期解耦。 */
+		/** 静态控制器：与组件生命周期解耦（目录选择由注册侧注入）。 */
 		const controller = {
 			load: apiGet,
 			save: apiPut
@@ -256,18 +256,16 @@ window.__ModuleLoader__.load({
 		* @param props - 注入面 + 设置壳 owner props。
 		* @returns 分区内容。
 		*/
-		function QuantWorkspaceSection({ load, save, t }) {
+		function QuantWorkspaceSection({ load, save, pick, t }) {
 			const [current, setCurrent] = (0, react.useState)(null);
-			const [draft, setDraft] = (0, react.useState)("");
 			const [status, setStatus] = (0, react.useState)("loading");
 			const [note, setNote] = (0, react.useState)(null);
-			const [busy, setBusy] = (0, react.useState)(false);
+			const [busy, setBusy] = (0, react.useState)(null);
 			(0, react.useEffect)(() => {
 				ensureStyle();
 				load().then((result) => {
 					if ("path" in result) {
 						setCurrent(result.path);
-						setDraft(result.path ?? "");
 						setStatus("ready");
 					} else {
 						setNote({
@@ -278,17 +276,51 @@ window.__ModuleLoader__.load({
 					}
 				});
 			}, [load]);
-			const dirty = draft.trim() !== (current ?? "");
-			const onSave = () => {
-				setBusy(true);
-				save(draft.trim() === "" ? null : draft.trim()).then((result) => {
-					setBusy(false);
+			/** 选择目录 → 立即保存（取消无副作用）。 */
+			const onPick = () => {
+				setBusy("pick");
+				setNote(null);
+				pick().then((picked) => {
+					if (picked === null) {
+						setBusy(null);
+						setNote({
+							ok: false,
+							text: t("cancelled")
+						});
+						return;
+					}
+					save(picked).then((result) => {
+						setBusy(null);
+						if ("path" in result) {
+							setCurrent(result.path);
+							setNote({
+								ok: true,
+								text: t("saved")
+							});
+						} else setNote({
+							ok: false,
+							text: result.error
+						});
+					});
+				}).catch((error) => {
+					setBusy(null);
+					setNote({
+						ok: false,
+						text: error instanceof Error ? error.message : t("pickFailed")
+					});
+				});
+			};
+			/** 清除配置 → 回退「跟当前会话」语义。 */
+			const onClear = () => {
+				setBusy("clear");
+				setNote(null);
+				save(null).then((result) => {
+					setBusy(null);
 					if ("path" in result) {
-						setCurrent(result.path);
-						setDraft(result.path ?? "");
+						setCurrent(null);
 						setNote({
 							ok: true,
-							text: t("saved")
+							text: t("cleared")
 						});
 					} else setNote({
 						ok: false,
@@ -319,17 +351,16 @@ window.__ModuleLoader__.load({
 				}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 					className: "kstock-qws-row",
 					children: [
-						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("input", {
-							className: "kstock-qws-input",
-							value: draft,
-							onChange: (event) => setDraft(event.target.value),
-							placeholder: t("placeholder"),
-							spellCheck: false
-						}),
 						/* @__PURE__ */ (0, react_jsx_runtime.jsx)(_qilin_client_ui_primitives.Button, {
-							disabled: !dirty || busy,
-							onClick: onSave,
-							children: busy ? t("saving") : t("save")
+							disabled: busy !== null,
+							onClick: onPick,
+							children: busy === "pick" ? t("picking") : t("pick")
+						}),
+						current !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_qilin_client_ui_primitives.Button, {
+							variant: "ghost",
+							disabled: busy !== null,
+							onClick: onClear,
+							children: busy === "clear" ? t("clearing") : t("clear")
 						}),
 						note !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
 							className: `kstock-qws-note ${note.ok ? "kstock-qws-ok" : "kstock-qws-err"}`,
@@ -373,8 +404,12 @@ window.__ModuleLoader__.load({
 			"saveFailed": "Save failed",
 			"envName": "Environment variable"
 		};
-		/** 必需服务：槽位注册表 + locale 注册表。 */
-		const inject = ["slots", "locale"];
+		/** 必需服务：槽位注册表 + locale 注册表 + 工作区 UI（原生目录选择）。 */
+		const inject = [
+			"slots",
+			"locale",
+			"uiWorkspace"
+		];
 		/**
 		* 挂载设置分区：注册进 settings.section（ui-agent-preset 同款槽位；本插件
 		* 自有 locale 命名空间，不与上游字典冲突）。
@@ -400,26 +435,32 @@ window.__ModuleLoader__.load({
 				zh: {
 					"nav": "量化工作区",
 					"title": "量化工作区",
-					"desc": "财经新闻/选股库「解读」等联动任务的目标工作区：当前会话不在该工作区时自动路由过去（复用空会话或最近会话）。留空 = 跟随当前会话。",
-					"placeholder": "/Users/你的量化研究目录",
+					"desc": "财经新闻/选股库「解读」等联动任务的目标工作区：当前会话不在该工作区时自动路由过去（复用空会话或最近会话）。未配置 = 跟随当前会话。",
 					"current": "当前",
 					"notConfigured": "未配置（联动跟随当前会话）",
-					"save": "保存",
-					"saving": "保存中…",
+					"pick": "选择目录…",
+					"picking": "选择中…",
+					"clear": "清除",
+					"clearing": "清除中…",
 					"saved": "已保存，即时生效",
-					"saveFailed": "保存失败"
+					"cleared": "已清除，联动跟随当前会话",
+					"pickFailed": "目录选择失败",
+					"cancelled": "已取消选择，配置未变"
 				},
 				en: {
 					"nav": "Quant Workspace",
 					"title": "Quant workspace",
-					"desc": "Target workspace for interpret actions (news/selections): routed automatically when the current session lives elsewhere. Empty = follow current session.",
-					"placeholder": "/path/to/your/quant/workspace",
+					"desc": "Target workspace for interpret actions (news/selections): routed automatically when the current session lives elsewhere. Not configured = follow current session.",
 					"current": "Current",
 					"notConfigured": "Not configured (follows current session)",
-					"save": "Save",
-					"saving": "Saving…",
+					"pick": "Choose directory…",
+					"picking": "Choosing…",
+					"clear": "Clear",
+					"clearing": "Clearing…",
 					"saved": "Saved. Takes effect immediately",
-					"saveFailed": "Save failed"
+					"cleared": "Cleared. Follows current session",
+					"pickFailed": "Directory picker failed",
+					"cancelled": "Cancelled, configuration unchanged"
 				}
 			});
 			ctx.slots.inject("settings.section", () => ctx.slots.register({
@@ -430,7 +471,8 @@ window.__ModuleLoader__.load({
 				locale: "settings.kstockQuantWorkspace",
 				inject: () => ({
 					load: () => QuantWorkspaceSection.load(),
-					save: (path) => QuantWorkspaceSection.save(path)
+					save: (path) => QuantWorkspaceSection.save(path),
+					pick: () => ctx.uiWorkspace.pickDirectory()
 				})
 			}, QuantWorkspaceSection));
 		}
