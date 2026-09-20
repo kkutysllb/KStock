@@ -290,9 +290,19 @@ window.__ModuleLoader__.load({
 			return "";
 		}
 		function criteriaSummary(version) {
-			const summary = version.criteria?.summary;
+			let value = version.criteria;
+			if (typeof value === "string") {
+				const text = value.trim();
+				try {
+					value = JSON.parse(text);
+				} catch {
+					return text;
+				}
+			}
+			const record = value ?? {};
+			const summary = record.summary;
 			if (typeof summary === "string" && summary.trim()) return summary;
-			const keys = Object.keys(version.criteria ?? {});
+			const keys = Object.keys(record);
 			return keys.length > 0 ? `（口径字段：${keys.join(" / ")}）` : "（空口径）";
 		}
 		/** 命中清单 → 股票代码集合（对比重合分析用）。 */

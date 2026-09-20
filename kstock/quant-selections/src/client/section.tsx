@@ -40,9 +40,20 @@ function selectionMetricClass(key: string, value: unknown): string {
 }
 
 function criteriaSummary(version: SelectionVersion): string {
-  const summary = version.criteria?.summary
+  // 兼容历史双重编码（criteria 曾被存成 JSON 字符串）：先解一层再取摘要。
+  let value: unknown = version.criteria
+  if (typeof value === 'string') {
+    const text = value.trim()
+    try {
+      value = JSON.parse(text)
+    } catch {
+      return text
+    }
+  }
+  const record = (value ?? {}) as Record<string, unknown>
+  const summary = record.summary
   if (typeof summary === 'string' && summary.trim()) return summary
-  const keys = Object.keys(version.criteria ?? {})
+  const keys = Object.keys(record)
   return keys.length > 0 ? `（口径字段：${keys.join(' / ')}）` : '（空口径）'
 }
 

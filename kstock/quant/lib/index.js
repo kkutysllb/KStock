@@ -176,7 +176,16 @@ var LibraryStore = class {
 		let contentJson = "{}";
 		let contentBytes = 0;
 		if (c.version.content && input.criteria !== void 0) {
-			contentJson = JSON.stringify(input.criteria);
+			let criteriaValue = input.criteria;
+			if (typeof criteriaValue === "string") {
+				const text = criteriaValue.trim();
+				try {
+					criteriaValue = JSON.parse(text);
+				} catch {
+					criteriaValue = { summary: text };
+				}
+			}
+			contentJson = JSON.stringify(criteriaValue);
 			contentBytes = Buffer.byteLength(contentJson);
 			if (contentBytes > 64 * 1024) throw new StoreError(422, "选股条件超过 64KB 上限");
 			writeFileSync(join(versionDir, "criteria.json"), contentJson, "utf-8");

@@ -91,7 +91,8 @@ SELECTION_ID=$(curl -s -X POST http://127.0.0.1:18001/kstock-api/selections \
   -d '{"name":"高股息低估蓝筹","criteria":"股息率>4% 且 PE<20，5 道质量闸门，多因子 Z-score Top20"}' \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["selection_id"])')
 
-# 2 存口径版本（criteria=结构化口径 JSON，≤64KB；版本自动 v1 起）
+# 2 存口径版本（criteria=结构化口径 JSON **对象**，≤64KB；版本自动 v1 起；
+#    误传字符串化 JSON 服务端会自动解一层，纯文本会包成 {summary}）
 curl -s -X POST http://127.0.0.1:18001/kstock-api/selections/$SELECTION_ID/versions \
   -H 'content-type: application/json' \
   -d '{"criteria":{"source":"iwencai","query":"高股息 股息率大于4% 市盈率小于20","gates":5,"rank":"zscore_top20"},"change_note":"初版口径"}'

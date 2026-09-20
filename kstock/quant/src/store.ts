@@ -241,7 +241,18 @@ export class LibraryStore {
     let contentJson = '{}'
     let contentBytes = 0
     if (c.version.content && input.criteria !== undefined) {
-      contentJson = JSON.stringify(input.criteria)
+      // Agent 容错：criteria 误传 JSON 字符串（会双重编码）时解一层；
+      // 非 JSON 纯文本包成 summary，保证面板时间线可读。
+      let criteriaValue: unknown = input.criteria
+      if (typeof criteriaValue === 'string') {
+        const text = criteriaValue.trim()
+        try {
+          criteriaValue = JSON.parse(text)
+        } catch {
+          criteriaValue = { summary: text }
+        }
+      }
+      contentJson = JSON.stringify(criteriaValue)
       contentBytes = Buffer.byteLength(contentJson)
       if (contentBytes > 64 * 1024) throw new StoreError(422, '选股条件超过 64KB 上限')
       writeFileSync(join(versionDir, 'criteria.json'), contentJson, 'utf-8')
