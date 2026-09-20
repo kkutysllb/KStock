@@ -99,14 +99,38 @@ export interface TaskTargetMenuProps {
   onClose: () => void
 }
 
-/** 目标选择菜单：轻量居中对话框，单击项即发送即记忆。 */
-export function TaskTargetMenu({ taskKind, title, prompt, bridge, useWorkspaces, onClose }: TaskTargetMenuProps) {
-  const items = useMemo(
-    () => (useWorkspaces !== undefined
-      ? (useWorkspaces(snapshot => snapshot.items ?? []) as Array<{ workspaceId: string; path: string; title?: string; sessionIds?: readonly string[] }>)
-      : []),
-    [useWorkspaces],
-  )
+/**
+ * 内层：useWorkspaces 恒存在（由外层 TaskTargetMenu 保证），hook 无条件
+ * 调用——Rules of Hooks 合规（禁在 useMemo 回调/条件分支里调 hook，
+ * 实测会炸 Minified React error #311）。
+ */
+function MenuBody({ useWorkspaces, ...rest }: TaskTargetMenuProps & { useWorkspaces: UseWorkspaces }): React.ReactElement {
+  const items = useWorkspaces(snapshot => snapshot.items ?? []) as Array<{
+    workspaceId: string
+    path: string
+    title?: string
+    sessionIds?: readonly string[]
+  }>
+  return <MenuView {...rest} items={items} />
+}
+
+/**
+ * 目标选择菜单外壳（零 hook）：useWorkspaces 缺席时降级渲染空列表，
+ * 存在时挂 MenuBody。分支发生在内层组件挂载之前——不同组件各自持有
+ * 稳定的 hooks 链，不会触发 hooks 数量漂移。
+ */
+export function TaskTargetMenu(props: TaskTargetMenuProps): React.ReactElement {
+  const { useWorkspaces, ...rest } = props
+  if (useWorkspaces === undefined) {
+    return <MenuView {...rest} items={[]} />
+  }
+  return <MenuBody {...rest} useWorkspaces={useWorkspaces} />
+}
+
+/** 目标选择菜单纯展示层：全部 hooks 无条件调用（items 由上层解析）。 */
+function MenuView({ items, taskKind, title, prompt, bridge, onClose }: Omit<TaskTargetMenuProps, 'useWorkspaces'> & {
+  items: Array<{ workspaceId: string; path: string; title?: string; sessionIds?: readonly string[] }>
+}) {
   const [memory] = useState<TaskTarget | null>(() => loadMemory(taskKind))
   const [defaultPath, setDefaultPath] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
