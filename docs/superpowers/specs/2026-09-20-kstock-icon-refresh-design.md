@@ -179,6 +179,11 @@
      生成器同时输出镜像 SVG 供像素级等价验证（`sheet-client-marks.png`）。
    - 篆书路径 1 位小数压缩：22.1KB → 11.5KB；`lib/client.cjs` 24.5KB → 42.6KB（gzip 15.8KB）。
    - 该文件同时是 `lib/*` 构建产物的来源，改动后需 `pnpm -C kstock/client-brand build`。
+   - **验证记录**（2026-09-20）：`pnpm -C kstock/client-brand build` 通过；改动文件 `tsc --noEmit` 零报错；
+     `bash scripts/check-ci.sh` 全绿；另做了一次**组件级渲染验证**——用 `react-dom/server` 实际渲染三个槽位，
+     24px 输出与生成器镜像**逐像素完全一致**（最大通道差 0），72px 与设计源 SVG 的差异仅
+     1.66% 边缘抗锯齿像素（源于篆书路径 1 位小数压缩，无可见影响）。
+     可重复的等价性检查由 `gen_client_marks.py` 输出的镜像 SVG 承担。
 6. 新增 `scripts/build-icons.sh` 与 `scripts/check-ci.sh` 中的图标校验：
    尺寸齐全、命名正确（`trayTemplate.png` / `@2x`）、`ico` 含 7 档、icns 含 1024。
 
