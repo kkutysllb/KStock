@@ -5,7 +5,8 @@
   "description": "KStock — A股量化分析 Super Agent（QiLin 3.x 引擎插件形态）",
   "packageManager": "pnpm@9.15.0",
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "kstock/*"
   ],
   "scripts": {
     "dev": "pnpm -C apps/desktop electron:dev",

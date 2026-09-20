@@ -36,7 +36,21 @@ UPSTREAM_EXE_BASE="deepseek-harness-sdk-runtime-$TARGET"
 # ── 1. KStock 插件包构建（宿主 + 四库界面 + 品牌 + 账户）──────────────
 echo "==> 构建 KStock 插件包"
 for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports; do
-  (cd "$REPO_ROOT/kstock/$pkg" && npx tsdown > /dev/null 2>&1)
+  # 前置：kstock/* 已并入根 workspace，一次根 pnpm install 全装。缺
+  # node_modules 时 npx 静默失败 + set -e 无声中止（Windows 实机踩坑：
+  # 脚本死在本步零报错，dev 侧只见「lib 未构建」无从定位），显式拦截。
+  if [ ! -d "$REPO_ROOT/kstock/$pkg/node_modules" ]; then
+    echo "!! kstock/$pkg 缺 node_modules——请先在仓库根执行 pnpm install" >&2
+    exit 1
+  fi
+  log="$(mktemp)"
+  if ! (cd "$REPO_ROOT/kstock/$pkg" && npx tsdown > "$log" 2>&1); then
+    echo "!! kstock/$pkg 构建失败（tsdown 尾部输出）：" >&2
+    tail -20 "$log" >&2
+    rm -f "$log"
+    exit 1
+  fi
+  rm -f "$log"
 done
 
 # ── 2. 引擎单文件（缺失或 --force-exe-build 时才构建，约数分钟）─────
