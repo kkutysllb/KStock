@@ -112,6 +112,7 @@ function displayTime(raw: string): string {
 /** 标的快析提示词（徽章点击）。 */
 function stockPrompt(tag: StockTag): string {
   return `对 ${tag.name}（${tag.code}）做快速分析：公司基本面要点 + 当前估值水平（含近一年历史分位）+ 近期催化与风险，最后一句话结论。`
+    + '当前会话若未挂载 stock-analysis/估值引擎技能，用网页检索补充并标注数据来源；禁止编造数值。'
 }
 
 /** 新闻解读提示词（解读按钮）。 */
@@ -120,7 +121,9 @@ function interpretPrompt(item: NewsItem): string {
   const related = (item.stocks ?? []).map((tag) => `${tag.name}(${tag.code})`).join('、')
   return `请解读这条财经快讯的市场影响：【${item.source} ${item.published_at}】${item.title}${summary}。`
     + (related !== '' ? `标题涉及标的：${related}。` : '')
-    + '要求：1) 用 news-search 技能检索交叉验证；2) 分析受益/受损方向与相关 A 股标的；'
+    + '要求：1) 检索交叉验证——当前会话挂载了 news-search 技能就优先用它；'
+    + '未挂载（如标准预设会话）改用网页检索工具；两者都不可用则基于新闻原文分析并明确标注「未交叉验证」，'
+    + '禁止反复尝试不存在的技能名；2) 分析受益/受损方向与相关 A 股标的；'
     + '3) 给出关注信号与反证信号；数据缺失诚实标注「无数据」，不构成投资建议。'
 }
 

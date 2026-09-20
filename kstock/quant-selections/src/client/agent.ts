@@ -44,5 +44,7 @@ export function interpretPickPrompt(input: {
   return `选股库「${input.selectionName}」v${input.version} 命中清单中${rank}${input.name}`
     + `（${input.code}${score}${dv}）${trap}：请做个股快速分析——公司基本面要点`
     + ` + 当前估值水平（含近一年历史分位）+ 作为高股息标的的分红可持续性`
-    + ` + 近期催化与风险，最后一句话结论。数据缺失诚实标注「无数据」，不构成投资建议。`
+    + ` + 近期催化与风险，最后一句话结论。当前会话若未挂载 stock-analysis/`
+    + `估值引擎技能，用网页检索补充并标注数据来源，禁止编造数值。`
+    + `数据缺失诚实标注「无数据」，不构成投资建议。`
 }
