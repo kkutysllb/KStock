@@ -13,7 +13,7 @@
  */
 
 import { app } from "electron";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createConnection } from "node:net";
 import {
   appendFileSync,
@@ -296,6 +296,27 @@ function legacySecretsEnvironment(): Record<string, string> {
  *
  * 打包态任何路径缺失都抛错指引重装；dev 态兜底失败指引跑引擎构建。
  */
+/**
+ * 单文件引擎冒烟：`--help` 退出码为 0 视为可用。
+ *
+ * 只验「能不能起到 CLI 帮助」——SEA 半成品（打包时漏包）通常在模块加载
+ * 期就崩，`--help` 足够暴露。冷启动含 pkg 快照初始化，给 30s 余量；
+ * 超时/异常一律视为不可用（宁可走源码直跑，也不要一个起不来的 exe）。
+ */
+function exeSmokeOk(exePath: string): boolean {
+  try {
+    const probe = spawnSync(exePath, ["--help"], {
+      timeout: 30_000,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    return probe.status === 0;
+  } catch (err) {
+    logMain(`exe 冒烟异常：${err instanceof Error ? err.message : String(err)}`);
+    return false;
+  }
+}
+
 function resolveEngineLaunch(): EngineLaunchSpec {
   const exeName = platform() === "win32" ? "kstock-engine.exe" : "kstock-engine";
   const pythonPath = enginePythonPath();
@@ -323,14 +344,21 @@ function resolveEngineLaunch(): EngineLaunchSpec {
   // 开发态：apps/desktop → ../../dist-exe（与 scripts/build-engine-bundle.sh 产物路径一致）
   const repoRoot = resolve(app.getAppPath(), "..", "..");
   const devExe = join(repoRoot, "dist-exe", exeName);
+  // 单文件 exe 冒烟：SEA 打包可能产出「能启动但缺包」的半成品（实机：
+  // runtime-bootstrap 解析 @qilin/sandbox-windows-acl 失败），此时静默
+  // 优先 exe 会让源码直跑这条稳路被白白挡住。冒烟不过就落到源码路径
+  // （dev 才有的兜底；打包态用户的 exe 缺东西只能重装）。
   if (existsSync(devExe)) {
-    return {
-      command: devExe,
-      args: ENGINE_ARGS,
-      cwd: dirname(devExe),
-      env: baseEnv,
-      label: "dev engine (single-file exe)",
-    };
+    if (exeSmokeOk(devExe)) {
+      return {
+        command: devExe,
+        args: ENGINE_ARGS,
+        cwd: dirname(devExe),
+        env: baseEnv,
+        label: "dev engine (single-file exe)",
+      };
+    }
+    logMain(`dist-exe 单文件引擎冒烟未通过（--help 非零退出），改用 vendor/qilin 源码直跑`);
   }
 
   if (!app.isPackaged) {
