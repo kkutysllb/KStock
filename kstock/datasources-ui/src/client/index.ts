@@ -9,6 +9,7 @@
 
 import type { Context as ClientContext } from '@qilin/kylin'
 import { DataSourcesSection, type DataSourcesSectionInjected } from './section.tsx'
+import { QuantWorkspaceSection, type QuantWorkspaceSectionInjected } from './workspace-section.tsx'
 
 const zh = {
   'nav': '数据源',
@@ -64,4 +65,44 @@ export function apply(ctx: ClientContext): void {
       save: (values) => DataSourcesSection.save(values),
     }),
   }, DataSourcesSection))
+
+  // 量化工作区（§26-9 智能路由配置面）：同一设置页的第二个分区，
+  // 独立 locale 命名空间；保存即时生效（sendRouted 每次读取）。
+  const wsZh = {
+    'nav': '量化工作区',
+    'title': '量化工作区',
+    'desc': '财经新闻/选股库「解读」等联动任务的目标工作区：当前会话不在该工作区时自动路由过去（复用空会话或最近会话）。留空 = 跟随当前会话。',
+    'placeholder': '/Users/你的量化研究目录',
+    'current': '当前',
+    'notConfigured': '未配置（联动跟随当前会话）',
+    'save': '保存',
+    'saving': '保存中…',
+    'saved': '已保存，即时生效',
+    'saveFailed': '保存失败',
+  } as const
+  type WsKey = keyof typeof wsZh
+  const wsEn: Record<WsKey, string> = {
+    'nav': 'Quant Workspace',
+    'title': 'Quant workspace',
+    'desc': 'Target workspace for interpret actions (news/selections): routed automatically when the current session lives elsewhere. Empty = follow current session.',
+    'placeholder': '/path/to/your/quant/workspace',
+    'current': 'Current',
+    'notConfigured': 'Not configured (follows current session)',
+    'save': 'Save',
+    'saving': 'Saving…',
+    'saved': 'Saved. Takes effect immediately',
+    'saveFailed': 'Save failed',
+  }
+  ctx.locale.register('settings.kstockQuantWorkspace', { zh: wsZh, en: wsEn })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'kstock-quant-workspace',
+    order: 31,
+    label: () => ctx.locale.bind('settings.kstockQuantWorkspace')('nav'),
+    locale: 'settings.kstockQuantWorkspace',
+    inject: (): QuantWorkspaceSectionInjected => ({
+      load: () => QuantWorkspaceSection.load(),
+      save: (path) => QuantWorkspaceSection.save(path),
+    }),
+  }, QuantWorkspaceSection))
 }

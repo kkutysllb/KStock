@@ -8,7 +8,8 @@
  * @module @kstock/quant
  */
 
-import { readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { StoreError, factorStore, selectionStore, strategyStore, type LibraryStore } from './store.ts'
 import { ReportsStore } from './reports.ts'
 import { dataSourceStatus, landingNews, workspaceNews } from './news.ts'
@@ -195,6 +196,42 @@ async function dispatch(
     if (method === 'PUT') {
       const body = await readJson(req)
       return saveDataSources(dataRoot, body.values)
+    }
+    throwMethod(method)
+  }
+  // 量化工作区路由配置（设置页）：新闻/选股库「解读」等联动任务的目标
+  // 工作区。GET 读当前值（未配置 path=null）；PUT 校验目录存在后写
+  // config/quant-workspace.json（null/空串 = 清除，回退「跟当前会话」语义）。
+  if (libraryKey === 'quant-workspace') {
+    const file = join(dataRoot, 'config', 'quant-workspace.json')
+    const read = (): { path: string | null } => {
+      try {
+        const parsed = JSON.parse(readFileSync(file, 'utf-8')) as { path?: unknown }
+        return { path: typeof parsed.path === 'string' && parsed.path.trim() !== '' ? parsed.path : null }
+      } catch {
+        return { path: null }
+      }
+    }
+    if (method === 'GET') return read()
+    if (method === 'PUT') {
+      const body = await readJson(req)
+      const raw = body.path
+      if (raw === null || raw === undefined || String(raw).trim() === '') {
+        mkdirSync(dirname(file), { recursive: true })
+        writeFileSync(file, JSON.stringify({ path: null }, null, 2) + '\n', 'utf-8')
+        return { path: null }
+      }
+      const path = resolve(String(raw))
+      let isDirectory = false
+      try {
+        isDirectory = statSync(path).isDirectory()
+      } catch {
+        // 目录不存在 → 下方 422
+      }
+      if (!isDirectory) throw new StoreError(422, `工作区目录不存在：${path}`)
+      mkdirSync(dirname(file), { recursive: true })
+      writeFileSync(file, JSON.stringify({ path }, null, 2) + '\n', 'utf-8')
+      return { path }
     }
     throwMethod(method)
   }

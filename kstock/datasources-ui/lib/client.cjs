@@ -15,8 +15,8 @@ window.__ModuleLoader__.load({
 		* 与组件生命周期解耦（设置页开合不丢已编辑内容）。
 		*/
 		/** 样式：一次性幂等注入。 */
-		const STYLE_ID = "kstock-datasources-style";
-		const STYLE_CSS = `
+		const STYLE_ID$1 = "kstock-datasources-style";
+		const STYLE_CSS$1 = `
 .kstock-ds{display:flex;flex-direction:column;gap:16px}
 .kstock-ds-head p{margin:4px 0 0;font-size:13px;opacity:.75}
 .kstock-ds-card{display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid rgba(148,163,184,.3);
@@ -30,14 +30,14 @@ window.__ModuleLoader__.load({
 .kstock-ds-ok{color:#22c55e}
 .kstock-ds-err{color:#ef4444}
 `;
-		function ensureStyle() {
-			if (document.getElementById(STYLE_ID) !== null) return;
+		function ensureStyle$1() {
+			if (document.getElementById(STYLE_ID$1) !== null) return;
 			const style = document.createElement("style");
-			style.id = STYLE_ID;
-			style.textContent = STYLE_CSS;
+			style.id = STYLE_ID$1;
+			style.textContent = STYLE_CSS$1;
 			document.head.appendChild(style);
 		}
-		async function apiGet() {
+		async function apiGet$1() {
 			try {
 				const response = await fetch("/kstock-api/data-sources", { headers: { accept: "application/json" } });
 				if (!response.ok) return { error: `HTTP ${response.status}` };
@@ -46,7 +46,7 @@ window.__ModuleLoader__.load({
 				return { error: error instanceof Error ? error.message : String(error) };
 			}
 		}
-		async function apiPut(values) {
+		async function apiPut$1(values) {
 			try {
 				const response = await fetch("/kstock-api/data-sources", {
 					method: "PUT",
@@ -60,9 +60,9 @@ window.__ModuleLoader__.load({
 			}
 		}
 		/** 静态控制器：与组件生命周期解耦。 */
-		const controller = {
-			load: apiGet,
-			save: apiPut
+		const controller$1 = {
+			load: apiGet$1,
+			save: apiPut$1
 		};
 		/**
 		* 渲染数据源分区。
@@ -76,7 +76,7 @@ window.__ModuleLoader__.load({
 			const [note, setNote] = (0, react.useState)(null);
 			const [busy, setBusy] = (0, react.useState)(false);
 			(0, react.useEffect)(() => {
-				ensureStyle();
+				ensureStyle$1();
 				load().then((result) => {
 					if ("sources" in result) {
 						setSources(result.sources);
@@ -193,8 +193,154 @@ window.__ModuleLoader__.load({
 				]
 			});
 		}
-		DataSourcesSection.load = controller.load;
-		DataSourcesSection.save = controller.save;
+		DataSourcesSection.load = controller$1.load;
+		DataSourcesSection.save = controller$1.save;
+		//#endregion
+		//#region src/client/workspace-section.tsx
+		/**
+		* 量化工作区设置分区：新闻/选股库联动任务（解读按钮）的目标工作区。
+		*
+		* 数据经静态控制器（同源 fetch /kstock-api/quant-workspace）拉取与写回，
+		* 与组件生命周期解耦（设置页开合不丢已编辑内容）。保存即时生效——
+		* 客户端 sendRouted 每次发送前读取，无需重启引擎。
+		*/
+		/** 样式：一次性幂等注入（独立于数据源分区的样式位）。 */
+		const STYLE_ID = "kstock-qws-style";
+		const STYLE_CSS = `
+.kstock-qws{display:flex;flex-direction:column;gap:12px}
+.kstock-qws-head p{margin:4px 0 0;font-size:13px;opacity:.75}
+.kstock-qws-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.kstock-qws-input{flex:1;min-width:260px;height:32px;padding:0 10px;border-radius:8px;
+  border:1px solid rgba(148,163,184,.4);background:transparent;color:inherit;font-size:13px}
+.kstock-qws-note{font-size:13px;margin:0}
+.kstock-qws-ok{color:#22c55e}
+.kstock-qws-err{color:#ef4444}
+.kstock-qws-code{font-family:ui-monospace,monospace;font-size:12px}
+`;
+		function ensureStyle() {
+			if (document.getElementById(STYLE_ID) !== null) return;
+			const style = document.createElement("style");
+			style.id = STYLE_ID;
+			style.textContent = STYLE_CSS;
+			document.head.appendChild(style);
+		}
+		async function apiGet() {
+			try {
+				const response = await fetch("/kstock-api/quant-workspace", { headers: { accept: "application/json" } });
+				if (!response.ok) return { error: `HTTP ${response.status}` };
+				return await response.json();
+			} catch (error) {
+				return { error: error instanceof Error ? error.message : String(error) };
+			}
+		}
+		async function apiPut(path) {
+			try {
+				const response = await fetch("/kstock-api/quant-workspace", {
+					method: "PUT",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify({ path })
+				});
+				if (!response.ok) return { error: (await response.json().catch(() => null))?.detail ?? `HTTP ${response.status}` };
+				return await response.json();
+			} catch (error) {
+				return { error: error instanceof Error ? error.message : String(error) };
+			}
+		}
+		/** 静态控制器：与组件生命周期解耦。 */
+		const controller = {
+			load: apiGet,
+			save: apiPut
+		};
+		/**
+		* 渲染量化工作区分区。
+		* @param props - 注入面 + 设置壳 owner props。
+		* @returns 分区内容。
+		*/
+		function QuantWorkspaceSection({ load, save, t }) {
+			const [current, setCurrent] = (0, react.useState)(null);
+			const [draft, setDraft] = (0, react.useState)("");
+			const [status, setStatus] = (0, react.useState)("loading");
+			const [note, setNote] = (0, react.useState)(null);
+			const [busy, setBusy] = (0, react.useState)(false);
+			(0, react.useEffect)(() => {
+				ensureStyle();
+				load().then((result) => {
+					if ("path" in result) {
+						setCurrent(result.path);
+						setDraft(result.path ?? "");
+						setStatus("ready");
+					} else {
+						setNote({
+							ok: false,
+							text: result.error
+						});
+						setStatus("error");
+					}
+				});
+			}, [load]);
+			const dirty = draft.trim() !== (current ?? "");
+			const onSave = () => {
+				setBusy(true);
+				save(draft.trim() === "" ? null : draft.trim()).then((result) => {
+					setBusy(false);
+					if ("path" in result) {
+						setCurrent(result.path);
+						setDraft(result.path ?? "");
+						setNote({
+							ok: true,
+							text: t("saved")
+						});
+					} else setNote({
+						ok: false,
+						text: result.error
+					});
+				});
+			};
+			if (status === "loading") return null;
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: "kstock-qws",
+				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "kstock-qws-head",
+					children: [
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("h3", { children: t("title") }),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", { children: t("desc") }),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("p", {
+							className: "kstock-qws-note",
+							children: [
+								t("current"),
+								"：",
+								current === null ? t("notConfigured") : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("code", {
+									className: "kstock-qws-code",
+									children: current
+								})
+							]
+						})
+					]
+				}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "kstock-qws-row",
+					children: [
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("input", {
+							className: "kstock-qws-input",
+							value: draft,
+							onChange: (event) => setDraft(event.target.value),
+							placeholder: t("placeholder"),
+							spellCheck: false
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)(_qilin_client_ui_primitives.Button, {
+							disabled: !dirty || busy,
+							onClick: onSave,
+							children: busy ? t("saving") : t("save")
+						}),
+						note !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+							className: `kstock-qws-note ${note.ok ? "kstock-qws-ok" : "kstock-qws-err"}`,
+							children: note.text
+						})
+					]
+				})]
+			});
+		}
+		QuantWorkspaceSection.load = controller.load;
+		QuantWorkspaceSection.save = controller.save;
 		//#endregion
 		//#region src/client/index.ts
 		const zh = {
@@ -250,6 +396,43 @@ window.__ModuleLoader__.load({
 					save: (values) => DataSourcesSection.save(values)
 				})
 			}, DataSourcesSection));
+			ctx.locale.register("settings.kstockQuantWorkspace", {
+				zh: {
+					"nav": "量化工作区",
+					"title": "量化工作区",
+					"desc": "财经新闻/选股库「解读」等联动任务的目标工作区：当前会话不在该工作区时自动路由过去（复用空会话或最近会话）。留空 = 跟随当前会话。",
+					"placeholder": "/Users/你的量化研究目录",
+					"current": "当前",
+					"notConfigured": "未配置（联动跟随当前会话）",
+					"save": "保存",
+					"saving": "保存中…",
+					"saved": "已保存，即时生效",
+					"saveFailed": "保存失败"
+				},
+				en: {
+					"nav": "Quant Workspace",
+					"title": "Quant workspace",
+					"desc": "Target workspace for interpret actions (news/selections): routed automatically when the current session lives elsewhere. Empty = follow current session.",
+					"placeholder": "/path/to/your/quant/workspace",
+					"current": "Current",
+					"notConfigured": "Not configured (follows current session)",
+					"save": "Save",
+					"saving": "Saving…",
+					"saved": "Saved. Takes effect immediately",
+					"saveFailed": "Save failed"
+				}
+			});
+			ctx.slots.inject("settings.section", () => ctx.slots.register({
+				name: "settings.section",
+				id: "kstock-quant-workspace",
+				order: 31,
+				label: () => ctx.locale.bind("settings.kstockQuantWorkspace")("nav"),
+				locale: "settings.kstockQuantWorkspace",
+				inject: () => ({
+					load: () => QuantWorkspaceSection.load(),
+					save: (path) => QuantWorkspaceSection.save(path)
+				})
+			}, QuantWorkspaceSection));
 		}
 		//#endregion
 		exports.apply = apply;

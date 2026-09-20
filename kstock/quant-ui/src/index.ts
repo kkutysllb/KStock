@@ -10,6 +10,7 @@
 import cssText from './quant.css?raw'
 
 export * from './api.ts'
+export * from './agent-route.ts'
 export * from './bits.tsx'
 export * from './icons.tsx'
 

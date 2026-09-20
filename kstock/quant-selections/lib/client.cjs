@@ -56,6 +56,65 @@ window.__ModuleLoader__.load({
 			return URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
 		}
 		//#endregion
+		//#region ../quant-ui/src/agent-route.ts
+		/** 尾分隔符归一后的目录比较（不做 realpath——两端都是展示口径路径）。 */
+		function sameDir(a, b) {
+			const norm = (p) => p.replace(/\/+$/, "") || "/";
+			return norm(a) === norm(b);
+		}
+		/** 读量化工作区配置；不可达/未配置返回 null（回退现状语义）。 */
+		async function fetchQuantWorkspacePath() {
+			try {
+				const response = await fetch("/kstock-api/quant-workspace");
+				if (!response.ok) return null;
+				const data = await response.json();
+				return typeof data.path === "string" && data.path.trim() !== "" ? data.path : null;
+			} catch {
+				return null;
+			}
+		}
+		async function sendTo(sessions, id, text) {
+			const conversation = sessions.scope(id)?.get("conversation");
+			if (conversation === void 0) throw new Error("会话作用域不可用（conversation 服务缺席）");
+			await conversation.send(text);
+		}
+		/**
+		* 智能路由发送：解析目标会话（见模块注释）→ conversation.send。
+		* 调用方在 send 完成后自行 gotoConversation() 切回对话页。
+		*/
+		async function sendRouted(sessions, text) {
+			if (sessions === void 0) throw new Error("会话服务不可用");
+			const target = await fetchQuantWorkspacePath();
+			const snapshot = sessions.list.getSnapshot();
+			const current = snapshot.current;
+			if (target === null) {
+				let id = current;
+				if (id === void 0) {
+					id = await sessions.create();
+					sessions.open(id);
+				}
+				await sendTo(sessions, id, text);
+				return;
+			}
+			if (current !== void 0) {
+				const cwd = snapshot.byId?.[current]?.cwd;
+				if (cwd !== void 0 && sameDir(cwd, target)) {
+					await sendTo(sessions, current, text);
+					return;
+				}
+			}
+			const entries = Object.entries(snapshot.byId ?? {}).filter(([, summary]) => summary.cwd !== void 0 && sameDir(summary.cwd, target));
+			const picked = entries.find(([, summary]) => summary.blank === true) ?? entries.sort(([, a], [, b]) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))[0];
+			if (picked !== void 0) {
+				sessions.open(picked[0]);
+				await sendTo(sessions, picked[0], text);
+				return;
+			}
+			const id = await sessions.create({ cwd: target });
+			sessions.open(id);
+			await sendTo(sessions, id, text);
+		}
+		//#endregion
 		//#region ../quant-ui/src/icons.tsx
 		function Svg({ size = 16, className, children }) {
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("svg", {
@@ -1035,18 +1094,7 @@ window.__ModuleLoader__.load({
 			ctx.effect(() => {
 				injectQuantStyles();
 				bindAgentBridge({
-					send: async (text) => {
-						const sessions = ctx.sessions;
-						if (sessions === void 0) throw new Error("会话服务不可用");
-						let id = sessions.list.getSnapshot().current;
-						if (id === void 0) {
-							id = await sessions.create();
-							sessions.open(id);
-						}
-						const conversation = sessions.scope(id)?.get("conversation");
-						if (conversation === void 0) throw new Error("会话作用域不可用（conversation 服务缺席）");
-						await conversation.send(text);
-					},
+					send: (text) => sendRouted(ctx.sessions, text),
 					gotoConversation: () => ctx.layout?.selectPanel(null)
 				});
 				ctx.slots.inject("main", () => ctx.slots.register({

@@ -15,23 +15,15 @@
  * 回合通道），随后 `layout.selectPanel('conversation')` 切回对话页。
  */
 
-import { IconNews, injectQuantStyles, type QuantClientContext } from '@kstock/quant-ui'
+import { IconNews, injectQuantStyles, sendRouted, type QuantClientContext } from '@kstock/quant-ui'
 import { bindAgentBridge, NewsPage } from './page.tsx'
 
 /** 面板键：main slot 与侧栏入口共用。 */
 const PANEL_KEY = 'kstock-client-news'
 
-/** sessions 服务的最小结构面（当前会话解析 + 建会话 + 作用域）。 */
-interface SessionsFace {
-  list: { getSnapshot(): { current?: string } }
-  create(opts?: { workspaceId?: string; cwd?: string; sessionId?: string }): Promise<string>
-  open(id: string): void
-  scope(id: string): { get(name: string): unknown } | undefined
-}
-
 /** sessions + layout 的最小结构面（运行时按上游契约调用）。 */
 interface NewsClientContext extends QuantClientContext {
-  sessions?: SessionsFace
+  sessions?: import('@kstock/quant-ui').SessionsFace
   layout?: { selectPanel(panelId: string | null): void }
 }
 
@@ -48,24 +40,10 @@ export function apply(ctx: NewsClientContext): void {
   ctx.effect(() => {
     injectQuantStyles()
     bindAgentBridge({
-      // conversation.send 需要会话作用域（上游契约：未经 scope 的
-      // conversation 服务没有会话归属）——取当前会话，无则建一个并
-      // 置为当前，再经 scope(id).conversation 发送。
-      send: async (text: string) => {
-        const sessions = ctx.sessions
-        if (sessions === undefined) throw new Error('会话服务不可用')
-        let id = sessions.list.getSnapshot().current
-        if (id === undefined) {
-          id = await sessions.create()
-          sessions.open(id)
-        }
-        const scoped = sessions.scope(id)
-        const conversation = scoped?.get('conversation') as
-          | { send(prompt: string): Promise<void> }
-          | undefined
-        if (conversation === undefined) throw new Error('会话作用域不可用（conversation 服务缺席）')
-        await conversation.send(text)
-      },
+      // 工作区智能路由（§26-9）：量化工作区已配置且当前会话不在其中时，
+      // 自动路由到目标工作区会话（复用 blank/最近会话，冷启动 create({cwd})）；
+      // 未配置回退「跟当前会话」语义。详见 @kstock/quant-ui agent-route。
+      send: (text: string) => sendRouted(ctx.sessions, text),
       // 上游 openSession 同款：selectPanel(null) 回到对话主面板。
       gotoConversation: () => ctx.layout?.selectPanel(null),
     })

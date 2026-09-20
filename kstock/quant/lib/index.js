@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { createHash, randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
+import { createHash, randomBytes } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
@@ -1248,6 +1248,15 @@ function dependenciesView(dataRoot) {
 }
 //#endregion
 //#region src/index.ts
+/**
+* @kstock/quant — KStock 量化库插件，node 半端。
+*
+* 四库（策略/因子/选股/报告）作为引擎插件的宿主侧：node:sqlite 直连既有
+* `product/kstock.db`（schema 与 1.x 完全兼容，用户数据无损），并经
+* webserver 注册 `/kstock-api/*` 数据路由，供量化客户端页面与 agent
+* 侧消费。不引入独立业务进程——数据面就在引擎插件体系内。
+* @module @kstock/quant
+*/
 /** 非 JSON 响应的直通形态（报告 HTML 正文等）。 */
 var RawResponse = class {
 	status;
@@ -1382,6 +1391,36 @@ async function dispatch(stores, reports, req, dataRoot, newsArchive) {
 	if (libraryKey === "data-sources") {
 		if (method === "GET") return dataSourcesView(dataRoot);
 		if (method === "PUT") return saveDataSources(dataRoot, (await readJson(req)).values);
+		throwMethod(method);
+	}
+	if (libraryKey === "quant-workspace") {
+		const file = join(dataRoot, "config", "quant-workspace.json");
+		const read = () => {
+			try {
+				const parsed = JSON.parse(readFileSync(file, "utf-8"));
+				return { path: typeof parsed.path === "string" && parsed.path.trim() !== "" ? parsed.path : null };
+			} catch {
+				return { path: null };
+			}
+		};
+		if (method === "GET") return read();
+		if (method === "PUT") {
+			const raw = (await readJson(req)).path;
+			if (raw === null || raw === void 0 || String(raw).trim() === "") {
+				mkdirSync(dirname(file), { recursive: true });
+				writeFileSync(file, JSON.stringify({ path: null }, null, 2) + "\n", "utf-8");
+				return { path: null };
+			}
+			const path = resolve(String(raw));
+			let isDirectory = false;
+			try {
+				isDirectory = statSync(path).isDirectory();
+			} catch {}
+			if (!isDirectory) throw new StoreError(422, `工作区目录不存在：${path}`);
+			mkdirSync(dirname(file), { recursive: true });
+			writeFileSync(file, JSON.stringify({ path }, null, 2) + "\n", "utf-8");
+			return { path };
+		}
 		throwMethod(method);
 	}
 	if (libraryKey === "reports") return dispatchReports(reports, req, url, method, segments.slice(2));
