@@ -36,10 +36,15 @@ esac
 
 cd "$REPO_ROOT/vendor/qilin"
 
-# pnpm 11 在跑脚本前做 deps 自检，判定不同步就自动执行 `pnpm install
-# --production`——该模式省略 devDependencies，vendor 根 postinstall
-# （install-lefthook，静态导入 lefthook）即随之失败并连带 build 失败
-# （Windows 实机）。我们的流程总是显式 install，自检只带来这类副作用。
-export npm_config_verify_deps_before_run=false
+# pnpm 11 在跑脚本前做 deps 自检（verifyDepsBeforeRun），判定不同步就用
+# **上次安装记录的 settings** 重放安装；而我们的 build-engine-bundle 步过
+# `pnpm deploy --prod`，工作区状态里 production=true → 自检实际执行
+# `pnpm install --production` → devDependencies 被剪掉（tsx/typescript
+# 消失），随后的 `tsx scripts/build.ts` 直接「不是内部或外部命令」
+# （Windows 实机）。该设置在 pnpm 源码里只读
+# `process.env.pnpm_config_verify_deps_before_run`（注意是 pnpm_config_
+# 前缀），且 switch 无 default 分支——值置 false 即静默跳过自检。
+# 我们的流程总是显式 install，自检只带来这类副作用。
+export pnpm_config_verify_deps_before_run=false
 
 exec node "$PNPM_CJS" "$@"
