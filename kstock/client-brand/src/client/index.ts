@@ -12,7 +12,7 @@ import type {} from '@qilin/client-ui-theme/client'
 import { applyBackgroundCss } from './background.ts'
 import { KStockArtistMark, KStockHeroMark, KStockMark, KStockWordmark } from './Marks.tsx'
 import { KSTOCK_THEME_SOURCE, KSTOCK_TOKENS } from './tokens.ts'
-import { applyUiFixesCss, applyWindowChromeCss } from './windowChrome.ts'
+import { applyThemeWatcher, applyUiFixesCss, applyWindowChromeCss } from './windowChrome.ts'
 
 /** 必需服务：槽位注册表（品牌标记）、主题注册表（token 覆盖）、locale 注册表（品牌文案）。 */
 export const inject = ['slots', 'theme', 'locale']
@@ -47,6 +47,9 @@ export function apply(ctx: ClientContext): void {
     const disposeBackground = applyBackgroundCss()
     const disposeUiFixes = applyUiFixesCss()
     const disposeWindowChrome = applyWindowChromeCss()
+    // 壳主题探测（仅 Electron）：明暗切换上报主进程，驱动窗口底色与
+    // Windows WCO overlay 热切换（chrome.ts 壳主题桥）。
+    const disposeThemeWatcher = applyThemeWatcher()
     const disposeMarks = ctx.slots.inject('sidebar.brand.mark', () =>
       ctx.slots.inject('sidebar.brand.name', () =>
         ctx.slots.inject('conversation.hero.brand.mark', function* () {
@@ -64,6 +67,7 @@ export function apply(ctx: ClientContext): void {
       disposeLocale()
       disposeAbout()
       disposeMarks()
+      disposeThemeWatcher()
       disposeWindowChrome()
       disposeUiFixes()
       disposeBackground()

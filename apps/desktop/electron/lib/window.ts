@@ -15,6 +15,12 @@ import {
 } from "electron";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import {
+  attachChromeThemeBridge,
+  chromeColorsFor,
+  loadChromeTheme,
+  SHELL_TITLEBAR_HEIGHT,
+} from "./chrome";
 import { logMain } from "./logger";
 
 let mainWindow: BrowserWindow | null = null;
@@ -37,6 +43,11 @@ export function loadInMainWindow(url: string): void {
 export function createMainWindow(targetUrl: string): BrowserWindow {
   engineOrigin = safeOrigin(targetUrl);
 
+  // 首帧主题取持久化值（renderer 上报后经 chrome 桥热切换）；
+  // 亮色主题不再吃深色底启动黑闪。
+  const theme = loadChromeTheme();
+  const { background, symbol } = chromeColorsFor(theme);
+
   const window = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -45,14 +56,20 @@ export function createMainWindow(targetUrl: string): BrowserWindow {
     show: false,
     // 无标题栏：macOS 红绿灯垂直居中于引擎 UI 的 48px 顶栏带（会话标题栏
     // 与侧栏品牌行同高，避让样式由 @kstock/client-brand 注入）；
-    // Windows/Linux 的 hidden + titleBarOverlay 由系统绘制窗控按钮。
+    // Windows/Linux 的 hidden + titleBarOverlay——WCO 原生层只画右上按钮簇，
+    // 标题栏本体是引擎 UI 自己的 48px 顶栏带（不下推内容，见 client-brand
+    // windowChrome 的 WINDOWS_TITLEBAR_CSS）；overlay 高度与该带对齐。
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
     trafficLightPosition: process.platform === "darwin" ? { x: 13, y: 18 } : undefined,
     titleBarOverlay:
       process.platform === "darwin"
         ? undefined
-        : { color: "#030d0b", symbolColor: "#d6d8dc", height: 40 },
-    backgroundColor: "#030d0b",
+        : {
+            color: background,
+            symbolColor: symbol,
+            height: SHELL_TITLEBAR_HEIGHT,
+          },
+    backgroundColor: background,
     // Windows 任务栏图标（macOS Dock 图标由 app.dock.setIcon 单独设置）。
     icon: resolveWindowIcon(),
     webPreferences: {
@@ -103,6 +120,10 @@ export function createMainWindow(targetUrl: string): BrowserWindow {
     }
     return { action: "deny" };
   });
+
+  // 壳主题桥：renderer 主题上报 → 底色/overlay 热切换 + 持久化；
+  // Windows 侧含 focus/restore/show overlay 重放（按钮簇丢失/黑块补丁）。
+  attachChromeThemeBridge(window);
 
   // 主框架导航拦截：仅允许引擎自身 origin（同源 302/登录跳转/SPA 路由）。
   // 无地址栏窗口整页跳转难以察觉，防止把窗口导航到外部站点。

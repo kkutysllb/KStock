@@ -150,7 +150,8 @@ class Verifier:
 
         # Electron 壳（引擎托管形态）
         for rel in ("electron/main.ts", "electron/lib/engine.ts", "electron/lib/window.ts",
-                    "electron/lib/menu.ts", "electron/lib/updater.ts", "electron/lib/deps.ts"):
+                    "electron/lib/menu.ts", "electron/lib/updater.ts", "electron/lib/deps.ts",
+                    "electron/lib/chrome.ts"):
             self.require_path(root / "apps" / "desktop" / rel, f"source apps/desktop/{rel}")
         self.require_file_contains(
             root / "apps" / "desktop" / "electron" / "lib" / "engine.ts",
