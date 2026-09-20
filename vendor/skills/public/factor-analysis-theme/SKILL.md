@@ -92,6 +92,54 @@ python3 $B analyze --factor-csv data/factor.csv --return-csv data/fwd.csv \
    因子定义 / 面板口径（防前视）/ 检验结果 / 稳健性 / 组合应用；
 2. 渲染 `-o reports/factor-<因子名>.html`，归档报告库，present 呈现。
 
+## 阶段五：归档因子库（必做，交付后收口）
+
+把本次因子检验沉淀为「因子库」资产——工作台侧栏「因子库」面板可随时
+回看 IC 曲线叠加、跨版本对比、重跑。引擎本机 `http://127.0.0.1:18001`，
+三步（均 curl POST，失败不阻塞交付）：
+
+```bash
+# 1 建因子（hypothesis=一句话逻辑假设；category 七类：
+#    value/momentum/quality/low_vol/size/growth/custom）
+FACTOR_ID=$(curl -s -X POST http://127.0.0.1:18001/kstock-api/factors \
+  -H 'content-type: application/json' \
+  -d '{"name":"20日动量","hypothesis":"近一月强势股短期延续超额收益","category":"momentum"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["factor_id"])')
+
+# 2 存代码版本（code=因子构造代码全文，≤512KB，落 factor_engine.py
+#    并记 sha256 版本链；params=窗口/分组等参数 JSON）
+curl -s -X POST http://127.0.0.1:18001/kstock-api/factors/$FACTOR_ID/versions \
+  -H 'content-type: application/json' \
+  -d @- <<'EOF'
+{"code":"（因子构造/检验核心代码全文贴入此处）",
+ "params":{"window":20,"n_groups":5,"freq":"M"},
+ "change_note":"初版：20日动量，5分组月度"}
+EOF
+
+# 3 存检验结果（data_start/data_end=面板区间；metrics=面板渲染五键；
+#    ic_series/layers=analyze 的原始 JSON 附件；rules.report_id 建看板链）
+curl -s -X POST http://127.0.0.1:18001/kstock-api/factors/$FACTOR_ID/runs \
+  -H 'content-type: application/json' -d @- <<'EOF'
+{"version":1,"data_start":"2024-09-20","data_end":"2026-09-18",
+ "rules":{"universe":"中证800","n_groups":5,
+          "report_id":"report-xxxxxxxxxxxx（阶段四归档返回的 id）"},
+ "metrics":{"ic_mean":0.052,"ir":1.31,"ic_positive_pct":61.3,
+            "long_short_spread_pct":8.7,"n_periods":24},
+ "ic_series":"（data/ic.json 的 ic 序列 JSON 贴入，≤2MB）",
+ "layers":"（分层净值/收益 JSON 贴入，≤2MB）"}
+EOF
+```
+
+- **重跑同一因子**：不要 POST 新因子——`PATCH /kstock-api/factors/{id}`
+  更新 hypothesis；代码或参数变化时 POST 新版本（code 变了 sha256 才变，
+  change_note 说明差异）；run 一律挂当前版本；
+- metrics 面板渲染键（**漏了对应列显示「—」**）：`ic_mean` / `ir` /
+  `ic_positive_pct` / `long_short_spread_pct` / `n_periods`；漏检可事后
+  UPDATE metrics_json 补；
+- ic_series 兼容 `[{date, ic}]` 对象数组与纯数值数组（面板做累计 IC）；
+- 引擎不可达时在最终回复里明说「未归档因子库」，其余交付照常（与
+  报告库归档同款降级语义）。
+
 ## 输出纪律（强约束）
 
 - IC/IR/分层数值**原样转述**，禁止改写或只报最优层；

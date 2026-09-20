@@ -374,6 +374,8 @@ window.__ModuleLoader__.load({
 			["long_short_spread_pct", "多空分层差 %"],
 			["n_periods", "检验期数"]
 		];
+		/** 空态引导：让 agent 把最近一次因子检验结果归档进因子库的复制提示词。 */
+		const INGEST_PROMPT = "请把本工作区最近一次因子检验任务的结果归档进 KStock 因子库（引擎 http://127.0.0.1:18001，不可达则跳过并明说）。三步：1) POST /kstock-api/factors，body {name: 因子名, hypothesis: 一句话逻辑假设, category: value/momentum/quality/low_vol/size/growth/custom 之一}；2) POST /kstock-api/factors/{factor_id}/versions，body {code: 因子构造代码全文, params: 窗口/分组参数 JSON, change_note}；3) POST /kstock-api/factors/{factor_id}/runs，body {version, data_start, data_end, rules（含 report_id 报告库看板链）, metrics: {ic_mean, ir, ic_positive_pct, long_short_spread_pct, n_periods}, ic_series: IC 序列 JSON, layers: 分层数据 JSON}。数据取自工作区 data/ 与 reports/ 下的真实产物，禁止编造。";
 		function FactorsSection() {
 			const [factors, setFactors] = (0, react.useState)([]);
 			const [loading, setLoading] = (0, react.useState)(true);
@@ -466,7 +468,7 @@ window.__ModuleLoader__.load({
 					active = false;
 				};
 			}, [selectedId, compareIds]);
-			const rerunPrompt = (version) => `请重跑因子库中的「${selected?.name ?? ""}」（${selectedId}）：因子代码与参数采用 v${version.version} 版本（change_note：${version.change_note || "无"}），股票池与检验配置参照该版本最近一次检验（无历史记录则用中证 800 + 近 2 年月度调仓）。跑完后把结果入库：POST /kstock-api/factors/${selectedId}/runs，version=${version.version}，附 universe/config/metrics/ic_series/layers。`;
+			const rerunPrompt = (version) => `请重跑因子库中的「${selected?.name ?? ""}」（${selectedId}）：因子代码与参数采用 v${version.version} 版本（change_note：${version.change_note || "无"}），股票池与检验配置参照该版本最近一次检验（无历史记录则用中证 800 + 近 2 年月度调仓）。跑完后把结果入库：POST /kstock-api/factors/${selectedId}/runs，version=${version.version}，附 data_start/data_end/rules（含 report_id 看板链）/metrics（ic_mean/ir/ic_positive_pct/long_short_spread_pct/n_periods）/ic_series/layers。`;
 			const icCurves = (0, react.useMemo)(() => icSeries.map((item, index) => ({
 				label: `v${item.version}`,
 				values: cumulativeIc(item.ic_series),
@@ -499,7 +501,7 @@ window.__ModuleLoader__.load({
 							className: "ksq-list",
 							children: factors.length === 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
 								className: "ksq-hint",
-								children: "暂无因子。在对话里让 agent 做「因子挖掘检验」并入库版本后，这里会出现因子资产。"
+								children: "暂无因子。用右侧提示词把最近一次因子检验结果入库。"
 							}) : factors.map((factor) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
 								type: "button",
 								className: `ksq-list-item ${factor.factor_id === selectedId ? "active" : ""}`,
@@ -536,7 +538,23 @@ window.__ModuleLoader__.load({
 							}, factor.factor_id))
 						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("section", {
 							className: "ksq-detail",
-							children: !selected ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+							children: !selected ? factors.length === 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+								className: "ksq-empty",
+								children: [
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "因子库还是空的" }),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", { children: "因子检验任务的产物目前只落在工作区文件（data/ 与 reports/）里。归档进因子库后，这里会出现可回看 IC 曲线、跨版本对比、重跑的因子资产。" }),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+										className: "ksq-linkbtn",
+										type: "button",
+										onClick: () => copy(INGEST_PROMPT),
+										children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconCopy, { size: 11 }), " 复制「把最近一次因子检验结果入库」提示词"]
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+										className: "ksq-item-meta",
+										children: "粘贴到对话发送即可；后续因子任务会按 factor-analysis-theme 阶段五自动归档。"
+									})
+								]
+							}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
 								className: "ksq-hint",
 								children: "从左侧选择一个因子查看版本时间线与检验对比。"
 							}) : detailLoading ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(Loading, { text: "加载因子详情…" }) : /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
