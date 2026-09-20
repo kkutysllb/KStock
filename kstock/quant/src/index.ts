@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs'
 import { StoreError, factorStore, selectionStore, strategyStore, type LibraryStore } from './store.ts'
 import { ReportsStore } from './reports.ts'
-import { dataSourceStatus, landingNews } from './news.ts'
+import { dataSourceStatus, landingNews, workspaceNews } from './news.ts'
 import { dataSourcesView, saveDataSources } from './datasources.ts'
 import { dependenciesView } from './deps.ts'
 
@@ -135,6 +135,8 @@ async function dispatch(
 
   // 落地页公共增强接口（匿名可达，与 1.x gateway 公共路由同语义）。
   if (libraryKey === 'landing-news') return method === 'GET' ? landingNews() : throwMethod(method)
+  // 工作台「财经新闻」面板 feed（侧栏菜单，30 条独立缓存槽）。
+  if (libraryKey === 'workspace-news') return method === 'GET' ? workspaceNews() : throwMethod(method)
   if (libraryKey === 'data-source-status') return method === 'GET' ? dataSourceStatus() : throwMethod(method)
   // 引擎 Python 依赖体检（设置页/诊断用）：逐依赖 import 探针与版本。
   if (libraryKey === 'dependencies') {

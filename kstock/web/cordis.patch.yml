@@ -96,6 +96,11 @@
     - id: kstock-quant-reports
       name: '@kstock/quant-reports'
 
+    # 财经新闻客户端插件：workspace 侧栏「财经新闻」实时快讯面板
+    # （GET /kstock-api/workspace-news，30 条独立缓存槽）。
+    - id: kstock-news-ui
+      name: '@kstock/client-news'
+
     # KStock 角色 preset 选择器（只列 6 个投研角色；standard 为隐形默认
     # 基座）。上游 ui-agent-preset 选择器被下面的 disabled 行下架。
     - id: kstock-presets-ui

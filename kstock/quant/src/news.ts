@@ -27,18 +27,17 @@ const CACHE_TTL_MS = 60_000
 /** 落地页最多展示 10 条（1.x LandingPage slice(0, 10)）。 */
 const MAX_ITEMS = 10
 
+/** 工作台「财经新闻」面板条数（主源 pageSize 50 内，30 条滚动浏览）。 */
+const WORKSPACE_MAX_ITEMS = 30
+
 const HTTP_TIMEOUT_MS = 8_000
 
 /** 部分公开接口会拒绝非常规 UA（requests/fetch 默认值），带浏览器 UA。 */
 const BROWSER_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
 
-let cache: { at: number; payload: LandingNewsPayload } | null = null
-let inflight: Promise<LandingNewsPayload> | null = null
-
 /** 东方财富全球财经快讯（akshare stock_info_global_em 的同源接口）。 */
-async function fetchEastmoney(limit: number): Promise<LandingNewsItem[]> {
-  const params = new URLSearchParams({
+async function fetchEastmoney(limit: number): Promise<LandingNewsItem[]> {  const params = new URLSearchParams({
     client: 'web',
     biz: 'web_724',
     fastColumn: '102',
@@ -121,41 +120,56 @@ async function fetchCctv(limit: number): Promise<LandingNewsItem[]> {
 }
 
 /** 刷新一次快讯（主源优先、备源补足；不缓存失败结果）。 */
-async function refreshLandingNews(): Promise<LandingNewsPayload> {
+async function refreshNews(limit: number): Promise<LandingNewsPayload> {
   let items: LandingNewsItem[] = []
   try {
-    items = await fetchEastmoney(MAX_ITEMS)
+    items = await fetchEastmoney(limit)
   } catch {
     // 主源不可用（无网/接口变更）时落到备源，与 1.x 的降级次序一致。
   }
-  if (items.length < MAX_ITEMS) {
+  if (items.length < limit) {
     try {
-      items = [...items, ...(await fetchCctv(MAX_ITEMS - items.length))]
+      items = [...items, ...(await fetchCctv(limit - items.length))]
     } catch {
       // 备源也失败则保留已获取条目（可能为空）。
     }
   }
-  if (items.length > 0) {
-    cache = { at: Date.now(), payload: { items, updated_at: new Date().toISOString() } }
-  }
   return { items, updated_at: new Date().toISOString() }
 }
 
-/**
- * 读取落地页快讯：60 秒内存缓存；并发请求合并到同一次刷新。
- * 失败不抛错——返回空列表由落地页渲染空态。
- */
-export async function landingNews(): Promise<LandingNewsPayload> {
-  if (cache !== null && Date.now() - cache.at < CACHE_TTL_MS) {
-    return cache.payload
+/** 读缓存工厂：60 秒 TTL + 并发合并；成功才写缓存（失败不缓存）。 */
+function createFeed(limit: number): () => Promise<LandingNewsPayload> {
+  let cache: { at: number; payload: LandingNewsPayload } | null = null
+  let inflight: Promise<LandingNewsPayload> | null = null
+  return async (): Promise<LandingNewsPayload> => {
+    if (cache !== null && Date.now() - cache.at < CACHE_TTL_MS) {
+      return cache.payload
+    }
+    if (inflight === null) {
+      inflight = refreshNews(limit)
+        .then((payload) => {
+          if (payload.items.length > 0) cache = { at: Date.now(), payload }
+          return payload
+        })
+        .finally(() => {
+          inflight = null
+        })
+    }
+    return inflight
   }
-  if (inflight === null) {
-    inflight = refreshLandingNews().finally(() => {
-      inflight = null
-    })
-  }
-  return inflight
 }
+
+/**
+ * 落地页快讯（10 条）：失败不抛错——返回空列表由落地页渲染空态。
+ */
+export const landingNews: () => Promise<LandingNewsPayload> = createFeed(MAX_ITEMS)
+
+/**
+ * 工作台财经新闻面板 feed（30 条，独立缓存）：侧栏「财经新闻」菜单的
+ * 数据源（@kstock/client-news 经 GET /kstock-api/workspace-news 消费）。
+ * 与落地页同一条主备源流水线，仅条数与缓存槽不同。
+ */
+export const workspaceNews: () => Promise<LandingNewsPayload> = createFeed(WORKSPACE_MAX_ITEMS)
 
 /** 数据源连接状态（1.x data-source-status：只报是否配置，绝不回传密钥）。 */
 export interface DataSourceStatus {

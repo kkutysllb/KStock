@@ -63,6 +63,22 @@ importers:
         specifier: 0.22.2
         version: 0.22.2(tsx@4.23.13)(typescript@6.0.3)
 
+  kstock/news-ui:
+    dependencies:
+      '@kstock/quant-ui':
+        specifier: workspace:^
+        version: link:../quant-ui
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.3
+        version: 18.3.31
+      tsdown:
+        specifier: 0.22.2
+        version: 0.22.2(tsx@4.23.13)(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   kstock/presets-ui:
     devDependencies:
       tsdown:
@@ -2338,7 +2354,7 @@ snapshots:
 
   '@babel/generator@8.0.0-rc.6':
     dependencies:
-      '@babel/parser': 8.0.0-rc.6
+      '@babel/parser': 8.0.6
       '@babel/types': 8.0.6
       '@jridgewell/gen-mapping': 0.3.13
       '@jridgewell/trace-mapping': 0.3.31

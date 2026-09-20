@@ -18,7 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PLUGIN_PACKAGES = ("accounts", "client-brand", "web", "quant",
-                   "quant-strategies", "quant-factors", "quant-selections", "quant-reports")
+                   "quant-strategies", "quant-factors", "quant-selections", "quant-reports",
+                   "news-ui")
 
 
 @dataclass
@@ -80,9 +81,10 @@ class Verifier:
 
         # KStock 插件包：清单 + 宿主/客户端半端 + bundle patch
         # web 是纯宿主 bundle 包（无客户端半端）；quant 为纯数据宿主；
-        # client-brand 与四个量化库界面包（quant-*）为客户端插件。
+        # client-brand、四个量化库界面包（quant-*）与财经新闻面板（news-ui）
+        # 为客户端插件。
         CLIENT_PACKAGES = ("client-brand", "quant-strategies", "quant-factors",
-                           "quant-selections", "quant-reports")
+                           "quant-selections", "quant-reports", "news-ui")
         self.require_path(root / "kstock" / "web" / "cordis.patch.yml", "source kstock/web bundle patch")
         for pkg in PLUGIN_PACKAGES:
             manifest = root / "kstock" / pkg / "package.json"

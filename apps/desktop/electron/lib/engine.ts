@@ -83,6 +83,7 @@ export function ensureKstockProfile(): string {
     ["@kstock/quant-factors", "quant-factors"],
     ["@kstock/quant-selections", "quant-selections"],
     ["@kstock/quant-reports", "quant-reports"],
+    ["@kstock/client-news", "news-ui"],
     ["@kstock/web", "web"],
   ];
 
