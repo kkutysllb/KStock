@@ -341,6 +341,26 @@ function resolveEngineLaunch(): EngineLaunchSpec {
         `dev 引擎入口缺失：${cliEntry}（请确认 vendor/qilin 快照完整，或先执行引擎单文件构建）`,
       );
     }
+    // 源码直跑前置：vendor/qilin 需已装依赖（tsx 等）且 packages/*/lib 已
+    // 构建（工作区包 exports 指向 lib/index.js，lib 不入库）。缺任一都让
+    // 引擎子进程在 import 阶段静默退出（Windows 实机踩坑：
+    // ERR_MODULE_NOT_FOUND tsx）——这里前置拦截并给出可操作指引。
+    const tsxInstalled = existsSync(join(engineRepo, "node_modules", "tsx"));
+    const libBuilt = existsSync(join(engineRepo, "packages", "host", "webserver", "lib"));
+    if (!tsxInstalled || !libBuilt) {
+      const missing = [
+        !tsxInstalled ? "缺 node_modules（tsx 等）" : null,
+        !libBuilt ? "packages/*/lib 未构建" : null,
+      ]
+        .filter((s): s is string => s !== null)
+        .join("，");
+      throw new Error(
+        `dev 引擎依赖未就绪：vendor/qilin ${missing}。请先执行（Git Bash / 任意 bash）：\n` +
+          `  cd vendor/qilin && ../../scripts/qilin-pnpm.sh install --frozen-lockfile\n` +
+          `  bash scripts/build-engine-bundle.sh   # 推荐：产物 dist-exe/kstock-engine(.exe) 一步到位\n` +
+          `（不建单文件而走源码直跑时，还需 ../../scripts/qilin-pnpm.sh run build 生成 lib）`,
+      );
+    }
     return {
       // dev 兜底用系统 Node（≥22.5，需 node:sqlite 支撑量化存储插件）。
       // 打包态引擎 exe 自带 Node 24，无此外部依赖。不用 Electron 自带

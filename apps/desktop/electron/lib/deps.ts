@@ -16,6 +16,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { platform } from "node:os";
 import { appDataDirectory } from "./engine";
 import { logMain } from "./logger";
 
@@ -34,12 +35,15 @@ export function pythonDepsDirectory(): string {
   return join(appDataDirectory(), "py-deps");
 }
 
-/** 引擎 PYTHONPATH：py-deps 前置（目录存在时），拼接既有值；无则 undefined。 */
+/** 引擎 PYTHONPATH：py-deps 前置（目录存在时），拼接既有值；无则 undefined。
+ * 分隔符平台相关（Windows ';'，Unix ':'）——写死 ':' 在 Windows 上会把
+ * 整串拼成一个非法路径，依赖层整体失效。 */
 export function enginePythonPath(): string | undefined {
   const parts = [pythonDepsDirectory(), process.env.PYTHONPATH].filter(
     (value): value is string => typeof value === "string" && value !== "",
   );
-  return parts.length > 0 ? parts.join(":") : undefined;
+  if (parts.length === 0) return undefined;
+  return parts.join(platform() === "win32" ? ";" : ":");
 }
 
 /** 探针/安装共用的子进程环境（PYTHONPATH 含 py-deps）。 */
@@ -48,29 +52,55 @@ function pythonEnv(): NodeJS.ProcessEnv {
   return path === undefined ? { ...process.env } : { ...process.env, PYTHONPATH: path };
 }
 
-/** 解析可用的 python 解释器（python3 优先，Windows 回落 python）。 */
-function resolvePythonBin(): string | null {
-  for (const bin of ["python3", "python"]) {
-    const probe = spawnSync(bin, ["--version"], { encoding: "utf8", timeout: 15_000 });
-    if (probe.status === 0) return bin;
+/** python 启动器：bin + 固定前缀参数（py 启动器需 -3 指定大版本）。 */
+interface PythonLauncher {
+  bin: string;
+  prefix: string[];
+}
+
+/**
+ * 解析可用的 python 解释器：python3 → python → py -3。
+ * py 启动器兜底覆盖 Windows python.org 安装器的默认形态（只装 py
+ * launcher、PATH 不加 python/python3，非常常见）。
+ */
+function resolvePythonLauncher(): PythonLauncher | null {
+  const candidates: PythonLauncher[] = [
+    { bin: "python3", prefix: [] },
+    { bin: "python", prefix: [] },
+    { bin: "py", prefix: ["-3"] },
+  ];
+  for (const candidate of candidates) {
+    const probe = spawnSync(candidate.bin, [...candidate.prefix, "--version"], {
+      encoding: "utf8",
+      timeout: 15_000,
+    });
+    if (probe.status === 0) return candidate;
   }
   return null;
 }
 
 /** pythonX.Y（marker 的版本键，解释器升级后自动重装）。 */
-function pythonVersionKey(bin: string): string | null {
-  const probe = spawnSync(bin, ["-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"], {
-    encoding: "utf8",
-    timeout: 15_000,
-  });
+function pythonVersionKey(launcher: PythonLauncher): string | null {
+  const probe = spawnSync(
+    launcher.bin,
+    [...launcher.prefix, "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"],
+    {
+      encoding: "utf8",
+      timeout: 15_000,
+    },
+  );
   const match = (probe.stdout ?? "").trim().match(/^\d+\.\d+$/);
   return match === null ? null : match[0];
 }
 
 /** import 探针：全部依赖可导入返回 true。 */
-function dependenciesImportable(bin: string): boolean {
+function dependenciesImportable(launcher: PythonLauncher): boolean {
   const script = `import ${DEPENDENCIES.map((d) => d.module).join(", ")}`;
-  const probe = spawnSync(bin, ["-c", script], { encoding: "utf8", timeout: 120_000, env: pythonEnv() });
+  const probe = spawnSync(launcher.bin, [...launcher.prefix, "-c", script], {
+    encoding: "utf8",
+    timeout: 120_000,
+    env: pythonEnv(),
+  });
   return probe.status === 0;
 }
 
@@ -83,27 +113,31 @@ export async function ensureEnginePythonDeps(): Promise<void> {
     logMain("Python 依赖引导：KSTOCK_SKIP_DEP_BOOTSTRAP=1，跳过");
     return;
   }
-  const bin = resolvePythonBin();
-  if (bin === null) {
-    logMain("Python 依赖引导：未找到 python3/python，技能引擎将按无数据降级（请安装 Python 3.9+）");
+  const launcher = resolvePythonLauncher();
+  if (launcher === null) {
+    logMain("Python 依赖引导：未找到 python3/python/py，技能引擎将按无数据降级（请安装 Python 3.9+）");
     return;
   }
-  const versionKey = pythonVersionKey(bin);
+  const binLabel = [launcher.bin, ...launcher.prefix].join(" ");
+  const versionKey = pythonVersionKey(launcher);
   const depsDir = pythonDepsDirectory();
   const marker = versionKey === null ? null : join(depsDir, `.ready-${versionKey}`);
   if (marker !== null && existsSync(marker)) return;
 
-  if (dependenciesImportable(bin)) {
+  if (dependenciesImportable(launcher)) {
     mkdirSync(depsDir, { recursive: true });
     if (marker !== null) writeFileSync(marker, `${new Date().toISOString()}\n`);
-    logMain(`Python 依赖引导：环境已有全部依赖（${bin}），无需安装`);
+    logMain(`Python 依赖引导：环境已有全部依赖（${binLabel}），无需安装`);
     return;
   }
 
-  const pip = spawnSync(bin, ["-m", "pip", "--version"], { encoding: "utf8", timeout: 30_000 });
+  const pip = spawnSync(launcher.bin, [...launcher.prefix, "-m", "pip", "--version"], {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
   if (pip.status !== 0) {
     logMain(
-      `Python 依赖引导：${bin} 缺 pip（python3 -m pip 不可用）。请安装 pip 后重启；` +
+      `Python 依赖引导：${binLabel} 缺 pip（-m pip 不可用）。请安装 pip 后重启；` +
         "技能引擎在此之前按无数据降级",
     );
     return;
@@ -111,18 +145,31 @@ export async function ensureEnginePythonDeps(): Promise<void> {
 
   logMain(`Python 依赖引导：首次安装引擎依赖到 ${depsDir}（约 1-3 分钟，仅此一次）…`);
   const packages = DEPENDENCIES.map((d) => d.pip);
-  const install = spawnSync(bin, ["-m", "pip", "install", "--target", depsDir, "--upgrade", ...packages], {
-    encoding: "utf8",
-    timeout: 10 * 60_000,
-    env: pythonEnv(),
-  });
+  const startedAt = Date.now();
+  const install = spawnSync(
+    launcher.bin,
+    [...launcher.prefix, "-m", "pip", "install", "--target", depsDir, "--upgrade", ...packages],
+    {
+      encoding: "utf8",
+      timeout: 10 * 60_000,
+      env: pythonEnv(),
+    },
+  );
   if (install.status !== 0) {
+    // status null = 被信号杀（多半是 10 分钟超时，慢网络装 pandas/
+    // numpy/matplotlib 可能超）或 spawn 失败——把 signal/error 说清楚，
+    // 别只给一个「exit null」（Windows 实机反馈无法定位）。
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+    const detail =
+      install.error?.message ?? (install.stderr ?? install.stdout ?? "").trim().slice(-400);
     logMain(
-      `Python 依赖引导：安装失败（exit ${install.status}）——${(install.stderr ?? install.stdout ?? "").slice(-400)}`,
+      `Python 依赖引导：安装失败（exit ${install.status}` +
+        `${install.signal === null ? "" : `, signal ${install.signal}`}, 耗时 ${elapsed}s` +
+        `）——${detail === "" ? "无输出（若为超时请重跑，已装包会续传）" : detail}`,
     );
     return;
   }
-  if (!dependenciesImportable(bin)) {
+  if (!dependenciesImportable(launcher)) {
     logMain("Python 依赖引导：安装后探针仍未通过，请查看上方日志；技能引擎按无数据降级");
     return;
   }
