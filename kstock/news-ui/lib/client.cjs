@@ -553,10 +553,10 @@ window.__ModuleLoader__.load({
 		function NavIcon({ size }) {
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconNews, { size: size ?? 18 });
 		}
-		/** 必需服务：slot 注册表 + 会话注入 + 面板切换。 */
+		/** 必需服务：slot 注册表 + 会话作用域 + 面板切换。 */
 		const inject = [
 			"slots",
-			"conversation",
+			"sessions",
 			"layout"
 		];
 		/** 客户端插件体。 */
@@ -564,8 +564,19 @@ window.__ModuleLoader__.load({
 			ctx.effect(() => {
 				injectQuantStyles();
 				bindAgentBridge({
-					send: (text) => ctx.conversation?.send(text) ?? Promise.reject(/* @__PURE__ */ new Error("会话服务不可用")),
-					gotoConversation: () => ctx.layout?.selectPanel("conversation")
+					send: async (text) => {
+						const sessions = ctx.sessions;
+						if (sessions === void 0) throw new Error("会话服务不可用");
+						let id = sessions.list.getSnapshot().current;
+						if (id === void 0) {
+							id = await sessions.create();
+							sessions.open(id);
+						}
+						const conversation = sessions.scope(id)?.get("conversation");
+						if (conversation === void 0) throw new Error("会话作用域不可用（conversation 服务缺席）");
+						await conversation.send(text);
+					},
+					gotoConversation: () => ctx.layout?.selectPanel(null)
 				});
 				ctx.slots.inject("main", () => ctx.slots.register({
 					name: "main",

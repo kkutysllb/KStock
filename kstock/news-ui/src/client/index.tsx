@@ -21,9 +21,17 @@ import { bindAgentBridge, NewsPage } from './page.tsx'
 /** 面板键：main slot 与侧栏入口共用。 */
 const PANEL_KEY = 'kstock-client-news'
 
-/** conversation + layout 的最小结构面（运行时按上游契约调用）。 */
+/** sessions 服务的最小结构面（当前会话解析 + 建会话 + 作用域）。 */
+interface SessionsFace {
+  list: { getSnapshot(): { current?: string } }
+  create(opts?: { workspaceId?: string; cwd?: string; sessionId?: string }): Promise<string>
+  open(id: string): void
+  scope(id: string): { get(name: string): unknown } | undefined
+}
+
+/** sessions + layout 的最小结构面（运行时按上游契约调用）。 */
 interface NewsClientContext extends QuantClientContext {
-  conversation?: { send(text: string): Promise<void> }
+  sessions?: SessionsFace
   layout?: { selectPanel(panelId: string | null): void }
 }
 
@@ -32,16 +40,34 @@ function NavIcon({ size }: { size?: number }) {
   return <IconNews size={size ?? 18} />
 }
 
-/** 必需服务：slot 注册表 + 会话注入 + 面板切换。 */
-export const inject = ['slots', 'conversation', 'layout']
+/** 必需服务：slot 注册表 + 会话作用域 + 面板切换。 */
+export const inject = ['slots', 'sessions', 'layout']
 
 /** 客户端插件体。 */
 export function apply(ctx: NewsClientContext): void {
   ctx.effect(() => {
     injectQuantStyles()
     bindAgentBridge({
-      send: (text) => ctx.conversation?.send(text) ?? Promise.reject(new Error('会话服务不可用')),
-      gotoConversation: () => ctx.layout?.selectPanel('conversation'),
+      // conversation.send 需要会话作用域（上游契约：未经 scope 的
+      // conversation 服务没有会话归属）——取当前会话，无则建一个并
+      // 置为当前，再经 scope(id).conversation 发送。
+      send: async (text: string) => {
+        const sessions = ctx.sessions
+        if (sessions === undefined) throw new Error('会话服务不可用')
+        let id = sessions.list.getSnapshot().current
+        if (id === undefined) {
+          id = await sessions.create()
+          sessions.open(id)
+        }
+        const scoped = sessions.scope(id)
+        const conversation = scoped?.get('conversation') as
+          | { send(prompt: string): Promise<void> }
+          | undefined
+        if (conversation === undefined) throw new Error('会话作用域不可用（conversation 服务缺席）')
+        await conversation.send(text)
+      },
+      // 上游 openSession 同款：selectPanel(null) 回到对话主面板。
+      gotoConversation: () => ctx.layout?.selectPanel(null),
     })
     ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL_KEY }, NewsPage))
     ctx.slots.inject('sidebar.panellist', () => ctx.slots.register(
