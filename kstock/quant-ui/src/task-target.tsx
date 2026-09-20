@@ -43,6 +43,61 @@ export interface TaskRouterBridge {
   gotoConversation(): void
 }
 
+/** 面板 ctx 的服务依赖面（各 index.tsx 的最小结构面并集）。 */
+export interface TaskRouterDeps {
+  sessions?: SessionsFace
+  layout?: { selectPanel(panelId: string | null): void }
+  uiWorkspace?: {
+    pickDirectory(): Promise<string | null>
+    connectWorkspace(workspaceId: string): Promise<string>
+  }
+  workspaces?: {
+    create(input: { path: string }): Promise<{ workspaceId: string; path: string }>
+  }
+}
+
+/**
+ * 标准路由桥实现（面板共用：新闻/选股库/因子库）。current=当前会话
+ * （无则默认建）；workspace=connectWorkspace（复用/新建 blank 会话并挂
+ * 进工作区分组——修复裸 create({cwd}) 的「未分组」与产物散落）。
+ */
+export function buildTaskRouterBridge(deps: TaskRouterDeps): TaskRouterBridge {
+  return {
+    send: async (target: TaskTarget, text: string): Promise<void> => {
+      const sessions = deps.sessions
+      if (sessions === undefined) throw new Error('会话服务不可用')
+      let id: string | undefined
+      if (target.kind === 'workspace') {
+        const uiWorkspace = deps.uiWorkspace
+        if (uiWorkspace === undefined) throw new Error('工作区服务不可用')
+        id = await uiWorkspace.connectWorkspace(target.workspaceId)
+        sessions.open(id)
+      } else {
+        id = sessions.list.getSnapshot().current
+        if (id === undefined) {
+          id = await sessions.create()
+          sessions.open(id)
+        }
+      }
+      const scoped = sessions.scope(id)
+      const conversation = scoped?.get('conversation') as
+        | { send(prompt: string): Promise<void> }
+        | undefined
+      if (conversation === undefined) throw new Error('会话作用域不可用（conversation 服务缺席）')
+      await conversation.send(text)
+    },
+    pickDirectory: (): Promise<string | null> => {
+      if (deps.uiWorkspace === undefined) return Promise.reject(new Error('工作区服务不可用'))
+      return deps.uiWorkspace.pickDirectory()
+    },
+    registerWorkspace: async (path: string) => {
+      if (deps.workspaces === undefined) throw new Error('工作区注册服务不可用')
+      return await deps.workspaces.create({ path })
+    },
+    gotoConversation: () => deps.layout?.selectPanel(null),
+  }
+}
+
 /** useWorkspaces hook 的最小结构面（GlobalStandardProps 注入，防御式可选）。 */
 export type UseWorkspaces = (selector: (snapshot: { items?: Array<{ workspaceId: string; path: string; title?: string; sessionIds?: readonly string[] }> }) => unknown) => unknown
 

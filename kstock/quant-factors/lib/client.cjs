@@ -70,6 +70,257 @@ window.__ModuleLoader__.load({
 		* 按任务类型（news / pick）分别记忆上次选择，下次菜单首项即默认；
 		* 单击任意项 = 发送 + 记忆 + 关闭。
 		*/
+		/**
+		* 标准路由桥实现（面板共用：新闻/选股库/因子库）。current=当前会话
+		* （无则默认建）；workspace=connectWorkspace（复用/新建 blank 会话并挂
+		* 进工作区分组——修复裸 create({cwd}) 的「未分组」与产物散落）。
+		*/
+		function buildTaskRouterBridge(deps) {
+			return {
+				send: async (target, text) => {
+					const sessions = deps.sessions;
+					if (sessions === void 0) throw new Error("会话服务不可用");
+					let id;
+					if (target.kind === "workspace") {
+						const uiWorkspace = deps.uiWorkspace;
+						if (uiWorkspace === void 0) throw new Error("工作区服务不可用");
+						id = await uiWorkspace.connectWorkspace(target.workspaceId);
+						sessions.open(id);
+					} else {
+						id = sessions.list.getSnapshot().current;
+						if (id === void 0) {
+							id = await sessions.create();
+							sessions.open(id);
+						}
+					}
+					const conversation = sessions.scope(id)?.get("conversation");
+					if (conversation === void 0) throw new Error("会话作用域不可用（conversation 服务缺席）");
+					await conversation.send(text);
+				},
+				pickDirectory: () => {
+					if (deps.uiWorkspace === void 0) return Promise.reject(/* @__PURE__ */ new Error("工作区服务不可用"));
+					return deps.uiWorkspace.pickDirectory();
+				},
+				registerWorkspace: async (path) => {
+					if (deps.workspaces === void 0) throw new Error("工作区注册服务不可用");
+					return await deps.workspaces.create({ path });
+				},
+				gotoConversation: () => deps.layout?.selectPanel(null)
+			};
+		}
+		/** 按任务类型记忆上次选择（news / pick 各记各的，互不覆盖）。 */
+		function loadMemory(taskKind) {
+			try {
+				const raw = localStorage.getItem(`kstock-task-route-${taskKind}`);
+				if (raw === null) return null;
+				const parsed = JSON.parse(raw);
+				if (parsed.kind === "current") return parsed;
+				if (parsed.kind === "workspace" && typeof parsed.workspaceId === "string") return parsed;
+			} catch {}
+			return null;
+		}
+		function saveMemory(taskKind, target) {
+			try {
+				localStorage.setItem(`kstock-task-route-${taskKind}`, JSON.stringify(target));
+			} catch {}
+		}
+		/** 读设置页「量化工作区」统一配置（无记忆时的默认目标；不可达返回 null）。 */
+		async function fetchDefaultPath() {
+			try {
+				const response = await fetch("/kstock-api/quant-workspace");
+				if (!response.ok) return null;
+				const data = await response.json();
+				return typeof data.path === "string" && data.path.trim() !== "" ? data.path : null;
+			} catch {
+				return null;
+			}
+		}
+		const sameDir = (a, b) => {
+			const norm = (p) => p.replace(/\/+$/, "") || "/";
+			return norm(a) === norm(b);
+		};
+		const targetKey = (target) => target === null ? "" : target.kind === "current" ? "current" : `ws:${target.workspaceId}`;
+		/**
+		* 内层：useWorkspaces 恒存在（由外层 TaskTargetMenu 保证），hook 无条件
+		* 调用——Rules of Hooks 合规（禁在 useMemo 回调/条件分支里调 hook，
+		* 实测会炸 Minified React error #311）。
+		*/
+		function MenuBody({ useWorkspaces, ...rest }) {
+			const items = useWorkspaces((snapshot) => snapshot.items ?? []);
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(MenuView, {
+				...rest,
+				items
+			});
+		}
+		/**
+		* 目标选择菜单外壳（零 hook）：useWorkspaces 缺席时降级渲染空列表，
+		* 存在时挂 MenuBody。分支发生在内层组件挂载之前——不同组件各自持有
+		* 稳定的 hooks 链，不会触发 hooks 数量漂移。
+		*/
+		function TaskTargetMenu(props) {
+			const { useWorkspaces, ...rest } = props;
+			if (useWorkspaces === void 0) return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(MenuView, {
+				...rest,
+				items: []
+			});
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(MenuBody, {
+				...rest,
+				useWorkspaces
+			});
+		}
+		/** 目标选择菜单纯展示层：全部 hooks 无条件调用（items 由上层解析）。 */
+		function MenuView({ items, taskKind, title, prompt, bridge, onClose }) {
+			const [memory] = (0, react.useState)(() => loadMemory(taskKind));
+			const [defaultPath, setDefaultPath] = (0, react.useState)(null);
+			const [busy, setBusy] = (0, react.useState)(null);
+			const [error, setError] = (0, react.useState)(null);
+			(0, react.useEffect)(() => {
+				fetchDefaultPath().then(setDefaultPath);
+			}, []);
+			const orderedItems = (0, react.useMemo)(() => {
+				const list = [...items];
+				if (memory?.kind === "workspace") {
+					const index = list.findIndex((item) => item.workspaceId === memory.workspaceId);
+					if (index > 0) list.unshift(...list.splice(index, 1));
+				} else if (defaultPath !== null) {
+					const index = list.findIndex((item) => sameDir(item.path, defaultPath));
+					if (index > 0) list.unshift(...list.splice(index, 1));
+				}
+				return list;
+			}, [
+				items,
+				memory,
+				defaultPath
+			]);
+			(0, react.useEffect)(() => {
+				const onKey = (event) => {
+					if (event.key === "Escape") onClose();
+				};
+				window.addEventListener("keydown", onKey);
+				return () => window.removeEventListener("keydown", onKey);
+			}, [onClose]);
+			const dispatch = (key, run) => {
+				if (busy !== null) return;
+				setBusy(key);
+				setError(null);
+				run().then(() => {
+					bridge.gotoConversation();
+					onClose();
+				}).catch((err) => {
+					setBusy(null);
+					setError(err instanceof Error ? err.message : "发送失败");
+				});
+			};
+			const sendTo = (target) => {
+				saveMemory(taskKind, target);
+				dispatch(targetKey(target), () => bridge.send(target, prompt));
+			};
+			const browse = () => {
+				dispatch("browse", async () => {
+					const picked = await bridge.pickDirectory();
+					if (picked === null) {
+						onClose();
+						return;
+					}
+					const view = await bridge.registerWorkspace(picked);
+					sendTo({
+						kind: "workspace",
+						workspaceId: view.workspaceId,
+						path: view.path
+					});
+				});
+			};
+			const lastKey = targetKey(memory);
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+				className: "ksq-overlay ksq-target-overlay",
+				role: "dialog",
+				"aria-modal": "true",
+				"aria-label": title,
+				onClick: onClose,
+				children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "ksq-target-menu",
+					onClick: (event) => event.stopPropagation(),
+					children: [
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+							className: "ksq-target-head",
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: title }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-item-meta",
+								children: items.length > 0 ? "选择任务归属的工作区（记住本次选择）" : "未获取到工作区列表"
+							})]
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+							type: "button",
+							className: `ksq-target-item ${lastKey === "current" ? "last" : ""}`,
+							disabled: busy !== null,
+							onClick: () => sendTo({ kind: "current" }),
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-target-name",
+								children: "跟随当前会话"
+							}), lastKey === "current" && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-badge tone-live",
+								children: "上次"
+							})]
+						}),
+						orderedItems.map((workspace) => {
+							const key = `ws:${workspace.workspaceId}`;
+							const isLast = lastKey === key;
+							const isDefault = !isLast && lastKey === "" && defaultPath !== null && sameDir(workspace.path, defaultPath);
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+								type: "button",
+								className: `ksq-target-item ${isLast ? "last" : ""}`,
+								disabled: busy !== null,
+								onClick: () => sendTo({
+									kind: "workspace",
+									workspaceId: workspace.workspaceId,
+									path: workspace.path
+								}),
+								children: [
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+										className: "ksq-target-name",
+										children: workspace.title || workspace.path.split("/").filter(Boolean).pop() || workspace.path
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+										className: "ksq-target-path",
+										children: workspace.path
+									}),
+									isLast && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+										className: "ksq-badge tone-live",
+										children: "上次"
+									}),
+									isDefault && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+										className: "ksq-badge tone-idle",
+										children: "默认"
+									})
+								]
+							}, workspace.workspaceId);
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+							type: "button",
+							className: "ksq-target-item",
+							disabled: busy !== null,
+							onClick: browse,
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-target-name",
+								children: busy === "browse" ? "选择中…" : "浏览选择目录…"
+							}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-target-path",
+								children: "新目录将注册为工作区后再发送"
+							})]
+						}),
+						error !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+							className: "ksq-target-error",
+							children: error
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+							type: "button",
+							className: "ksq-linkbtn ksq-target-cancel",
+							onClick: onClose,
+							children: "取消（Esc）"
+						})
+					]
+				})
+			});
+		}
 		//#endregion
 		//#region ../quant-ui/src/icons.tsx
 		function Svg({ size = 16, className, children }) {
@@ -367,6 +618,29 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		//#endregion
+		//#region src/client/agent.ts
+		let agentBridge = null;
+		function bindAgentBridge(bridge) {
+			agentBridge = bridge;
+		}
+		/** 面板组件取桥（未绑定返回 null，按钮静默降级）。 */
+		function getAgentBridge() {
+			return agentBridge;
+		}
+		/** 检验「解读」提示词：带因子名/假设/核心检验指标上下文。 */
+		function interpretFactorPrompt(input) {
+			const hypothesis = input.hypothesis !== void 0 && input.hypothesis !== "" ? `（假设：${input.hypothesis}）` : "";
+			const parts = [];
+			if (input.icMean !== void 0 && String(input.icMean) !== "") parts.push(`IC 均值 ${input.icMean}`);
+			if (input.ir !== void 0 && String(input.ir) !== "") parts.push(`IR ${input.ir}`);
+			if (input.icPositivePct !== void 0 && String(input.icPositivePct) !== "") parts.push(`IC>0 占比 ${input.icPositivePct}%`);
+			if (input.longShortSpread !== void 0 && String(input.longShortSpread) !== "") parts.push(`多空分层差 ${input.longShortSpread}%`);
+			if (input.nPeriods !== void 0 && String(input.nPeriods) !== "") parts.push(`${input.nPeriods} 期`);
+			const stats = parts.length > 0 ? `，最近检验：${parts.join(" / ")}` : "";
+			const range = input.range !== void 0 && input.range !== "" && input.range !== "—" ? `，区间 ${input.range}` : "";
+			return `因子库「${input.factorName}」v${input.version}${hypothesis}${stats}${range}：请解读该因子的有效性——IC/IR 水平在同类因子里处于什么位置、分层单调性如何、多空收益来源与可能的风格暴露、失效风险（拥挤度/市场环境切换）与后续跟踪建议。当前会话若未挂载 factor-research 技能，用网页检索补充并标注来源，禁止编造数值；数据缺失诚实标注「无数据」，不构成投资建议。`;
+		}
+		//#endregion
 		//#region src/client/section.tsx
 		/**
 		* 因子库面板：列表 + 版本时间线 + 检验运行 + 跨版本对比（累计 IC 叠加）。
@@ -515,7 +789,7 @@ window.__ModuleLoader__.load({
 				color: groupOrder(item.label) === 99 ? "#e64646" : RUN_COLORS[index % RUN_COLORS.length]
 			}));
 		}
-		function FactorsSection() {
+		function FactorsSection({ useWorkspaces } = {}) {
 			const [factors, setFactors] = (0, react.useState)([]);
 			const [loading, setLoading] = (0, react.useState)(true);
 			const [error, setError] = (0, react.useState)(null);
@@ -529,6 +803,7 @@ window.__ModuleLoader__.load({
 			const [refreshing, setRefreshing] = (0, react.useState)(false);
 			const [detailView, setDetailView] = (0, react.useState)(null);
 			const [reportView, setReportView] = (0, react.useState)(null);
+			const [pendingInterpret, setPendingInterpret] = (0, react.useState)(null);
 			const { copy, toast } = useCopyPrompt();
 			const reload = (0, react.useCallback)(async () => {
 				setError(null);
@@ -641,6 +916,27 @@ window.__ModuleLoader__.load({
 				runs,
 				closeReportView
 			]);
+			/** 单 run「解读」（§27-F2）：先弹目标选择菜单（factor 类型记忆）。 */
+			const askInterpret = (0, react.useCallback)((run) => {
+				if (selected === null) return;
+				if (getAgentBridge() === null) {
+					setError("会话联动不可用（sessions/layout 服务缺席）");
+					return;
+				}
+				const num = (value) => typeof value === "number" && Number.isFinite(value) ? value : void 0;
+				setPendingInterpret(interpretFactorPrompt({
+					factorName: selected.name,
+					hypothesis: selected.hypothesis,
+					version: run.version,
+					universe: run.universe,
+					range: runRange(run),
+					icMean: num(run.metrics?.ic_mean),
+					ir: num(run.metrics?.ir),
+					icPositivePct: num(run.metrics?.ic_positive_pct),
+					longShortSpread: num(run.metrics?.long_short_spread_pct),
+					nPeriods: num(run.metrics?.n_periods)
+				}));
+			}, [selected]);
 			(0, react.useEffect)(() => {
 				if (!selectedId || compareIds.length < 2) {
 					setComparison(null);
@@ -883,17 +1179,27 @@ window.__ModuleLoader__.load({
 												children: metric(run, "long_short_spread_pct")
 											}),
 											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: formatDateTime(run.created_at) }),
-											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("td", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
-												className: "ksq-linkbtn",
-												type: "button",
-												onClick: () => void toggleDetail(run.run_id),
-												children: detailView?.runId === run.run_id ? "收起" : "详情"
-											}), runReportId(run) !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [" ", /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
-												className: "ksq-linkbtn",
-												type: "button",
-												onClick: () => void showReport(run.run_id),
-												children: reportView?.runId === run.run_id ? "收起" : "看板"
-											})] })] })
+											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("td", { children: [
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+													className: "ksq-linkbtn",
+													type: "button",
+													onClick: () => void toggleDetail(run.run_id),
+													children: detailView?.runId === run.run_id ? "收起" : "详情"
+												}),
+												runReportId(run) !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [" ", /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+													className: "ksq-linkbtn",
+													type: "button",
+													onClick: () => void showReport(run.run_id),
+													children: reportView?.runId === run.run_id ? "收起" : "看板"
+												})] }),
+												" ",
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+													className: "ksq-linkbtn",
+													type: "button",
+													onClick: () => askInterpret(run),
+													children: "解读"
+												})
+											] })
 										]
 									}, run.run_id)) })]
 								})] }),
@@ -1010,16 +1316,21 @@ window.__ModuleLoader__.load({
 							] })
 						})]
 					}),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)(CopyToast, { text: toast })
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)(CopyToast, { text: toast }),
+					pendingInterpret !== null && getAgentBridge() !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(TaskTargetMenu, {
+						taskKind: "factor",
+						title: "因子解读发送到…",
+						prompt: pendingInterpret,
+						bridge: getAgentBridge(),
+						useWorkspaces,
+						onClose: () => setPendingInterpret(null)
+					})
 				]
 			});
 		}
 		//#endregion
 		//#region src/client/page.tsx
-		/**
-		* 因子库 主区面板：页头 + 库 Section。
-		*/
-		function FactorsPage() {
+		function FactorsPage({ useWorkspaces } = {}) {
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: "ksq-page",
 				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("header", {
@@ -1028,7 +1339,7 @@ window.__ModuleLoader__.load({
 						className: "ksq-title",
 						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "因子库" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: "因子研究资产沉淀：IC 曲线与口径对比" })]
 					})
-				}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(FactorsSection, {})]
+				}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(FactorsSection, { useWorkspaces })]
 			});
 		}
 		//#endregion
@@ -1039,6 +1350,10 @@ window.__ModuleLoader__.load({
 		* 注册 `main` keyed 面板（键 kstock-quant-factors）+ `sidebar.panellist` 导航入口
 		* （同 id，侧栏自动接线 ctx.layout.selectPanel）；ksq 样式经
 		* @kstock/quant-ui 幂等注入（四个量化库插件共用一份）。
+		*
+		* 研究联动（§27-F2）：检验 run「解读」按钮先弹 TaskTargetMenu 选任务
+		* 归属（跟随当前会话/已注册子工作区/浏览注册新目录），按 factor 类型
+		* 记忆；路由桥为 quant-ui 共享实现 buildTaskRouterBridge。
 		*/
 		/** 面板键：main slot 与侧栏入口共用。 */
 		const PANEL_KEY = "kstock-quant-factors";
@@ -1046,12 +1361,19 @@ window.__ModuleLoader__.load({
 		function NavIcon({ size }) {
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconFlask, { size: size ?? 18 });
 		}
-		/** 必需服务：slot 注册表。 */
-		const inject = ["slots"];
+		/** 必需服务：slot 注册表 + 会话作用域 + 面板切换 + 工作区面。 */
+		const inject = [
+			"slots",
+			"sessions",
+			"layout",
+			"uiWorkspace",
+			"workspaces"
+		];
 		/** 客户端插件体。 */
 		function apply(ctx) {
 			ctx.effect(() => {
 				injectQuantStyles();
+				bindAgentBridge(buildTaskRouterBridge(ctx));
 				ctx.slots.inject("main", () => ctx.slots.register({
 					name: "main",
 					key: PANEL_KEY

@@ -70,6 +70,44 @@ window.__ModuleLoader__.load({
 		* 按任务类型（news / pick）分别记忆上次选择，下次菜单首项即默认；
 		* 单击任意项 = 发送 + 记忆 + 关闭。
 		*/
+		/**
+		* 标准路由桥实现（面板共用：新闻/选股库/因子库）。current=当前会话
+		* （无则默认建）；workspace=connectWorkspace（复用/新建 blank 会话并挂
+		* 进工作区分组——修复裸 create({cwd}) 的「未分组」与产物散落）。
+		*/
+		function buildTaskRouterBridge(deps) {
+			return {
+				send: async (target, text) => {
+					const sessions = deps.sessions;
+					if (sessions === void 0) throw new Error("会话服务不可用");
+					let id;
+					if (target.kind === "workspace") {
+						const uiWorkspace = deps.uiWorkspace;
+						if (uiWorkspace === void 0) throw new Error("工作区服务不可用");
+						id = await uiWorkspace.connectWorkspace(target.workspaceId);
+						sessions.open(id);
+					} else {
+						id = sessions.list.getSnapshot().current;
+						if (id === void 0) {
+							id = await sessions.create();
+							sessions.open(id);
+						}
+					}
+					const conversation = sessions.scope(id)?.get("conversation");
+					if (conversation === void 0) throw new Error("会话作用域不可用（conversation 服务缺席）");
+					await conversation.send(text);
+				},
+				pickDirectory: () => {
+					if (deps.uiWorkspace === void 0) return Promise.reject(/* @__PURE__ */ new Error("工作区服务不可用"));
+					return deps.uiWorkspace.pickDirectory();
+				},
+				registerWorkspace: async (path) => {
+					if (deps.workspaces === void 0) throw new Error("工作区注册服务不可用");
+					return await deps.workspaces.create({ path });
+				},
+				gotoConversation: () => deps.layout?.selectPanel(null)
+			};
+		}
 		/** 按任务类型记忆上次选择（news / pick 各记各的，互不覆盖）。 */
 		function loadMemory(taskKind) {
 			try {
@@ -1358,8 +1396,9 @@ window.__ModuleLoader__.load({
 		*
 		* 研究联动（P2 + §26-10 目标选择菜单）：命中股「解读」按钮先弹
 		* TaskTargetMenu 让用户选任务归属（跟随当前会话 / 已注册子工作区 /
-		* 浏览注册新目录），按 pick 类型记忆；工作区目标经 uiWorkspace.
-		* connectWorkspace 落地（会话挂进工作区分组，不再「未分组」）。
+		* 浏览注册新目录），按 pick 类型记忆；路由桥为 quant-ui 共享实现
+		* buildTaskRouterBridge（workspace 目标经 uiWorkspace.connectWorkspace
+		* 落地，会话挂进工作区分组，不再「未分组」）。
 		*/
 		/** 面板键：main slot 与侧栏入口共用。 */
 		const PANEL_KEY = "kstock-quant-selections";
@@ -1379,37 +1418,7 @@ window.__ModuleLoader__.load({
 		function apply(ctx) {
 			ctx.effect(() => {
 				injectQuantStyles();
-				bindAgentBridge({
-					send: async (target, text) => {
-						const sessions = ctx.sessions;
-						if (sessions === void 0) throw new Error("会话服务不可用");
-						let id;
-						if (target.kind === "workspace") {
-							const uiWorkspace = ctx.uiWorkspace;
-							if (uiWorkspace === void 0) throw new Error("工作区服务不可用");
-							id = await uiWorkspace.connectWorkspace(target.workspaceId);
-							sessions.open(id);
-						} else {
-							id = sessions.list.getSnapshot().current;
-							if (id === void 0) {
-								id = await sessions.create();
-								sessions.open(id);
-							}
-						}
-						const conversation = sessions.scope(id)?.get("conversation");
-						if (conversation === void 0) throw new Error("会话作用域不可用（conversation 服务缺席）");
-						await conversation.send(text);
-					},
-					pickDirectory: () => {
-						if (ctx.uiWorkspace === void 0) return Promise.reject(/* @__PURE__ */ new Error("工作区服务不可用"));
-						return ctx.uiWorkspace.pickDirectory();
-					},
-					registerWorkspace: async (path) => {
-						if (ctx.workspaces === void 0) throw new Error("工作区注册服务不可用");
-						return await ctx.workspaces.create({ path });
-					},
-					gotoConversation: () => ctx.layout?.selectPanel(null)
-				});
+				bindAgentBridge(buildTaskRouterBridge(ctx));
 				ctx.slots.inject("main", () => ctx.slots.register({
 					name: "main",
 					key: PANEL_KEY

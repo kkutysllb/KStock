@@ -31,11 +31,14 @@ import {
   PreviewDialog,
   RefreshButton,
   RUN_COLORS,
+  TaskTargetMenu,
   formatDateTime,
   metric,
   statusBadge,
   useCopyPrompt,
+  type UseWorkspaces,
 } from '@kstock/quant-ui'
+import { getAgentBridge, interpretFactorPrompt } from './agent.ts'
 
 const CATEGORY_LABELS: Record<string, string> = {
   value: '价值',
@@ -192,7 +195,7 @@ function layersToSeries(raw: unknown): OverlaySeries[] {
     }))
 }
 
-export function FactorsSection() {
+export function FactorsSection({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = {}) {
   const [factors, setFactors] = useState<Factor[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -206,6 +209,7 @@ export function FactorsSection() {
   const [refreshing, setRefreshing] = useState(false)
   const [detailView, setDetailView] = useState<{ runId: string; ic: FactorRunIcSeries | null; layers: FactorRunLayers | null } | null>(null)
   const [reportView, setReportView] = useState<{ runId: string; htmlUrl: string | null; text: string } | null>(null)
+  const [pendingInterpret, setPendingInterpret] = useState<string | null>(null)
   const { copy, toast } = useCopyPrompt()
 
   const reload = useCallback(async () => {
@@ -326,6 +330,28 @@ export function FactorsSection() {
     }
     setError(reportId !== null ? '看板加载失败（报告可能已删除）' : '该 run 未链接报告看板（config 缺 report_id）')
   }, [selectedId, reportView, runs, closeReportView])
+
+  /** 单 run「解读」（§27-F2）：先弹目标选择菜单（factor 类型记忆）。 */
+  const askInterpret = useCallback((run: FactorRunSummary) => {
+    if (selected === null) return
+    if (getAgentBridge() === null) {
+      setError('会话联动不可用（sessions/layout 服务缺席）')
+      return
+    }
+    const num = (value: unknown): number | undefined => (typeof value === 'number' && Number.isFinite(value) ? value : undefined)
+    setPendingInterpret(interpretFactorPrompt({
+      factorName: selected.name,
+      hypothesis: selected.hypothesis,
+      version: run.version,
+      universe: run.universe,
+      range: runRange(run),
+      icMean: num(run.metrics?.ic_mean),
+      ir: num(run.metrics?.ir),
+      icPositivePct: num(run.metrics?.ic_positive_pct),
+      longShortSpread: num(run.metrics?.long_short_spread_pct),
+      nPeriods: num(run.metrics?.n_periods),
+    }))
+  }, [selected])
 
   useEffect(() => {
     if (!selectedId || compareIds.length < 2) {
@@ -514,6 +540,8 @@ export function FactorsSection() {
                                   </button>
                                 </>
                               )}
+                              {' '}
+                              <button className="ksq-linkbtn" type="button" onClick={() => askInterpret(run)}>解读</button>
                             </td>
                           </tr>
                         ))}
@@ -612,6 +640,17 @@ export function FactorsSection() {
         </div>
       )}
       <CopyToast text={toast} />
+
+      {pendingInterpret !== null && getAgentBridge() !== null && (
+        <TaskTargetMenu
+          taskKind="factor"
+          title="因子解读发送到…"
+          prompt={pendingInterpret}
+          bridge={getAgentBridge()!}
+          useWorkspaces={useWorkspaces}
+          onClose={() => setPendingInterpret(null)}
+        />
+      )}
     </div>
   )
 }
