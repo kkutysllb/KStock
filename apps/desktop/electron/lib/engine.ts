@@ -18,7 +18,6 @@ import { createConnection } from "node:net";
 import {
   appendFileSync,
   existsSync,
-  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -129,6 +128,7 @@ export function ensureKstockProfile(): string {
   // 链接名必须取包名尾段（如 @kstock/accounts-local → accounts-local），
   // 不能用源目录名（accounts）——Loader 按行里的包名解析，名不一致 =
   // "failed to import"，该插件整面（登录/注册/会话门）静默失效。
+  // Windows 链接类型见 linkPluginPackage；单包失败只跳过该包不中断整批。
   const modulesDir = join(profileDir, "node_modules", "@kstock");
   mkdirSync(modulesDir, { recursive: true });
   for (const [name, dir] of packages) {
@@ -136,16 +136,37 @@ export function ensureKstockProfile(): string {
     const linkPath = join(modulesDir, segment);
     const target = join(pluginRoot, dir);
     if (!existsSync(join(target, "package.json"))) continue;
+    // 失效判定对 symlink 与 junction 通用：readlink 二者都能读出目标
+    // （junction 的 lstat.isSymbolicLink() 为 false，旧守卫会漏判失效
+    // junction）；实体目录（非链接）readlink 抛错 → 只按内容存在性判。
+    let linkTarget: string | null = null;
+    if (existsSync(linkPath)) {
+      try {
+        linkTarget = readlinkSync(linkPath);
+      } catch {
+        linkTarget = null;
+      }
+    }
     const stale =
       !existsSync(linkPath) ||
       !existsSync(join(linkPath, "package.json")) ||
-      (lstatSync(linkPath).isSymbolicLink() &&
-        resolve(dirname(linkPath), readlinkSync(linkPath)) !== target);
+      (linkTarget !== null && resolve(dirname(linkPath), linkTarget) !== target);
     if (!stale) continue;
-    rmSync(linkPath, { force: true });
-    symlinkSync(target, linkPath, "dir");
-    // 清理按目录名误建的旧链接（与包名尾段不一致时）。
-    if (segment !== dir) rmSync(join(modulesDir, dir), { force: true });
+    try {
+      rmSync(linkPath, { force: true });
+      // Windows 真实符号链接（type "dir"）需要管理员或开发者模式权限，
+      // 普通用户 EPERM；junction 无特权要求，本地目录语义等价
+      // （不支持网络路径，dev/打包均为本地目录）。
+      symlinkSync(target, linkPath, platform() === "win32" ? "junction" : "dir");
+      // 清理按目录名误建的旧链接（与包名尾段不一致时）。
+      if (segment !== dir) rmSync(join(modulesDir, dir), { force: true });
+    } catch (err) {
+      logMain(
+        `profile 插件链接创建失败（${name} → ${target}，跳过继续）: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
   return profileDir;
 }
