@@ -1,5 +1,19 @@
 {
-  "_comment": "KStock 角色 preset 的技能绑定清单：preset id → 随行技能目录名（发布进 <preset>/skills/）。patch_vendor_skills.py 按此把 vendor/skills/public 的最终语料镜像进各 preset；清单里的技能名必须存在于 vendor/skills/public。",
+  "_comment": "KStock 角色 preset 的技能绑定清单：preset id → 随行技能目录名（发布进 <preset>/skills/）。patch_vendor_skills.py 按此把 vendor/skills/public 的最终语料镜像进各 preset；清单里的技能名必须存在于 vendor/skills/public。standard 为基座全量（43 技能）：平时不用不占上下文（SKILL.md 按需加载），特殊情况（基座会话点解读/临时量化任务）也有全火力。",
+  "standard": [
+    "common", "sandbox-path-guide", "html-report",
+    "stock-due-diligence", "stock-screening-theme", "market-scan-workflow",
+    "market-linkage", "index-futures-theme", "option-futures-linkage-theme", "option-etf-theme", "cb-panorama",
+    "chan-stock-theme", "factor-analysis-theme", "strategy-backtest-theme",
+    "a-stock-screener", "selection-strategies", "stock-analysis",
+    "financial-statement", "valuation-model", "dcf",
+    "earnings-forecast", "earnings-revision", "business-query", "event-query",
+    "market-linkage-engine", "futures-analysis", "option-futures-linkage", "options-volatility",
+    "etf-analysis", "cb-analysis", "hithink-futures", "macro-query", "zhishu-query",
+    "industry-analysis", "news-search", "announcement-search", "report-search", "chart-visualization",
+    "factor-research", "strategy-research", "backtrader_strategies",
+    "tushare-data", "options-payoff"
+  ],
   "market-analysis": [
     "common", "sandbox-path-guide", "html-report",
     "market-linkage", "index-futures-theme", "option-futures-linkage-theme", "option-etf-theme", "cb-panorama",

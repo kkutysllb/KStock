@@ -83,8 +83,15 @@
 # `skill-filesystem` contributes local-root discovery for agents on this preset, and
 # `tool-skill` gives them the catalog and loader; the merged catalog also
 # carries whatever the deployment registered globally (repository plugins).
+# KStock 基座全量技能（43 个投研技能随行）：SKILL.md 按需加载不占上下文，
+# 平时不用、特殊情况（基座会话点解读/临时量化任务）也有全火力。
+# skills/ 目录由 patch_vendor_skills.py 按 skills.manifest.json 发布。
 - id: skill-filesystem
   name: '@qilin/skill-filesystem'
+  config:
+    customSkillDirs:
+      # baseUrl 由 preset mount 机制改写为本 preset 目录，拷到哪都能解析。
+      - !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('skills/', baseUrl))"
 
 - id: tool-skill
   name: '@qilin/tool-skill'
