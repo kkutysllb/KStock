@@ -203,11 +203,28 @@ def build() -> None:
     gly4 = side_by_side("e2", x4, y4, s4, RICE)
     e1side = ink_ground("e2") + red_seal("e2", x4, y4, s4, gly4)
 
+    # ── D · DB1 印下字标（用户选定）：朱印横排篆书 + KSTOCK 字标，无绿 K 印 ──
+    def db1(wordmark: str, tag: str) -> str:
+        s5, x5, y5 = 620, 202, 130
+        gly5 = side_by_side(tag, x5, y5, s5, RICE)
+        return (
+            ink_ground(tag)
+            + red_seal(tag, x5, y5, s5, gly5)
+            + f'<text x="512" y="846" font-family="Avenir" font-weight="900" font-size="90" '
+              f'letter-spacing="22" fill="{wordmark}" text-anchor="middle" '
+              f'dominant-baseline="central">KSTOCK</text>'
+        )
+
+    db1_white = db1(RICE, "db1")
+    db1_green = db1("#31c7a2", "db1g")
+
     for name, body, tag in (
         ("db3-zhuan", db3, "db3"),
         ("e1-zhuan", e1, "e1"),
         ("db5-side", db5, "db5"),
         ("e1-side-zhuan", e1side, "e2"),
+        ("db1-zhuan", db1_white, "db1"),
+        ("db1-zhuan-greenmark", db1_green, "db1g"),
     ):
         svg = app_svg(body, defs_common(tag))
         p = SRC / f"{name}.svg"

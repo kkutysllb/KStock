@@ -112,7 +112,7 @@
     <span class="chip">已渲染尺寸 <b>1024 / 512 / 256 / 128 / 64 / 32</b></span>
     <span class="chip">托盘已出 <b>16 / 22 / 32（模板图）</b></span>
     <span class="chip">品牌底色 <b>#030d0b · #31c7a2</b></span>
-    <span class="chip">状态 <b>篆书出稿 · 待定版式与授权</b></span>
+    <span class="chip">状态 <b>Tier 1 定稿（DB1 篆书横排 + 字标）</b></span>
   </div>
 
   <h2 id="diag">1 · 现状诊断：为什么必须重构</h2>
@@ -473,11 +473,11 @@
   三个 Tier 1 版式如下（篆书字形位置当前用黑体占位，见下一节）。</p>
   <img src="sheet-dual-256.png" alt="双品牌三个执行" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
   <div class="grid3" style="margin-top:8px">
-    <div class="card">
-      <h4>DB1 · 印下字标</h4>
-      <p style="margin-top:4px">朱印居中偏上 + 底部 <span class="mono">KSTOCK</span> 字标（宽字距、宣纸白）。
+    <div class="card" style="border-color:rgba(49,199,162,.5)">
+      <h4>DB1 · 印下字标 <span class="ok">← 已选定</span></h4>
+      <p style="margin-top:4px">朱印居中偏上 + 底部 <span class="mono">KSTOCK</span> 字标（宽字距）。
       最像标准品牌锁定（lockup），适合关于页 / 官网 / 物料。</p>
-      <p class="mono">风险：字标是拉丁字母，缩到 128px 就成一条糊线，且消失后什么都不剩。</p>
+      <p class="mono">已按你的意见去掉右下角的绿 K 印；字标颜色有白 / 品牌绿两版，见下。</p>
     </div>
     <div class="card">
       <h4>DB2 · 角标 K 印</h4>
@@ -505,11 +505,11 @@
     </tbody>
   </table>
   <div class="callout">
-    <b>证据结论：DB2 / DB3 优于 DB1。</b>原因是<b>双色结构的降级是连续的</b>——
+    <b>证据结论（当时的比较）：DB2 / DB3 的降级优于 DB1。</b>原因是<b>双色结构的降级是连续的</b>——
     尺寸变小时，朱印里的汉字先退成纹理，而品牌绿的 K 印能撑到 32px。
     于是同一张图在 1024→32 的过程中，视觉重心自然从「麒麟」滑向「K」，
     正好等于品牌的主次关系；而 DB1 的字标一消失，图标就只剩一块红。
-    若你只要一枚主印，<b>我推荐 DB3（对印）</b>：对称、两个品牌都完整、印边语言统一。
+    但你已选定 <b>DB1</b>——字标在 128px 以下会消失，因此<b>按尺寸换形制</b>（见下方「逐尺寸形制」），这个代价就被抵消了。
   </div>
 
   <h3>篆书出稿：横排 vs 竖排（实测）</h3>
@@ -524,18 +524,36 @@
         <td>像两个窄条挂在印面上，不像刻出来的章</td></tr>
       <tr><td><b>单印 · 横排 620</b></td><td class="ok">好：两字并排正好铺满印面</td>
         <td>标准小篆方印的观感，字与印边呼吸合适</td></tr>
-      <tr><td>对印 · 竖排 520</td><td class="bad">差：字更小，留白更多</td><td>被主印尺寸拖累，最弱</td></tr>
-      <tr><td><b>对印 · 横排 560（推荐）</b></td><td class="ok">好</td>
-        <td>篆印饱满 + 下方品牌绿 K 印，双品牌同时在场</td></tr>
+      <tr><td>单印 · 竖排 640</td><td class="bad">差：字瘦长，两侧留白一大片</td><td>已被横排取代</td></tr>
+      <tr><td><b>DB1 · 横排 + 字标（定稿）</b></td><td class="ok">好</td>
+        <td>篆印饱满 + 底部 KSTOCK 字标；绿 K 印已按你意见去掉</td></tr>
     </tbody>
   </table>
   <div class="callout">
-    <b>结论：走「方印 + 横排（右麒左麟）」+ 下方品牌绿 K 印</b>（本页记作 <span class="mono">DB5 · 对印横排</span>）。
+    <b>定稿：方印 + 横排（右麒左麟）+ 底部 KSTOCK 字标 = DB1 篆书版</b>。<br>
     横排不只是好看：小篆字形实测宽高比 0.64–0.68，横排是<b>字形本身的自然排法</b>；
-    「2 字印必须竖排」是楷/黑体方字的经验，套到篆书上不成立。<br>
-    注：横排顺序按篆印传统<b>自右向左</b>读（右麒左麟）。若你更希望现代读者一眼读对，
-    我可以出一版左→右（左麒右麟）对比——这是唯一需要你拍板的排法细节。
+    「2 字印必须竖排」是楷/黑体方字的经验，套到篆书上不成立。左右顺序按篆印传统<b>自右向左</b>（右麒左麟），已确认不变。
   </div>
+  <h4>字标颜色：两版（1 行改动）</h4>
+  <img src="sheet-db1-mark.png" alt="DB1 字标颜色两版" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
+  <p><b>宣纸白</b>（<span class="mono">#fff8f2</span>）：与印文同色，克制、经典。<br>
+  <b>品牌绿</b>（<span class="mono">#31c7a2</span>）：去掉绿 K 印之后，Tier 1 里就再没有产品色了；
+  字标改绿能把产品色带回图标，并与 Tier 2 / 3 的绿底 K 同色。<b>我倾向品牌绿。</b></p>
+  <h4>逐尺寸形制：字标会死在哪一档（实测）</h4>
+  <img src="sheet-db1-marklegibility.png" alt="KSTOCK 字标逐尺寸可读性" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
+  <table>
+    <thead><tr><th>尺寸</th><th>字标实际像素</th><th>结论</th><th>该档用哪个形制</th></tr></thead>
+    <tbody>
+      <tr><td>1024 / 512</td><td class="mono">272×55 px</td><td class="ok">清晰</td><td>朱印 + KSTOCK</td></tr>
+      <tr><td>256</td><td class="mono">136×27 px</td><td class="ok">清晰</td><td>朱印 + KSTOCK</td></tr>
+      <tr><td>128</td><td class="mono">68×13 px</td><td class="warn">一条糊线（1:1 下读不出）</td><td><b>去掉字标</b>，朱印居中放大</td></tr>
+      <tr><td>64</td><td class="mono">34×7 px</td><td class="bad">噪点</td><td>去掉字标，朱印居中放大</td></tr>
+      <tr><td>48 / 32</td><td>—</td><td class="bad">印章只剩色块</td><td>Tier 2（C2 绿场 K，16/24 再加重笔画）</td></tr>
+      <tr><td>菜单栏 16pt</td><td>—</td><td>—</td><td>Tier 3（印章框 + K，单色模板）</td></tr>
+    </tbody>
+  </table>
+  <p>所以 DB1 的字标代价被这一步抵消了：<b>同一套源、按尺寸出不同形制</b>——
+  这也正是「图标集」的标准做法（Apple 自己的指导也是小尺寸简化）。</p>
   <h4>篆书版的尺寸降级（实测）</h4>
   <img src="sheet-zhuan-degrade.png" alt="篆书版降级实测" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
   <p>128px 起篆书笔画开始粘连、变成「纹样」；64px 仍有印章形制；32px 只剩色块。
@@ -640,8 +658,32 @@
     <li><code>apps/desktop/electron/lib/window.ts:210-217</code> — <code>resolveWindowIcon</code> 首选 256/512，避免任务栏用小图放大。</li>
     <li><code>apps/desktop/electron/main.ts:119-132</code> — <code>setDockIcon</code> 仅 dev 态生效（当前逻辑已如此，重构时保持并注释因果）。</li>
     <li><code>apps/desktop/electron-builder.yml:21-22,36,62,85</code> — <code>files</code> 与各平台 <code>icon</code> 路径随新资产同步。</li>
-    <li><code>kstock/client-brand/src/client/Marks.tsx</code> + <code>--dsw-specific-brand-seal-fill</code> — 若选 C，把侧栏/hero 标记的渐变同步为场色，保证「角标 → 图标 → 印记」三处同源。</li>
+    <li><code>kstock/client-brand/src/client/Marks.tsx</code> — UI 内三处商标（**已实施**，见下）。</li>
   </ul>
+
+  <h3>关联改动：UI 内的品牌标记（已实施）</h3>
+  <p>侧栏顶部、会话 hero、设置·关于页三处商标位原先共用同一张「青底 + K 三笔」SVG，
+  它的病根与应用图标在 32px 糊掉完全一样：<b>K 的三笔在 24px 下互相咬合</b>。
+  现在三处改为<u>与应用图标同源</u>的标记，并按同一套「按尺寸分形制」规则自动选形：</p>
+  <table>
+    <thead><tr><th>槽位</th><th>尺寸</th><th>形制</th><th>原因（实测）</th></tr></thead>
+    <tbody>
+      <tr><td><code>sidebar.brand.mark</code> 侧栏顶部</td><td>24px</td><td>品牌绿实色场 K</td>
+        <td>篆书两字在此尺寸退化为纹理；几何 K 可辨（笔画按小尺寸配重 +25%）</td></tr>
+      <tr><td><code>conversation.hero.brand.mark</code> 会话 hero</td><td>34px</td><td>品牌绿实色场 K</td><td>同上</td></tr>
+      <tr><td><code>settings.about.mark</code> 设置·关于</td><td><b>72px</b></td><td>朱红白文方印（篆书「麒麟」横排）</td>
+        <td>该尺寸下印章形制完整，与应用图标同形制，回答「这个应用长什么样」</td></tr>
+    </tbody>
+  </table>
+  <img src="sheet-client-marks.png" alt="UI 商标实测" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
+  <p class="mono">左二为「设计源 72px」与「客户端标记 72px」的逐像素对照——两者几何完全一致，
+  说明 <span class="mono">marks/geometry.ts</span> 的常量确实由设计源算出，而不是手抄一份。</p>
+  <div class="callout">
+    <b>实现要点</b>：几何常量由脚本生成（<span class="mono">docs/design/icon-refresh/gen_client_marks.py</span>
+    → <span class="mono">kstock/client-brand/src/client/marks/geometry.ts</span>），
+    篆书路径按 1 位小数压缩（22.1KB → 11.5KB），客户端 bundle 由 24.5KB 增至 42.6KB（gzip 15.8KB）。
+    生成器同时输出逐字对应的镜像 SVG，用于与设计稿做像素级等价验证。
+  </div>
 
   <h2 id="decide">6 · 决策表与推荐</h2>
   <table>
@@ -692,19 +734,15 @@
     如果你要的是「一枚图打通所有尺寸」，那 <b>E 不成立，应选 C2</b>：它的 32px 与 16pt 都是四者最佳。
   </div>
 
-  <h3>已定 / 待拍板</h3>
-  <p><b class="ok">已定</b>：① 主方向 = E 麒麟印章（接受三档形制）；② 朱红白文印（E1）作 Tier 1；
-  ③ 托盘使用拉丁「K」；④ 走双品牌（麒麟 = 引擎，KStock = 产品）；⑤ 先上篆书。</p>
-  <p><b>待你拍板（3 项）</b>：</p>
-  <ol>
-    <li><b>版式</b>：<span class="mono">DB5 · 对印横排</span>（推荐：方印横排右麒左麟 + 下方品牌绿 K 印）
-      还是 <span class="mono">DB1/DB2/DB3</span> 之一？</li>
-    <li><b>篆书横排的左右顺序</b>：篆印传统<b>自右向左</b>（右麒左麟，当前稿）；
-      若希望现代读者一眼读对，可出左→右版（左麒右麟）对比。</li>
-    <li><b>篆书字形的授权路径</b>：先让我去确认 Commons 那两个文件页的协议（够用就直接用），
-      还是直接按「自绘 / 委托自有轮廓」推进（更稳，但要设计师）？</li>
-  </ol>
-  <p class="mono">另：Tier 2 图形（C2 深绿实色场 K）与 Tier 3 托盘（印章框 + K）已定稿，不受上述决定影响。</p>
+  <h3>已定 / 待定</h3>
+  <p><b class="ok">已定</b>：① Tier 1 = 篆书朱印（白文印）；② 版式 = <b>DB1 印下字标</b>；
+  ③ 去掉绿 K 印；④ 篆书「麒麟」<b>横排、右麒左麟</b>；⑤ 篆书字形直接使用 Commons 字形
+  （产品不商用，见 §3 字形来源说明）；⑥ 托盘使用拉丁「K」；⑦ Tier 2 = C2 绿场 K、Tier 3 = 印章框 + K。</p>
+  <p><b>待定（1 项）</b>：<span class="mono">KSTOCK</span> 字标用<b>宣纸白</b>还是<b>品牌绿</b>？
+  我倾向品牌绿（去掉绿 K 印后，Tier 1 里只剩它承载产品色）。这是 1 行改动。</p>
+  <p class="mono">另需你确认的两件小事：① git 里我那 98 个设计产物（含 <span class="mono">zhuan-tmp/</span> 中间渲染）
+  被卷进了你的 <span class="mono">25ea1757</span> 提交，要不要我瘦身整理；② 篆书授权的记录方式（我已按「不商用」记为可用，
+  并在 <span class="mono">glyphs/README.md</span> 写明「若产品转为商用需重新评估」的触发条件）。</p>
 
   <h3>选定方向后我会做什么</h3>
   <ul>
