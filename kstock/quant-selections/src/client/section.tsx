@@ -360,6 +360,7 @@ export function SelectionsSection() {
                 <div>
                   <h3 className="ksq-section-title">运行归档（勾选 2-4 个对比）</h3>
                   {runs.length === 0 ? <p className="ksq-hint">尚无运行归档。</p> : (
+                    <div className="ksq-table-wrap">
                     <table className="ksq-table">
                       <thead>
                         <tr>
@@ -389,7 +390,7 @@ export function SelectionsSection() {
                             <td className="ksq-mono" title={run.run_id}>{run.run_id.slice(7, 15)}</td>
                             <td>v{run.version}</td>
                             <td>{run.trade_date || '—'}</td>
-                            <td>{run.universe || '—'}</td>
+                            <td className="ksq-cell-clip" title={run.universe || undefined}>{run.universe || '—'}</td>
                             <td className="num">{metric(run, 'hit_count')}</td>
                             <td className={`num ${selectionMetricClass('consensus_count', run.metrics?.consensus_count)}`}>{metric(run, 'consensus_count')}</td>
                             <td className="num">{metric(run, 'top_n')}</td>
@@ -405,6 +406,7 @@ export function SelectionsSection() {
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   )}
                 </div>
 
@@ -423,6 +425,7 @@ export function SelectionsSection() {
                   <div className="ksq-compare">
                     <h3>运行对比{comparison.comparable ? '（同口径，可严格对比）' : '（口径不一致，仅供参考）'}</h3>
                     {!comparison.comparable && comparison.notes.map(note => <p key={note} className="ksq-note">{note}</p>)}
+                    <div className="ksq-table-wrap">
                     <table className="ksq-table">
                       <thead>
                         <tr>
@@ -443,9 +446,11 @@ export function SelectionsSection() {
                         ))}
                       </tbody>
                     </table>
+                    </div>
                     {overlapRows.length >= 1 ? (
                       <div className="ksq-chart">
                         <h4>命中重合分析（基准：v{picksList[0]!.version} · {picksList[0]!.trade_date || picksList[0]!.run_id.slice(7, 15)}）</h4>
+                        <div className="ksq-table-wrap">
                         <table className="ksq-table">
                           <thead>
                             <tr>
@@ -466,12 +471,13 @@ export function SelectionsSection() {
                                 <td className="num">{row.keptCount}</td>
                                 <td className="num">{row.addedCount}</td>
                                 <td className="num">{row.removedCount}</td>
-                                <td className="ksq-mono">{row.keptSample.join('、') || '—'}</td>
-                                <td className="ksq-mono">{row.addedSample.join('、') || '—'}</td>
+                                <td className="ksq-mono ksq-cell-clip" title={row.keptSample.join('、') || undefined}>{row.keptSample.join('、') || '—'}</td>
+                                <td className="ksq-mono ksq-cell-clip" title={row.addedSample.join('、') || undefined}>{row.addedSample.join('、') || '—'}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
+                        </div>
                       </div>
                     ) : (
                       <p className="ksq-note">所选运行缺少命中清单数据（record_run 未存 picks），无法做重合分析。</p>

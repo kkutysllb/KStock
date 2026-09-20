@@ -242,6 +242,18 @@
 .ksq-table tr.selected td { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); }
 .ksq-table input[type="checkbox"] { accent-color: var(--dsw-alias-brand-primary); }
 
+/* 长文本单元格裁剪（agent 写入的股票池/口径描述可达数百字，nowrap 下会把
+   操作列挤出视口）：max-width + ellipsis，全文走 title 悬浮。 */
+.ksq-table td.ksq-cell-clip {
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 表格横向滚动兜底：窗口再窄操作列（报告/看板）也始终可达，不整页溢出。 */
+.ksq-table-wrap { overflow-x: auto; }
+.ksq-table-wrap .ksq-table { min-width: 640px; }
+
 /* ── 内容区骨架 ─────────────────────────────────────────── */
 
 .ksq-body {
