@@ -2,9 +2,10 @@
  * 选股库 主区面板：页头 + 库 Section。
  */
 
+import type { UseWorkspaces } from '@kstock/quant-ui'
 import { SelectionsSection } from './section.tsx'
 
-export function SelectionsPage() {
+export function SelectionsPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = {}) {
   return (
     <div className="ksq-page">
       <header className="ksq-topbar">
@@ -13,7 +14,7 @@ export function SelectionsPage() {
           <span>选股研究资产沉淀：结果快照与重合分析</span>
         </div>
       </header>
-      <SelectionsSection />
+      <SelectionsSection useWorkspaces={useWorkspaces} />
     </div>
   )
 }

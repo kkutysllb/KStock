@@ -435,7 +435,7 @@ window.__ModuleLoader__.load({
 				zh: {
 					"nav": "量化工作区",
 					"title": "量化工作区",
-					"desc": "财经新闻/选股库「解读」等联动任务的目标工作区：当前会话不在该工作区时自动路由过去（复用空会话或最近会话）。未配置 = 跟随当前会话。",
+					"desc": "联动任务（新闻/选股库「解读」）目标选择菜单的默认项：点击解读时仍可自由改选具体子工作区（选择会被记住）。未配置时默认跟随当前会话。",
 					"current": "当前",
 					"notConfigured": "未配置（联动跟随当前会话）",
 					"pick": "选择目录…",
@@ -450,7 +450,7 @@ window.__ModuleLoader__.load({
 				en: {
 					"nav": "Quant Workspace",
 					"title": "Quant workspace",
-					"desc": "Target workspace for interpret actions (news/selections): routed automatically when the current session lives elsewhere. Not configured = follow current session.",
+					"desc": "Default entry for interpret-action target menus (news/selections); every click can still pick another workspace, remembered per task type. Not configured = follow current session.",
 					"current": "Current",
 					"notConfigured": "Not configured (follows current session)",
 					"pick": "Choose directory…",

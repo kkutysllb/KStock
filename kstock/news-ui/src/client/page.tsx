@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Empty, ErrorLine, Loading, RefreshButton, formatDateTime } from '@kstock/quant-ui'
+import { Empty, ErrorLine, Loading, RefreshButton, TaskTargetMenu, formatDateTime, type UseWorkspaces } from '@kstock/quant-ui'
 
 interface StockTag {
   code: string
@@ -54,15 +54,10 @@ const WATCH_KEY = 'kstock-news-watch'
 const READ_KEY = 'kstock-news-read'
 const READ_CAP = 300
 
-/** agent 桥（apply 时注入 conversation.send + 面板切换）。 */
-interface AgentBridge {
-  send(text: string): Promise<void>
-  gotoConversation(): void
-}
+/** agent 桥（apply 时注入 §26-10 目标路由 + 原生目录选择 + 面板切换）。 */
+let agentBridge: import('@kstock/quant-ui').TaskRouterBridge | null = null
 
-let agentBridge: AgentBridge | null = null
-
-export function bindAgentBridge(bridge: AgentBridge): void {
+export function bindAgentBridge(bridge: import('@kstock/quant-ui').TaskRouterBridge): void {
   agentBridge = bridge
 }
 
@@ -129,7 +124,7 @@ function interpretPrompt(item: NewsItem): string {
     + '3) 给出关注信号与反证信号；数据缺失诚实标注「无数据」，不构成投资建议。'
 }
 
-export function NewsPage() {
+export function NewsPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = {}) {
   const [payload, setPayload] = useState<NewsPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -223,11 +218,14 @@ export function NewsPage() {
     })
   }, [])
 
+  // §26-10：解读/标的点击先弹目标选择菜单（按 news 类型记忆上次落点）。
+  const [pendingAsk, setPendingAsk] = useState<string | null>(null)
   const askAgent = useCallback((prompt: string) => {
-    if (agentBridge === null) return
-    void agentBridge.send(prompt)
-      .then(() => agentBridge?.gotoConversation())
-      .catch((err: unknown) => console.error('[kstock-news] send failed:', err))
+    if (agentBridge === null) {
+      console.error('[kstock-news] bridge missing')
+      return
+    }
+    setPendingAsk(prompt)
   }, [])
 
   const items = payload?.items ?? []
@@ -361,6 +359,17 @@ export function NewsPage() {
 
         <StatsAside stats={stats} onPickWord={(word) => setQuery(word)} />
       </div>
+
+      {pendingAsk !== null && agentBridge !== null && (
+        <TaskTargetMenu
+          taskKind="news"
+          title="新闻解读发送到…"
+          prompt={pendingAsk}
+          bridge={agentBridge}
+          useWorkspaces={useWorkspaces}
+          onClose={() => setPendingAsk(null)}
+        />
+      )}
     </div>
   )
 }

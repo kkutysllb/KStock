@@ -1,27 +1,24 @@
 /**
- * 选股库 → 会话联动桥（P2 命中清单「解读」按钮用）。
+ * 选股库 → 会话联动桥（P2 命中清单「解读」按钮用，§26-10 升级为目标路由）。
  *
  * 与财经新闻面板（@kstock/client-news）同款形态：index.tsx 在 apply()
- * 里 bindAgentBridge({send, gotoConversation})——send 走 sessions 作用域
- * 的 conversation.send()（官方排队回合通道），gotoConversation 经
- * layout.selectPanel(null) 回对话主面板（上游 openSession 同款约定）。
- * 面板组件只依赖模块级单例，React 树不感知注入细节。
+ * 里 bindAgentBridge() 注入 TaskRouterBridge——workspace 目标经
+ * uiWorkspace.connectWorkspace 落地（复用/新建 blank 会话并挂进工作区
+ * 分组，修复裸 create({cwd}) 的「未分组」），current 目标走当前会话
+ * 作用域 conversation.send()。面板组件经 TaskTargetMenu 弹出目标选择，
+ * 按任务类型记忆上次落点。
  */
 
-/** 会话联动桥（由客户端插件入口绑定）。 */
-export interface AgentBridge {
-  send(prompt: string): Promise<void>
-  gotoConversation(): void
-}
+import type { TaskRouterBridge } from '@kstock/quant-ui'
 
-let agentBridge: AgentBridge | null = null
+let agentBridge: TaskRouterBridge | null = null
 
-export function bindAgentBridge(bridge: AgentBridge): void {
+export function bindAgentBridge(bridge: TaskRouterBridge): void {
   agentBridge = bridge
 }
 
 /** 面板组件取桥（未绑定返回 null，按钮静默降级）。 */
-export function getAgentBridge(): AgentBridge | null {
+export function getAgentBridge(): TaskRouterBridge | null {
   return agentBridge
 }
 

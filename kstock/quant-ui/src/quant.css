@@ -955,3 +955,64 @@ a.ksq-news-title:hover {
 .ksq-news-freq-bar:hover {
   background: var(--dsw-alias-brand-primary);
 }
+
+/* ── 联动任务目标选择菜单（§26-10，新闻/选股库共用）────────────── */
+
+.ksq-target-overlay { z-index: 95; padding: 40px; background: rgba(3, 13, 11, 0.45); }
+
+.ksq-target-menu {
+  width: min(480px, 100%);
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--dsw-alias-bg-layer-1);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+}
+
+.ksq-target-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px 10px;
+  border-bottom: 1px solid var(--dsw-alias-border-l3);
+  margin-bottom: 6px;
+}
+
+.ksq-target-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.ksq-target-item:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent); }
+.ksq-target-item:disabled { opacity: 0.55; cursor: default; }
+.ksq-target-item.last { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent); }
+
+.ksq-target-name { font-weight: 500; flex: none; }
+.ksq-target-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.ksq-target-error { color: #e64646; font-size: 12.5px; margin: 4px 8px; }
+.ksq-target-cancel { align-self: flex-end; margin-top: 4px; }

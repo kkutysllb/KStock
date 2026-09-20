@@ -27,10 +27,12 @@ import {
   Loading,
   PreviewDialog,
   RefreshButton,
+  TaskTargetMenu,
   formatDateTime,
   metric,
   statusBadge,
   useCopyPrompt,
+  type UseWorkspaces,
 } from '@kstock/quant-ui'
 import { getAgentBridge, interpretPickPrompt } from './agent.ts'
 
@@ -110,7 +112,7 @@ function runReportId(run: SelectionRunSummary | undefined): string | null {
   return typeof value === 'string' && value ? value : null
 }
 
-export function SelectionsSection() {
+export function SelectionsSection({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = {}) {
   const [selections, setSelections] = useState<Selection[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -285,7 +287,8 @@ export function SelectionsSection() {
     return rows
   }, [picksView])
 
-  /** 单股「解读」：带方案/版本/排名/陷阱上下文送进当前会话并切回对话页。 */
+  /** 单股「解读」（§26-10）：先弹目标选择菜单（pick 类型记忆），选完发送。 */
+  const [pendingInterpret, setPendingInterpret] = useState<string | null>(null)
   const askPickInterpret = useCallback((row: PickRow) => {
     if (selected === null) return
     const bridge = getAgentBridge()
@@ -293,7 +296,7 @@ export function SelectionsSection() {
       setError('会话联动不可用（sessions/layout 服务缺席）')
       return
     }
-    void bridge.send(interpretPickPrompt({
+    setPendingInterpret(interpretPickPrompt({
       selectionName: selected.name,
       version: picksView?.version ?? selected.current_version,
       rank: asNumber(row.rank) ?? undefined,
@@ -303,8 +306,6 @@ export function SelectionsSection() {
       dvTtm: asNumber(row.dv_ttm) ?? undefined,
       trap: asText(row.trap_flags),
     }))
-      .then(() => bridge.gotoConversation())
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : '解读发送失败'))
   }, [selected, picksView])
 
   const rerunPrompt = (version: SelectionVersion) =>
@@ -625,6 +626,17 @@ export function SelectionsSection() {
         </div>
       )}
       <CopyToast text={toast} />
+
+      {pendingInterpret !== null && getAgentBridge() !== null && (
+        <TaskTargetMenu
+          taskKind="pick"
+          title="个股解读发送到…"
+          prompt={pendingInterpret}
+          bridge={getAgentBridge()!}
+          useWorkspaces={useWorkspaces}
+          onClose={() => setPendingInterpret(null)}
+        />
+      )}
     </div>
   )
 }
