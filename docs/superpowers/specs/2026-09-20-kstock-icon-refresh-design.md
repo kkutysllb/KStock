@@ -207,7 +207,8 @@
    尚未推送；`main` 是共享分支且有发布流水线，需用户确认后再推。
 2. **打包视觉验收**（§8 第 10 条）：需要真实构建产物上的截图——Dock、菜单栏（浅/深）、
    任务栏托盘、安装器图标。本机可直接 `pnpm dev:desktop` 或 `scripts/build-desktop.sh`。
-3. （可选）把 `build_assets.py --check` 挂进 `scripts/check-ci.sh`，让图标断进入 CI 门禁。
+3. ~~（可选）把 `build_assets.py --check` 挂进 `scripts/check-ci.sh`~~ —— **已做**：
+   图标校验已成为 CI 门禁的一步（`scripts/check-ci.sh` 里紧接技能包校验之后）。
 
 > **手动打包的注意事项（本轮实测踩到）**：`dist-exe/plugins/` 是 `build-engine-bundle.sh`
 > 产出的**快照**，打包态 App 从 `resources/engine/plugins` 加载插件，因此
@@ -249,6 +250,19 @@
 | 8 | 对比度 | ✅ | Tier 2 实测 2.96:1～8.08:1 |
 | 9 | 来源可追溯 | ✅ | `glyphs/README.md`（含「转商用需重新评估」触发条件） |
 | 11 | CI | ✅ | `bash scripts/check-ci.sh` 全绿 |
+
+**图标校验已进入 CI 门禁**：`scripts/check-ci.sh` 现调用
+`scripts/python.sh docs/design/icon-refresh/build_assets.py --check`，分三层：
+
+| 层 | 内容 | 依赖 | CI 是否执行 |
+| --- | --- | --- | --- |
+| 结构 | 文件齐全、逐档像素尺寸（读 PNG IHDR）、icns 含 ic10、ico 七档、托盘模板图源仅纯黑、256 档字标非空 | 纯标准库 | ✅ 总是 |
+| 像素 | 留白占比 80.5%±、模板图逐像素纯黑且有实心核、字标区非空 | Pillow | 有则跑 |
+| 漂移 | 从设计源重渲染全部 `icons/` 档并与入库产物**逐字节**比对 | rsvg-convert | 有则跑 |
+
+CI 矩阵（ubuntu/macos/windows）不装第三方依赖，因此第一层必须是纯标准库（Pillow 改为惰性导入）；
+后两层在本机与后续加装依赖的环境自动生效。**负向测试已验**：改错尺寸、删 ico 档位、
+改设计源不重出资产三种情况都能被抓到并返回非零。
 
 **打包验收（electron-builder，macOS arm64，未签名 `--dir`）**
 

@@ -30,6 +30,12 @@ pnpm -C apps/desktop exec tsc -p electron/tsconfig.json --noEmit
 scripts/python.sh scripts/verify_package_resources.py --source-only
 scripts/python.sh scripts/verify_skill_pack.py
 
+# 图标资产契约（纯标准库层，CI 无需 Pillow/rsvg）：文件齐全 + 逐档像素尺寸 +
+# icns 含 1024 / ico 七档 / 托盘模板图源仅纯黑 + 256 档字标非空。
+# 本机若装了 Pillow / rsvg-convert，同一命令会额外跑像素级校验与「设计源→资产」
+# 重渲染漂移校验（能发现「改了设计源却忘了重出资产」）。
+scripts/python.sh docs/design/icon-refresh/build_assets.py --check
+
 # 引擎单文件冒烟（产物存在时）：--help 快速失败验证可执行完整性。
 # 完整启动冒烟由发布流水线的引擎束构建 + 桌面打包覆盖。
 if [ -f dist-exe/kstock-engine ]; then

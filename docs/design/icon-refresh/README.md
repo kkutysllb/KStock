@@ -36,6 +36,16 @@ python3 docs/design/icon-refresh/gen_client_marks.py   # ★ 客户端商标几�
 python3 docs/design/icon-refresh/generate_uimarks.py   # UI 小尺寸商标候选（B0/B1/B2 选型用）
 ```
 
+## 校验（已进 CI 门禁）
+
+```bash
+python3 docs/design/icon-refresh/build_assets.py --check   # 结构层总是跑；有 Pillow/rsvg 时自动加跑像素层与漂移层
+```
+
+`scripts/check-ci.sh` 已调用该命令：CI 矩阵不装第三方依赖，所以结构层是纯标准库实现
+（Pillow 惰性导入，缺依赖时打印跳过原因而不失败）；本机则三层全跑，
+第三层能把「改了设计源却忘了重出资产」直接抓成 CI 失败。
+
 `gen_client_marks.py` 会写入源码文件（`kstock/client-brand/src/client/marks/geometry.ts`），
 改完后需重新构建客户端插件：
 

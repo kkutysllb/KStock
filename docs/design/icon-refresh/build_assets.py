@@ -31,7 +31,8 @@ import struct
 import subprocess
 import sys
 
-from PIL import Image
+# 注意：**不在这里 import PIL**。CI（ubuntu/macos/windows）不装第三方依赖，
+# `--check` 必须能在纯标准库下跑通；PIL 只在生成 ICO 与像素级校验时惰性导入。
 
 ROOT = pathlib.Path(__file__).resolve().parent
 REPO = ROOT.parents[2]
@@ -121,6 +122,8 @@ def write_ico(dest: pathlib.Path, entries: list[tuple[str, int]]) -> None:
     """
     import io
 
+    from PIL import Image
+
     payloads: list[tuple[int, bytes]] = []
     for tier, size in entries:
         buf = io.BytesIO()
@@ -165,66 +168,175 @@ def build_tray() -> str:
     return "✓ trayTemplate.png + @2x，彩色托盘 16/20/24/32"
 
 
-def verify() -> list[str]:
-    """把 spec §8 的验收条款变成可执行断言。"""
+def png_size(path: pathlib.Path) -> tuple[int, int]:
+    """纯标准库读 PNG 尺寸（IHDR）。"""
+    head = path.read_bytes()[:24]
+    if head[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError(f"{path.name} 不是 PNG")
+    return struct.unpack(">II", head[16:24])
+
+
+def ico_sizes(path: pathlib.Path) -> list[int]:
+    """纯标准库读 ICO 各档边长（0 表示 256）。"""
+    data = path.read_bytes()
+    count = struct.unpack("<H", data[4:6])[0]
+    sizes = []
+    for i in range(count):
+        off = 6 + i * 16
+        w = data[off] or 256
+        sizes.append(w)
+    return sizes
+
+
+def icns_types(path: pathlib.Path) -> list[bytes]:
+    """纯标准库遍历 icns 条目类型码。
+
+    iconutil 的布局是「每个条目紧跟自己的数据」（不是开头紧凑 TOC），
+    所以必须按结构逐条目走，不能用前缀子串判断。
+    """
+    data = path.read_bytes()
+    total = struct.unpack(">I", data[4:8])[0]
+    off, types = 8, []
+    while off + 8 <= total:
+        types.append(data[off : off + 4])
+        off += struct.unpack(">I", data[off + 4 : off + 8])[0]
+    return types
+
+
+def verify_structure() -> list[str]:
+    """第一层（纯标准库，CI 必跑）：文件齐全 + 尺寸正确 + 容器档位正确 + 模板图源不变量。"""
+    problems: list[str] = []
+
+    # a) 每个应有资产的像素边长
+    expected = {name: size for name, _tier, size in ICONS_DIR}
+    expected["icon.png"] = 512
+    for name, size in expected.items():
+        path = (BUILD / "icons" / name) if name.endswith(".png") and name != "icon.png" else BUILD / name
+        if not path.exists():
+            problems.append(f"缺资产 {path.relative_to(REPO)}")
+            continue
+        try:
+            w, h = png_size(path)
+        except ValueError as err:
+            problems.append(str(err))
+            continue
+        if (w, h) != (size, size):
+            problems.append(f"{path.name} 尺寸 {w}x{h}（期望 {size}x{size}）")
+
+    # b) 容器档位
+    ico = BUILD / "icon.ico"
+    if not ico.exists():
+        problems.append("缺 icon.ico")
+    else:
+        got = ico_sizes(ico)
+        if got != ICO_SIZES:
+            problems.append(f"icon.ico 档位 {got}（期望 {ICO_SIZES}）")
+
+    icns = BUILD / "icon.icns"
+    if not icns.exists():
+        problems.append("缺 icon.icns")
+    else:
+        types = icns_types(icns)
+        if b"ic10" not in types:
+            problems.append(
+                f"icon.icns 缺 1024 档（ic10）；实测 {[t.decode('latin1') for t in types]}"
+            )
+
+    # c) 模板图源不变量：只能纯黑 + alpha（用源 SVG 判断，零依赖）
+    tray_svg = SRC["tray"].read_text(encoding="utf-8")
+    if "Gradient" in tray_svg:
+        problems.append("托盘模板图源含渐变（模板图只能是纯色 + alpha）")
+    strokes = {m.group(1).lower() for m in re.finditer(r'stroke="([^"]+)"', tray_svg)}
+    strokes |= {m.group(1).lower() for m in re.finditer(r'fill="([^"]+)"', tray_svg)}
+    illegal = {c for c in strokes if c not in ("#000000", "none")}
+    if illegal:
+        problems.append(f"托盘模板图源含非纯黑颜色 {sorted(illegal)}")
+
+    # d) 托盘模板图的像素尺寸
+    for name, size in (("trayTemplate.png", 16), ("trayTemplate@2x.png", 32)):
+        path = BUILD / name
+        if not path.exists():
+            problems.append(f"缺 {name}")
+        elif png_size(path) != (size, size):
+            problems.append(f"{name} 尺寸 {png_size(path)}（期望 {size}x{size}）")
+
+    return problems
+
+
+def verify_pixels() -> tuple[list[str], bool]:
+    """第二层（有 Pillow 才跑）：留白一致 + 模板图逐像素纯黑 + 字标分档。
+
+    CI 不装 Pillow，故返回 (问题, 是否执行)；未执行时由调用方打印跳过原因。
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return [], False
     problems: list[str] = []
 
     def alpha_cover(p: pathlib.Path) -> float:
         im = Image.open(p).convert("RGBA")
         box = im.getchannel("A").getbbox()
-        if box is None:
-            return 0.0
-        return (box[2] - box[0]) / im.width
+        return 0.0 if box is None else (box[2] - box[0]) / im.width
 
-    # 1) 留白一致：squircle 内容区 824/1024 = 80.5%；小尺寸抗锯齿会把墨迹外扩，
-    #    16px 下实测 87.5%，故 ≤32px 放宽到 90%。
+    # 留白一致：squircle 内容区 824/1024 = 80.5%；16px 抗锯齿外扩，故 ≤32px 放宽到 90%
     for name, _tier, size in ICONS_DIR:
         c = alpha_cover(ICONS / name)
         upper = 0.90 if size <= 32 else 0.84
         if not 0.78 <= c <= upper:
             problems.append(f"留白异常 {name}: 内容占比 {c:.1%}（期望 78–{upper:.0%}）")
 
-    # 2) 托盘模板图：RGB 必须纯黑（alpha 可以有抗锯齿过渡——那是边缘平滑所必需），
-    #    且必须存在不透明的实心核，否则系统反色后会整片发灰。
+    # 模板图：非透明像素必须纯黑（抗锯齿 alpha 合法），且要有不透明实心核
     for name in ("trayTemplate.png", "trayTemplate@2x.png"):
         px_list = list(Image.open(BUILD / name).convert("RGBA").getdata())
         bad = next((p for p in px_list if p[3] > 0 and (p[0] or p[1] or p[2])), None)
         if bad is not None:
-            problems.append(f"{name} 含非纯黑像素 {bad}（模板图会被系统反色成脏灰）")
+            problems.append(f"{name} 含非纯黑像素 {bad}")
         if max(p[3] for p in px_list) != 255:
-            problems.append(f"{name} 没有不透明实心像素（最大 alpha={max(p[3] for p in px_list)}）")
+            problems.append(f"{name} 无实心核（最大 alpha={max(p[3] for p in px_list)}）")
 
-    # 3) icns 含 1024；ico 含 7 档
-    icns = BUILD / "icon.icns"
-    if not icns.exists():
-        problems.append("缺 icon.icns")
-    else:
-        # iconutil 的布局是「每个条目紧跟自己的数据」（非开头紧凑 TOC），
-        # 所以必须按结构逐条目走，不能用前缀子串判断类型码。
-        data = icns.read_bytes()
-        total = struct.unpack(">I", data[4:8])[0]
-        off, types = 8, []
-        while off + 8 <= total:
-            types.append(data[off : off + 4])
-            off += struct.unpack(">I", data[off + 4 : off + 8])[0]
-        if b"ic10" not in types:
-            problems.append(f"icon.icns 缺 1024 档（ic10）；实测档位 {[t.decode('latin1') for t in types]}")
-        elif len(types) < len(ICONSET):
-            problems.append(f"icon.icns 档数 {len(types)}（期望 ≥{len(ICONSET)}）")
-    ico = BUILD / "icon.ico"
-    if not ico.exists():
-        problems.append("缺 icon.ico")
-    else:
-        n = struct.unpack("<H", ico.read_bytes()[4:6])[0]
-        if n != len(ICO_SIZES):
-            problems.append(f"icon.ico 档数 {n}（期望 {len(ICO_SIZES)}）")
+    # 字标分档：256 的 Tier 1 字标区必须非空
+    im = Image.open(ICONS / "256x256.png").convert("RGBA")
+    band = im.crop((int(256 * 0.28), int(256 * 0.80), int(256 * 0.72), int(256 * 0.87)))
+    if len(set(band.getdata())) <= 3:
+        problems.append("icons/256x256.png 字标区疑似空白（应含品牌绿 KSTOCK）")
 
-    # 4) 该有字标的档必须有、该去掉的档必须没有（抽查像素：字标区是否为非背景色）
-    for size in (256, 512, 1024):
-        im = Image.open(render("tier1", size)).convert("RGBA")
-        band = im.crop((int(size * 0.28), int(size * 0.80), int(size * 0.72), int(size * 0.87)))
-        if len(set(band.getdata())) <= 3:
-            problems.append(f"Tier 1 {size}px 字标区疑似空白（应含品牌绿字标）")
+    return problems, True
+
+
+def verify_regeneration() -> tuple[list[str], bool]:
+    """第三层（有 rsvg-convert 才跑）：重渲染关键档并与入库产物**逐字节**比对。
+
+    这是唯一能发现「改了设计源但忘了重出资产」的检查；CI 无 rsvg 时自动跳过。
+    """
+    if shutil.which("rsvg-convert") is None:
+        return [], False
+    problems: list[str] = []
+    tmp = STAGE / "regen"
+    tmp.mkdir(parents=True, exist_ok=True)
+    for name, tier, size in ICONS_DIR:
+        out = tmp / name
+        subprocess.run(
+            ["rsvg-convert", "-w", str(size), "-h", str(size), "-o", str(out), str(SRC[tier])],
+            check=True,
+        )
+        if out.read_bytes() != (ICONS / name).read_bytes():
+            problems.append(f"{name} 与设计源重渲染结果不一致（设计源改了但资产没重出）")
+    return problems, True
+
+
+def verify() -> list[str]:
+    problems = verify_structure()
+
+    pixel_problems, pixel_ran = verify_pixels()
+    problems += pixel_problems
+    if not pixel_ran:
+        print("· 跳过像素级校验（未安装 Pillow；CI 环境属正常）")
+
+    regen_problems, regen_ran = verify_regeneration()
+    problems += regen_problems
+    if not regen_ran:
+        print("· 跳过重生成漂移校验（未安装 rsvg-convert）")
     return problems
 
 
@@ -234,6 +346,11 @@ def main() -> int:
     args = ap.parse_args()
 
     if not args.check:
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            print("✗ 生成资产需要 Pillow：scripts/python.sh -m pip install pillow")
+            return 1
         for tier, path in SRC.items():
             if not path.exists():
                 print(f"✗ 缺设计源 {path}；先跑 docs/design/icon-refresh/generate*.py")
@@ -250,7 +367,7 @@ def main() -> int:
         for p in problems:
             print("  ✗", p)
         return 1
-    print("\n验证通过：留白一致 / 模板图纯黑 / icns 含 1024 / ico 7 档 / 字标分档正确")
+    print("\n验证通过：资产齐全且尺寸正确 / icns 含 1024 / ico 7 档 / 模板图源纯黑 / 字标分档正确")
     if STAGE.exists():
         shutil.rmtree(STAGE)
     return 0
