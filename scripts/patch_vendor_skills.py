@@ -1214,6 +1214,104 @@ def _fix_kk_data_adapter(text: str, levels: int) -> str | None:
     return text.replace(_KK_DATA_ADAPTER_ANCHOR, injection, 1)
 
 
+# ── qilin 引擎打包 staging 修复（Windows 传递 workspace 包漏带）───────────
+# 实机现象（win-x64 SEA exe 启动即死）：runtime-bootstrap.mjs 的
+# import.meta.resolve('@qilin/sandbox-windows-acl/runner') 报
+# ERR_MODULE_NOT_FOUND——包不在 pkg 快照里。根因指向 pnpm deploy --legacy
+# 在 Windows 上把传递 workspace 依赖（ACL 包经 @qilin/sandbox-local 引入）
+# 留在部署源而未落 staging；上游 restoreLegacyHoists 只兜清单**直接**依赖。
+# 补丁在 materializeStagedLinks 之后加 repairStagedScope：把部署源
+# @qilin/@deepseek-ai 两个 workspace scope 下缺失于 staging 的包补拷进去
+# （只限这两个 scope——源 node_modules 还有 @types/@yao-pkg 等 devDep
+# scope，全量拷会把开发依赖灌进 exe），再对补拷包的非 scope 运行时依赖
+# （如 ACL 的 koffi）做一次清单驱动补拷。锚点失配时静默跳过（上游结构
+# 变化需人工重放评估），已含 repairStagedScope 标记则幂等跳过。
+_QIILIN_EXE_SCRIPT_REL = "qilin/scripts/build-exe-for-python-sdk.ts"
+_REPAIR_MARKER = "repairStagedScope"
+_REPAIR_CALL_ANCHOR = "    await this.materializeStagedLinks()"
+_REPAIR_METHOD_ANCHOR = "  /** Add the executable entry and pkg assets to the staged manifest. */"
+_REPAIR_METHOD = '''  /**
+   * KStock patch: repair workspace-scope packages missing from staging.
+   *
+   * pnpm's legacy deploy on Windows can leave transitive workspace
+   * dependencies hoisted at the deploy source instead of the target;
+   * `restoreLegacyHoists` only covers the manifest's direct dependencies,
+   * so a package like `@qilin/sandbox-windows-acl` (reached through
+   * `@qilin/sandbox-local`) can be absent from the packaged payload while
+   * the SEA executable still boots into `runtime-bootstrap.mjs` and fails
+   * at its first bare import. Copy scope packages that exist at the deploy
+   * source but are missing from staging, then top up the non-scoped
+   * runtime dependencies of everything that was repaired.
+   */
+  private async repairStagedScope(): Promise<void> {
+    if (this.cli.dryRun) {
+      console.log('build-exe-for-python-sdk: [dry-run] repair staged workspace scope packages')
+      return
+    }
+    const sourceNodeModules = resolve(root, DEPLOY_SOURCE_NODE_MODULES)
+    const stagedNodeModules = join(this.staging, 'node_modules')
+    const scopes = ['@qilin', '@deepseek-ai']
+    const repaired: string[] = []
+    const copyPackage = async (name: string): Promise<void> => {
+      const destination = join(stagedNodeModules, name)
+      if (existsSync(join(destination, 'package.json'))) return
+      const source = join(sourceNodeModules, name)
+      if (!existsSync(join(source, 'package.json'))) return
+      const nestedNodeModules = join(source, 'node_modules')
+      await mkdir(dirname(destination), { recursive: true })
+      await cp(source, destination, {
+        recursive: true,
+        dereference: true,
+        filter: path => path !== nestedNodeModules && !path.startsWith(nestedNodeModules + sep),
+      })
+      repaired.push(name)
+    }
+    for (const scope of scopes) {
+      const scopeDir = join(sourceNodeModules, scope)
+      if (!existsSync(scopeDir)) continue
+      for (const entry of await readdir(scopeDir, { withFileTypes: true })) {
+        if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
+        await copyPackage(`${scope}/${entry.name}`)
+      }
+    }
+    for (const name of [...repaired]) {
+      const manifestPath = join(stagedNodeModules, name, 'package.json')
+      if (!existsSync(manifestPath)) continue
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+        dependencies?: Record<string, string>
+      }
+      for (const dependency of Object.keys(manifest.dependencies ?? {})) {
+        if (dependency.startsWith('@')) continue
+        await copyPackage(dependency)
+      }
+    }
+    if (repaired.length > 0) {
+      console.log(`build-exe-for-python-sdk: repaired staged workspace packages: ${repaired.join(', ')}`)
+    }
+  }
+
+'''
+
+
+def _fix_qilin_staging_scope(text: str) -> str | None:
+    """给 build-exe-for-python-sdk.ts 注入 repairStagedScope；已修/锚点失配返回 None。"""
+    if _REPAIR_MARKER in text:
+        return None
+    if _REPAIR_CALL_ANCHOR not in text or _REPAIR_METHOD_ANCHOR not in text:
+        return None
+    patched = text.replace(
+        _REPAIR_CALL_ANCHOR,
+        _REPAIR_CALL_ANCHOR + "\n    await this." + _REPAIR_MARKER + "()",
+        1,
+    )
+    patched = patched.replace(
+        _REPAIR_METHOD_ANCHOR,
+        _REPAIR_METHOD + _REPAIR_METHOD_ANCHOR,
+        1,
+    )
+    return patched
+
+
 # ── KStock 自有技能 ensure（kstock/skills → vendor/skills/public）────────
 # 源码在 kstock/skills/<name>（上游同步整体覆盖 vendor 时不受影响），补丁器
 # 把它们 ensure 进 vendor 技能目录：html-report（自研渲染器）、market-linkage
@@ -1433,6 +1531,11 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     # KStock 自有技能 ensure（html-report / market-linkage / sandbox-path-guide…）。
     for rel_path in _ensure_owned_skills(vendor_root):
         changed.append(rel_path)
+    # qilin 引擎打包脚本（Windows staging 修复，补丁 14）。
+    qilin_script = REPO_ROOT / "vendor" / "qilin" / "scripts" / "build-exe-for-python-sdk.ts"
+    if qilin_script.exists():
+        if _patch_file(qilin_script, _QIILIN_EXE_SCRIPT_REL, _fix_qilin_staging_scope):
+            changed.append(_QIILIN_EXE_SCRIPT_REL)
     # preset 随行技能目录发布（技能随 preset 分发，cordis 模式）。
     if _publish_preset_skills(vendor_root):
         changed.append("kstock/presets/*/skills")
