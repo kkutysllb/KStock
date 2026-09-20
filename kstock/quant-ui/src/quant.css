@@ -641,8 +641,11 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 90;
-  background: var(--dsw-alias-toast-bg, var(--dsw-alias-bg-overlay));
-  color: var(--dsw-alias-label-primary);
+  /* 自洽深色药丸：不依赖宿主 toast token（--dsw-alias-toast-bg 在宿主不存在，
+     回退 bg-overlay 是遮罩 scrim 色——黑条不可读）。深底浅字双主题通用。 */
+  background: rgba(3, 13, 11, 0.92);
+  color: #e8edef;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   font-size: 12.5px;
   border-radius: 999px;
   padding: 8px 16px;
