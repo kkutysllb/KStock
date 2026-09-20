@@ -1,0 +1,21 @@
+# 逐尺寸渲染产物与临时目录由脚本再生，不入库（见本目录 README）。
+# 看板直接引用的少量预览图在下面逐一放行。
+zhuan-tmp/
+seal-png/
+dual-png/
+zhuan-png/
+
+# png/ 只保留看板引用的三档预览
+png/*
+!png/a-monoline-32.png
+!png/a-monoline-512.png
+!png/a-monoline-tray-16.png
+!png/b-candle-32.png
+!png/b-candle-512.png
+!png/b-candle-tray-16.png
+!png/c-field-32.png
+!png/c-field-512.png
+!png/c-field-tray-16.png
+!png/d-horizon-32.png
+!png/d-horizon-512.png
+!png/d-horizon-tray-16.png
