@@ -1344,6 +1344,36 @@ def _fix_qilin_lefthook_optional(text: str) -> str | None:
     return patched.replace(_LEFTHOOK_GUARD_ANCHOR, _LEFTHOOK_GUARD_REPLACEMENT, 1)
 
 
+# ── 补丁 16：kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界）──
+# 实测（agent 任务报告）：TushareClient.__init__ 无条件 ts.set_token(token)，
+# tushare 官方实现固定写 ~/tk.csv（HOME 根，工作区沙箱写边界之外）→ 被
+# 沙箱拒绝，调用侧只能 HOME 重定向规避。修法：删 set_token，改 pro_api
+# 显式传 token（官方支持，不读不写 token 文件）——行为等价且零 HOME
+# 写入。src 与 build 两份都修；锚点失配静默跳过。
+_TUSHARE_SET_TOKEN_RELS = (
+    "public/common/src/kk_common/tushare_client.py",
+    "public/common/build/lib/kk_common/tushare_client.py",
+)
+_TUSHARE_TOKEN_MARKER = "KStock patch: pro_api 显式传 token"
+_TUSHARE_SET_TOKEN_ANCHOR = """        # 设置 token
+        ts.set_token(self.token)
+
+        # 获取 API 对象
+        self.pro = ts.pro_api()"""
+_TUSHARE_SET_TOKEN_REPLACEMENT = """        # 获取 API 对象（KStock patch: pro_api 显式传 token——set_token 会
+        # 固定写 ~/tk.csv 于 HOME 根，工作区沙箱写边界外会被拒）
+        self.pro = ts.pro_api(self.token)"""
+
+
+def _fix_tushare_client_token(text: str) -> str | None:
+    """tushare_client 去 set_token 化；已修/锚点失配返回 None。"""
+    if _TUSHARE_TOKEN_MARKER in text:
+        return None
+    if _TUSHARE_SET_TOKEN_ANCHOR not in text:
+        return None
+    return text.replace(_TUSHARE_SET_TOKEN_ANCHOR, _TUSHARE_SET_TOKEN_REPLACEMENT, 1)
+
+
 # ── KStock 自有技能 ensure（kstock/skills → vendor/skills/public）────────
 # 源码在 kstock/skills/<name>（上游同步整体覆盖 vendor 时不受影响），补丁器
 # 把它们 ensure 进 vendor 技能目录：html-report（自研渲染器）、market-linkage
@@ -1573,6 +1603,13 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     if lefthook_script.exists():
         if _patch_file(lefthook_script, _LEFTHOOK_SCRIPT_REL, _fix_qilin_lefthook_optional):
             changed.append(_LEFTHOOK_SCRIPT_REL)
+    # kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界，补丁 16）。
+    for rel_path in _TUSHARE_SET_TOKEN_RELS:
+        target = vendor_root / rel_path
+        if not target.exists():
+            continue
+        if _patch_file(target, rel_path, _fix_tushare_client_token):
+            changed.append(rel_path)
     # preset 随行技能目录发布（技能随 preset 分发，cordis 模式）。
     if _publish_preset_skills(vendor_root):
         changed.append("kstock/presets/*/skills")
