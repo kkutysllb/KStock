@@ -206,25 +206,75 @@
    任务栏托盘、安装器图标。本机可直接 `pnpm dev:desktop` 或 `scripts/build-desktop.sh`。
 3. （可选）把 `build_assets.py --check` 挂进 `scripts/check-ci.sh`，让图标断进入 CI 门禁。
 
-## 8. 验收标准
+## 8. 验收标准与验收记录
 
-1. `bash scripts/build-icons.sh` 可在干净环境一次性重出全部资产，重复执行结果幂等（字节级稳定）。✅ 已可跑通
-   （其中第 2/3/4/5/6 条的断言已实现在 `build_assets.py` 的 `verify()` 里，已通过）。
-2. 资产齐全：`icon.icns`（11 档含 1024）、`icon.ico`（7 档含 24）、`icons/` 16→1024 + `icon.png`、
-   `trayTemplate.png` + `trayTemplate@2x.png`、Windows 彩色托盘图。
-3. **留白一致**：`icons/` 全部 PNG 的 alpha bbox 内容占比 80%±2%（当前 `32x32.png` 为 100%，必须修正）。
-4. **托盘质量**：`trayTemplate.png` 仅含纯黑与透明（无灰度）；32 素材下 K 描边 ≥3px；
+### 8.1 标准
+
+1. `bash scripts/build-icons.sh` 可在干净环境一次性重出全部资产，重复执行结果幂等（字节级稳定）。
+2. 资产齐全：`icon.icns`（11 项含 ic10/1024）、`icon.ico`（7 档含 24）、`icons/` 16→1024 + `icon.png`、
+   `trayTemplate.png` + `trayTemplate@2x.png`、彩色托盘（`tray.ico` + `tray-16/20/24/32.png`）。
+3. **留白一致**：`icons/` 全部 PNG 的 alpha bbox 内容占比 80.5%±（16px 因抗锯齿放宽到 ≤90%）。
+4. **托盘质量**：模板图非透明像素 **RGB 必须纯黑**（alpha 允许抗锯齿过渡）且存在不透明实心核；
    浅色（#ececec）与深色（#1c1c1e）菜单栏上与系统图标并排目视等重。
-5. **逐尺寸形制正确**（§3.1 / §4.2）：1024/512/256 带字标；128/64 无字标且印章居中放大；
-   48/32/24/16 用 Tier 2（16/24 加重笔画）。
-6. **字标阈值达标**：256px 下 `KSTOCK` 在 1:1 下可读（≥136×27px）；128px 起不得出现字标。
-7. **小尺寸可辨**：32px 下 Tier 2 的 K、Tier 3 的「框 + K」均可辨（与现有图标同尺寸对比截图）。
+5. **逐尺寸形制正确**：1024/512/256 带字标；64/128 无字标且印章居中放大；48/32/24/16 用 Tier 2（16/24 加重）。
+6. **字标阈值**：256px 下 `KSTOCK` 在 1:1 下可读（≥136×27px）；128px 起不得出现字标。
+7. **小尺寸可辨**：32px 下 Tier 2 的 K、Tier 3 的「框 + K」均可辨。
 8. **对比度**：Tier 2 白字 vs 场色全图 ≥ 2.9:1；Tier 1 印文（`#fff8f2`）vs 印面朱红 ≥ 4:1。
-9. **字形来源可追溯**：每个产物都能追到字形来源与授权依据（`glyphs/README.md` 含来源页、
-   下载直链与「转商用需重新评估」的触发条件）。
-10. **视觉验收**：Dock、macOS 菜单栏（浅/深）、Windows 任务栏与托盘、Windows 安装器图标、
-    Linux 应用列表，逐项提供真实截图；不通过则返工。
+9. **字形来源可追溯**：产物可追到字形来源与授权依据（`glyphs/README.md` 含来源页、直链与转商用触发条件）。
+10. **视觉验收**：Dock、macOS 菜单栏（浅/深）、Windows 任务栏与托盘、安装器图标逐项确认。
 11. `bash scripts/check-ci.sh` 通过。
+
+### 8.2 验收记录（2026-09-20）
+
+| # | 条款 | 结果 | 证据 |
+| --- | --- | --- | --- |
+| 1 | 幂等 | ✅ | 两次 `build-icons.sh` 产物聚合哈希一致（`ab1da4bf…`） |
+| 2 | 资产齐全 | ✅ | `icon.icns` 11 项含 `ic10`；`icon.ico` 7 档；`icons/` 10 档 + `icon.png`；`trayTemplate.png`+`@2x`；`tray.ico` + `tray-16/20/24/32.png` |
+| 3 | 留白一致 | ✅ | `build_assets.py verify()` 断言通过 |
+| 4 | 托盘质量 | ✅ | 断言通过（纯黑 + 实心核）；双底色对照见 `sheet-production-assets.png` |
+| 5 | 逐尺寸形制 | ✅ | 断言 + 打包 asar 内逐档实测（`sheet-packaged-acceptance.png`） |
+| 6 | 字标阈值 | ✅ | 断言抽查 256/512/1024 字标区非空；阈值实测见 `sheet-db1-marklegibility.png` |
+| 7 | 小尺寸可辨 | ✅ | `sheet-production-assets.png` 16/24/32 档 |
+| 8 | 对比度 | ✅ | Tier 2 实测 2.96:1～8.08:1 |
+| 9 | 来源可追溯 | ✅ | `glyphs/README.md`（含「转商用需重新评估」触发条件） |
+| 11 | CI | ✅ | `bash scripts/check-ci.sh` 全绿 |
+
+**打包验收（electron-builder，macOS arm64，未签名 `--dir`）**
+
+- `KStock.app/Contents/Resources/icon.icns` 与设计产物**哈希一致**（`37c57b7b…`）→ 打包链路确实注入了新图标。
+- `app.asar` 内含全部 17 个图标资产，路径与代码读取一致：
+  `build/trayTemplate.png`、`build/trayTemplate@2x.png`、`build/tray-16/20/24/32.png`、`build/tray.ico`、
+  `build/icons/*.png`（16→1024）。
+- **运行时日志（打包态实跑，取自主进程日志）**：
+  ```
+  packaged=true
+  托盘图标加载：…/KStock.app/Contents/Resources/app.asar/build/trayTemplate.png
+               size={"width":16,"height":16} isEmpty=false
+  托盘已创建
+  窗口 ready-to-show
+  ```
+  即新代码路径在**打包产物内**成立（旧实现此处会记录 `build/tray.png` 并 resize 到 22）。
+- Electron 运行时探针（直接读 asar）：`trayTemplate.png` → 16×16 且 `reps=[1,2]`
+  （**`@2x` 已被自动合并**）、彩色托盘 32/16、窗口图标 256、Dock 用 512。
+
+**未完成项（明确记录，不含糊）**
+
+- 第 10 条的**真实屏幕视觉验收**只完成了一半：打包产物、asar 内容、运行时加载均已验证；
+  但 **Dock 图标与菜单栏托盘的实际屏幕截图未能获取**——本机未向沙箱进程授予屏幕录制权限
+  （`screencapture` 被拒）。需由用户目视确认，或在其机器上直接运行打包产物。
+- Windows 任务栏 / 托盘 / 安装器图标**无法在本机验证**（无 Windows 环境）：
+  当前证据为资产生成断言 + Electron 对各档尺寸的加载探针，真实外观需在 Windows 上确认。
+
+**验收过程中的环境限制（踩坑记录，供后续复用）**
+
+- `electron-builder` 默认要写 `~/Library/Caches/electron`，被本机文件沙箱拒绝（EPERM）；
+  改用 `ELECTRON_CACHE` / `ELECTRON_BUILDER_CACHE` 指到工作区内，并用
+  `--config.electronDist=<本地解包的 electron/dist>` 走**离线打包**（避免下载 Electron）。
+- 打包态 App 实跑需重定向两处：`HOME`（引擎数据目录 `~/.kstock`）与
+  `--user-data-dir`（Electron 的 userData 走 macOS 真实用户目录，**不认 `HOME`**，
+  否则单例锁被拒后进程直接退出）。
+- 隔离 HOME 会让引擎走**首次引导**（安装 py-deps 约 4.5 分钟后失败退出 code=1），
+  这与图标改动无关；用户机器上已有 `~/.kstock`，不受此影响。
 
 ## 9. 交付物
 

@@ -112,7 +112,7 @@
     <span class="chip">已渲染尺寸 <b>1024 / 512 / 256 / 128 / 64 / 32</b></span>
     <span class="chip">托盘已出 <b>16 / 22 / 32（模板图）</b></span>
     <span class="chip">品牌底色 <b>#030d0b · #31c7a2</b></span>
-    <span class="chip">状态 <b>已实施 · 生产资产已生成</b></span>
+    <span class="chip">状态 <b>已实施 · 打包验收通过（待目视）</b></span>
   </div>
 
   <h2 id="diag">1 · 现状诊断：为什么必须重构</h2>
@@ -749,6 +749,19 @@
   <p class="mono">待你确认：① <b>是否推送</b>（本轮 6 个本地提交，main 是共享分支且有发布流水线）；
   ② 打包产物上的视觉验收（本机可跑 <span class="mono">pnpm dev:desktop</span> 或
   <span class="mono">scripts/build-desktop.sh</span>）。</p>
+
+  <h3>打包验收结果（2026-09-20）</h3>
+  <img src="sheet-packaged-acceptance.png" alt="打包产物验收" style="border-radius:10px;border:1px solid var(--line);margin:6px 0 4px">
+  <ul>
+    <li><code>KStock.app/Contents/Resources/icon.icns</code> 与设计产物<b>哈希一致</b>（<span class="mono">37c57b7b…</span>）。</li>
+    <li><code>app.asar</code> 内含全部 <b>17 个</b>图标资产，路径与代码读取一致（<span class="mono">build/trayTemplate*.png</span>、
+      <span class="mono">build/tray-*.png</span>、<span class="mono">build/tray.ico</span>、<span class="mono">build/icons/*</span>）。</li>
+    <li><b>打包态实跑日志</b>：<span class="mono">托盘图标加载：…/app.asar/build/trayTemplate.png size={width:16,height:16} isEmpty=false</span>
+      → <span class="mono">托盘已创建</span>；旧实现此处会记录 128px <span class="mono">tray.png</span> 并 resize 到 22。</li>
+    <li>Electron 运行时探针：模板图 16×16 且 <b>@2x 已自动合并</b>（<span class="mono">reps=[1,2]</span>）；彩色托盘 32/16；窗口图标 256；Dock 512。</li>
+    <li class="warn"><b>未完成</b>：Dock 与菜单栏的<b>真实屏幕截图</b>未取到（本机未授予屏幕录制权限，<span class="mono">screencapture</span> 被拒）；
+      Windows 任务栏/安装器图标本机无法验证（无 Windows 环境）。这两项需你目视或上 Windows 确认。</li>
+  </ul>
 
   <h3>选定方向后我会做什么</h3>
   <ul>
