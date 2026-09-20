@@ -131,6 +131,12 @@ curl -s -X POST http://127.0.0.1:18001/kstock-api/factors/$FACTOR_ID/runs \
 EOF
 ```
 
+- **多因子/多变体研究**（一次检验 N 个变体，如「8 变体有效性」）：
+  每个变体建独立因子资产——name 带变体标识区分（如「动量·20日月频」
+  「动量·60日」「动量·10分组」），category 共用，hypothesis 写变体差异；
+  逐变体走上面三步（代码/params 各自落版本，ic_summary 的五指标 +
+  ic 序列 + 分层各自归 run）。禁止因"变体多"而整体跳过归档只交报告
+  ——报告库与因子库是两个互补资产面；
 - **重跑同一因子**：不要 POST 新因子——`PATCH /kstock-api/factors/{id}`
   更新 hypothesis；代码或参数变化时 POST 新版本（code 变了 sha256 才变，
   change_note 说明差异）；run 一律挂当前版本；
