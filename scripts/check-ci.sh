@@ -26,8 +26,9 @@ pnpm -C apps/desktop build:electron-main
 pnpm -C apps/desktop exec tsc -p electron/tsconfig.json --noEmit
 
 # 打包资源契约（源形态）：插件清单 / bundle patch / 技能接线 / 壳模块 / 无遗留模块。
-python3 scripts/verify_package_resources.py --source-only
-python3 scripts/verify_skill_pack.py
+# python 经解析器调用（Windows Store 桩问题，见 scripts/python.sh）。
+scripts/python.sh scripts/verify_package_resources.py --source-only
+scripts/python.sh scripts/verify_skill_pack.py
 
 # 引擎单文件冒烟（产物存在时）：--help 快速失败验证可执行完整性。
 # 完整启动冒烟由发布流水线的引擎束构建 + 桌面打包覆盖。

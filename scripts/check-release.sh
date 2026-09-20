@@ -7,5 +7,5 @@ set -euo pipefail
 # 无需手动构造 updater 元数据。
 bash scripts/check-ci.sh
 bash scripts/build-engine-bundle.sh
-python3 scripts/verify_package_resources.py
+scripts/python.sh scripts/verify_package_resources.py
 bash scripts/build-desktop.sh

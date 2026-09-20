@@ -61,8 +61,8 @@ fi
 
 # ── 3. 技能补丁 + preset 随行技能目录发布（幂等）────────────────────
 # 上游同步后本地修复重放 + 各角色 preset 的 skills/ 子集镜像（生成物不入库，
-# 任何环境构建时重建）。
-python3 "$REPO_ROOT/scripts/patch_vendor_skills.py"
+# 任何环境构建时重建）。python 经解析器调用（Windows Store 桩问题）。
+"$REPO_ROOT/scripts/python.sh" "$REPO_ROOT/scripts/patch_vendor_skills.py"
 
 # ── 4. 组装 dist-exe/ ───────────────────────────────────────────────
 echo "==> 组装 $OUT_DIR"
