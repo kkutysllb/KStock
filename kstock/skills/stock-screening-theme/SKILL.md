@@ -113,9 +113,11 @@ EOF
   run 一律挂当前版本。这样面板的跨期重合对比才成立；
 - picks 的 `code` 必须带交易所后缀（`002170.SZ`）——重合分析按 code
   精确匹配，无后缀会对不上；Top20 建议全量入库（≤4MB 上限）；
-- metrics 面板渲染键：`hit_count`（命中数）/ `strategy_count`（策略数）/
-  `consensus_count`（共振股数，跨策略重合命中）/ `top_n`，其余自由指标
-  存着不展示；
+- metrics 面板渲染键：**`hit_count`（命中数，必填 = picks 条数）**/
+  `strategy_count`（策略数）/ `consensus_count`（共振股数，跨策略重合
+  命中）/ `top_n`——漏 hit_count 面板命中列会显示「—」；漏检即补
+  （可事后 UPDATE metrics_json）。其余自由指标（漏斗口径如
+  pool_initial/gates_passed、report_metrics 卡片数组）存着不展示；
 - 引擎不可达时在最终回复里明说「未归档选股库」，其余交付照常（与
   报告库归档同款降级语义）。
 
