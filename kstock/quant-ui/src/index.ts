@@ -29,14 +29,24 @@ export interface QuantClientContext {
   }
 }
 
-/** 样式注入标记（幂等：四个客户端插件共用一份）。 */
+/** 样式注入标记（幂等：五个客户端插件共用一份）。 */
 const STYLE_ID = 'kstock-quant-pages'
 
-/** 把 ksq 样式注入 <head>（幂等）。 */
+/**
+ * 样式版本：各插件把 quant.css 源码内联进自己的 bundle，构建时间不一，
+ * 旧副本可能先注入抢占幂等位（first-inject-wins）——版本不匹配即撤旧
+ * 换新，保证最终落页的是最新构建的样式副本。改 quant.css 时同步抬版本。
+ */
+const STYLE_VERSION = '2026-09-20.2-news'
+
+/** 把 ksq 样式注入 <head>（幂等 + 版本淘汰旧副本）。 */
 export function injectQuantStyles(): void {
-  if (document.querySelector(`style[data-kstock="${STYLE_ID}"]`) !== null) return
+  const existing = document.querySelector(`style[data-kstock="${STYLE_ID}"]`)
+  if (existing !== null && existing.getAttribute('data-version') === STYLE_VERSION) return
+  existing?.remove()
   const tag = document.createElement('style')
   tag.dataset.kstock = STYLE_ID
+  tag.setAttribute('data-version', STYLE_VERSION)
   tag.textContent = quantCssText
   document.head.appendChild(tag)
 }
