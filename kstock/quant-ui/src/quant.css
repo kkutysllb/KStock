@@ -1067,3 +1067,75 @@ a.ksq-news-title:hover {
 
 .ksq-trend-bar.consensus { background: #31c7a2; }
 .ksq-trend-bar.consensus:hover { background: #22a06b; }
+
+/* ── 因子库：跨因子概览（F3，IC 均值零轴双向横条）──────────────── */
+
+.ksq-factors-overview {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 10px;
+}
+
+.ksq-fo-rows { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+
+.ksq-fo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ksq-fo-row:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); }
+.ksq-fo-row.active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); }
+
+.ksq-fo-name {
+  flex: none;
+  width: 128px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.ksq-fo-bar {
+  flex: 1;
+  position: relative;
+  height: 10px;
+  min-width: 0;
+}
+
+/* 零轴：容器中缝 1px 基线；正值条从中线向右，负值向左。 */
+.ksq-fo-bar::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--dsw-alias-border-l3);
+}
+
+.ksq-fo-fill {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 2px;
+}
+
+.ksq-fo-fill.up { background: #31c7a2; }
+.ksq-fo-fill.down { background: #e64646; }
+
+.ksq-fo-value { flex: none; width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
+.ksq-fo-ir { flex: none; width: 64px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }

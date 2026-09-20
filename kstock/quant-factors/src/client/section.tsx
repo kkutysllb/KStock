@@ -195,6 +195,59 @@ function layersToSeries(raw: unknown): OverlaySeries[] {
     }))
 }
 
+/**
+ * 跨因子概览（F3）：全库因子按 latest run 的 IC 均值排序的零轴双向横条
+ * （正右绿 / 负左红，IR 数值随行），点击条联动选中该因子。≥2 个有
+ * 检验指标的因子才显示（单因子无横向意义）。
+ */
+function FactorsOverview({ factors, selectedId, onSelect }: {
+  factors: Factor[]
+  selectedId: string | null
+  onSelect: (id: string) => void
+}): React.ReactElement | null {
+  const num = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isFinite(value) ? value : null
+  const rows = factors
+    .map(factor => ({
+      id: factor.factor_id,
+      name: factor.name,
+      category: factor.category,
+      ic: num(factor.latest_run?.metrics?.ic_mean),
+      ir: num(factor.latest_run?.metrics?.ir),
+    }))
+    .filter((row): row is { id: string; name: string; category: string; ic: number; ir: number | null } => row.ic !== null)
+    .sort((a, b) => b.ic - a.ic)
+  if (rows.length < 2) return null
+  const max = Math.max(...rows.map(row => Math.abs(row.ic)), 0.0001)
+  return (
+    <div className="ksq-factors-overview" aria-label="跨因子概览">
+      <span className="ksq-trend-label">IC 均值排行</span>
+      <div className="ksq-fo-rows">
+        {rows.map(row => {
+          const width = Math.round(Math.abs(row.ic) / max * 50)
+          const positive = row.ic >= 0
+          return (
+            <button
+              key={row.id}
+              type="button"
+              className={`ksq-fo-row ${row.id === selectedId ? 'active' : ''}`}
+              onClick={() => onSelect(row.id)}
+              title={`${row.name}（${categoryLabel(row.category)}）· IC ${row.ic.toFixed(4)}${row.ir !== null ? ` · IR ${row.ir.toFixed(2)}` : ''}——点击查看该因子`}
+            >
+              <span className="ksq-fo-name">{row.name}</span>
+              <span className="ksq-fo-bar">
+                <span className={`ksq-fo-fill ${positive ? 'up' : 'down'}`} style={{ [positive ? 'left' : 'right']: '50%', width: `${width}%` }} />
+              </span>
+              <span className={`ksq-fo-value ${positive ? 'ksq-up' : 'ksq-down'}`}>{row.ic.toFixed(4)}</span>
+              <span className="ksq-fo-ir">{row.ir !== null ? `IR ${row.ir.toFixed(2)}` : ''}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function FactorsSection({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = {}) {
   const [factors, setFactors] = useState<Factor[]>([])
   const [loading, setLoading] = useState(true)
@@ -399,6 +452,9 @@ export function FactorsSection({ useWorkspaces }: { useWorkspaces?: UseWorkspace
         <span className="ksq-count"><IconFlask size={13} /> {factors.length} 个因子</span>
         <RefreshButton refreshing={refreshing} onClick={() => void refresh()} label="刷新因子库" />
       </div>
+      {!loading && (
+        <FactorsOverview factors={factors} selectedId={selectedId} onSelect={setSelectedId} />
+      )}
       {error && <ErrorLine message={error} />}
       {loading ? <Loading text="加载因子库…" /> : (
         <div className="ksq-split">
