@@ -1,5 +1,6 @@
 /**
  * 选股库面板：方案列表 + 要求版本时间线 + 运行归档（报告查看）+
+ * 命中清单（P2：picks 表展开 + 每股「解读」联动会话）+
  * 跨期命中对比（重合分析）。移植自 1.x components/SelectionsLibrary.tsx。
  */
 
@@ -31,6 +32,24 @@ import {
   statusBadge,
   useCopyPrompt,
 } from '@kstock/quant-ui'
+import { getAgentBridge, interpretPickPrompt } from './agent.ts'
+
+/** picks 行（agent 按报告总表约定写入：rank/code/name/industry/score/
+ * dv_ttm/pe_ttm/pb/roe/div_years_3y/trap_flags 等，宽松读取）。 */
+type PickRow = Record<string, unknown>
+
+const asNumber = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null
+const asText = (value: unknown): string =>
+  typeof value === 'string' ? value : value === undefined || value === null ? '' : String(value)
+const fmtPct = (value: unknown): string => {
+  const n = asNumber(value)
+  return n === null ? asText(value) || '—' : `${n.toFixed(2)}%`
+}
+const fmtNum = (value: unknown, digits = 2): string => {
+  const n = asNumber(value)
+  return n === null ? asText(value) || '—' : n.toFixed(digits)
+}
 
 /** 共振股数 > 0 绿。 */
 function selectionMetricClass(key: string, value: unknown): string {
@@ -103,6 +122,7 @@ export function SelectionsSection() {
   const [comparison, setComparison] = useState<SelectionRunComparison | null>(null)
   const [picksList, setPicksList] = useState<SelectionRunPicks[]>([])
   const [reportView, setReportView] = useState<ReportView | null>(null)
+  const [picksView, setPicksView] = useState<SelectionRunPicks | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const { copy, toast } = useCopyPrompt()
 
@@ -157,6 +177,7 @@ export function SelectionsSection() {
     setComparison(null)
     setPicksList([])
     closeReportView()
+    setPicksView(null)
     setError(null)
     let active = true
     void (async () => {
@@ -238,6 +259,53 @@ export function SelectionsSection() {
       setError(err instanceof Error ? err.message : '报告加载失败')
     }
   }, [selectedId, reportView, runs, closeReportView])
+
+  /** 展开某 run 的命中清单（再点收起；未存 picks 报服务端 422 文案）。 */
+  const togglePicks = useCallback(async (runId: string) => {
+    if (!selectedId) return
+    if (picksView?.run_id === runId) {
+      setPicksView(null)
+      return
+    }
+    try {
+      setPicksView(await getSelectionRunPicks(selectedId, runId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '命中清单加载失败')
+    }
+  }, [selectedId, picksView])
+
+  /** 命中清单排序：rank 全数值时按排名，否则按综合分降序。 */
+  const sortedPicks = useMemo(() => {
+    const rows = [...(picksView?.picks ?? [])]
+    if (rows.length > 0 && rows.every(row => asNumber(row.rank) !== null)) {
+      rows.sort((a, b) => (asNumber(a.rank)! - asNumber(b.rank)!))
+      return rows
+    }
+    rows.sort((a, b) => (asNumber(b.score) ?? -Infinity) - (asNumber(a.score) ?? -Infinity))
+    return rows
+  }, [picksView])
+
+  /** 单股「解读」：带方案/版本/排名/陷阱上下文送进当前会话并切回对话页。 */
+  const askPickInterpret = useCallback((row: PickRow) => {
+    if (selected === null) return
+    const bridge = getAgentBridge()
+    if (bridge === null) {
+      setError('会话联动不可用（sessions/layout 服务缺席）')
+      return
+    }
+    void bridge.send(interpretPickPrompt({
+      selectionName: selected.name,
+      version: picksView?.version ?? selected.current_version,
+      rank: asNumber(row.rank) ?? undefined,
+      name: asText(row.name) || asText(row.code) || '该标的',
+      code: asText(row.code),
+      score: asNumber(row.score) ?? undefined,
+      dvTtm: asNumber(row.dv_ttm) ?? undefined,
+      trap: asText(row.trap_flags),
+    }))
+      .then(() => bridge.gotoConversation())
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : '解读发送失败'))
+  }, [selected, picksView])
 
   const rerunPrompt = (version: SelectionVersion) =>
     `请重跑选股库中的「${selected?.name ?? ''}」（${selectedId}）：选股口径采用 v${version.version} 版本` +
@@ -373,7 +441,7 @@ export function SelectionsSection() {
                           <th>共振</th>
                           <th>TopN</th>
                           <th>时间</th>
-                          <th>报告</th>
+                          <th>清单 / 报告</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -396,11 +464,20 @@ export function SelectionsSection() {
                             <td className="num">{metric(run, 'top_n')}</td>
                             <td>{formatDateTime(run.created_at)}</td>
                             <td>
-                              {(run.report_path || runReportId(run)) ? (
-                                <button className="ksq-linkbtn" type="button" onClick={() => void showReport(run.run_id)}>
-                                  {reportView?.runId === run.run_id ? '收起' : runReportId(run) ? '看板' : '查看'}
+                              {run.picks_path ? (
+                                <button className="ksq-linkbtn" type="button" onClick={() => void togglePicks(run.run_id)}>
+                                  {picksView?.run_id === run.run_id ? '收清单' : '清单'}
                                 </button>
-                              ) : '—'}
+                              ) : null}
+                              {(run.report_path || runReportId(run)) ? (
+                                <>
+                                  {run.picks_path ? ' ' : ''}
+                                  <button className="ksq-linkbtn" type="button" onClick={() => void showReport(run.run_id)}>
+                                    {reportView?.runId === run.run_id ? '收起' : runReportId(run) ? '看板' : '查看'}
+                                  </button>
+                                </>
+                              ) : null}
+                              {!run.picks_path && !run.report_path && !runReportId(run) ? '—' : null}
                             </td>
                           </tr>
                         ))}
@@ -409,6 +486,64 @@ export function SelectionsSection() {
                     </div>
                   )}
                 </div>
+
+                {picksView && (
+                  <div className="ksq-compare">
+                    <h3>
+                      命中清单（{picksView.run_id.slice(7, 15)} · v{picksView.version} · {picksView.trade_date || '—'} · {sortedPicks.length} 只）
+                      <button className="ksq-linkbtn" type="button" onClick={() => setPicksView(null)}>收起</button>
+                    </h3>
+                    {sortedPicks.length === 0 ? <p className="ksq-hint">该 run 命中清单为空。</p> : (
+                      <div className="ksq-table-wrap">
+                        <table className="ksq-table">
+                          <thead>
+                            <tr>
+                              <th>排名</th>
+                              <th>代码</th>
+                              <th>名称</th>
+                              <th>行业</th>
+                              <th>综合分</th>
+                              <th>股息率TTM</th>
+                              <th>PE</th>
+                              <th>PB</th>
+                              <th>ROE</th>
+                              <th>3年分红</th>
+                              <th>陷阱</th>
+                              <th>解读</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sortedPicks.map((row, index) => {
+                              const code = asText(row.code)
+                              const trap = asText(row.trap_flags)
+                              const hasTrap = trap !== '' && trap !== '—'
+                              return (
+                                <tr key={code || index}>
+                                  <td className="num">{asText(row.rank) || index + 1}</td>
+                                  <td className="ksq-mono">{code || '—'}</td>
+                                  <td>{asText(row.name) || '—'}</td>
+                                  <td className="ksq-cell-clip" title={asText(row.industry) || undefined}>{asText(row.industry) || '—'}</td>
+                                  <td className="num">{asText(row.score) || '—'}</td>
+                                  <td className="num">{fmtPct(row.dv_ttm)}</td>
+                                  <td className="num">{fmtNum(row.pe_ttm)}</td>
+                                  <td className="num">{fmtNum(row.pb)}</td>
+                                  <td className="num">{fmtPct(row.roe)}</td>
+                                  <td className="num">{asText(row.div_years_3y) || '—'}</td>
+                                  <td>{hasTrap ? <span className="ksq-badge tone-bad" title={trap}>陷阱</span> : '—'}</td>
+                                  <td>
+                                    {code !== '' ? (
+                                      <button className="ksq-linkbtn" type="button" onClick={() => askPickInterpret(row)}>解读</button>
+                                    ) : '—'}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {reportView?.htmlUrl ? (
                   <PreviewDialog title="运行报告看板" onClose={closeReportView}>

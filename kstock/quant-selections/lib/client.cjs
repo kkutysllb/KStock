@@ -278,11 +278,40 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		//#endregion
+		//#region src/client/agent.ts
+		let agentBridge = null;
+		function bindAgentBridge(bridge) {
+			agentBridge = bridge;
+		}
+		/** 面板组件取桥（未绑定返回 null，按钮静默降级）。 */
+		function getAgentBridge() {
+			return agentBridge;
+		}
+		/** 命中清单「解读」提示词：带方案名 / 排名 / 综合分 / 陷阱提示上下文。 */
+		function interpretPickPrompt(input) {
+			const rank = input.rank !== void 0 && String(input.rank) !== "" ? `排名第 ${input.rank} 的` : "";
+			const score = input.score !== void 0 && String(input.score) !== "" ? `，综合分 ${input.score}` : "";
+			const dv = typeof input.dvTtm === "number" && Number.isFinite(input.dvTtm) ? `，股息率(TTM) ${input.dvTtm.toFixed(2)}%` : "";
+			const trap = input.trap !== void 0 && input.trap !== "" && input.trap !== "—" ? `（股息陷阱提示：${input.trap}）` : "";
+			return `选股库「${input.selectionName}」v${input.version} 命中清单中${rank}${input.name}（${input.code}${score}${dv}）${trap}：请做个股快速分析——公司基本面要点 + 当前估值水平（含近一年历史分位）+ 作为高股息标的的分红可持续性 + 近期催化与风险，最后一句话结论。数据缺失诚实标注「无数据」，不构成投资建议。`;
+		}
+		//#endregion
 		//#region src/client/section.tsx
 		/**
 		* 选股库面板：方案列表 + 要求版本时间线 + 运行归档（报告查看）+
+		* 命中清单（P2：picks 表展开 + 每股「解读」联动会话）+
 		* 跨期命中对比（重合分析）。移植自 1.x components/SelectionsLibrary.tsx。
 		*/
+		const asNumber = (value) => typeof value === "number" && Number.isFinite(value) ? value : null;
+		const asText = (value) => typeof value === "string" ? value : value === void 0 || value === null ? "" : String(value);
+		const fmtPct = (value) => {
+			const n = asNumber(value);
+			return n === null ? asText(value) || "—" : `${n.toFixed(2)}%`;
+		};
+		const fmtNum = (value, digits = 2) => {
+			const n = asNumber(value);
+			return n === null ? asText(value) || "—" : n.toFixed(digits);
+		};
 		/** 共振股数 > 0 绿。 */
 		function selectionMetricClass(key, value) {
 			if (typeof value !== "number") return "";
@@ -334,6 +363,7 @@ window.__ModuleLoader__.load({
 			const [comparison, setComparison] = (0, react.useState)(null);
 			const [picksList, setPicksList] = (0, react.useState)([]);
 			const [reportView, setReportView] = (0, react.useState)(null);
+			const [picksView, setPicksView] = (0, react.useState)(null);
 			const [refreshing, setRefreshing] = (0, react.useState)(false);
 			const { copy, toast } = useCopyPrompt();
 			const reload = (0, react.useCallback)(async () => {
@@ -381,6 +411,7 @@ window.__ModuleLoader__.load({
 				setComparison(null);
 				setPicksList([]);
 				closeReportView();
+				setPicksView(null);
 				setError(null);
 				let active = true;
 				(async () => {
@@ -458,6 +489,48 @@ window.__ModuleLoader__.load({
 				runs,
 				closeReportView
 			]);
+			/** 展开某 run 的命中清单（再点收起；未存 picks 报服务端 422 文案）。 */
+			const togglePicks = (0, react.useCallback)(async (runId) => {
+				if (!selectedId) return;
+				if (picksView?.run_id === runId) {
+					setPicksView(null);
+					return;
+				}
+				try {
+					setPicksView(await getSelectionRunPicks(selectedId, runId));
+				} catch (err) {
+					setError(err instanceof Error ? err.message : "命中清单加载失败");
+				}
+			}, [selectedId, picksView]);
+			/** 命中清单排序：rank 全数值时按排名，否则按综合分降序。 */
+			const sortedPicks = (0, react.useMemo)(() => {
+				const rows = [...picksView?.picks ?? []];
+				if (rows.length > 0 && rows.every((row) => asNumber(row.rank) !== null)) {
+					rows.sort((a, b) => asNumber(a.rank) - asNumber(b.rank));
+					return rows;
+				}
+				rows.sort((a, b) => (asNumber(b.score) ?? -Infinity) - (asNumber(a.score) ?? -Infinity));
+				return rows;
+			}, [picksView]);
+			/** 单股「解读」：带方案/版本/排名/陷阱上下文送进当前会话并切回对话页。 */
+			const askPickInterpret = (0, react.useCallback)((row) => {
+				if (selected === null) return;
+				const bridge = getAgentBridge();
+				if (bridge === null) {
+					setError("会话联动不可用（sessions/layout 服务缺席）");
+					return;
+				}
+				bridge.send(interpretPickPrompt({
+					selectionName: selected.name,
+					version: picksView?.version ?? selected.current_version,
+					rank: asNumber(row.rank) ?? void 0,
+					name: asText(row.name) || asText(row.code) || "该标的",
+					code: asText(row.code),
+					score: asNumber(row.score) ?? void 0,
+					dvTtm: asNumber(row.dv_ttm) ?? void 0,
+					trap: asText(row.trap_flags)
+				})).then(() => bridge.gotoConversation()).catch((err) => setError(err instanceof Error ? err.message : "解读发送失败"));
+			}, [selected, picksView]);
 			const rerunPrompt = (version) => `请重跑选股库中的「${selected?.name ?? ""}」（${selectedId}）：选股口径采用 v${version.version} 版本（${criteriaSummary(version)}），股票池与执行口径与该版本最近一次 run 保持一致（无历史 run 则按口径默认执行）。跑完后把结果入库：POST /kstock-api/selections/${selectedId}/runs，version=${version.version}，附 trade_date/universe/rules/metrics/report（报告全文）/picks（命中清单）。`;
 			/** 命中重合分析：以所选第一个运行为基准，统计其余运行的保留/新增/剔除。 */
 			const overlapRows = (0, react.useMemo)(() => {
@@ -648,7 +721,7 @@ window.__ModuleLoader__.load({
 											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "共振" }),
 											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "TopN" }),
 											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "时间" }),
-											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "报告" })
+											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "清单 / 报告" })
 										] }) }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("tbody", { children: runs.map((run) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("tr", {
 											className: compareIds.includes(run.run_id) ? "selected" : "",
 											children: [
@@ -683,16 +756,122 @@ window.__ModuleLoader__.load({
 													children: metric(run, "top_n")
 												}),
 												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: formatDateTime(run.created_at) }),
-												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: run.report_path || runReportId(run) ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
-													className: "ksq-linkbtn",
-													type: "button",
-													onClick: () => void showReport(run.run_id),
-													children: reportView?.runId === run.run_id ? "收起" : runReportId(run) ? "看板" : "查看"
-												}) : "—" })
+												/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("td", { children: [
+													run.picks_path ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+														className: "ksq-linkbtn",
+														type: "button",
+														onClick: () => void togglePicks(run.run_id),
+														children: picksView?.run_id === run.run_id ? "收清单" : "清单"
+													}) : null,
+													run.report_path || runReportId(run) ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [run.picks_path ? " " : "", /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+														className: "ksq-linkbtn",
+														type: "button",
+														onClick: () => void showReport(run.run_id),
+														children: reportView?.runId === run.run_id ? "收起" : runReportId(run) ? "看板" : "查看"
+													})] }) : null,
+													!run.picks_path && !run.report_path && !runReportId(run) ? "—" : null
+												] })
 											]
 										}, run.run_id)) })]
 									})
 								})] }),
+								picksView && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+									className: "ksq-compare",
+									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("h3", { children: [
+										"命中清单（",
+										picksView.run_id.slice(7, 15),
+										" · v",
+										picksView.version,
+										" · ",
+										picksView.trade_date || "—",
+										" · ",
+										sortedPicks.length,
+										" 只）",
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+											className: "ksq-linkbtn",
+											type: "button",
+											onClick: () => setPicksView(null),
+											children: "收起"
+										})
+									] }), sortedPicks.length === 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+										className: "ksq-hint",
+										children: "该 run 命中清单为空。"
+									}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+										className: "ksq-table-wrap",
+										children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("table", {
+											className: "ksq-table",
+											children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("tr", { children: [
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "排名" }),
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "代码" }),
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "名称" }),
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "行业" }),
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "综合分" }),
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "股息率TTM" }),
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "PE" }),
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "PB" }),
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "ROE" }),
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "3年分红" }),
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "陷阱" }),
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "解读" })
+											] }) }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("tbody", { children: sortedPicks.map((row, index) => {
+												const code = asText(row.code);
+												const trap = asText(row.trap_flags);
+												const hasTrap = trap !== "" && trap !== "—";
+												return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("tr", { children: [
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
+														className: "num",
+														children: asText(row.rank) || index + 1
+													}),
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
+														className: "ksq-mono",
+														children: code || "—"
+													}),
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: asText(row.name) || "—" }),
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
+														className: "ksq-cell-clip",
+														title: asText(row.industry) || void 0,
+														children: asText(row.industry) || "—"
+													}),
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
+														className: "num",
+														children: asText(row.score) || "—"
+													}),
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
+														className: "num",
+														children: fmtPct(row.dv_ttm)
+													}),
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
+														className: "num",
+														children: fmtNum(row.pe_ttm)
+													}),
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
+														className: "num",
+														children: fmtNum(row.pb)
+													}),
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
+														className: "num",
+														children: fmtPct(row.roe)
+													}),
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
+														className: "num",
+														children: asText(row.div_years_3y) || "—"
+													}),
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: hasTrap ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+														className: "ksq-badge tone-bad",
+														title: trap,
+														children: "陷阱"
+													}) : "—" }),
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: code !== "" ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+														className: "ksq-linkbtn",
+														type: "button",
+														onClick: () => askPickInterpret(row),
+														children: "解读"
+													}) : "—" })
+												] }, code || index);
+											}) })]
+										})
+									})]
+								}),
 								reportView?.htmlUrl ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(PreviewDialog, {
 									title: "运行报告看板",
 									onClose: closeReportView,
@@ -833,6 +1012,11 @@ window.__ModuleLoader__.load({
 		* 注册 `main` keyed 面板（键 kstock-quant-selections）+ `sidebar.panellist` 导航入口
 		* （同 id，侧栏自动接线 ctx.layout.selectPanel）；ksq 样式经
 		* @kstock/quant-ui 幂等注入（四个量化库插件共用一份）。
+		*
+		* 研究联动（P2 命中清单）：注入 `sessions` + `layout`——命中股「解读」按钮
+		* 经 sessions 作用域的 conversation.send() 把带方案上下文的提示词送进当前
+		* 会话，随后 layout.selectPanel(null) 切回对话页（与 @kstock/client-news
+		* 同款桥接形态）。
 		*/
 		/** 面板键：main slot 与侧栏入口共用。 */
 		const PANEL_KEY = "kstock-quant-selections";
@@ -840,12 +1024,31 @@ window.__ModuleLoader__.load({
 		function NavIcon({ size }) {
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconTarget, { size: size ?? 18 });
 		}
-		/** 必需服务：slot 注册表。 */
-		const inject = ["slots"];
+		/** 必需服务：slot 注册表 + 会话作用域 + 面板切换。 */
+		const inject = [
+			"slots",
+			"sessions",
+			"layout"
+		];
 		/** 客户端插件体。 */
 		function apply(ctx) {
 			ctx.effect(() => {
 				injectQuantStyles();
+				bindAgentBridge({
+					send: async (text) => {
+						const sessions = ctx.sessions;
+						if (sessions === void 0) throw new Error("会话服务不可用");
+						let id = sessions.list.getSnapshot().current;
+						if (id === void 0) {
+							id = await sessions.create();
+							sessions.open(id);
+						}
+						const conversation = sessions.scope(id)?.get("conversation");
+						if (conversation === void 0) throw new Error("会话作用域不可用（conversation 服务缺席）");
+						await conversation.send(text);
+					},
+					gotoConversation: () => ctx.layout?.selectPanel(null)
+				});
 				ctx.slots.inject("main", () => ctx.slots.register({
 					name: "main",
 					key: PANEL_KEY
