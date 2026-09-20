@@ -78,6 +78,47 @@ run_in_background；基目录 = stock-analysis 技能加载结果）：
    - 风险提示与参考来源（接口名 + 数据日期）；
 2. 渲染 `-o reports/screening.html`，归档报告库，present 呈现。
 
+## 阶段四：归档选股库（必做，交付后收口）
+
+把本次选股沉淀为「选股库」方案资产——工作台侧栏「选股库」面板可随时
+回看、重跑、跨期重合对比（保留/新增/剔除）。引擎本机
+`http://127.0.0.1:18001`，三步（均 curl POST，失败不阻塞交付）：
+
+```bash
+# 1 建方案（criteria=一句话口径摘要，面板方案卡片直接展示）
+SELECTION_ID=$(curl -s -X POST http://127.0.0.1:18001/kstock-api/selections \
+  -H 'content-type: application/json' \
+  -d '{"name":"高股息低估蓝筹","criteria":"股息率>4% 且 PE<20，5 道质量闸门，多因子 Z-score Top20"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["selection_id"])')
+
+# 2 存口径版本（criteria=结构化口径 JSON，≤64KB；版本自动 v1 起）
+curl -s -X POST http://127.0.0.1:18001/kstock-api/selections/$SELECTION_ID/versions \
+  -H 'content-type: application/json' \
+  -d '{"criteria":{"source":"iwencai","query":"高股息 股息率大于4% 市盈率小于20","gates":5,"rank":"zscore_top20"},"change_note":"初版口径"}'
+
+# 3 存运行结果（report=报告 markdown 全文；picks=命中清单，列对齐报告总表）
+curl -s -X POST http://127.0.0.1:18001/kstock-api/selections/$SELECTION_ID/runs \
+  -H 'content-type: application/json' -d @- <<'EOF'
+{"version":1,"trade_date":"2026-09-18","universe":"问财初筛 214 只",
+ "rules":{"strategies":["value_dividend"]},
+ "metrics":{"hit_count":20,"strategy_count":1,"top_n":20},
+ "report":"（阶段三报告全文 markdown 贴入此处）",
+ "picks":[{"code":"002170.SZ","name":"芭田股份","industry":"农药化肥","score":1.3694,
+           "dv_ttm":"7.07%","pe":9.99,"pb":2.76,"roe":"26.18%","note":""}]}
+EOF
+```
+
+- **重跑同一方案**：不要 POST 新方案——`PATCH /kstock-api/selections/{id}`
+  更新 criteria 摘要；口径变化时 POST 新版本（change_note 说明差异）；
+  run 一律挂当前版本。这样面板的跨期重合对比才成立；
+- picks 的 `code` 必须带交易所后缀（`002170.SZ`）——重合分析按 code
+  精确匹配，无后缀会对不上；Top20 建议全量入库（≤4MB 上限）；
+- metrics 面板渲染键：`hit_count`（命中数）/ `strategy_count`（策略数）/
+  `consensus_count`（共振股数，跨策略重合命中）/ `top_n`，其余自由指标
+  存着不展示；
+- 引擎不可达时在最终回复里明说「未归档选股库」，其余交付照常（与
+  报告库归档同款降级语义）。
+
 ## 输出纪律（强约束）
 
 - 策略命中与评分**原样转述**，禁止重算或重排；

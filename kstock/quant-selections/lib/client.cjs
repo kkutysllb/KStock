@@ -269,6 +269,8 @@ window.__ModuleLoader__.load({
 			["consensus_count", "共振股数"],
 			["top_n", "TopN"]
 		];
+		/** 空态引导：让 agent 把最近一次选股任务结果归档进选股库的复制提示词。 */
+		const INGEST_PROMPT = "请把本工作区最近一次选股任务的结果归档进 KStock 选股库（引擎 http://127.0.0.1:18001，不可达则跳过并明说）。三步：1) POST /kstock-api/selections，body {name: 方案名, criteria: 一句话口径}；2) POST /kstock-api/selections/{selection_id}/versions，body {criteria: 结构化口径 JSON, change_note}；3) POST /kstock-api/selections/{selection_id}/runs，body {version, trade_date, universe, rules, metrics, report: 报告全文, picks: 命中清单数组}。picks 每项含 code（必须带 .SH/.SZ/.BJ 后缀）/name/score 等报告总表字段。数据取自工作区 data/ 与 reports/ 下的真实产物，禁止编造。";
 		function SelectionsSection() {
 			const [selections, setSelections] = (0, react.useState)([]);
 			const [loading, setLoading] = (0, react.useState)(true);
@@ -427,7 +429,7 @@ window.__ModuleLoader__.load({
 							className: "ksq-list",
 							children: selections.length === 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
 								className: "ksq-hint",
-								children: "暂无方案。在对话里让 agent 做选股并把要求入库后，这里会出现方案资产。"
+								children: "暂无方案。用右侧提示词把最近一次选股结果入库。"
 							}) : selections.map((selection) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
 								type: "button",
 								className: `ksq-list-item ${selection.selection_id === selectedId ? "active" : ""}`,
@@ -456,7 +458,23 @@ window.__ModuleLoader__.load({
 							}, selection.selection_id))
 						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("section", {
 							className: "ksq-detail",
-							children: !selected ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+							children: !selected ? selections.length === 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+								className: "ksq-empty",
+								children: [
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "选股库还是空的" }),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", { children: "选股任务的产物目前只落在工作区文件（data/ 与 reports/）里。归档进选股库后，这里会出现可回看、可重跑、可跨期对比的方案资产。" }),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+										className: "ksq-linkbtn",
+										type: "button",
+										onClick: () => copy(INGEST_PROMPT),
+										children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconCopy, { size: 11 }), " 复制「把最近一次选股结果入库」提示词"]
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+										className: "ksq-item-meta",
+										children: "粘贴到对话发送即可；后续选股任务会按 stock-screening-theme 阶段四自动归档。"
+									})
+								]
+							}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
 								className: "ksq-hint",
 								children: "从左侧选择一个方案查看要求时间线与运行归档。"
 							}) : detailLoading ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(Loading, { text: "加载方案详情…" }) : /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [

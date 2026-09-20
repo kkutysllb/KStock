@@ -59,6 +59,15 @@ const METRIC_KEYS = [
   ['top_n', 'TopN'],
 ] as const
 
+/** 空态引导：让 agent 把最近一次选股任务结果归档进选股库的复制提示词。 */
+const INGEST_PROMPT =
+  '请把本工作区最近一次选股任务的结果归档进 KStock 选股库（引擎 http://127.0.0.1:18001，不可达则跳过并明说）。三步：' +
+  '1) POST /kstock-api/selections，body {name: 方案名, criteria: 一句话口径}；' +
+  '2) POST /kstock-api/selections/{selection_id}/versions，body {criteria: 结构化口径 JSON, change_note}；' +
+  '3) POST /kstock-api/selections/{selection_id}/runs，body {version, trade_date, universe, rules, metrics, report: 报告全文, picks: 命中清单数组}。' +
+  'picks 每项含 code（必须带 .SH/.SZ/.BJ 后缀）/name/score 等报告总表字段。' +
+  '数据取自工作区 data/ 与 reports/ 下的真实产物，禁止编造。'
+
 export function SelectionsSection() {
   const [selections, setSelections] = useState<Selection[]>([])
   const [loading, setLoading] = useState(true)
@@ -223,7 +232,7 @@ export function SelectionsSection() {
         <div className="ksq-split">
           <aside className="ksq-list">
             {selections.length === 0
-              ? <p className="ksq-hint">暂无方案。在对话里让 agent 做选股并把要求入库后，这里会出现方案资产。</p>
+              ? <p className="ksq-hint">暂无方案。用右侧提示词把最近一次选股结果入库。</p>
               : selections.map(selection => (
                 <button
                   key={selection.selection_id}
@@ -249,7 +258,18 @@ export function SelectionsSection() {
 
           <section className="ksq-detail">
             {!selected ? (
-              <p className="ksq-hint">从左侧选择一个方案查看要求时间线与运行归档。</p>
+              selections.length === 0 ? (
+                <div className="ksq-empty">
+                  <strong>选股库还是空的</strong>
+                  <p>选股任务的产物目前只落在工作区文件（data/ 与 reports/）里。归档进选股库后，这里会出现可回看、可重跑、可跨期对比的方案资产。</p>
+                  <button className="ksq-linkbtn" type="button" onClick={() => copy(INGEST_PROMPT)}>
+                    <IconCopy size={11} /> 复制「把最近一次选股结果入库」提示词
+                  </button>
+                  <p className="ksq-item-meta">粘贴到对话发送即可；后续选股任务会按 stock-screening-theme 阶段四自动归档。</p>
+                </div>
+              ) : (
+                <p className="ksq-hint">从左侧选择一个方案查看要求时间线与运行归档。</p>
+              )
             ) : detailLoading ? (
               <Loading text="加载方案详情…" />
             ) : (

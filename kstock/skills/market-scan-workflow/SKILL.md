@@ -57,7 +57,12 @@ package:
    **script** 参数后发起；钩子契约（agent/pipeline/parallel/phase/log、
    schema 关键字子集）以会话内 workflow 工具描述为准，冲突时自我纠正；
 4. run 返回后：核验 `summary.report_path` 文件存在、`quick_ok` 计数，
-   主会话 `present` 呈现报告（**present 由主会话做，子代理不做**）。
+   主会话 `present` 呈现报告（**present 由主会话做，子代理不做**）；
+5. 交付后主会话**归档选股库**（三步 POST 契约见
+   [stock-screening-theme](../stock-screening-theme/SKILL.md) 阶段四）：
+   初筛 QUERY 与 `strategies_used` 进口径版本，Top 清单逐股进 `picks`
+   （code 带交易所后缀），报告全文进 `report`。同一方案重跑不建新方案
+   （PATCH + 新版本 + 新 run），否则面板跨期重合对比失效。
 
 ## 三阶段契约
 
@@ -81,7 +86,8 @@ package:
 - 产物分区：引擎输出落 `data/market-scan/`，报告 JSON 与 HTML 落 `reports/`；
 - 子代理返回的评分与数值**原样转述**，禁止改写、重算或重排；
 - 归档 `POST http://127.0.0.1:18001/kstock-api/reports` 引擎不可达时记
-  `archived: "no"` 继续，不阻塞交付；缺失维度诚实标注「无数据」及原因；
+  `archived: "no"` 继续，不阻塞交付；选股库归档（阶段四契约）同款降级
+  语义，跳过须在最终回复明说；缺失维度诚实标注「无数据」及原因；
 - 结论带数据日期；全文为研究参考口径，不构成投资建议。
 
 ## 变体（改阶段、不改骨架）
