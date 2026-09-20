@@ -887,9 +887,10 @@ var NewsStore = class {
 //#region src/stocks.ts
 var stocks_exports = /* @__PURE__ */ __exportAll({
 	MACRO_WORDS: () => MACRO_WORDS,
-	dictionaryWords: () => dictionaryWords,
 	matchStocks: () => matchStocks,
-	stockUniverse: () => stockUniverse
+	stockNames: () => stockNames,
+	stockUniverse: () => stockUniverse,
+	themeWords: () => themeWords
 });
 const CACHE_TTL_MS = 24 * 36e5;
 const HTTP_TIMEOUT_MS = 15e3;
@@ -1008,14 +1009,17 @@ async function stockUniverse() {
 	})();
 	return inflight;
 }
-/** 字典词全集（标的名 + 行业 + 宏观词，去重），热词统计用。 */
-function dictionaryWords(stocks) {
+/** 主题词全集（宏观词表 + 行业字段去重），热词「热点主题」榜用。 */
+function themeWords(stocks) {
 	const words = new Set(MACRO_WORDS);
-	for (const stock of stocks) {
-		if (stock.name.length >= 2) words.add(stock.name);
-		if (stock.industry !== "") words.add(stock.industry);
-	}
+	for (const stock of stocks) if (stock.industry !== "") words.add(stock.industry);
 	return [...words];
+}
+/** 标的名词全集（证券简称，歧义简称排除），热词「提及标的」榜用。 */
+function stockNames(stocks) {
+	const names = /* @__PURE__ */ new Set();
+	for (const stock of stocks) if (stock.name.length >= 2 && !AMBIGUOUS_NAMES.has(stock.name)) names.add(stock.name);
+	return [...names];
 }
 /**
 * 歧义简称排除表：与日常用语/行业词完全重合的证券简称（标题命中是
@@ -1345,11 +1349,18 @@ async function dispatch(stores, reports, req, dataRoot, newsArchive) {
 	if (libraryKey === "news-stats") {
 		if (method === "GET") {
 			const universe = await stockUniverse();
-			const dictionary = universe !== null ? dictionaryWords(universe) : [];
+			const themesAll = universe !== null ? themeWords(universe) : [];
+			const stocksAll = universe !== null ? stockNames(universe) : [];
+			const pick = (words, limit) => {
+				const ranked = newsArchive.trending(6 * 36e5, words.length, words);
+				const hot = ranked.filter((entry) => entry.count >= 2).slice(0, limit);
+				return hot.length >= 3 ? hot : ranked.slice(0, limit);
+			};
 			return {
-				trending: newsArchive.trending(6 * 36e5, 12, dictionary),
+				themes: pick(themesAll, 8),
+				stocks: pick(stocksAll, 6),
 				frequency: newsArchive.frequency(24 * 36e5, 36e5),
-				dictionary_size: dictionary.length
+				dictionary_size: themesAll.length + stocksAll.length
 			};
 		}
 		throwMethod(method);

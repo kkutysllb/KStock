@@ -13,7 +13,7 @@ import { StoreError, factorStore, selectionStore, strategyStore, type LibrarySto
 import { ReportsStore } from './reports.ts'
 import { dataSourceStatus, landingNews, workspaceNews } from './news.ts'
 import { NewsStore } from './news-store.ts'
-import { dictionaryWords, stockUniverse } from './stocks.ts'
+import { stockNames, stockUniverse, themeWords } from './stocks.ts'
 import { dataSourcesView, saveDataSources } from './datasources.ts'
 import { dependenciesView } from './deps.ts'
 
@@ -161,15 +161,24 @@ async function dispatch(
     }
     throwMethod(method)
   }
-  // 面板统计：热词榜（6h 字典词频 Top12）+ 24h 逐小时频率。
+  // 面板统计：热点主题榜（6h 行业/宏观词频，count≥2 优先）+ 提及标的榜
+  // （6h 股名词频）+ 24h 逐小时频率。
   if (libraryKey === 'news-stats') {
     if (method === 'GET') {
       const universe = await stockUniverse()
-      const dictionary = universe !== null ? dictionaryWords(universe) : []
+      const themesAll = universe !== null ? themeWords(universe) : []
+      const stocksAll = universe !== null ? stockNames(universe) : []
+      // count≥2 的真热点优先；不足 3 个时回退全部 Top（冷启动不留空）。
+      const pick = (words: string[], limit: number): Array<{ word: string; count: number }> => {
+        const ranked = newsArchive.trending(6 * 3_600_000, words.length, words)
+        const hot = ranked.filter((entry) => entry.count >= 2).slice(0, limit)
+        return hot.length >= 3 ? hot : ranked.slice(0, limit)
+      }
       return {
-        trending: newsArchive.trending(6 * 3_600_000, 12, dictionary),
+        themes: pick(themesAll, 8),
+        stocks: pick(stocksAll, 6),
         frequency: newsArchive.frequency(24 * 3_600_000, 3_600_000),
-        dictionary_size: dictionary.length,
+        dictionary_size: themesAll.length + stocksAll.length,
       }
     }
     throwMethod(method)

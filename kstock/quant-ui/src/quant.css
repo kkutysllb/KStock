@@ -642,8 +642,7 @@
 .ksq-news-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-width: 820px;
+  gap: 12px;
   padding-bottom: 8px;
 }
 
@@ -758,7 +757,7 @@ a.ksq-news-title:hover {
   min-width: 0;
 }
 
-.ksq-news-toolbar-right .ksq-search { margin-bottom: 0; flex: 1; min-width: 200px; max-width: 340px; }
+.ksq-news-toolbar-right .ksq-search { margin-bottom: 0; flex: 1; min-width: 220px; max-width: 460px; }
 
 .ksq-news-watchedit {
   padding: 8px 22px 0;
@@ -779,8 +778,11 @@ a.ksq-news-title:hover {
 /* 双栏：主列表 + 统计侧栏（窄面板时侧栏隐藏）。 */
 .ksq-news-split {
   display: flex;
-  gap: 18px;
+  gap: 20px;
   align-items: flex-start;
+  width: 100%;
+  max-width: 1360px;
+  margin: 0 auto;
 }
 
 .ksq-news-main {

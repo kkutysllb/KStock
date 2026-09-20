@@ -85,14 +85,22 @@ export async function stockUniverse(): Promise<StockRef[] | null> {
   return inflight
 }
 
-/** 字典词全集（标的名 + 行业 + 宏观词，去重），热词统计用。 */
-export function dictionaryWords(stocks: StockRef[]): string[] {
+/** 主题词全集（宏观词表 + 行业字段去重），热词「热点主题」榜用。 */
+export function themeWords(stocks: StockRef[]): string[] {
   const words = new Set<string>(MACRO_WORDS)
   for (const stock of stocks) {
-    if (stock.name.length >= 2) words.add(stock.name)
     if (stock.industry !== '') words.add(stock.industry)
   }
   return [...words]
+}
+
+/** 标的名词全集（证券简称，歧义简称排除），热词「提及标的」榜用。 */
+export function stockNames(stocks: StockRef[]): string[] {
+  const names = new Set<string>()
+  for (const stock of stocks) {
+    if (stock.name.length >= 2 && !AMBIGUOUS_NAMES.has(stock.name)) names.add(stock.name)
+  }
+  return [...names]
 }
 
 /**

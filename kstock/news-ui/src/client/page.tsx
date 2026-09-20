@@ -41,7 +41,8 @@ interface ArchiveResult {
 }
 
 interface StatsPayload {
-  trending: Array<{ word: string; count: number }>
+  themes: Array<{ word: string; count: number }>
+  stocks: Array<{ word: string; count: number }>
   frequency: Array<{ bucket: number; count: number }>
   dictionary_size: number
 }
@@ -444,15 +445,15 @@ function StatsAside({ stats, onPickWord }: {
     <aside className="ksq-news-stats" aria-label="新闻统计">
       <div className="ksq-news-stats-block">
         <div className="ksq-news-stats-head">
-          热词榜 <span>近 6 小时</span>
+          热点主题 <span>近 6 小时</span>
         </div>
-        {stats !== null && stats.trending.length === 0 && (
+        {stats !== null && stats.themes.length === 0 && (
           <p className="ksq-news-stats-empty">留档积累中——运行一段时间后出现</p>
         )}
         <div className="ksq-news-trending">
-          {stats?.trending.map((entry) => (
+          {stats?.themes.map((entry) => (
             <button
-              key={entry.word}
+              key={`t-${entry.word}`}
               type="button"
               className="ksq-news-trendword"
               title={`检索「${entry.word}」`}
@@ -464,6 +465,27 @@ function StatsAside({ stats, onPickWord }: {
           ))}
         </div>
       </div>
+      {stats !== null && stats.stocks.length > 0 && (
+        <div className="ksq-news-stats-block">
+          <div className="ksq-news-stats-head">
+            提及标的 <span>近 6 小时</span>
+          </div>
+          <div className="ksq-news-trending">
+            {stats.stocks.map((entry) => (
+              <button
+                key={`s-${entry.word}`}
+                type="button"
+                className="ksq-news-trendword"
+                title={`检索「${entry.word}」`}
+                onClick={() => onPickWord(entry.word)}
+              >
+                {entry.word}
+                <em>{entry.count}</em>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="ksq-news-stats-block">
         <div className="ksq-news-stats-head">
           快讯频率 <span>近 24 小时</span>
