@@ -1016,3 +1016,54 @@ a.ksq-news-title:hover {
 
 .ksq-target-error { color: #e64646; font-size: 12.5px; margin: 4px 8px; }
 .ksq-target-cancel { align-self: flex-end; margin-top: 4px; }
+
+/* ── 选股库：口径芯片（P4）+ 命中趋势（P3）────────────────────── */
+
+.ksq-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 2px; }
+.ksq-chips .ksq-chip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.ksq-trend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin: 6px 0 10px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 10px;
+}
+
+.ksq-trend-label {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.ksq-trend-bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 4px;
+  height: 44px;
+  min-width: 0;
+}
+
+.ksq-trend-col {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 100%;
+  cursor: default;
+}
+
+.ksq-trend-bar {
+  width: 9px;
+  min-height: 3px;
+  border-radius: 2px 2px 0 0;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 60%, transparent);
+}
+
+.ksq-trend-bar:hover { background: var(--dsw-alias-brand-primary); }
+
+.ksq-trend-bar.consensus { background: #31c7a2; }
+.ksq-trend-bar.consensus:hover { background: #22a06b; }

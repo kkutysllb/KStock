@@ -60,22 +60,63 @@ function selectionMetricClass(key: string, value: unknown): string {
   return ''
 }
 
-function criteriaSummary(version: SelectionVersion): string {
-  // 兼容历史双重编码（criteria 曾被存成 JSON 字符串）：先解一层再取摘要。
+/** 版本口径解析（历史双重编码防御：字符串先解一层）。 */
+function parseCriteria(version: SelectionVersion): Record<string, unknown> {
   let value: unknown = version.criteria
   if (typeof value === 'string') {
     const text = value.trim()
     try {
       value = JSON.parse(text)
     } catch {
-      return text
+      return { summary: text }
     }
   }
-  const record = (value ?? {}) as Record<string, unknown>
+  return (value ?? {}) as Record<string, unknown>
+}
+
+/** 口径一行摘要（summary 字段 → pipeline 字段 → 字段名列表）。 */
+function criteriaSummaryText(record: Record<string, unknown>): string {
   const summary = record.summary
-  if (typeof summary === 'string' && summary.trim()) return summary
+  if (typeof summary === 'string' && summary.trim() !== '') return summary
+  const pipeline = record.pipeline
+  if (typeof pipeline === 'string' && pipeline.trim() !== '') return pipeline
   const keys = Object.keys(record)
   return keys.length > 0 ? `（口径字段：${keys.join(' / ')}）` : '（空口径）'
+}
+
+/** 已知闸门参数 → 展示标签（gates_params 数值键，agent 常用口径）。 */
+const GATE_LABELS: ReadonlyArray<[string, string, string]> = [
+  ['dv_ttm_min', '股息率%', '≥'],
+  ['dv_ttm_max', '股息率%', '≤'],
+  ['pe_ttm_min', 'PE', '≥'],
+  ['pe_ttm_max', 'PE', '≤'],
+  ['min_div_years_3y', '3年分红', '≥'],
+]
+
+/** 口径 → 条件芯片（P4）：识别 gates_params 闸门 / factors 权重 Top3 /
+ * top_n；识别不出时回退空数组（时间线仍显示文本摘要）。 */
+function criteriaChips(record: Record<string, unknown>): string[] {
+  const chips: string[] = []
+  const params = record.gates_params
+  if (typeof params === 'object' && params !== null) {
+    for (const [key, label, op] of GATE_LABELS) {
+      const value = (params as Record<string, unknown>)[key]
+      if (typeof value === 'number' && Number.isFinite(value)) chips.push(`${label} ${op} ${value}`)
+    }
+  }
+  const factors = record.factors
+  if (Array.isArray(factors)) {
+    const weights = factors
+      .map(item => (typeof item === 'object' && item !== null ? item as Record<string, unknown> : null))
+      .filter((item): item is Record<string, unknown> => item !== null)
+      .map(item => ({ field: String(item.field ?? ''), weight: Number(item.weight) }))
+      .filter(item => item.field !== '' && Number.isFinite(item.weight) && item.weight > 0)
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, 3)
+    for (const item of weights) chips.push(`${item.field} ×${item.weight}`)
+  }
+  if (typeof record.top_n === 'number' && Number.isFinite(record.top_n)) chips.push(`Top${record.top_n}`)
+  return chips
 }
 
 /** 命中清单 → 股票代码集合（对比重合分析用）。 */
@@ -110,6 +151,41 @@ type ReportView = { runId: string; text: string; htmlUrl: string | null }
 function runReportId(run: SelectionRunSummary | undefined): string | null {
   const value = run?.rules?.report_id
   return typeof value === 'string' && value ? value : null
+}
+
+/** 命中趋势（P3）：run 时间正序 mini 柱图——柱高 ∝ hit_count，
+ * 绿色叠加 consensus_count；hover 显示 run 明细。单 run 即当前水平。 */
+function RunsTrend({ runs }: { runs: SelectionRunSummary[] }): React.ReactElement | null {
+  const asc = [...runs].reverse()
+  if (asc.length === 0) return null
+  const hitOf = (run: SelectionRunSummary): number => {
+    const value = run.metrics?.hit_count
+    return typeof value === 'number' && Number.isFinite(value) ? value : 0
+  }
+  const consensusOf = (run: SelectionRunSummary): number => {
+    const value = run.metrics?.consensus_count
+    return typeof value === 'number' && Number.isFinite(value) ? value : 0
+  }
+  const max = Math.max(1, ...asc.map(hitOf))
+  return (
+    <div className="ksq-trend" aria-label="运行趋势">
+      <span className="ksq-trend-label">命中趋势</span>
+      <div className="ksq-trend-bars">
+        {asc.map(run => {
+          const hit = hitOf(run)
+          const consensus = consensusOf(run)
+          const label = `v${run.version} · ${run.trade_date || run.run_id.slice(7, 15)} · 命中 ${hit}` +
+            (consensus > 0 ? ` · 共振 ${consensus}` : '') + ` · ${formatDateTime(run.created_at)}`
+          return (
+            <span key={run.run_id} className="ksq-trend-col" title={label}>
+              {consensus > 0 && <span className="ksq-trend-bar consensus" style={{ height: `${Math.max(6, Math.round(consensus / max * 100))}%` }} />}
+              <span className="ksq-trend-bar" style={{ height: `${Math.max(6, Math.round(hit / max * 100))}%` }} />
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 export function SelectionsSection({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = {}) {
@@ -310,7 +386,7 @@ export function SelectionsSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
 
   const rerunPrompt = (version: SelectionVersion) =>
     `请重跑选股库中的「${selected?.name ?? ''}」（${selectedId}）：选股口径采用 v${version.version} 版本` +
-    `（${criteriaSummary(version)}），股票池与执行口径与该版本最近一次 run 保持一致` +
+    `（${criteriaSummaryText(parseCriteria(version))}），股票池与执行口径与该版本最近一次 run 保持一致` +
     `（无历史 run 则按口径默认执行）。跑完后把结果入库：` +
     `POST /kstock-api/selections/${selectedId}/runs，version=${version.version}，` +
     `附 trade_date/universe/rules/metrics/report（报告全文）/picks（命中清单）。`
@@ -406,7 +482,10 @@ export function SelectionsSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                     {versions.length === 0 ? <p className="ksq-hint">尚无版本。</p> : versions
                       .slice()
                       .reverse()
-                      .map(version => (
+                      .map(version => {
+                        const record = parseCriteria(version)
+                        const chips = criteriaChips(record)
+                        return (
                         <div
                           key={version.version}
                           className={`ksq-version ${version.version === selected.current_version ? 'latest' : ''}`}
@@ -416,18 +495,25 @@ export function SelectionsSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                             {version.version === selected.current_version && <span className="ksq-badge tone-live">最新</span>}
                             <span className="ksq-item-meta">{formatDateTime(version.created_at)}</span>
                           </div>
-                          <p className="ksq-version-note">{criteriaSummary(version)}</p>
+                          {chips.length > 0 && (
+                            <div className="ksq-chips" aria-label="口径条件">
+                              {chips.map(chip => <span key={chip} className="ksq-chip">{chip}</span>)}
+                            </div>
+                          )}
+                          <p className="ksq-version-note">{criteriaSummaryText(record)}</p>
                           <p className="ksq-item-meta">{version.change_note || '（无变更说明）'}</p>
                           <button className="ksq-linkbtn" type="button" onClick={() => copy(rerunPrompt(version))}>
                             <IconPlay size={11} /> <IconCopy size={11} /> 复制重跑提示词
                           </button>
                         </div>
-                      ))}
+                        )
+                      })}
                   </div>
                 </div>
 
                 <div>
                   <h3 className="ksq-section-title">运行归档（勾选 2-4 个对比）</h3>
+                  <RunsTrend runs={runs} />
                   {runs.length === 0 ? <p className="ksq-hint">尚无运行归档。</p> : (
                     <div className="ksq-table-wrap">
                     <table className="ksq-table">
