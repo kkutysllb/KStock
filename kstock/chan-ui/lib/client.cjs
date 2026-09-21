@@ -335,7 +335,7 @@ window.__ModuleLoader__.load({
 		* 旧副本可能先注入抢占幂等位（first-inject-wins）——版本不匹配即撤旧
 		* 换新，保证最终落页的是最新构建的样式副本。改 quant.css 时同步抬版本。
 		*/
-		const STYLE_VERSION = "2026-09-21.5-chan5";
+		const STYLE_VERSION = "2026-09-21.6-chan6";
 		/** 把 ksq 样式注入 <head>（幂等 + 版本淘汰旧副本）。 */
 		function injectQuantStyles() {
 			const existing = document.querySelector(`style[data-kstock="${STYLE_ID}"]`);

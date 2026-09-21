@@ -66,8 +66,9 @@ export interface MatrixRowUI { level: string; status: 'ok' | 'loading' | 'error'
 
 const dirCn = (data: Rec): { cn: string; dir: 'up' | 'down' | 'flat' } => {
   const cn = asStr(asRec(data.trend_analysis).type_cn)
+  // typeCnDir 命中关键词才返回非 flat，命中即 cn 非空——空串恒 flat → 「未判定」
   const dir = typeCnDir(cn)
-  return { cn: cn !== '' ? cn : dir === 'flat' ? '未判定' : '—', dir }
+  return { cn: cn !== '' ? cn : '未判定', dir }
 }
 
 /** 多级别联立矩阵：四行级别 × 方向/买卖点/得分/背驰，多数方向高亮共振。 */
