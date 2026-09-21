@@ -418,7 +418,7 @@ window.__ModuleLoader__.load({
 				markers: asArr(c.markers).map((item) => {
 					const r = asRec(item);
 					return {
-						time: asStr(r.time),
+						time: asStr(r.time) || asStr(r.date),
 						price: asNum(r.price) ?? 0,
 						type: asStr(r.type) || void 0,
 						label: asStr(r.label) || void 0,
@@ -429,9 +429,9 @@ window.__ModuleLoader__.load({
 					};
 				}),
 				macd: {
-					dif: asArr(asRec(c.macd).dif),
-					dea: asArr(asRec(c.macd).dea),
-					hist: asArr(asRec(c.macd).hist)
+					dif: asArr(asRec(c.macd).dif).map(asNum),
+					dea: asArr(asRec(c.macd).dea).map(asNum),
+					hist: asArr(asRec(c.macd).hist).map(asNum)
 				},
 				fenxings: asArr(c.fenxings).map((item) => {
 					const r = asRec(item);
@@ -458,11 +458,18 @@ window.__ModuleLoader__.load({
 				})
 			};
 		}
-		/** 日期(YYYY-MM-DD 前 10 位) → 全局索引表。 */
+		/** 时间 → 全局索引表：同时建全时间戳精确键与日期前缀兜底键。 */
 		function dateIndexOf(dates) {
 			const map = /* @__PURE__ */ new Map();
-			dates.forEach((date, index) => map.set(date.slice(0, 10), index));
+			dates.forEach((date, index) => {
+				map.set(date, index);
+				map.set(date.slice(0, 10), index);
+			});
 			return map;
+		}
+		/** 时间 → 索引：先按全时间戳精确匹配，再退日期前缀（分钟级同日多根时避免整日误吸附）。 */
+		function resolveIndex(map, time) {
+			return map.get(time) ?? map.get(time.slice(0, 10)) ?? -1;
 		}
 		//#endregion
 		//#region src/client/page.tsx
@@ -527,18 +534,15 @@ window.__ModuleLoader__.load({
 			const winEnd = view.start + view.count;
 			const x = (index) => PAD_L + (index - view.start + .5) * slot;
 			const dateIndex = dateIndexOf(dates);
-			function indexOfTimeLocal(time) {
-				return dateIndex.get(time.slice(0, 10)) ?? -1;
-			}
-			const indexOfTime = indexOfTimeLocal;
+			const indexOfTime = (time) => resolveIndex(dateIndex, time);
 			const visK = kline.slice(view.start, winEnd);
 			const lows = visK.map((k) => k[2]).concat(chart.zhongshus.filter((z) => {
-				const i1 = indexOfTimeLocal(z.start_time);
-				return indexOfTimeLocal(z.end_time) >= view.start && i1 <= winEnd;
+				const i1 = indexOfTime(z.start_time);
+				return indexOfTime(z.end_time) >= view.start && i1 <= winEnd;
 			}).map((z) => z.low));
 			const highs = visK.map((k) => k[3]).concat(chart.zhongshus.filter((z) => {
-				const i1 = indexOfTimeLocal(z.start_time);
-				return indexOfTimeLocal(z.end_time) >= view.start && i1 <= winEnd;
+				const i1 = indexOfTime(z.start_time);
+				return indexOfTime(z.end_time) >= view.start && i1 <= winEnd;
 			}).map((z) => z.high));
 			const pMin = Math.min(...lows);
 			const pSpan = Math.max(...highs) - pMin || 1;
@@ -766,7 +770,7 @@ window.__ModuleLoader__.load({
 						}, `fx-${i}`);
 					}),
 					chart.markers.map((marker, i) => {
-						const time = asStr(marker.time ?? asRec(marker).date);
+						const time = asStr(marker.time);
 						const index = indexOfTime(time);
 						const price = asNum(marker.price);
 						if (index < 0 || price === null || index < view.start || index >= winEnd) return null;
@@ -1256,8 +1260,8 @@ window.__ModuleLoader__.load({
 			if (chart !== null) {
 				const dateIndex = dateIndexOf(chart.dates);
 				for (const marker of chart.markers) {
-					const time = asStr(marker.time ?? asRec(marker).date);
-					const index = dateIndex.get(time.slice(0, 10)) ?? -1;
+					const time = asStr(marker.time);
+					const index = resolveIndex(dateIndex, time);
 					if (index >= 0) signalRows.push({
 						key: `m-${index}-${asStr(marker.label)}`,
 						date: time.slice(0, 10),
@@ -1267,7 +1271,7 @@ window.__ModuleLoader__.load({
 					});
 				}
 				for (const bi of chart.biLines.slice(-6).reverse()) {
-					const endIndex = dateIndex.get(bi.end_time.slice(0, 10)) ?? -1;
+					const endIndex = resolveIndex(dateIndex, bi.end_time);
 					if (endIndex >= 0) signalRows.push({
 						key: `b-${endIndex}`,
 						date: bi.end_time.slice(0, 10),

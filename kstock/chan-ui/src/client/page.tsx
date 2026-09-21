@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { TaskTargetMenu, type TaskRouterBridge, type UseWorkspaces } from '@kstock/quant-ui'
 import {
-  asArr, asNum, asRec, asStr, dateIndexOf, parseChart,
+  asArr, asNum, asRec, asStr, dateIndexOf, parseChart, resolveIndex,
   LEVEL_OPTIONS, type ChartSlice, type Rec,
 } from './derive.ts'
 
@@ -70,21 +70,18 @@ function ChanChart({ chart, view, onViewChange }: { chart: ChartSlice; view: { s
   const winEnd = view.start + view.count
   const x = (index: number) => PAD_L + (index - view.start + 0.5) * slot
 
-  // 日期（YYYY-MM-DD 前缀）→ 全局索引。
+  // 时间 → 全局索引：全时间戳精确优先，日期前缀兜底。
   const dateIndex = dateIndexOf(dates)
-  function indexOfTimeLocal(time: string): number {
-    return dateIndex.get(time.slice(0, 10)) ?? -1
-  }
-  const indexOfTime = indexOfTimeLocal
+  const indexOfTime = (time: string) => resolveIndex(dateIndex, time)
 
   // 价格轴按可视窗口自适应（窗口内蜡烛 + 相交中枢）。
   const visK = kline.slice(view.start, winEnd)
   const lows = visK.map(k => k[2]).concat(chart.zhongshus.filter(z => {
-    const i1 = indexOfTimeLocal(z.start_time); const i2 = indexOfTimeLocal(z.end_time)
+    const i1 = indexOfTime(z.start_time); const i2 = indexOfTime(z.end_time)
     return i2 >= view.start && i1 <= winEnd
   }).map(z => z.low))
   const highs = visK.map(k => k[3]).concat(chart.zhongshus.filter(z => {
-    const i1 = indexOfTimeLocal(z.start_time); const i2 = indexOfTimeLocal(z.end_time)
+    const i1 = indexOfTime(z.start_time); const i2 = indexOfTime(z.end_time)
     return i2 >= view.start && i1 <= winEnd
   }).map(z => z.high))
   const pMin = Math.min(...lows)
@@ -226,8 +223,7 @@ function ChanChart({ chart, view, onViewChange }: { chart: ChartSlice; view: { s
       })}
       {/* 买卖点徽章（一二三类分类：B1/B2/B3/S1/S2/S3） */}
       {chart.markers.map((marker, i) => {
-        // date 为历史兜底字段（引擎实际发 time），类型迁至 ChartMarker 后需显式读取。
-        const time = asStr(marker.time ?? asRec(marker).date)
+        const time = asStr(marker.time)
         const index = indexOfTime(time)
         const price = asNum(marker.price)
         if (index < 0 || price === null || index < view.start || index >= winEnd) return null
@@ -458,14 +454,14 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
   if (chart !== null) {
     const dateIndex = dateIndexOf(chart.dates)
     for (const marker of chart.markers) {
-      const time = asStr(marker.time ?? asRec(marker).date)
-      const index = dateIndex.get(time.slice(0, 10)) ?? -1
+      const time = asStr(marker.time)
+      const index = resolveIndex(dateIndex, time)
       if (index >= 0) {
         signalRows.push({ key: `m-${index}-${asStr(marker.label)}`, date: time.slice(0, 10), label: asStr(marker.label ?? marker.type ?? '信号'), price: asNum(marker.price), index })
       }
     }
     for (const bi of chart.biLines.slice(-6).reverse()) {
-      const endIndex = dateIndex.get(bi.end_time.slice(0, 10)) ?? -1
+      const endIndex = resolveIndex(dateIndex, bi.end_time)
       if (endIndex >= 0) {
         signalRows.push({ key: `b-${endIndex}`, date: bi.end_time.slice(0, 10), label: `笔转折（${bi.end_price >= bi.start_price ? '向上' : '向下'}）`, price: bi.end_price, index: endIndex })
       }

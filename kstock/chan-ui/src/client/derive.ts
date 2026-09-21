@@ -85,17 +85,17 @@ export function parseChart(payload: Rec): ChartSlice | null {
     markers: asArr(c.markers).map(item => {
       const r = asRec(item)
       return {
-        time: asStr(r.time), price: asNum(r.price) ?? 0,
+        time: asStr(r.time) || asStr(r.date), price: asNum(r.price) ?? 0,
         type: asStr(r.type) || undefined, label: asStr(r.label) || undefined,
         reliability: asNum(r.reliability) ?? undefined, strength: asNum(r.strength) ?? undefined,
         confirmedByHigher: r.confirmed_by_higher === true, confirmedByLower: r.confirmed_by_lower === true,
       }
     }),
     macd: {
-      dif: asArr(asRec(c.macd).dif),
-      dea: asArr(asRec(c.macd).dea),
-      hist: asArr(asRec(c.macd).hist),
-    } as ChartSlice['macd'],
+      dif: asArr(asRec(c.macd).dif).map(asNum),
+      dea: asArr(asRec(c.macd).dea).map(asNum),
+      hist: asArr(asRec(c.macd).hist).map(asNum),
+    },
     fenxings: asArr(c.fenxings).map(item => {
       const r = asRec(item)
       return { time: asStr(r.time), fenxingType: asStr(r.fenxing_type), price: asNum(r.price) ?? 0, strength: asNum(r.strength) ?? 0 }
@@ -114,9 +114,17 @@ export function parseChart(payload: Rec): ChartSlice | null {
   }
 }
 
-/** 日期(YYYY-MM-DD 前 10 位) → 全局索引表。 */
+/** 时间 → 全局索引表：同时建全时间戳精确键与日期前缀兜底键。 */
 export function dateIndexOf(dates: string[]): Map<string, number> {
   const map = new Map<string, number>()
-  dates.forEach((date, index) => map.set(date.slice(0, 10), index))
+  dates.forEach((date, index) => {
+    map.set(date, index)                 // 全时间戳精确键（引擎笔/段/中枢/买卖点时间与 K 线同格式）
+    map.set(date.slice(0, 10), index)    // 日期前缀兜底（同日折叠，后写胜出；仅日线级精确）
+  })
   return map
+}
+
+/** 时间 → 索引：先按全时间戳精确匹配，再退日期前缀（分钟级同日多根时避免整日误吸附）。 */
+export function resolveIndex(map: Map<string, number>, time: string): number {
+  return map.get(time) ?? map.get(time.slice(0, 10)) ?? -1
 }
