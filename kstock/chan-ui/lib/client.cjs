@@ -481,6 +481,12 @@ window.__ModuleLoader__.load({
 			const slot = (W - PAD_L - PAD_R) / view.count;
 			const winEnd = view.start + view.count;
 			const x = (index) => PAD_L + (index - view.start + .5) * slot;
+			const dateIndex = /* @__PURE__ */ new Map();
+			dates.forEach((date, index) => dateIndex.set(date.slice(0, 10), index));
+			function indexOfTimeLocal(time) {
+				return dateIndex.get(time.slice(0, 10)) ?? -1;
+			}
+			const indexOfTime = indexOfTimeLocal;
 			const visK = kline.slice(view.start, winEnd);
 			const lows = visK.map((k) => k[2]).concat(chart.zhongshus.filter((z) => {
 				const i1 = indexOfTimeLocal(z.start_time);
@@ -495,12 +501,6 @@ window.__ModuleLoader__.load({
 			const vMax = Math.max(...volumes.slice(view.start, winEnd), 1);
 			const yMain = (price) => 12 + (1 - (price - pMin) / pSpan) * (H_MAIN - 26);
 			const yVol = (volume) => 304 + (1 - volume / vMax) * (H_VOL - 10);
-			const dateIndex = /* @__PURE__ */ new Map();
-			dates.forEach((date, index) => dateIndex.set(date.slice(0, 10), index));
-			function indexOfTimeLocal(time) {
-				return dateIndex.get(time.slice(0, 10)) ?? -1;
-			}
-			const indexOfTime = indexOfTimeLocal;
 			const vxOf = (event) => {
 				const rect = svgRef.current?.getBoundingClientRect();
 				if (rect === void 0 || rect.width === 0) return -1;

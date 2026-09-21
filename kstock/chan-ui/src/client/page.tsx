@@ -114,6 +114,14 @@ function ChanChart({ chart }: { chart: ChartSlice }): React.ReactElement {
   const winEnd = view.start + view.count
   const x = (index: number) => PAD_L + (index - view.start + 0.5) * slot
 
+  // 日期（YYYY-MM-DD 前缀）→ 全局索引。
+  const dateIndex = new Map<string, number>()
+  dates.forEach((date, index) => dateIndex.set(date.slice(0, 10), index))
+  function indexOfTimeLocal(time: string): number {
+    return dateIndex.get(time.slice(0, 10)) ?? -1
+  }
+  const indexOfTime = indexOfTimeLocal
+
   // 价格轴按可视窗口自适应（窗口内蜡烛 + 相交中枢）。
   const visK = kline.slice(view.start, winEnd)
   const lows = visK.map(k => k[2]).concat(chart.zhongshus.filter(z => {
@@ -130,14 +138,6 @@ function ChanChart({ chart }: { chart: ChartSlice }): React.ReactElement {
   const vMax = Math.max(...volumes.slice(view.start, winEnd), 1)
   const yMain = (price: number) => 12 + (1 - (price - pMin) / pSpan) * (H_MAIN - 26)
   const yVol = (volume: number) => H_MAIN + 4 + (1 - volume / vMax) * (H_VOL - 10)
-
-  // 日期（YYYY-MM-DD 前缀）→ 全局索引。
-  const dateIndex = new Map<string, number>()
-  dates.forEach((date, index) => dateIndex.set(date.slice(0, 10), index))
-  function indexOfTimeLocal(time: string): number {
-    return dateIndex.get(time.slice(0, 10)) ?? -1
-  }
-  const indexOfTime = indexOfTimeLocal
 
   const vxOf = (event: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>): number => {
     const rect = svgRef.current?.getBoundingClientRect()
