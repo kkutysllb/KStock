@@ -27,25 +27,20 @@ window.__ModuleLoader__.load({
 		* 标准路由桥实现（面板共用：新闻/选股库/因子库）。current=当前会话
 		* （无则默认建）；workspace=connectWorkspace（复用/新建 blank 会话并挂
 		* 进工作区分组——修复裸 create({cwd}) 的「未分组」与产物散落）。
+		* 打开/选中一律走 uiWorkspace.openSession（QiLin 3.0.2+ 引擎把会话
+		* 导航从 sessions 服务移交视图拥有者，sessions.open 已删除）。
 		*/
 		function buildTaskRouterBridge(deps) {
 			return {
 				send: async (target, text) => {
 					const sessions = deps.sessions;
 					if (sessions === void 0) throw new Error("会话服务不可用");
+					const uiWorkspace = deps.uiWorkspace;
+					if (uiWorkspace === void 0) throw new Error("工作区导航服务不可用");
 					let id;
-					if (target.kind === "workspace") {
-						const uiWorkspace = deps.uiWorkspace;
-						if (uiWorkspace === void 0) throw new Error("工作区服务不可用");
-						id = await uiWorkspace.connectWorkspace(target.workspaceId);
-						sessions.open(id);
-					} else {
-						id = sessions.list.getSnapshot().current;
-						if (id === void 0) {
-							id = await sessions.create();
-							sessions.open(id);
-						}
-					}
+					if (target.kind === "workspace") id = await uiWorkspace.connectWorkspace(target.workspaceId);
+					else id = uiWorkspace.selection.getSnapshot().sessionId ?? await sessions.create();
+					uiWorkspace.openSession(id);
 					const conversation = sessions.scope(id)?.get("conversation");
 					if (conversation === void 0) throw new Error("会话作用域不可用（conversation 服务缺席）");
 					await conversation.send(text);
