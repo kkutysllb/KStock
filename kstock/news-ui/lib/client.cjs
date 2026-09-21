@@ -27,25 +27,20 @@ window.__ModuleLoader__.load({
 		* 标准路由桥实现（面板共用：新闻/选股库/因子库）。current=当前会话
 		* （无则默认建）；workspace=connectWorkspace（复用/新建 blank 会话并挂
 		* 进工作区分组——修复裸 create({cwd}) 的「未分组」与产物散落）。
+		* 打开/选中一律走 uiWorkspace.openSession（QiLin 3.0.2+ 引擎把会话
+		* 导航从 sessions 服务移交视图拥有者，sessions.open 已删除）。
 		*/
 		function buildTaskRouterBridge(deps) {
 			return {
 				send: async (target, text) => {
 					const sessions = deps.sessions;
 					if (sessions === void 0) throw new Error("会话服务不可用");
+					const uiWorkspace = deps.uiWorkspace;
+					if (uiWorkspace === void 0) throw new Error("工作区导航服务不可用");
 					let id;
-					if (target.kind === "workspace") {
-						const uiWorkspace = deps.uiWorkspace;
-						if (uiWorkspace === void 0) throw new Error("工作区服务不可用");
-						id = await uiWorkspace.connectWorkspace(target.workspaceId);
-						sessions.open(id);
-					} else {
-						id = sessions.list.getSnapshot().current;
-						if (id === void 0) {
-							id = await sessions.create();
-							sessions.open(id);
-						}
-					}
+					if (target.kind === "workspace") id = await uiWorkspace.connectWorkspace(target.workspaceId);
+					else id = uiWorkspace.selection.getSnapshot().sessionId ?? await sessions.create();
+					uiWorkspace.openSession(id);
 					const conversation = sessions.scope(id)?.get("conversation");
 					if (conversation === void 0) throw new Error("会话作用域不可用（conversation 服务缺席）");
 					await conversation.send(text);
@@ -416,6 +411,15 @@ window.__ModuleLoader__.load({
 		function bindAgentBridge(bridge) {
 			agentBridge = bridge;
 		}
+		/**
+		* 内嵌浏览器打开回调（apply 时注入 ctx.sidebarRight.openTab('browser')）。
+		* 未注入（sidebarRight 服务缺席）时保持 null —— 标题链接退回原生行为
+		* （新标签 → 壳转系统浏览器），不阻断阅读。
+		*/
+		let embeddedBrowserOpen = null;
+		function bindEmbeddedBrowser(open) {
+			embeddedBrowserOpen = open;
+		}
 		/** 稳定字符串哈希（已读集键，djb2）。 */
 		function hash(text) {
 			let value = 5381;
@@ -724,7 +728,13 @@ window.__ModuleLoader__.load({
 						href: item.url,
 						target: "_blank",
 						rel: "noreferrer noopener",
-						onClick: (event) => event.stopPropagation(),
+						title: embeddedBrowserOpen === null ? void 0 : "右栏内嵌浏览器打开（站点拒绝嵌入时可在浏览器标签内转系统浏览器）",
+						onClick: (event) => {
+							event.stopPropagation();
+							if (embeddedBrowserOpen === null || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+							event.preventDefault();
+							embeddedBrowserOpen(item.url);
+						},
 						children: item.title
 					}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
 						className: "ksq-news-title",
@@ -853,19 +863,49 @@ window.__ModuleLoader__.load({
 		function NavIcon({ size }) {
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconNews, { size: size ?? 18 });
 		}
-		/** 必需服务：slot 注册表 + 会话作用域 + 面板切换 + 工作区面。 */
+		/**
+		* 宿主可嵌性预检（与引擎 ui-chat 补丁同口径）：拒绝 iframe 嵌入的站点
+		* 直接走外部浏览器。预检请求失败按可嵌返回（宽松降级，宁可偶尔白屏）。
+		*/
+		async function preflightEmbeddable(url) {
+			try {
+				const response = await fetch(`/kstock-api/frame-check?url=${encodeURIComponent(url)}`);
+				if (!response.ok) return true;
+				return (await response.json()).embeddable !== false;
+			} catch {
+				return true;
+			}
+		}
+		/** 必需服务：slot 注册表 + 会话作用域 + 面板切换 + 工作区面 + 右栏导航。 */
 		const inject = [
 			"slots",
 			"sessions",
 			"layout",
 			"uiWorkspace",
-			"workspaces"
+			"workspaces",
+			"sidebarRight"
 		];
 		/** 客户端插件体。 */
 		function apply(ctx) {
 			ctx.effect(() => {
 				injectQuantStyles();
 				bindAgentBridge(buildTaskRouterBridge(ctx));
+				bindEmbeddedBrowser((url) => {
+					(async () => {
+						if (await preflightEmbeddable(url)) {
+							const sessionId = ctx.uiWorkspace?.selection.getSnapshot().sessionId;
+							if (sessionId !== void 0) try {
+								ctx.sidebarRight?.openTab("browser", {
+									scope: sessionId,
+									params: { url }
+								});
+								ctx.uiWorkspace?.openSession(sessionId);
+								return;
+							} catch {}
+						}
+						window.open(url, "_blank", "noopener,noreferrer");
+					})();
+				});
 				ctx.slots.inject("main", () => ctx.slots.register({
 					name: "main",
 					key: PANEL_KEY

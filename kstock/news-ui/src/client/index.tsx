@@ -31,13 +31,29 @@ const PANEL_KEY = 'kstock-client-news'
  */
 interface NewsClientContext extends QuantClientContext, TaskRouterDeps {
   sidebarRight?: {
-    openTab(kind: 'browser', options?: { params?: { url?: string } }): void
+    /** scope=定向到指定会话的右栏（无它则要求当前有挂载会话面，否则抛错）。 */
+    openTab(kind: 'browser', options?: { scope?: string; params?: { url?: string } }): void
   }
 }
 
 /** 侧栏图标（sidebar.panellist 的组件收到 {size, active} props）。 */
 function NavIcon({ size }: { size?: number }) {
   return <IconNews size={size ?? 18} />
+}
+
+/**
+ * 宿主可嵌性预检（与引擎 ui-chat 补丁同口径）：拒绝 iframe 嵌入的站点
+ * 直接走外部浏览器。预检请求失败按可嵌返回（宽松降级，宁可偶尔白屏）。
+ */
+async function preflightEmbeddable(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/kstock-api/frame-check?url=${encodeURIComponent(url)}`)
+    if (!response.ok) return true
+    const data = (await response.json()) as { embeddable?: boolean }
+    return data.embeddable !== false
+  } catch {
+    return true
+  }
 }
 
 /** 必需服务：slot 注册表 + 会话作用域 + 面板切换 + 工作区面 + 右栏导航。 */
@@ -49,13 +65,26 @@ export function apply(ctx: NewsClientContext): void {
     injectQuantStyles()
     bindAgentBridge(buildTaskRouterBridge(ctx))
     // 新闻标题点击 → 右栏内嵌浏览器（与引擎 ui-chat openExternalLink 同姿势）。
-    // browser 标签缺席（如未来组合变动）时退回原生新标签（壳转系统浏览器）。
+    // 两层守卫：①宿主预检 /kstock-api/frame-check（X-Frame-Objects/
+    // frame-ancestors 拒绝嵌入的站点直接走外部，不进白屏 iframe）；
+    // ②右栏 tab store 挂在会话面上，必须带 scope 定向到当前会话；无选中
+    // 会话（右栏本身不存在）或不可嵌时退回原生新标签（壳转系统浏览器）。
     bindEmbeddedBrowser((url) => {
-      try {
-        ctx.sidebarRight?.openTab('browser', { params: { url } })
-      } catch {
+      void (async () => {
+        if (await preflightEmbeddable(url)) {
+          const sessionId = ctx.uiWorkspace?.selection.getSnapshot().sessionId
+          if (sessionId !== undefined) {
+            try {
+              ctx.sidebarRight?.openTab('browser', { scope: sessionId, params: { url } })
+              // 新闻面板占主视图时右栏不在屏幕上：切回该会话视图让浏览器
+              // 标签立即可见（与引擎 ui-chat 在会话视图内点击的处境差异）。
+              ctx.uiWorkspace?.openSession(sessionId)
+              return
+            } catch { /* browser 标签缺席等：落到外部打开 */ }
+          }
+        }
         window.open(url, '_blank', 'noopener,noreferrer')
-      }
+      })()
     })
     ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL_KEY }, NewsPage))
     ctx.slots.inject('sidebar.panellist', () => ctx.slots.register(

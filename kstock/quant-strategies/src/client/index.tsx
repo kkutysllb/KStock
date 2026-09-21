@@ -10,7 +10,7 @@
  * 路由桥为 quant-ui 共享实现 buildTaskRouterBridge。
  */
 
-import { IconCandles, buildTaskRouterBridge, injectQuantStyles, type QuantClientContext, type TaskRouterDeps } from '@kstock/quant-ui'
+import { IconGitBranch, buildTaskRouterBridge, injectQuantStyles, type QuantClientContext, type TaskRouterDeps } from '@kstock/quant-ui'
 import { bindAgentBridge } from './agent.ts'
 import { StrategiesPage } from './page.tsx'
 
@@ -20,9 +20,9 @@ const PANEL_KEY = 'kstock-quant-strategies'
 /** sessions + layout + uiWorkspace + workspaces 的最小结构面（共享桥消费）。 */
 interface StrategiesClientContext extends QuantClientContext, TaskRouterDeps {}
 
-/** 侧栏图标（sidebar.panellist 的组件收到 {size, active} props）。 */
+/** 侧栏图标：版本链分支（策略库特色为版本演进），与缠论研究的 K 线蜡烛区分。 */
 function NavIcon({ size }: { size?: number }) {
-  return <IconCandles size={size ?? 18} />
+  return <IconGitBranch size={size ?? 18} />
 }
 
 /** 必需服务：slot 注册表 + 会话作用域 + 面板切换 + 工作区面。 */

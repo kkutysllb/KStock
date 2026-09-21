@@ -651,7 +651,7 @@ const MAX_ITEMS = 10;
 const WORKSPACE_MAX_ITEMS = 30;
 const HTTP_TIMEOUT_MS$1 = 8e3;
 /** 部分公开接口会拒绝非常规 UA（requests/fetch 默认值），带浏览器 UA。 */
-const BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+const BROWSER_UA$1 = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 /** 东方财富全球财经快讯（akshare stock_info_global_em 的同源接口）。 */
 async function fetchEastmoney(limit) {
 	const params = new URLSearchParams({
@@ -665,7 +665,7 @@ async function fetchEastmoney(limit) {
 	const response = await fetch(`https://np-weblist.eastmoney.com/comm/web/getFastNewsList?${params}`, {
 		headers: {
 			accept: "application/json",
-			"user-agent": BROWSER_UA
+			"user-agent": BROWSER_UA$1
 		},
 		signal: AbortSignal.timeout(HTTP_TIMEOUT_MS$1)
 	});
@@ -711,7 +711,7 @@ async function fetchCctv(limit) {
 			const response = await fetch(`https://api.cntv.cn/NewVideo/getVideoListByColumn?${params}`, {
 				headers: {
 					accept: "application/json",
-					"user-agent": BROWSER_UA
+					"user-agent": BROWSER_UA$1
 				},
 				signal: AbortSignal.timeout(HTTP_TIMEOUT_MS$1)
 			});
@@ -1158,6 +1158,80 @@ async function saveDataSources(dataRoot, values) {
 	};
 }
 //#endregion
+//#region src/frame-check.ts
+/**
+* 内嵌浏览器可嵌性预检（X-Frame-Options / CSP frame-ancestors 响应头判据）。
+*
+* 右栏内嵌浏览器是 iframe 直连目标 URL。Chromium 对 XFO / frame-ancestors
+* 拒绝渲染的响应照常触发 iframe load 事件，且被拒 frame 与成功的跨源加载
+* 在客户端不可区分（contentDocument 同为 null）——拒绝嵌入的站点在内嵌
+* 浏览器里表现为无提示白屏。唯一可靠判据是响应头：宿主侧（Node，无 CORS
+* 限制）HEAD 目标 URL，读 x-frame-options 与 content-security-policy 的
+* frame-ancestors 指令。
+*
+* 降级口径一律宽松（宁可偶尔白屏，不错杀可嵌站点）：网络失败、超时、
+* 无相关响应头均按可嵌入返回；仅明确的 deny / sameorigin /
+* frame-ancestors 白名单（不含通配 *）判不可嵌。
+*
+* @module @kstock/quant/frame-check
+*/
+const HEAD_TIMEOUT_MS = 5e3;
+/** 部分公开接口拒绝非常规 UA，带浏览器 UA（与 news.ts 同口径）。 */
+const BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+/**
+* 预检一个 URL 能否在右栏内嵌浏览器（iframe）中呈现。
+* @param rawUrl - 目标链接（会话消息 / 新闻卡片外链）。
+* @returns 可嵌性判定；非 http(s) 协议、明确拒绝头 → 不可嵌。
+*/
+async function frameCheck(rawUrl) {
+	let target;
+	try {
+		target = new URL(rawUrl);
+	} catch {
+		return {
+			embeddable: false,
+			reason: "scheme"
+		};
+	}
+	if (target.protocol !== "https:" && target.protocol !== "http:") return {
+		embeddable: false,
+		reason: "scheme"
+	};
+	try {
+		return classifyEmbedHeaders((await fetch(target, {
+			method: "HEAD",
+			redirect: "follow",
+			signal: AbortSignal.timeout(HEAD_TIMEOUT_MS),
+			headers: { "user-agent": BROWSER_UA }
+		})).headers);
+	} catch {
+		return { embeddable: true };
+	}
+}
+/**
+* 按响应头判可嵌性。
+* @param headers - HEAD 响应头（重复头由 Headers 合并为逗号分隔）。
+* @returns 判定结果；无相关头 → 可嵌。
+*/
+function classifyEmbedHeaders(headers) {
+	const xfo = (headers.get("x-frame-options") ?? "").toLowerCase();
+	if (xfo.includes("deny") || xfo.includes("sameorigin")) return {
+		embeddable: false,
+		reason: "x-frame-options"
+	};
+	const csp = (headers.get("content-security-policy") ?? "").toLowerCase();
+	for (const directive of csp.split(";")) {
+		const trimmed = directive.trim();
+		if (!trimmed.startsWith("frame-ancestors")) continue;
+		const sources = trimmed.slice(15).trim().split(/\s+/).filter(Boolean);
+		if (sources.length > 0 && !sources.includes("*")) return {
+			embeddable: false,
+			reason: "frame-ancestors"
+		};
+	}
+	return { embeddable: true };
+}
+//#endregion
 //#region src/deps.ts
 /**
 * 引擎 Python 依赖体检（`GET /kstock-api/dependencies`）。
@@ -1497,6 +1571,10 @@ async function dispatch(stores, reports, req, dataRoot, newsArchive) {
 		throwMethod(method);
 	}
 	if (libraryKey === "data-source-status") return method === "GET" ? dataSourceStatus() : throwMethod(method);
+	if (libraryKey === "frame-check") {
+		if (method !== "GET") throwMethod(method);
+		return frameCheck(url.searchParams.get("url") ?? "");
+	}
 	if (libraryKey === "chan-analyze") {
 		if (method === "POST") return analyzeChan(await readJson(req));
 		throwMethod(method);

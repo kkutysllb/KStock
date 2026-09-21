@@ -16,6 +16,7 @@ import { dataSourceStatus, landingNews, workspaceNews } from './news.ts'
 import { NewsStore } from './news-store.ts'
 import { stockNames, stockUniverse, themeWords } from './stocks.ts'
 import { dataSourcesView, saveDataSources } from './datasources.ts'
+import { frameCheck } from './frame-check.ts'
 import { dependenciesView } from './deps.ts'
 import { analyzeChan } from './chan.ts'
 
@@ -186,6 +187,12 @@ async function dispatch(
     throwMethod(method)
   }
   if (libraryKey === 'data-source-status') return method === 'GET' ? dataSourceStatus() : throwMethod(method)
+  // 内嵌浏览器可嵌性预检（会话外链 / 新闻卡片打开前判 XFO / frame-ancestors，
+  // 拒绝嵌入的站点直接走外部浏览器，不进白屏 iframe）。宽松降级见模块注释。
+  if (libraryKey === 'frame-check') {
+    if (method !== 'GET') throwMethod(method)
+    return frameCheck(url.searchParams.get('url') ?? '')
+  }
   // 缠论研究面板（§29-C1）：面板直连引擎秒级分析（60s 缓存防连点）。
   if (libraryKey === 'chan-analyze') {
     if (method === 'POST') {

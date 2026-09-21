@@ -1344,6 +1344,53 @@ def _fix_qilin_lefthook_optional(text: str) -> str | None:
     return patched.replace(_LEFTHOOK_GUARD_ANCHOR, _LEFTHOOK_GUARD_REPLACEMENT, 1)
 
 
+# ── 补丁 21：ui-chat 外链先经宿主可嵌性预检（内嵌浏览器白屏修复）──────────
+# 实测（升级 3.0.5 后真机）：会话内外链（券商研报等）在内嵌浏览器中白屏
+# 无提示——Chromium 对 X-Frame-Options / frame-ancestors 拒绝渲染的响应
+# 照常触发 iframe load，客户端与成功加载不可区分，引擎的 onError 失败
+# 路径永不触发。修法：openExternalLink 先 fetch 同源宿主路由
+# /kstock-api/frame-check（kstock/quant 的 Node 侧 HEAD 预检响应头），
+# 不可嵌直接 window.open 外部（壳转系统浏览器），预检失败退回内嵌尝试
+# （宽松降级，与 frame-check 模块口径一致）。非 kstock profile 下该路由
+# 404 → catch → 内嵌，行为与上游一致。锚点失配静默跳过。
+_UI_CHAT_APPLY_REL = "qilin/packages/client/ui-chat/src/client/apply.ts"
+_UI_CHAT_PREFLIGHT_MARKER = "KStock patch: X-Frame-Options"
+_UI_CHAT_OPEN_LINK_ANCHOR = """          openExternalLink: (url) => {
+            if (ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
+              ctx.sidebarRight.openTab('browser', { params: { url } })
+            } else {
+              window.open(url, '_blank', 'noopener,noreferrer')
+            }
+          },"""
+_UI_CHAT_OPEN_LINK_REPLACEMENT = """          openExternalLink: (url) => {
+            if (ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
+              // KStock patch: X-Frame-Options / frame-ancestors refusals still
+              // fire the iframe load event, so the embedded Browser renders a
+              // blank frame with no failure notice. Ask the KStock host route
+              // whether the URL is embeddable and open externally when it is
+              // not; preflight failure falls back to the embedded attempt.
+              void fetch(`/kstock-api/frame-check?url=${encodeURIComponent(url)}`)
+                .then(response => response.json() as Promise<{ embeddable?: boolean }>)
+                .then(result => {
+                  if (result.embeddable === true) ctx.sidebarRight.openTab('browser', { params: { url } })
+                  else window.open(url, '_blank', 'noopener,noreferrer')
+                })
+                .catch(() => { ctx.sidebarRight.openTab('browser', { params: { url } }) })
+            } else {
+              window.open(url, '_blank', 'noopener,noreferrer')
+            }
+          },"""
+
+
+def _fix_qilin_chat_link_preflight(text: str) -> str | None:
+    """ui-chat openExternalLink 先经 /kstock-api/frame-check 预检；已修/锚点失配返回 None。"""
+    if _UI_CHAT_PREFLIGHT_MARKER in text:
+        return None
+    if _UI_CHAT_OPEN_LINK_ANCHOR not in text:
+        return None
+    return text.replace(_UI_CHAT_OPEN_LINK_ANCHOR, _UI_CHAT_OPEN_LINK_REPLACEMENT, 1)
+
+
 # ── 补丁 16：kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界）──
 # 实测（agent 任务报告）：TushareClient.__init__ 无条件 ts.set_token(token)，
 # tushare 官方实现固定写 ~/tk.csv（HOME 根，工作区沙箱写边界之外）→ 被
@@ -1850,6 +1897,11 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     if lefthook_script.exists():
         if _patch_file(lefthook_script, _LEFTHOOK_SCRIPT_REL, _fix_qilin_lefthook_optional):
             changed.append(_LEFTHOOK_SCRIPT_REL)
+    # qilin ui-chat 外链宿主预检（内嵌浏览器白屏修复，补丁 21）。
+    ui_chat_apply = REPO_ROOT / "vendor" / "qilin" / "packages" / "client" / "ui-chat" / "src" / "client" / "apply.ts"
+    if ui_chat_apply.exists():
+        if _patch_file(ui_chat_apply, _UI_CHAT_APPLY_REL, _fix_qilin_chat_link_preflight):
+            changed.append(_UI_CHAT_APPLY_REL)
     # kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界，补丁 16）。
     for rel_path in _TUSHARE_SET_TOKEN_RELS:
         target = vendor_root / rel_path

@@ -74,25 +74,20 @@ window.__ModuleLoader__.load({
 		* 标准路由桥实现（面板共用：新闻/选股库/因子库）。current=当前会话
 		* （无则默认建）；workspace=connectWorkspace（复用/新建 blank 会话并挂
 		* 进工作区分组——修复裸 create({cwd}) 的「未分组」与产物散落）。
+		* 打开/选中一律走 uiWorkspace.openSession（QiLin 3.0.2+ 引擎把会话
+		* 导航从 sessions 服务移交视图拥有者，sessions.open 已删除）。
 		*/
 		function buildTaskRouterBridge(deps) {
 			return {
 				send: async (target, text) => {
 					const sessions = deps.sessions;
 					if (sessions === void 0) throw new Error("会话服务不可用");
+					const uiWorkspace = deps.uiWorkspace;
+					if (uiWorkspace === void 0) throw new Error("工作区导航服务不可用");
 					let id;
-					if (target.kind === "workspace") {
-						const uiWorkspace = deps.uiWorkspace;
-						if (uiWorkspace === void 0) throw new Error("工作区服务不可用");
-						id = await uiWorkspace.connectWorkspace(target.workspaceId);
-						sessions.open(id);
-					} else {
-						id = sessions.list.getSnapshot().current;
-						if (id === void 0) {
-							id = await sessions.create();
-							sessions.open(id);
-						}
-					}
+					if (target.kind === "workspace") id = await uiWorkspace.connectWorkspace(target.workspaceId);
+					else id = uiWorkspace.selection.getSnapshot().sessionId ?? await sessions.create();
+					uiWorkspace.openSession(id);
 					const conversation = sessions.scope(id)?.get("conversation");
 					if (conversation === void 0) throw new Error("会话作用域不可用（conversation 服务缺席）");
 					await conversation.send(text);
@@ -336,30 +331,6 @@ window.__ModuleLoader__.load({
 				className,
 				"aria-hidden": "true",
 				children
-			});
-		}
-		/** 侧栏入口：K 线蜡烛。 */
-		function IconCandles(props) {
-			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(Svg, {
-				...props,
-				children: [
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M7 6v12" }),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
-						x: "5",
-						y: "9",
-						width: "4",
-						height: "6",
-						rx: "0.5"
-					}),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M17 4v14" }),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
-						x: "15",
-						y: "8",
-						width: "4",
-						height: "5",
-						rx: "0.5"
-					})
-				]
 			});
 		}
 		function IconRefresh(props) {
@@ -1968,9 +1939,9 @@ window.__ModuleLoader__.load({
 		*/
 		/** 面板键：main slot 与侧栏入口共用。 */
 		const PANEL_KEY = "kstock-quant-strategies";
-		/** 侧栏图标（sidebar.panellist 的组件收到 {size, active} props）。 */
+		/** 侧栏图标：版本链分支（策略库特色为版本演进），与缠论研究的 K 线蜡烛区分。 */
 		function NavIcon({ size }) {
-			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconCandles, { size: size ?? 18 });
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconGitBranch, { size: size ?? 18 });
 		}
 		/** 必需服务：slot 注册表 + 会话作用域 + 面板切换 + 工作区面。 */
 		const inject = [
