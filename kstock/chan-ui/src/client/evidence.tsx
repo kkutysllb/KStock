@@ -3,13 +3,13 @@
  * + 中枢演化卡。全部可点击 → 主图定位并脉冲高亮（onFocus 回调上抛）。
  */
 import {
-  asArr, asNum, asRec, asStr, backchiKind, backchiPriceRelation, dateIndexOf, resolveIndex,
-  pointWhy, zhongshuForecast, zhongshuPosition,
+  asNum, asRec, asStr, backchiKind, backchiPriceRelation, dateIndexOf, latestSignals, resolveIndex,
+  pointTypeKey, pointWhy, zhongshuForecast, zhongshuPosition, zhongshuTypeLabel,
   type ChartHighlight, type ChartSlice, type Rec,
 } from './derive.ts'
 
-export interface FocusEvent { startIdx: number; endIdx: number; hl: ChartHighlight }
-export type FocusHandler = (focus: FocusEvent) => void
+export interface CardFocusEvent { startIdx: number; endIdx: number; hl: ChartHighlight }
+export type FocusHandler = (focus: CardFocusEvent) => void
 
 const backchiTypeCn = (raw: string): string => {
   const kind = backchiKind(raw)
@@ -17,9 +17,6 @@ const backchiTypeCn = (raw: string): string => {
   if (kind === 'bottom') return '底背驰'
   return '盘整背驰'
 }
-
-const zsTypeCn = (raw?: string): string =>
-  raw === 'extended' ? '扩展' : raw === 'complex' ? '复杂' : '普通'
 
 /** ⓪ 推导总链：segments 用 → 串起的一句话推理（derive.evidenceChain 产出）。 */
 export function ChainStrip({ segments }: { segments: string[] }): React.ReactElement {
@@ -33,7 +30,15 @@ export function ChainStrip({ segments }: { segments: string[] }): React.ReactEle
 }
 
 /** ① 背驰判定卡：MACD 面积对比条 + 价格关系 + 结论徽章。 */
-export function BackchiCard({ chart, onFocus }: { chart: ChartSlice; onFocus: FocusHandler }): React.ReactElement {
+export function BackchiCard({ chart, onFocus }: { chart: ChartSlice | null; onFocus: FocusHandler }): React.ReactElement {
+  if (chart === null) {
+    return (
+      <div className="ksq-chanx-card">
+        <div className="ksq-chanx-card-hd"><strong>① 背驰判定</strong><span className="ksq-item-meta">动力学 · MACD 力度对比</span></div>
+        <p className="ksq-item-meta">图表数据未就绪。</p>
+      </div>
+    )
+  }
   const di = dateIndexOf(chart.dates)
   const items = chart.backchis
     .map((bc, i) => ({ bc, i }))
@@ -97,27 +102,21 @@ export function BackchiCard({ chart, onFocus }: { chart: ChartSlice; onFocus: Fo
 export function BSPointsCard({ payload, chart, onFocus }: { payload: Rec; chart: ChartSlice | null; onFocus: FocusHandler }): React.ReactElement {
   const di = chart !== null ? dateIndexOf(chart.dates) : null
   const hasValidBackchi = (chart?.backchis ?? []).some(bc => bc.valid)
-  /** 动力学 type（如「一类买点」）→ 图上 marker 索引（label=BUY_1 形态），找不到返回 -1。 */
+  /** 动力学 type（中文「一类买点」/枚举 '1buy'）→ 图上 marker 索引（label=BUY_1 形态），找不到返回 -1。 */
   const markerIndexOf = (type: string, time: string): number => {
-    const cls = type.includes('一') ? '1' : type.includes('二') ? '2' : type.includes('三') ? '3' : null
-    const side = type.includes('买') ? 'BUY' : type.includes('卖') ? 'SELL' : null
-    if (cls === null || side === null) return -1
-    return chart?.markers.findIndex(m =>
-      (m.label ?? '').toUpperCase() === `${side}_${cls}` && m.time.slice(0, 10) === time.slice(0, 10),
+    const m = /^(\d)(buy|sell)$/.exec(pointTypeKey(type))
+    if (m === null) return -1
+    const side = m[2] === 'buy' ? 'BUY' : 'SELL'
+    return chart?.markers.findIndex(mk =>
+      (mk.label ?? '').toUpperCase() === `${side}_${m[1]}` && mk.time.slice(0, 10) === time.slice(0, 10),
     ) ?? -1
   }
-  const rows = [
-    ...asArr(asRec(payload.dynamics).buy_points).map(asRec),
-    ...asArr(asRec(payload.dynamics).sell_points).map(asRec),
-  ]
-    .slice(-6)
-    .reverse()
-    .map((r, i) => ({ r, markerIdx: i }))
+  const rows = latestSignals(payload, 6)
   return (
     <div className="ksq-chanx-card">
       <div className="ksq-chanx-card-hd"><strong>② 买卖点证据链</strong><span className="ksq-item-meta">形态 × 动力联立</span></div>
       {rows.length === 0 && <p className="ksq-item-meta">当前级别无买卖点信号。</p>}
-      {rows.map(({ r }) => {
+      {rows.map(r => {
         const time = asStr(r.timestamp)
         const price = asNum(r.price)
         const rel = asNum(r.reliability)
@@ -146,7 +145,7 @@ export function BSPointsCard({ payload, chart, onFocus }: { payload: Rec; chart:
               {r.confirmed_by_higher === true && <span className="ksq-chanx-ok" title="高级别确认">高✓</span>}
               {r.confirmed_by_lower === true && <span className="ksq-chanx-ok" title="低级别确认">低✓</span>}
             </div>
-            <div className="ksq-chanx-why">{pointWhy(type, hasValidBackchi)}</div>
+            <div className="ksq-chanx-why">{pointWhy(pointTypeKey(type), hasValidBackchi)}</div>
           </button>
         )
       })}
@@ -185,7 +184,7 @@ export function ZhongshuCard({ chart, payload, onFocus }: { chart: ChartSlice | 
             onClick={() => onFocus({ startIdx: s, endIdx: e, hl: { kind: 'zhongshu', id: absIdx } })}
           >
             <div className="ksq-chanx-bsrow-hd">
-              <span className="ksq-chanx-badge zs">{zsTypeCn(zs.zhongshuType)}中枢{zs.extendCount !== undefined && zs.extendCount > 0 ? ` ·延伸${zs.extendCount}` : ''}</span>
+              <span className="ksq-chanx-badge zs">{zhongshuTypeLabel(zs.zhongshuType)}中枢{zs.extendCount !== undefined && zs.extendCount > 0 ? ` ·延伸${zs.extendCount}` : ''}</span>
               <b className="ksq-mono">{zs.low.toFixed(2)}~{zs.high.toFixed(2)}</b>
             </div>
             {zs.stability !== undefined && (

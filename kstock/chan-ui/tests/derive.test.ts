@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  backchiPriceRelation, dateIndexOf, evidenceChain, LEVEL_OPTIONS, matrixLevels, parseChart,
-  pointWhy, radarDims, radarSummary, resolveIndex, zhongshuForecast, zhongshuPosition,
+  backchiPriceRelation, dateIndexOf, evidenceChain, LEVEL_OPTIONS, latestSignals, matrixLevels, parseChart,
+  pointTypeKey, pointWhy, radarDims, radarSummary, resolveIndex, stampOf, zhongshuForecast, zhongshuPosition,
+  zhongshuTypeLabel,
 } from '../src/client/derive.ts'
 
 test('matrixLevels: 中间级别取低一档+当前+高两档', () => {
@@ -146,4 +147,49 @@ test('evidenceChain: 买卖点并存时按 timestamp 取最新', () => {
     },
   }, chart)
   assert.match(segs.join('→'), /1sell·高级别✓/)
+})
+
+test('pointTypeKey: 引擎中文 type 归一化（真实格式回归，修复 pointWhy 永远兜底）', () => {
+  assert.equal(pointTypeKey('一类买点'), '1buy')
+  assert.equal(pointTypeKey('二类卖点'), '2sell')
+  assert.equal(pointTypeKey('三类买点'), '3buy')
+  assert.equal(pointTypeKey('1sell'), '1sell')
+  // 生产链路：中文 type 经归一化后必须命中定义行，而非兜底文案
+  assert.equal(pointWhy(pointTypeKey('一类买点'), false), pointWhy('1buy', false))
+  assert.match(pointWhy(pointTypeKey('一类买点'), true), /一类买点/)
+})
+
+test('zhongshuTypeLabel: 中文 zhongshu_type 子串匹配 + 英文枚举兼容', () => {
+  assert.equal(zhongshuTypeLabel('扩展中枢'), '扩展')
+  assert.equal(zhongshuTypeLabel('复杂中枢'), '复杂')
+  assert.equal(zhongshuTypeLabel('趋势中枢'), '趋势')
+  assert.equal(zhongshuTypeLabel('盘整中枢'), '盘整')
+  assert.equal(zhongshuTypeLabel('普通中枢'), '普通')
+  assert.equal(zhongshuTypeLabel('extended'), '扩展')
+  assert.equal(zhongshuTypeLabel(undefined), '普通')
+})
+
+test('latestSignals: 买卖两侧按时间合并取最近 n 条（新→旧）', () => {
+  const payload = {
+    dynamics: {
+      buy_points: [{ type: '一类买点', timestamp: '2026-01-05 10:00' }],
+      sell_points: [
+        { type: '一类卖点', timestamp: '2026-01-08 14:30' },
+        { type: '二类卖点', timestamp: '2026-01-02 09:30' },
+        { type: '三类卖点', timestamp: 1800000000000 },
+      ],
+    },
+  }
+  const rows = latestSignals(payload, 2)
+  assert.equal(rows.length, 2)
+  assert.equal(rows[0]!.type, '三类卖点') // 数值时间戳最晚
+  assert.equal(rows[1]!.type, '一类卖点')
+  // 卖侧 ≥ n 时买侧不再被整体截掉：n 放宽后买点在列
+  assert.ok(latestSignals(payload, 4).some(r => r.type === '一类买点'))
+})
+
+test('stampOf: 数值优先、字符串可解析、均失败退 -∞', () => {
+  assert.equal(stampOf({ timestamp: 100 }), 100)
+  assert.equal(stampOf({ timestamp: '2026-01-08 14:30' }), Date.parse('2026-01-08 14:30'))
+  assert.equal(stampOf({ timestamp: 'not-a-date' }), -Infinity)
 })

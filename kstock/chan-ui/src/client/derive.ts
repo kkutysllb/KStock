@@ -308,6 +308,41 @@ export function radarSummary(dims: RadarDim[]): { score: number | null; directio
 
 // ── 证据链拼装 ───────────────────────────────────────────────────────────
 
+/** 引擎买卖点 type（中文 str(BuySellPointType)，如「一类买点」）→ pointWhy/marker 查找键（'1buy' 等）；已是枚举形态时原样小写。 */
+export function pointTypeKey(type: string): string {
+  const cls = type.includes('一') ? '1' : type.includes('二') ? '2' : type.includes('三') ? '3' : ''
+  const side = type.includes('买') ? 'buy' : type.includes('卖') ? 'sell' : ''
+  return cls !== '' && side !== '' ? `${cls}${side}` : type.toLowerCase()
+}
+
+/** 引擎 zhongshu_type（中文 str(ZhongShuType)，如「扩展中枢」）→ 徽章短标签；英文枚举值兼容。 */
+export function zhongshuTypeLabel(raw?: string): string {
+  if (raw !== undefined) {
+    if (raw.includes('扩展') || raw === 'extended') return '扩展'
+    if (raw.includes('复杂') || raw === 'complex') return '复杂'
+    if (raw.includes('趋势')) return '趋势'
+    if (raw.includes('盘整')) return '盘整'
+  }
+  return '普通'
+}
+
+/** 信号时间戳比较键：数值时间戳优先，其次 Date.parse 可解析字符串，均不可用退 -∞（排序中保持原有相对顺序）。 */
+export const stampOf = (r: Rec): number => {
+  const n = asNum(r.timestamp)
+  if (n !== null) return n
+  const p = Date.parse(asStr(r.timestamp))
+  return Number.isNaN(p) ? -Infinity : p
+}
+
+/** 合并买卖两侧按 timestamp 取最近 n 条（新→旧）——「最近 N 条信号」语义，修复拼接尾取导致单侧被淹没。 */
+export function latestSignals(payload: Rec, n: number): Rec[] {
+  const dynamics = asRec(payload.dynamics)
+  return [
+    ...asArr(dynamics.buy_points).map(asRec),
+    ...asArr(dynamics.sell_points).map(asRec),
+  ].sort((a, b) => stampOf(b) - stampOf(a)).slice(0, Math.max(0, n))
+}
+
 /** 买卖点类型 → 缠论定义行（hasBackchi 时附背驰联动提示）。 */
 export function pointWhy(pointType: string, hasBackchi: boolean): string {
   const t = pointType.toLowerCase()
@@ -348,13 +383,6 @@ export function evidenceChain(payload: Rec, chart: ChartSlice | null): string[] 
   const dynamics = asRec(payload.dynamics)
   const buys = asArr(dynamics.buy_points).map(asRec)
   const sells = asArr(dynamics.sell_points).map(asRec)
-  // 时间戳比较键：数值时间戳优先，其次 Date.parse 可解析字符串，均不可用退 -∞（保持原有相对顺序）
-  const stampOf = (r: Rec): number => {
-    const n = asNum(r.timestamp)
-    if (n !== null) return n
-    const p = Date.parse(asStr(r.timestamp))
-    return Number.isNaN(p) ? -Infinity : p
-  }
   // 买卖点并存时按 timestamp 取最新（同刻维持先买后卖的稳定序），而非固定买侧优先
   const latest = [...buys, ...sells].reduce<Rec | null>((acc, r) => (acc === null || stampOf(r) > stampOf(acc) ? r : acc), null)
     ?? asArr(payload.latest_signals).map(asRec)[0] ?? null

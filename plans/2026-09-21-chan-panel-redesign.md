@@ -1151,8 +1151,8 @@ import {
   type ChartHighlight, type ChartSlice, type Rec,
 } from './derive.ts'
 
-export interface FocusEvent { startIdx: number; endIdx: number; hl: ChartHighlight }
-export type FocusHandler = (focus: FocusEvent) => void
+export interface CardFocusEvent { startIdx: number; endIdx: number; hl: ChartHighlight }
+export type FocusHandler = (focus: CardFocusEvent) => void
 
 const backchiTypeCn = (raw: string): string => {
   const kind = backchiKind(raw)
@@ -1696,7 +1696,7 @@ import {
   type ChartHighlight, type ChartSlice, type MatrixBrief, type Rec,
 } from './derive.ts'
 import { ChanChart } from './chart.tsx'
-import { BackchiCard, BSPointsCard, ChainStrip, ZhongshuCard, type FocusEvent } from './evidence.tsx'
+import { BackchiCard, BSPointsCard, ChainStrip, ZhongshuCard, type CardFocusEvent } from './evidence.tsx'
 import { ChanRadar, KeyLevelsCard, LevelMatrix, SignalDetailsCollapsible, type MatrixRowUI } from './status.tsx'
 
 /** 桥（index.tsx 注入；页面为 slot 组件拿不到 ctx，模块级单例传递）。 */
@@ -1810,7 +1810,7 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
   }, [stockCode, level])
 
   /** 卡片联动：视图聚焦到区间 + 脉冲高亮 2.4s 后自清。 */
-  const onCardFocus = useCallback((focus: FocusEvent) => {
+  const onCardFocus = useCallback((focus: CardFocusEvent) => {
     const total = chart?.dates.length ?? 0
     if (total === 0) return
     const span = Math.max(40, focus.endIdx - focus.startIdx + 24)
@@ -2043,7 +2043,7 @@ git log --oneline -8
 
 - **规格覆盖**：§3 布局→Task 7；§4.1 ⓪→derive.evidenceChain+ChainStrip（T3/T5）、①→BackchiCard（T3/T5）、②→BSPointsCard（T3/T5，marker 联动已补）、③→ZhongshuCard（T3/T5）；§4.2 雷达→radarDims/ChanRadar（T3/T6）、矩阵→matrixLevels/LevelMatrix（T2/T6/T7）、关键位评估→KeyLevelsCard（T6）、折叠 chips→SignalDetailsCollapsible（T6）；§4.3 主图增强→Task 4；§4.4 美化→CSS 段一/二/三；§5 引擎补丁→Task 1；§7 缺失态→derive null 语义 + 组件空态文案（T3/T5/T6）；§8 验收→Task 8。无缺口。
 - **占位扫描**：无 TBD/TODO；每个代码步骤含完整代码；执行命令均带预期输出。
-- **类型一致性**：FocusEvent/ChartHighlight/MatrixBrief/MatrixRowUI/RadarDim 在 Task 3/4/5/6 定义处与消费处（Task 7）签名一致；dynamics.buy_points 的 type 字段实测为「一类买点」中文串（引擎 BuySellPointType.__str__），markerIndexOf 按此设计。
+- **类型一致性**：CardFocusEvent/ChartHighlight/MatrixBrief/MatrixRowUI/RadarDim 在 Task 3/4/5/6 定义处与消费处（Task 7）签名一致；dynamics.buy_points 的 type 字段实测为「一类买点」中文串（引擎 BuySellPointType.__str__），markerIndexOf 按此设计。
 - **已知风险**：marker label 形态（`BUY_1`）若上游变化则脉冲失配（降级为仅定位，不报错）——可接受。
 
 ---
