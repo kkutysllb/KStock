@@ -155,8 +155,9 @@ export function backchiPriceRelation(chart: ChartSlice, dateIndex: Map<string, n
   const prev = range(bc.previousStart, bc.previousEnd)
   const cur = range(bc.currentStart, bc.currentEnd)
   if (prev === null || cur === null || prev.length === 0 || cur.length === 0) return null
-  const highs = (ks: typeof cur) => Math.max(...ks.map(k => k[3]))
-  const lows = (ks: typeof cur) => Math.min(...ks.map(k => k[2]))
+  // reduce 而非 Math.max(...展开)：分钟级超长段不受引擎参数个数上限约束
+  const highs = (ks: typeof cur) => ks.reduce((m, k) => Math.max(m, k[3]), -Infinity)
+  const lows = (ks: typeof cur) => ks.reduce((m, k) => Math.min(m, k[2]), Infinity)
   const kind = backchiKind(bc.backchiType)
   const prevHigh = highs(prev); const curHigh = highs(cur)
   const prevLow = lows(prev); const curLow = lows(cur)
@@ -213,7 +214,7 @@ export function radarDims(payload: Rec, matrixRows: MatrixBrief[]): RadarDim[] {
 
   const dims: RadarDim[] = []
 
-  { // 形态完整度：处理保留率 / 分型对笔充足率(理想≈2:1) / 笔对段充足率(理想≈3:1)
+  { // 形态完整度：处理保留率 / 分型对笔充足率(理想≈2:1) / 笔对段充足率(理想≈3:1)；无段可校验时该项取中性 0.5 兜底
     const a = klines > 0 ? Math.min(1, processed / klines) : 0
     const b = bis > 0 ? Math.min(1, fxs / (bis * 2)) : 0
     const d = segs > 0 ? Math.min(1, bis / (segs * 3)) : (bis > 0 ? 0.5 : 0)
@@ -232,7 +233,7 @@ export function radarDims(payload: Rec, matrixRows: MatrixBrief[]): RadarDim[] {
     dims.push({ key: 'trend-strength', label: '走势强度', value: strength !== null ? clamp100(strength * 100) : null, basis: `trend_strength=${strength ?? '—'}（${asStr(trend.type_cn) || '未判定'}）` })
   }
 
-  { // 背驰压力：顶背驰记空方压力、底背驰记多方承接（±每处最多 30 分）
+  { // 背驰压力：顶背驰记空方压力、底背驰记多方承接（±每处最多 30 分，|macd_divergence|×200 线性换算）
     let adj = 0
     let count = 0
     for (const bc of backchis) {
@@ -252,12 +253,14 @@ export function radarDims(payload: Rec, matrixRows: MatrixBrief[]): RadarDim[] {
     dims.push({ key: 'bs-quality', label: '买卖点质量', value: rel !== null ? clamp100(rel * 100) : null, basis: latest !== null ? `最新信号 ${asStr(latest.type)} 可靠度 ${rel ?? '—'}` : '近期无买卖点信号' })
   }
 
-  { // 级别共振：矩阵 ok 行方向多数一致率（<2 ok 行 → null）
+  { // 级别共振：矩阵 ok 行方向多数一致率（<2 ok 行 → null；「多」「空」并存的复合措辞视为 flat）
     type Dir = 'up' | 'down' | 'flat'
     const dirOf = (data: Rec): Dir => {
       const cn = asStr(asRec(data.trend_analysis).type_cn)
-      if (cn.includes('上涨') || cn.includes('多')) return 'up'
-      if (cn.includes('下跌') || cn.includes('空')) return 'down'
+      const up = cn.includes('上涨') || cn.includes('多')
+      const down = cn.includes('下跌') || cn.includes('空')
+      if (up && !down) return 'up'
+      if (down && !up) return 'down'
       return 'flat'
     }
     const dirs = matrixRows.filter(r => r.status === 'ok' && r.data !== undefined).map(r => dirOf(r.data!))
@@ -271,7 +274,7 @@ export function radarDims(payload: Rec, matrixRows: MatrixBrief[]): RadarDim[] {
     }
   }
 
-  { // 量能配合：近 20 根涨/跌放量对比
+  { // 量能配合：近 20 根涨/跌放量对比（样本 ≥6 根才计分；偏移比 ×80 映射到 50±40）
     const kline = asArr(c.kline).map(asArr)
     const vols = asArr(c.volumes).map(v => asNum(v) ?? 0)
     const n = Math.min(20, kline.length, vols.length)
@@ -342,7 +345,16 @@ export function evidenceChain(payload: Rec, chart: ChartSlice | null): string[] 
   const dynamics = asRec(payload.dynamics)
   const buys = asArr(dynamics.buy_points).map(asRec)
   const sells = asArr(dynamics.sell_points).map(asRec)
-  const latest = [...buys, ...sells][0] ?? asArr(payload.latest_signals).map(asRec)[0] ?? null
+  // 时间戳比较键：数值时间戳优先，其次 Date.parse 可解析字符串，均不可用退 -∞（保持原有相对顺序）
+  const stampOf = (r: Rec): number => {
+    const n = asNum(r.timestamp)
+    if (n !== null) return n
+    const p = Date.parse(asStr(r.timestamp))
+    return Number.isNaN(p) ? -Infinity : p
+  }
+  // 买卖点并存时按 timestamp 取最新（同刻维持先买后卖的稳定序），而非固定买侧优先
+  const latest = [...buys, ...sells].reduce<Rec | null>((acc, r) => (acc === null || stampOf(r) > stampOf(acc) ? r : acc), null)
+    ?? asArr(payload.latest_signals).map(asRec)[0] ?? null
   if (latest !== null) {
     const higher = latest.confirmed_by_higher === true
     segs.push(`${asStr(latest.type) || '信号'}${higher ? '·高级别✓' : '·待高级别确认'}`)

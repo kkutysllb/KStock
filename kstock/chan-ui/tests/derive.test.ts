@@ -125,3 +125,25 @@ test('pointWhy/evidenceChain: 定义行与推理链拼装', () => {
 test('radarSummary: 空维度集返回 null 分', () => {
   assert.equal(radarSummary([]).score, null)
 })
+
+test('radarSummary: 三档方向阈值（≥55 看多 / ≤45 看空 / 区间中性）', () => {
+  const dim = (v: number) => ({ key: 'k', label: 'k', value: v, basis: '' })
+  assert.equal(radarSummary([dim(60), dim(52)]).direction, 'bullish')
+  assert.equal(radarSummary([dim(40), dim(48)]).direction, 'bearish')
+  assert.equal(radarSummary([dim(50), dim(50)]).direction, 'neutral')
+  // null 维退出平均：60 与 null → 只平均 60
+  const withNull = radarSummary([{ key: 'k', label: 'k', value: 60, basis: '' }, { key: 'n', label: 'n', value: null, basis: '' }])
+  assert.equal(withNull.score, 60)
+})
+
+test('evidenceChain: 买卖点并存时按 timestamp 取最新', () => {
+  const segs = evidenceChain({
+    trend_analysis: { type_cn: '震荡' },
+    chart_data: {},
+    dynamics: {
+      buy_points: [{ type: '2buy', price: 10, timestamp: '2026-01-02 10:00', reliability: 0.6, strength: 0.5, confirmed_by_higher: false }],
+      sell_points: [{ type: '1sell', price: 11, timestamp: '2026-01-08 14:30', reliability: 0.8, strength: 0.5, confirmed_by_higher: true }],
+    },
+  }, chart)
+  assert.match(segs.join('→'), /1sell·高级别✓/)
+})
