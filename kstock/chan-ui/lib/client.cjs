@@ -2125,8 +2125,11 @@ window.__ModuleLoader__.load({
 			const [sideTab, setSideTab] = (0, react.useState)("evidence");
 			const narrow = useNarrow();
 			const hlTimer = (0, react.useRef)(null);
+			const analyzeSeq = (0, react.useRef)(0);
+			const matrixSeq = (0, react.useRef)(0);
 			const analyze = (0, react.useCallback)(async (targetStock, targetLevel) => {
 				if (targetStock.trim() === "") return;
+				const my = ++analyzeSeq.current;
 				setLoading(true);
 				setError(null);
 				try {
@@ -2143,6 +2146,7 @@ window.__ModuleLoader__.load({
 						throw new Error(detail?.detail ?? `分析失败（${response.status}）`);
 					}
 					const data = await response.json();
+					if (my !== analyzeSeq.current) return;
 					setPayload(data);
 					const next = parseChart(data);
 					setChart(next);
@@ -2152,11 +2156,12 @@ window.__ModuleLoader__.load({
 					});
 					setHighlight(null);
 				} catch (err) {
+					if (my !== analyzeSeq.current) return;
 					setError(err instanceof Error ? err.message : "分析失败");
 					setPayload(null);
 					setChart(null);
 				} finally {
-					setLoading(false);
+					if (my === analyzeSeq.current) setLoading(false);
 				}
 			}, []);
 			(0, react.useEffect)(() => {
@@ -2168,6 +2173,7 @@ window.__ModuleLoader__.load({
 					setMatrix({});
 					return;
 				}
+				const my = ++matrixSeq.current;
 				const others = matrixLevels(level).filter((l) => l !== level);
 				setMatrix(Object.fromEntries(others.map((l) => [l, "loading"])));
 				for (const other of others) fetch("/kstock-api/chan-analyze", {
@@ -2178,21 +2184,28 @@ window.__ModuleLoader__.load({
 						level: other
 					})
 				}).then(async (response) => {
-					if (!response.ok) throw new Error("fail");
+					if (my !== matrixSeq.current) return;
+					if (!response.ok) throw new Error("failed");
 					const data = await response.json();
+					if (my !== matrixSeq.current) return;
 					const parsed = parseChart(data);
 					if (parsed === null || parsed.dates.length < 30) throw new Error("insufficient");
 					setMatrix((current) => ({
 						...current,
 						[other]: data
 					}));
-				}).catch(() => {
+				}).catch((err) => {
+					if (my !== matrixSeq.current) return;
+					const kind = err instanceof Error && err.message === "insufficient" ? "empty" : "error";
 					setMatrix((current) => ({
 						...current,
-						[other]: "error"
+						[other]: kind
 					}));
 				});
 			}, [stockCode, level]);
+			(0, react.useEffect)(() => () => {
+				if (hlTimer.current !== null) window.clearTimeout(hlTimer.current);
+			}, []);
 			/** 卡片联动：视图聚焦到区间 + 脉冲高亮 2.4s 后自清。 */
 			const onCardFocus = (0, react.useCallback)((focus) => {
 				const total = chart?.dates.length ?? 0;
@@ -2223,7 +2236,7 @@ window.__ModuleLoader__.load({
 			const matrixRows = matrixLevels(level).map((l) => {
 				if (l === level) return {
 					level: l,
-					status: "ok",
+					status: payload !== null ? "ok" : "loading",
 					data: payload ?? void 0,
 					current: true
 				};
@@ -2236,9 +2249,13 @@ window.__ModuleLoader__.load({
 					level: l,
 					status: "loading"
 				};
-				if (cell === "error") return {
+				if (cell === "empty") return {
 					level: l,
 					status: "empty"
+				};
+				if (cell === "error") return {
+					level: l,
+					status: "error"
 				};
 				return {
 					level: l,

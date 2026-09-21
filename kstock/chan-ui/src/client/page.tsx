@@ -63,14 +63,18 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pendingAsk, setPendingAsk] = useState<string | null>(null)
-  const [matrix, setMatrix] = useState<Record<string, Rec | 'loading' | 'error'>>({})
+  const [matrix, setMatrix] = useState<Record<string, Rec | 'loading' | 'error' | 'empty'>>({})
   const [highlight, setHighlight] = useState<ChartHighlight | null>(null)
   const [sideTab, setSideTab] = useState<'evidence' | 'status'>('evidence')
   const narrow = useNarrow()
   const hlTimer = useRef<number | null>(null)
+  // 竞态守卫：仅最新一次 analyze / 矩阵扇出可落状态（快速切股票/级别时旧响应丢弃）
+  const analyzeSeq = useRef(0)
+  const matrixSeq = useRef(0)
 
   const analyze = useCallback(async (targetStock: string, targetLevel: string) => {
     if (targetStock.trim() === '') return
+    const my = ++analyzeSeq.current
     setLoading(true)
     setError(null)
     try {
@@ -84,26 +88,29 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
         throw new Error((detail as { detail?: string } | null)?.detail ?? `分析失败（${response.status}）`)
       }
       const data = (await response.json()) as Rec
+      if (my !== analyzeSeq.current) return
       setPayload(data)
       const next = parseChart(data)
       setChart(next)
       setView({ start: 0, count: Math.max(1, next?.dates.length ?? 1) })
       setHighlight(null)
     } catch (err) {
+      if (my !== analyzeSeq.current) return
       setError(err instanceof Error ? err.message : '分析失败')
       setPayload(null)
       setChart(null)
     } finally {
-      setLoading(false)
+      if (my === analyzeSeq.current) setLoading(false)
     }
   }, [])
 
   useEffect(() => { void analyze('000001', 'daily') }, [analyze])
 
-  // 联立矩阵：当前级别的其余 3 档并行拉取（含低一档；分钟级可能配额不足 → error 行）。
+  // 联立矩阵：当前级别的其余 3 档并行拉取（含低一档；分钟级可能配额不足 → empty 行；硬失败 → error 行）。
   const stockCode = payload !== null ? asStr(payload.stock_code) : ''
   useEffect(() => {
     if (stockCode === '') { setMatrix({}); return }
+    const my = ++matrixSeq.current
     const others = matrixLevels(level).filter(l => l !== level)
     setMatrix(Object.fromEntries(others.map(l => [l, 'loading' as const])))
     for (const other of others) {
@@ -113,16 +120,24 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
         body: JSON.stringify({ stock: stockCode, level: other }),
       })
         .then(async response => {
-          if (!response.ok) throw new Error('fail')
+          if (my !== matrixSeq.current) return
+          if (!response.ok) throw new Error('failed')
           const data = (await response.json()) as Rec
+          if (my !== matrixSeq.current) return
           const parsed = parseChart(data)
           // 分钟级配额不足：引擎可能返回 200 但 K 线极少——按数据不足处理。
           if (parsed === null || parsed.dates.length < 30) throw new Error('insufficient')
           setMatrix(current => ({ ...current, [other]: data }))
         })
-        .catch(() => { setMatrix(current => ({ ...current, [other]: 'error' as const })) })
+        .catch((err: unknown) => {
+          if (my !== matrixSeq.current) return
+          const kind = err instanceof Error && err.message === 'insufficient' ? 'empty' as const : 'error' as const
+          setMatrix(current => ({ ...current, [other]: kind }))
+        })
     }
   }, [stockCode, level])
+
+  useEffect(() => () => { if (hlTimer.current !== null) window.clearTimeout(hlTimer.current) }, [])
 
   /** 卡片联动：视图聚焦到区间 + 脉冲高亮 2.4s 后自清。 */
   const onCardFocus = useCallback((focus: CardFocusEvent) => {
@@ -146,11 +161,12 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
   const lastZhongshu = chart !== null && chart.zhongshus.length > 0 ? chart.zhongshus[chart.zhongshus.length - 1] ?? null : null
 
   const matrixRows: MatrixRowUI[] = matrixLevels(level).map(l => {
-    if (l === level) return { level: l, status: 'ok', data: payload ?? undefined, current: true }
+    if (l === level) return { level: l, status: payload !== null ? 'ok' : 'loading', data: payload ?? undefined, current: true }
     const cell = matrix[l]
     if (cell === undefined) return { level: l, status: 'empty' }
     if (cell === 'loading') return { level: l, status: 'loading' }
-    if (cell === 'error') return { level: l, status: 'empty' }
+    if (cell === 'empty') return { level: l, status: 'empty' }
+    if (cell === 'error') return { level: l, status: 'error' }
     return { level: l, status: 'ok', data: cell }
   })
   const matrixBriefs: MatrixBrief[] = matrixRows.map(r =>
