@@ -1,14 +1,17 @@
 {
   "name": "@qilin/cmdline",
   "description": "Immutable command-line handoff from a qilin launcher to any app plugin that injects cmdlineArgs",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/boot/cmdline"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",

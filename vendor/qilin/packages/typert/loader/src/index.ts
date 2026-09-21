@@ -30,7 +30,7 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Context } from '@qilin/kylin'
-import z from '@deepseek-ai/schemastery'
+import z from '@qilin/schemastery'
 import type {} from '@qilin/kylin-plugin-loader'
 import type {} from '@qilin/app-boot'
 import type {} from '@qilin/typert-registry'
@@ -108,8 +108,8 @@ export function validateTypertManifest(pkgName: string, exported: unknown): Type
     }
     const schema = value as Record<string, unknown>
     requireString(pkgName, schema, 'name', 'schema')
-    if (typeof schema.schema !== 'object' || schema.schema === null || !('_zod' in schema.schema)) {
-      throw new Error(`typert-loader: ${pkgName} TYPERT schema "${schema.name as string}" is not a zod v4 schema instance`)
+    if (typeof schema.create !== 'function') {
+      throw new Error(`typert-loader: ${pkgName} TYPERT schema "${schema.name as string}" has no create() factory`)
     }
   }
   const model = requireObject(pkgName, manifest.model, 'TYPERT.model')
@@ -273,11 +273,8 @@ function requireStrictCodec(pkgName: string, value: unknown, subject: string): v
     throw new Error(`typert-loader: ${pkgName} ${subject} must use a strict codec`)
   }
   requireString(pkgName, codec, 'typeSymbol', subject)
-  if (typeof codec.schema !== 'object'
-    || codec.schema === null
-    || !('_zod' in codec.schema)
-    || typeof (codec.schema as { parse?: unknown }).parse !== 'function') {
-    throw new Error(`typert-loader: ${pkgName} ${subject} is not backed by a zod v4 schema`)
+  if (typeof codec.create !== 'function') {
+    throw new Error(`typert-loader: ${pkgName} ${subject} has no create() factory`)
   }
 }
 

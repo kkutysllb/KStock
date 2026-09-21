@@ -1,14 +1,17 @@
 {
   "name": "@qilin/client-ui-settings-unarchive-sessions",
   "description": "Archived-session settings page: the registry-global archive set with one Unarchive action per row",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/client/ui-settings-unarchive-sessions"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",

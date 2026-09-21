@@ -1,14 +1,17 @@
 {
   "name": "@qilin/web-frontend",
   "description": "Web application entry: vite build over the @qilin/client-web shell library; dist/ served by apps/cli's qilin web",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "apps/web"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "exports": {
@@ -58,6 +61,7 @@
     "vitest": "^4.1.8",
     "ws": "8.21.0",
     "@qilin/launch-environment": "workspace:^",
+    "@qilin/workspace-changes": "workspace:^",
     "@qilin/subprocess-local": "workspace:^",
     "@qilin/experimental-auto-review": "workspace:^"
   }

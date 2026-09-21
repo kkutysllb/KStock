@@ -1,14 +1,17 @@
 {
   "name": "@qilin/client-ui-settings-skills",
   "description": "Skills page in Web Settings: the current Session's skill catalog grouped by discovery source",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/client/ui-settings-skills"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -31,7 +34,8 @@
         "@qilin/api-remotes",
         "@qilin/client-ui-session",
         "@qilin/client-ui-settings",
-        "@qilin/client-locale"
+        "@qilin/client-locale",
+        "@qilin/client-ui-workspace"
       ],
       "platform": "web"
     }
@@ -45,7 +49,6 @@
     "@qilin/kylin": "workspace:^"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
     "@qilin/api-remotes": "workspace:^",
     "@qilin/client-locale": "workspace:^",
     "@qilin/client-store": "workspace:^",
@@ -55,6 +58,8 @@
     "@qilin/client-ui-session": "workspace:^",
     "@qilin/client-ui-settings": "workspace:^",
     "@qilin/client-ui-slots": "workspace:^",
+    "@qilin/client-ui-workspace": "workspace:^",
+    "@qilin/kylin": "workspace:^",
     "@qilin/session": "workspace:^",
     "@qilin/typert-protocol": "workspace:^",
     "@testing-library/react": "^16.1.0",

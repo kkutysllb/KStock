@@ -1,14 +1,17 @@
 {
   "name": "@qilin/client-ui-sidebar-documentpreview",
-  "description": "Extensible document previews for Sidebar files: Markdown, highlighted code, images, PDF, HTML, and plain text",
-  "version": "3.0.0",
+  "description": "Extensible document previews for Sidebar files: Office, Markdown, highlighted code, images, PDF, HTML, and plain text",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/client/ui-sidebar-documentpreview"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -32,7 +35,8 @@
         "@qilin/api-workspace-files",
         "@qilin/client-ui-sidebar-right",
         "@qilin/client-ui-session",
-        "@qilin/api-remotes"
+        "@qilin/api-remotes",
+        "@qilin/client-locale"
       ],
       "platform": "web"
     }
@@ -50,6 +54,7 @@
     "@qilin/api-gateway": "workspace:^",
     "@qilin/api-remotes": "workspace:^",
     "@qilin/api-workspace-files": "workspace:^",
+    "@qilin/client-connection": "workspace:^",
     "@qilin/client-locale": "workspace:^",
     "@qilin/client-resources": "workspace:^",
     "@qilin/client-store": "workspace:^",
@@ -60,6 +65,7 @@
     "@qilin/client-ui-session": "workspace:^",
     "@qilin/client-ui-sidebar-right": "workspace:^",
     "@qilin/client-ui-slots": "workspace:^",
+    "@qilin/host-webserver": "workspace:^",
     "@qilin/session": "workspace:^",
     "@qilin/util-workspace-path": "workspace:^",
     "@testing-library/react": "^16.1.0",
@@ -68,11 +74,16 @@
     "clsx": "^2.0.0",
     "pdfjs-dist": "6.3.289",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "@qilin/office-to-pdf": "workspace:^"
   },
   "files": [
     "lib/index.js",
     "lib/client.js",
+    "lib/client.*.js",
     "lib/types/**/*.d.ts"
-  ]
+  ],
+  "dependencies": {
+    "@qilin/schemastery": "workspace:^"
+  }
 }

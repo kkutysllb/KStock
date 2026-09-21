@@ -1,14 +1,17 @@
 {
   "name": "@qilin/client-ui-user-questions",
   "description": "Web ask_user_question composer takeover and plan-review presentation UI",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/client/ui-user-questions"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -66,7 +69,8 @@
     "@qilin/client-ui-conversation": "workspace:^",
     "@qilin/client-connection": "workspace:^",
     "@qilin/session": "workspace:^",
-    "clsx": "^2.0.0"
+    "clsx": "^2.0.0",
+    "@qilin/llm": "workspace:^"
   },
   "files": [
     "lib/index.js",

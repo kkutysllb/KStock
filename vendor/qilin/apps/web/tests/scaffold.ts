@@ -28,7 +28,7 @@ import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } f
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { Page } from 'playwright'
+import type { Locator, Page } from 'playwright'
 import { expect } from 'vitest'
 import { Context } from '@qilin/kylin'
 import { QILIN_LAUNCH_ENVIRONMENT_KEY, type LaunchEnvironmentSnapshot } from '@qilin/launch-environment'
@@ -38,6 +38,7 @@ import Group from '@qilin/kylin-plugin-group'
 import {
   captureExpectedWorkspaceSnapshot,
   captureWorkspaceSnapshot,
+  type CaptureWorkspaceSnapshotOptions,
   assertSessionFixtureVersion,
   formatSystemPromptSnapshot,
   formatToolSchemasSnapshot,
@@ -56,16 +57,7 @@ import {
   writesCurrentSessionFixtures,
   type NormalizeContext,
 } from '@qilin/session-snapshot'
-import {
-  auditStartupEntries,
-  composeEntries,
-  createProfileResolutionGeneration,
-  healProfilesModuleFallback,
-  loadOverlayPatches,
-  PluginPackages,
-  type Profile,
-  type ProfileResolutionMode,
-} from '@qilin/app-boot'
+import type { Profile, ProfileContext, ProfileResolutionMode } from '@qilin/app-boot'
 import { qilinHomePath } from '@qilin/home-paths'
 import { LlmAdapter } from '@qilin/llm'
 import type {
@@ -91,26 +83,22 @@ import JsonlSessionPersistence from '@qilin/session-persistence-jsonl'
 import type {} from '@qilin/host-webserver'
 import type {} from '@qilin/agent'
 import { provideCmdline } from '@qilin/cmdline'
-import { REPO_ROOT, requireDist } from './support.ts'
+import { REPO_ROOT, requireBuilt, requireDist } from './support.ts'
 
-// Host-side web e2e cannot import a browser package: doing so would pull that
-// package's complete TS project into this graph. Mirrored from
-// packages/client/ui-settings-models/src/onboarding-copy.ts; drift makes the
-// default pre-acknowledgement stop suppressing the notice and fails loudly.
-// import {
-//   WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_SETTINGS_NAMESPACE,
-//   WELCOME_NOTICE_VERSION, WELCOME_NOTICE_COPY,
-// } from '@qilin/client-ui-settings-models'
-export const WELCOME_NOTICE_SETTINGS_NAMESPACE = 'ui-onboarding'
-export const WELCOME_NOTICE_ACK_FIELD = 'welcomeNoticeVersion'
-export const WELCOME_NOTICE_VERSION = '2026-08-13.1'
-export const WELCOME_NOTICE_COPY = {
-  zh: {
-    title: '内测声明',
-    body: 'QiLin 目前的 0.1 版本仍处在面向 Harness 开发者进行测试的阶段，还有许多地方需要持续改进和打磨，希望听取广大开发者的反馈建议。预计 QiLin 的核心插件以及基础 API 都会在接下来的一段时间内快速迭代、持续演化。\n\n我们期待与全球开发者一起，在开源、开放、可复用、可组合的基础设施之上，共同探索智能上限。欢迎全球 Harness 开发者加入 QILIN 插件生态。',
-    continueLabel: '继续',
-  },
-} as const
+type AppBoot = typeof import('@qilin/app-boot')
+let builtAppBoot: AppBoot | undefined
+
+/**
+ * The launcher's own module, as built: the manager and HMR plugins the profile
+ * loads reload the tree through this copy's registry of the root Include, so
+ * the scaffold mounts through the same copy rather than the source import.
+ * Resolved on the first launch, which needs the build anyway, so the fixture
+ * helpers this module also exports load without one.
+ */
+function appBoot(): AppBoot {
+  builtAppBoot ??= requireBuilt('@qilin/app-boot') as AppBoot
+  return builtAppBoot
+}
 
 /** Snapshot mode for the lane, from $QILIN_SNAPSHOT (same vocabulary as the other snapshot suites). */
 export type WebSnapshotMode = 'replay' | 'record' | 'refresh'
@@ -130,13 +118,16 @@ export function webSnapshotMode(): WebSnapshotMode {
  * Compare a session-driven Web scenario's complete workspace with its committed independent expected state.
  * @param scenarioDir - Absolute recorded-session scenario directory.
  * @param workspaceRoot - Absolute cwd used by the controlled session.
+ * @param options - Root entries the scenario owns outside the expected state, such as a `.git` directory it initialized.
  */
-export async function assertFinalWorkspaceSnapshot(scenarioDir: string, workspaceRoot: string): Promise<void> {
+export async function assertFinalWorkspaceSnapshot(
+  scenarioDir: string, workspaceRoot: string, options: CaptureWorkspaceSnapshotOptions = {},
+): Promise<void> {
   const manifestPath = join(scenarioDir, 'snapshot.yml')
   const manifest = parseSnapshotManifest(await readFile(manifestPath, 'utf8'), manifestPath)
   expect(manifest.workspace?.final, `${manifest.scenario ?? scenarioDir}: mutating Web scenario declares workspace.final`)
     .toBe(true)
-  const actual = await captureWorkspaceSnapshot(workspaceRoot)
+  const actual = await captureWorkspaceSnapshot(workspaceRoot, options)
   const expected = await captureExpectedWorkspaceSnapshot(join(scenarioDir, 'workspace.expected'))
   expect(actual, `${manifest.scenario ?? scenarioDir}: complete final workspace`).toEqual(expected)
 }
@@ -261,9 +252,25 @@ function replayProviders(contextWindow: number | undefined, messages: boolean): 
   }))
 }
 
+/**
+ * Open the settings dialog the way the shipped UI does: the sidebar account
+ * menu's Settings row. The dialog is modal, so callers reach the sidebar again
+ * only after closing it.
+ * @param page - the browser page whose sidebar opens the dialog.
+ * @param accountLabel - the account button's accessible name in the page's locale.
+ * @param settingsLabel - the settings row's and dialog's accessible name in the page's locale.
+ * @returns the opened settings dialog.
+ */
+export async function openSettingsDialog(page: Page, accountLabel: string, settingsLabel: string): Promise<Locator> {
+  await page.getByRole('button', { name: accountLabel, exact: true }).click()
+  await page.getByRole('menuitem', { name: settingsLabel, exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: settingsLabel })
+  await dialog.waitFor({ timeout: 10_000 })
+  return dialog
+}
+
 /** A booted web scaffold: real composition, mode-selected model backend, temp world. */
-export interface WebScaffold {
-  /** The active snapshot mode this scaffold booted under. */
+export interface WebScaffold {  /** The active snapshot mode this scaffold booted under. */
   mode: WebSnapshotMode
   /** Browser-facing origin for the bound test server. */
   baseUrl: string
@@ -308,6 +315,21 @@ export interface LaunchOptions {
    * profile layers named by {@link extraOverlayPath}.
    */
   extraInstallAnchors?: string[]
+  /**
+   * Manage the scaffold profile the way the launcher does: a `profileContext`
+   * over the profile directory, whose manifest lists the shipped web bundles
+   * and each package directory here as an installed dependency (`file:` in the
+   * manifest, a symlink under the profile's `node_modules`); `enabled` also
+   * lists a bundle in `qilin.profile.bundles`. The plugin manager mounts on such
+   * a profile, and the root Include is mounted from the profile's own layers.
+   * The base bundle's `hmr` row turns on with the profile context, so
+   * configuration changes apply live; `hmr: false` disables that row through
+   * an overlay, leaving changes for the next start.
+   */
+  profile?: {
+    hmr?: boolean
+    packages: { dir: string; enabled?: boolean }[]
+  }
   /**
    * Replay fixture (session.jsonl) served by the inserted qilin-llm-replay row
    * in replay/refresh modes; ignored in record mode (the real adapter
@@ -358,12 +380,6 @@ export interface LaunchOptions {
    */
   toolsMode?: 'native' | 'ptc' | 'both'
   /**
-   * Insert the opt-in model-facing Cordis tool provider into the shipped tree.
-   * Record and replay use the same tool surface, so captured request headers
-   * remain reconstructable without making the tools a product default.
-   */
-  cordisTools?: boolean
-  /**
    * Keep the shipped DeepSeek adapter mounted while masking the process
    * environment's DEEPSEEK_API_KEY for this scaffold lifetime. This is the
    * keyless first-run configuration lane; the default disables the adapter.
@@ -379,8 +395,6 @@ export interface LaunchOptions {
   absentCredentialReferences?: readonly string[]
   /** Record or replay a Messages scenario; older scenarios explicitly retain their recorded Chat Completions route. */
   deepSeekMessages?: boolean
-  /** Leave the current welcome notice pending; ordinary scenarios pre-acknowledge it before browser boot. */
-  welcomeNoticePending?: boolean
   /**
    * Patch the shipped DeepSeek search row to a deterministic endpoint and
    * credential reference. Browser search scenarios keep the real provider and
@@ -440,6 +454,10 @@ async function cleanupScaffoldWorld(ctx: Context, workspaceCwd: string, persiste
  */
 export async function launchWebScaffold(options: LaunchOptions = {}): Promise<WebScaffold> {
   requireDist()
+  const {
+    auditStartupEntries, composeEntries, createProfileResolutionGeneration, healProfilesModuleFallback, initProfile,
+    mountRootInclude, readProfileManifest, readProfilePatches, loadOverlayPatches, PluginPackages,
+  } = appBoot()
   const mode = webSnapshotMode()
   const replayFixture = options.replayFixture === undefined
     ? undefined
@@ -536,9 +554,14 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     surfaceContext?: boolean
   } | undefined
   const surfaceContext = webRuntimeConfig?.surfaceContext !== false
-  const patches: PatchOptions[] = [
-    ...basePatches,
-    ...surfacePatches,
+  // The scaffold's own overrides, above every bundle layer like `--patch` overlays.
+  const overlayPatches: PatchOptions[] = [
+    // Without HMR the profile applies configuration changes at its next start.
+    ...options.profile?.hmr === false ? [{ id: 'hmr', disabled: true }] : [],
+    // The shipped composition gates the application behind a local account;
+    // these scenarios drive plugin, settings, and conversation surfaces, not
+    // sign-in, so the gate is off unless an explicit overlay turns it back on.
+    { id: 'accounts', config: { enabled: false } },
     { id: 'session-log-deepseek', config: { enabled: false } },
     // The historical Messages fixture retains its recorded route during replay;
     // live configuration uses the shared DeepSeek route. Explicit overlays win.
@@ -645,13 +668,6 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       // be able to change a golden, whatever roots a scenario asks for.
       : [{ id: 'agent-presets', config: { ...options.agentPresets, includeUserRoot: false } }],
     ...options.toolsMode === undefined ? [] : [{ id: 'tools', config: { mode: options.toolsMode } }],
-    // The shipped Web bundle already owns both runners and the Cordis UI. This
-    // scenario adds only the model-facing tools that exercise those services.
-    ...options.cordisTools === true
-      ? [{ insert: [
-        { id: 'tool-cordis', name: '@qilin/tool-cordis' },
-      ] }]
-      : [],
     ...options.deepSeekSearch === undefined
       ? []
       : [{
@@ -666,6 +682,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
         config: messages ? {} : { protocol: 'chat-completions' } },
     ],
   ]
+  const patches: PatchOptions[] = [...basePatches, ...surfacePatches, ...overlayPatches]
 
   // Sessions inherit the gateway's process.cwd() default; run the boot from
   // the temp workspace so tool cwd, session cwd, and fixtures agree.
@@ -708,7 +725,6 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       layers: extraLayers,
       patchPath: join(profileDir, 'cordis.patch.yml'),
       patches: [],
-      patchReload: 'startup',
     }
     const profileResolutionMode = options.profileResolutionMode ?? 'runtime'
     const resolutionOptions = { installAnchor: INSTALL_ANCHOR, home: harnessHome, profile }
@@ -719,6 +735,34 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     const rootConfig = join(profileDir, 'cordis.yml')
     await writeFile(rootConfig, '[]\n')
     ctx.baseUrl = pathToFileURL(profileDir).href + '/'
+    let profileContext: ProfileContext | undefined
+    if (options.profile !== undefined) {
+      // A real profile: the shipped web bundles plus each fixture package,
+      // installed the way `qilin plugin add` leaves them.
+      const dependencies: Record<string, string> = {}
+      const bundles = ['@qilin/base', '@qilin/web-app']
+      for (const entry of options.profile.packages) {
+        const manifest = JSON.parse(await readFile(join(entry.dir, 'package.json'), 'utf8')) as { name: string }
+        dependencies[manifest.name] = `file:${entry.dir}`
+        if (entry.enabled === true) bundles.push(manifest.name)
+        const link = join(profileDir, 'node_modules', manifest.name)
+        await mkdir(dirname(link), { recursive: true })
+        await symlink(entry.dir, link, 'junction')
+      }
+      initProfile(profileDir, bundles)
+      const manifest = readProfileManifest('qilin', profileDir)
+      manifest.dependencies = dependencies
+      await writeFile(join(profileDir, 'package.json'), JSON.stringify(manifest, null, 2) + '\n')
+      profileContext = {
+        name: 'scaffold', dir: profileDir, patchPath: profile.patchPath, installAnchor: INSTALL_ANCHOR,
+        cwd: workspaceCwd, home: harnessHome, startedBundles: bundles,
+        overlays: overlayPatches, telemetryDisabledEnv: undefined,
+      }
+      // HMR gates file-driven reloads on application readiness, which the
+      // launcher commits after boot; this direct harness is ready at once.
+      ctx.provide('appReady', { onReady: (listener) => { listener(); return () => {} } })
+      ctx.provide('profileContext', profileContext)
+    }
     // This direct Loader harness supplies the same root-path capability as app-boot.
     ctx.provide('qilinHomePath', qilinHomePath)
     // A host with no command line still provides one: the web bundle's startup
@@ -736,23 +780,25 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       behavior: profileResolutionMode === 'dual' ? 'verify' : 'enforce',
     })
     await ctx.plugin(Loader)
-    ctx.loader.builtins.include = Include
-    // `cordis:group` beside it, exactly as `boot()` registers it: a group row is
-    // how a preset gives one `isolate` realm to a provider and its consumers,
-    // and a preset resolving package names from its own directory cannot reach
-    // `@qilin/kylin-plugin-group` by name.
-    ctx.loader.builtins.group = Group
-    await ctx.loader.create({
-      name: 'cordis:include',
-      config: { path: pathToFileURL(rootConfig).href, patches },
-    })
+    if (profileContext === undefined) {
+      ctx.loader.builtins.include = Include
+      // `cordis:group` beside it, exactly as `boot()` registers it: a group row is
+      // how a preset gives one `isolate` realm to a provider and its consumers,
+      // and a preset resolving package names from its own directory cannot reach
+      // `@qilin/kylin-plugin-group` by name.
+      ctx.loader.builtins.group = Group
+      await ctx.loader.create({
+        name: 'cordis:include',
+        config: { path: pathToFileURL(rootConfig).href, patches },
+      })
+    } else {
+      // The launcher's own mount, so the manager's reloads find the root Include
+      // and compose the same layers the profile files name; bare names still
+      // resolve through the resolution generation above, as in the direct mount.
+      await mountRootInclude(ctx, rootConfig, readProfilePatches('qilin', profileContext))
+    }
     await ctx.loader.await()
     await auditStartupEntries(ctx, 'web e2e scaffold')
-    if (options.welcomeNoticePending !== true) {
-      await ctx.settings.mutate(WELCOME_NOTICE_SETTINGS_NAMESPACE, [{
-        op: 'set', path: [WELCOME_NOTICE_ACK_FIELD], value: WELCOME_NOTICE_VERSION,
-      }])
-    }
     const boundPort = ctx.get('webServer')?.port
     if (boundPort === undefined) {
       throw new Error('web e2e scaffold: webServer service missing after settled boot')
@@ -820,7 +866,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     authenticatedUrl = ctx.connection.authenticatedUrl(baseUrl)
     const login = await fetch(authenticatedUrl, { redirect: 'manual' })
     const setCookie = login.headers.get('set-cookie')
-    if (login.status !== 303 || login.headers.get('location') !== '/' || setCookie === null) {
+    if (login.status !== 303 || login.headers.get('location') !== new URL(authenticatedUrl).pathname || setCookie === null) {
       throw new Error('web e2e scaffold: browser token exchange did not return its session cookie')
     }
     cookieHeader = setCookie.split(';', 1)[0] ?? ''

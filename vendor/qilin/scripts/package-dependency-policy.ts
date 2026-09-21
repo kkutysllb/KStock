@@ -32,6 +32,7 @@ const CONFIGURATION_ONLY_DEV_DEPENDENCIES = {
 /** Workspace packages whose complete runtime surface is safe across duplicate installations. */
 const DUPLICATE_SAFE_PACKAGES: readonly string[] = [
   '@qilin/brand',
+  '@qilin/lazy-require',
   '@qilin/typert-protocol',
   '@qilin/util-crypto',
   '@qilin/util-values',
@@ -45,12 +46,17 @@ const DUPLICATE_SAFE_PACKAGES: readonly string[] = [
  */
 const SAFE_HOST_DEPENDENCY_EXPORTS = {
   '@qilin/credentials': ['credentialKey'],
+  // A pure type-assertion brand (`FsVersion(v) { return v as FsVersion }`) with no
+  // runtime identity, so two installed copies produce interchangeable values. It is
+  // added here because packages/api/workspace-files re-brands the opaque wire token
+  // on its way back to the provider, and reviewed as an exception to the default.
+  '@qilin/fs': ['FsVersion'],
   '@qilin/dsh-compat': ['clientDeclarationOf', 'dshCompatModuleId'],
   '@qilin/deque': ['Deque'],
   '@qilin/llm': ['callConfigEquals'],
   '@qilin/session-format': ['sessionFormatLogFilename'],
   '@qilin/timeout': ['MAX_TIMER_DELAY_MS'],
-  '@deepseek-ai/schemastery': ['default'],
+  '@qilin/schemastery': ['default'],
 } as const satisfies HostDependencyExports
 
 /** Runtime exports that require every consumer to resolve the provider's shared peer instance. */

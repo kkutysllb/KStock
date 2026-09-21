@@ -1,4 +1,4 @@
-import { defineProperty, hyphenate } from '@deepseek-ai/cosmokit'
+import { defineProperty, hyphenate } from '@qilin/cosmokit'
 import { Context } from './context.ts'
 import { Fiber } from './fiber.ts'
 import { createCallable, joinPrototype, symbols, type Tracker } from './utils.ts'
@@ -231,8 +231,9 @@ export class LoggerService {
    */
   exporter(exporter: Exporter) {
     return this.ctx.effect(() => {
-      this.exporters.set(++this._snExporter, exporter)
-      return () => this.exporters.delete(this._snExporter)
+      const id = ++this._snExporter
+      this.exporters.set(id, exporter)
+      return () => this.exporters.delete(id)
     }, 'ctx.logger.exporter()')
   }
 

@@ -9,7 +9,10 @@ import type {} from '@qilin/client-locale/client'
 import type {} from '@qilin/client-ui-renderer/client'
 // Type-only: pulls the Session root standard-props merge.
 import type {} from '@qilin/client-ui-session/client'
+// Type-only: pulls the conversation header slot declarations.
+import type {} from '@qilin/client-ui-conversation/client'
 import type { SidebarPanelMetadata, SidebarRootInjected } from './contract/slots.ts'
+import { HeaderLeadingControls } from './HeaderLeadingControls.tsx'
 import { SidebarRoot } from './SidebarRoot.tsx'
 import { en, zh, type SidebarKey } from './locales.ts'
 
@@ -48,12 +51,14 @@ export function apply(ctx: ClientContext): void {
     const next = ctx.slots.entriesOfSlot('sidebar.panellist').map(({ options }) => {
       // The list registration requires an id; StoredEntry erases the slot kind.
       const id = options.id as MainPanelId
-      return { id, order: options.order ?? 0, label: resolveSlotLabel(options.label) ?? id }
+      const section = resolveSlotLabel(options.section)
+      return { id, order: options.order ?? 0, label: resolveSlotLabel(options.label) ?? id, section }
     }).sort((a, b) => a.order - b.order)
     const previous = panels.getSnapshot()
     if (previous.length === next.length && previous.every((panel, index) => {
       const candidate = next[index] as SidebarPanelMetadata
-      return panel.id === candidate.id && panel.order === candidate.order && panel.label === candidate.label
+      return panel.id === candidate.id && panel.order === candidate.order
+        && panel.label === candidate.label && panel.section === candidate.section
     })) return
     panels.set(next)
   }
@@ -74,6 +79,7 @@ export function apply(ctx: ClientContext): void {
     children: {
       'sidebar.brand.mark': { kind: 'single', scope: 'root' },
       'sidebar.brand.name': { kind: 'single', scope: 'root' },
+      'sidebar.toggle.badge': { kind: 'single', scope: 'root' },
       'sidebar.panellist': { kind: 'list', scope: 'root' },
       'sidebar.workspaces': { kind: 'single', scope: 'root' },
       'sidebar.settings': { kind: 'single', scope: 'root' },
@@ -81,5 +87,14 @@ export function apply(ctx: ClientContext): void {
     },
     inject: injectProps,
   }, SidebarRoot))
+  // macOS desktop hides the collapsed sidebar entirely, so the open/New
+  // Session controls move into the conversation header's leading seat; the
+  // occupant reuses the shell's injected actions and shows itself purely
+  // through CSS against the AppFrame's data-sidebar-collapsed attribute.
+  ctx.slots.inject('conversation.session.header.leading', () => ctx.slots.register({
+    name: 'conversation.session.header.leading',
+    locale: NS,
+    inject: injectProps,
+  }, HeaderLeadingControls))
   syncPanels()
 }

@@ -1,14 +1,17 @@
 {
   "name": "@qilin/base",
   "description": "The shared qilin core as a profile bundle: the first patch layer of base-backed profiles, inserting core rows over the empty profile root",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/bundle/base"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -34,7 +37,7 @@
     }
   },
   "dependencies": {
-    "@qilin/kylin-plugin-hmr": "workspace:^",
+    "@qilin/hmr": "workspace:^",
     "@qilin/kylin-plugin-timer": "workspace:^",
     "@qilin/agent": "workspace:^",
     "@qilin/agent-default-model": "workspace:^",
@@ -120,7 +123,8 @@
     "@qilin/web-search-deepseek": "workspace:^",
     "@qilin/workflow-ptc": "workspace:^",
     "@qilin/agent-instructions": "workspace:^",
-    "@qilin/ptc-runtime-node": "workspace:^"
+    "@qilin/ptc-runtime-node": "workspace:^",
+    "@qilin/plugin-manager": "workspace:^"
   },
   "peerDependencies": {
     "@qilin/kylin": "workspace:^"

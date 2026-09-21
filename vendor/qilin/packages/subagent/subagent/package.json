@@ -1,14 +1,17 @@
 {
   "name": "@qilin/subagent",
   "description": "Abstract subagent seam (ctx.subagents): named-provider registry for delegating to child agents",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/subagent/subagent"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -56,6 +59,7 @@
     "@qilin/brand": "workspace:^",
     "@qilin/chunked-list": "workspace:^",
     "@qilin/util-values": "workspace:^",
+    "@qilin/schemastery": "workspace:^",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
@@ -79,7 +83,8 @@
     "@qilin/typert-protocol": "workspace:^",
     "@qilin/user-approval": "workspace:^",
     "@qilin/util-time": "workspace:^",
-    "@qilin/permission-presets": "workspace:^"
+    "@qilin/permission-presets": "workspace:^",
+    "@qilin/settings": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@qilin/agent-presets": {
@@ -111,6 +116,9 @@
     },
     "@qilin/user-approval": {
       "optional": true
+    },
+    "@qilin/settings": {
+      "optional": true
     }
   },
   "devDependencies": {
@@ -138,6 +146,7 @@
     "@qilin/typert-protocol": "workspace:^",
     "@qilin/user-approval": "workspace:^",
     "@qilin/util-time": "workspace:^",
-    "@qilin/permission-presets": "workspace:^"
+    "@qilin/permission-presets": "workspace:^",
+    "@qilin/settings": "workspace:^"
   }
 }

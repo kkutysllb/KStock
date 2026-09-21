@@ -1,14 +1,17 @@
 {
   "name": "@qilin/acp",
   "description": "Automation-only Agent Client Protocol server for driving QiLin agents over JSON-RPC stdio",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/acp/acp"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -29,7 +32,7 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "1.4.0",
     "@qilin/brand": "workspace:^",
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@qilin/schemastery": "workspace:^"
   },
   "peerDependencies": {
     "@qilin/kylin": "workspace:^",

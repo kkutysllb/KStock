@@ -1,14 +1,17 @@
 {
   "name": "@qilin/client-ui-settings-plugin-inventory",
   "description": "Read-only Cordis Loader inventory tab in Web Plugins settings",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/client/ui-settings-plugin-inventory"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -31,7 +34,8 @@
         "@qilin/api-remotes",
         "@qilin/client-ui-settings",
         "@qilin/client-locale",
-        "@qilin/client-ui-agent-preset"
+        "@qilin/client-ui-agent-preset",
+        "@qilin/client-modules"
       ],
       "platform": "web"
     }
@@ -58,7 +62,9 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "@qilin/client-ui-renderer": "workspace:^",
-    "@qilin/agent-presets": "workspace:^"
+    "@qilin/agent-presets": "workspace:^",
+    "@qilin/client-modules": "workspace:^",
+    "@qilin/client-store": "workspace:^"
   },
   "files": [
     "lib/index.js",

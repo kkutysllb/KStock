@@ -1,14 +1,17 @@
 {
   "name": "@qilin/client-ui-agent-preset",
   "description": "Agent-preset surfaces: the default for later sessions, this session's seat, and the composition editor",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/client/ui-agent-preset"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -61,6 +64,7 @@
     "@qilin/client-ui-settings": "workspace:^",
     "@qilin/client-ui-slots": "workspace:^",
     "@qilin/session": "workspace:^",
+    "@qilin/util-values": "workspace:^",
     "@types/react": "~18.3.1",
     "@qilin/kylin": "workspace:^",
     "react": "^18.2.0",

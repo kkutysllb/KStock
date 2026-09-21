@@ -66,7 +66,7 @@ function facts(manifest: PackageDependencyManifest): PackageDependencyFacts {
       '@qilin/runtime',
       '@qilin/types',
       '@qilin/stale',
-      '@deepseek-ai/schemastery',
+      '@qilin/schemastery',
     ]),
     allSourceUses: new Map([
       ['@qilin/runtime', ['packages/core/probe/src/index.ts']],
@@ -204,12 +204,13 @@ describe('package dependency scope', () => {
     })
     expect(PACKAGE_DEPENDENCY_POLICY.duplicateSafePackages).toEqual([
       '@qilin/brand',
+      '@qilin/lazy-require',
       '@qilin/typert-protocol',
       '@qilin/util-crypto',
       '@qilin/util-values',
     ])
     expect(PACKAGE_DEPENDENCY_POLICY.safeHostDependencyExports['@qilin/deque']).toEqual(['Deque'])
-    expect(PACKAGE_DEPENDENCY_POLICY.safeHostDependencyExports['@deepseek-ai/schemastery']).toEqual(['default'])
+    expect(PACKAGE_DEPENDENCY_POLICY.safeHostDependencyExports['@qilin/schemastery']).toEqual(['default'])
     expect(PACKAGE_DEPENDENCY_POLICY.safeHostDependencyExports['@qilin/session/types']).toBeUndefined()
     expect(PACKAGE_DEPENDENCY_POLICY.safeHostDependencyExports['@qilin/typert-protocol']).toBeUndefined()
     expect(PACKAGE_DEPENDENCY_POLICY.peerRequiredHostExports['@qilin/scope']).toEqual([
@@ -612,12 +613,20 @@ describe('face-aware source classification', () => {
       "export * from '@f/star'",
       "void import('@f/dynamic')",
       "void require('@f/required')",
+      "import { createLazyRequire as lazy } from '@qilin/lazy-require'",
+      "import * as lazyModule from '@qilin/lazy-require'",
+      "void lazy('@f/lazy', import.meta.url)",
+      "void lazyModule.createLazyRequire('@f/lazy-namespace', import.meta.url)",
       'void defaultValue; void local; void namespace',
     ].join('\n')
     const uses = collectRuntimeSourceExportUses('probe.ts', source)
     expect(uses.map(({ specifier, exportName }) => ({ specifier, exportName }))).toEqual([
+      { specifier: '@qilin/lazy-require', exportName: '*' },
+      { specifier: '@qilin/lazy-require', exportName: 'createLazyRequire' },
       { specifier: '@f/dynamic', exportName: '*' },
       { specifier: '@f/effect', exportName: '(side effect)' },
+      { specifier: '@f/lazy', exportName: '*' },
+      { specifier: '@f/lazy-namespace', exportName: '*' },
       { specifier: '@f/namespace', exportName: '*' },
       { specifier: '@f/reexport', exportName: 'source' },
       { specifier: '@f/required', exportName: '*' },
@@ -822,7 +831,7 @@ describe('dependency sections', () => {
       name: '@qilin/probe',
       dependencies: {
         '@qilin/runtime': 'workspace:^',
-        '@deepseek-ai/schemastery': 'workspace:^',
+        '@qilin/schemastery': 'workspace:^',
         external: '^1.0.0',
       },
       devDependencies: {
@@ -938,7 +947,7 @@ describe('dependency sections', () => {
     const manifestPath = 'package.json'
     const manifest: PackageDependencyManifest = {
       name: '@qilin/probe',
-      dependencies: { '@deepseek-ai/schemastery': 'workspace:*', external: '^1.0.0' },
+      dependencies: { '@qilin/schemastery': 'workspace:*', external: '^1.0.0' },
       devDependencies: { [CORDIS]: 'workspace:^', '@qilin/runtime': 'workspace:^' },
       peerDependencies: {
         [CORDIS]: 'workspace:^',
@@ -954,7 +963,7 @@ describe('dependency sections', () => {
     expect(fixPackageDependencies(root, state)).toEqual([manifestPath])
     const fixed = JSON.parse(readFileSync(join(root, manifestPath), 'utf8')) as PackageDependencyManifest
     expect(fixed.dependencies).toEqual({
-      '@deepseek-ai/schemastery': 'workspace:^',
+      '@qilin/schemastery': 'workspace:^',
       external: '^1.0.0',
       '@qilin/runtime': 'workspace:^',
     })

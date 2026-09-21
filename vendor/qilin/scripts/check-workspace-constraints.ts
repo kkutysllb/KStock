@@ -13,6 +13,7 @@ import {
   PRIVATE_EXPERIMENTAL_PACKAGE_DIRECTORIES,
 } from './experimental-package-policy.ts'
 import { hasTypertRemoteNavigation, isForbiddenPublicationFile } from './publication-payload.ts'
+import { OPTIONAL_BUNDLES } from '../packages/boot/app-boot/src/profile.ts'
 import { collectProjectReferenceFaceViolations } from './project-reference-faces.ts'
 
 const root = resolve(import.meta.dirname, '..')
@@ -36,6 +37,8 @@ const vendoredPackages = new Set([
   '@qilin/kylin-plugin-hmr',
   '@qilin/kylin-plugin-logger-console',
 ])
+/** Name prefix every member of the native addon sequence shares, including its workspace root. */
+const nativePackagePrefix = '@qilin/node-addon-system'
 const publicNativePackages = new Set([
   '@qilin/node-addon-system',
   '@qilin/node-addon-system-darwin-arm64',
@@ -48,7 +51,7 @@ const publicationSourceAllowlist: Readonly<Record<string, readonly string[]>> = 
   '@qilin/node-addon-system': ['src/main.c', 'src/flock.c'],
 }
 /** Public source home recorded in maintained package manifests. */
-const publishedRepositoryUrl = 'git+https://github.com/qilin/deepseek-harness.git'
+const publishedRepositoryUrl = 'git+https://github.com/kkutysllb/QiLin.git'
 /** Packages that participate in the experimental policy. */
 const experimentalPackageDirectory = /^packages\/experimental\/[^/]+$/
 /** npm namespace reserved for experimental packages. */
@@ -59,10 +62,9 @@ const standardReleaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[
 const desktopApplicationDirectory = 'apps/desktop'
 const localArtifactDirs = new Set(['node_modules'])
 const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
-  '@qilin/cli': ['lib/*.js'],
+  '@qilin/cli': ['lib/*.js', 'lib/types/*.d.ts'],
   '@qilin/desktop-host': [
     'lib/index.js',
-    'config/desktop.cordis.patch.yml',
   ],
   // Sourcemaps stay out by payload policy; the worker-preview surface
   // (dist/preview.html and dist/preview/) backs opt-in experimental
@@ -92,6 +94,7 @@ export interface PackageManifest {
   files?: string[]
   publishConfig?: { access?: string }
   repository?: { type?: string; url?: string; directory?: string }
+  engines?: { node?: string }
   peerDependencies?: Record<string, string>
   devDependencies?: Record<string, string>
   dependencies?: Record<string, string>
@@ -115,6 +118,8 @@ function readJson(path: string): PackageManifest {
 
 const rootManifest = readJson(join(root, 'package.json'))
 const repositoryVersion = rootManifest.version
+/** Node range every published release member restates from the workspace root. */
+const publishedNodeFloor = rootManifest.engines?.node
 const nativeWorkspaceManifest = readJson(join(root, 'native/system/package.json'))
 const nativeVersion = nativeWorkspaceManifest.version
 
@@ -157,7 +162,9 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   // unpublished, as everywhere else in the repository.
   '@qilin/client-ui-primitives': ['lib/**/*.css'],
   '@qilin/client-ui-dockkit': ['lib/**/*.css'],
-  '@qilin/client-web': ['lib/**/*.css'],
+  '@qilin/client-ui-sidebar-documentpreview': ['lib/client.*.js'],
+  '@qilin/client-ui-sidebar-terminal': ['lib/client.*.js'],
+  '@qilin/client-web': ['lib/**/*.css', 'lib/apply-injections.js'],
   '@qilin/client-ui-theme': ['lib/styles'],
   // The CPython side ships as source .py files, published as-is rather than built.
   '@qilin/experimental-ptc-runtime-python': ['py/**/*.py'],
@@ -178,6 +185,7 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   // also shares its generated FFI code through a hashed runtime chunk.
   '@qilin/sandbox-windows-acl': ['lib/runner.js', 'lib/types-*.js'],
   '@qilin/skill-badge': ['assets'],
+  '@qilin/skill-office': ['assets'],
   '@qilin/subprocess': ['lib/control.js'],
   // SSH launches a private helper and shares wire definitions and TLS setup
   // between that helper and the connection owner.
@@ -317,7 +325,9 @@ function isReleaseMemberDirectory(dir: string): boolean {
  * private qilin package on one shared version, written by `release:qilin` and
  * shared with the workspace root. This name test is that boundary: it covers
  * the family wherever the manifest lives, so apps/ members cannot drift with
- * only the release lane noticing.
+ * only the release lane noticing. The vendored framework and the native addon
+ * family share the `@qilin` scope but not the version line: each publishes from
+ * its own sequence, so both stay outside this boundary.
  * @param manifest - the workspace package manifest.
  * @param expected - the version every qilin-family manifest must carry (the root's).
  * @returns one violation naming the manifest and the expected version, or
@@ -326,6 +336,10 @@ function isReleaseMemberDirectory(dir: string): boolean {
 export function checkQilinFamilyVersion(manifest: PackageManifest, expected: string | undefined): string | undefined {
   const name = manifest.name
   if (name !== '@qilin/cli' && name?.startsWith('@qilin/') !== true) return undefined
+  // The vendored framework and the native addon family keep their own version
+  // lines and publish from their own sequences, so the shared qilin version does
+  // not apply to them.
+  if (vendoredPackages.has(name) || name.startsWith(nativePackagePrefix)) return undefined
   if (manifest.version !== expected) {
     return `${name}: package.json version must match root version ${expected ?? '(missing)'}`
   }
@@ -380,6 +394,13 @@ export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): st
       || manifest.repository.url !== publishedRepositoryUrl
       || manifest.repository.directory !== dir) {
       errors.push(`${label}: release member repository must use ${publishedRepositoryUrl} with directory ${dir}`)
+    }
+    // npm reads this floor from the manifest a consumer installs, not from the
+    // workspace root, which is never published: `npx @qilin/cli` on an
+    // unsupported Node must refuse with the supported range rather than fail
+    // later inside the boot.
+    if (publishedNodeFloor !== undefined && manifest.engines?.node !== publishedNodeFloor) {
+      errors.push(`${label}: release member engines.node must be ${publishedNodeFloor}, the workspace floor`)
     }
   } else if (!experimentalPackageDirectory.test(dir) && manifest.private !== true) {
     errors.push(`${label}: package.json must set "private": true`)
@@ -501,11 +522,16 @@ const dependencySections = ['dependencies', 'devDependencies', 'peerDependencies
 const runtimeDependencySections = ['dependencies', 'optionalDependencies', 'peerDependencies'] as const
 
 /**
- * Prevent an official runtime from requiring a package its release omits.
+ * Prevent an official runtime from requiring an experimental package. The qilin installation's `dependencies`
+ * may hold the bundles the launcher's `OPTIONAL_BUNDLES` names: shipped switched off, they are not a requirement
+ * ([rationale](../.agents/notes/implemented/process/2026-09-15-shipped-optional-bundles.md)).
  * @param manifests - release, private experimental, and deployment-root manifests.
+ * @param optionalBundles - the bundles the installation ships switched off; the launcher's list by default.
  * @returns One error for each forbidden runtime dependency.
  */
-export function checkExperimentalDependencyIsolation(manifests: readonly WorkspaceManifest[]): string[] {
+export function checkExperimentalDependencyIsolation(
+  manifests: readonly WorkspaceManifest[], optionalBundles: readonly string[] = OPTIONAL_BUNDLES,
+): string[] {
   const experimentalNames = new Set(manifests
     .filter(entry => experimentalPackageDirectory.test(entry.dir))
     .map(entry => entry.manifest.name)
@@ -513,9 +539,11 @@ export function checkExperimentalDependencyIsolation(manifests: readonly Workspa
   const errors: string[] = []
   for (const { dir, manifest } of manifests) {
     if (!standardReleaseMemberDirectory.test(dir) && dir !== 'python/sdk-runtime') continue
+    const offered = manifest.name === '@qilin/cli' ? new Set(optionalBundles) : new Set<string>()
     for (const section of runtimeDependencySections) {
       for (const name of Object.keys(manifest[section] ?? {})) {
         if (!experimentalNames.has(name)) continue
+        if (section === 'dependencies' && offered.has(name)) continue
         errors.push(`${manifest.name ?? dir}: ${section}.${name} must not reference an experimental package`)
       }
     }

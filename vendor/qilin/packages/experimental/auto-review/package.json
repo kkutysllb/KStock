@@ -1,11 +1,14 @@
 {
   "name": "@qilin/experimental-auto-review",
   "description": "Per-tool LLM authorization review for the QiLin Auto permission preset",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/experimental/auto-review"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",

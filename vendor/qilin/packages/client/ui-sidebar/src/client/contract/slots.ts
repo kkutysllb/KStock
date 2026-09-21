@@ -14,6 +14,8 @@ import type { MainPanelId } from '@qilin/client-ui-layout/client'
 
 declare module '@qilin/client-ui-slots' {
   interface SlotMap {
+    /** Non-interactive notification inside the collapsed sidebar expand button. */
+    'sidebar.toggle.badge': { kind: 'single'; scope: 'root'; owner: Record<never, never> }
     /**
      * Brand mark rendered in the expanded brand row and collapsed rail.
      * Declared by this package's `sidebar` entry; deployments may replace
@@ -81,6 +83,16 @@ export interface SidebarPanelMetadata {
   order: number
   /** Row title and accessible name: resolved label, or the id when omitted. */
   label: string
+  /**
+   * Optional grouping label. Consecutive rows sharing a section render under
+   * one header; `undefined` rows render header-less. The sidebar owns the
+   * header because it owns the list.
+   *
+   * Spelled `| undefined` on purpose: this value is copied out of the
+   * type-erased registration options (which admit undefined under
+   * exactOptionalPropertyTypes), so the projection must accept it.
+   */
+  section?: string | undefined
 }
 
 /**
@@ -138,6 +150,7 @@ export type SidebarRootComponentProps =
   & PropsRenderSlots<
     | 'sidebar.brand.mark'
     | 'sidebar.brand.name'
+    | 'sidebar.toggle.badge'
     | 'sidebar.panellist'
     | 'sidebar.workspaces'
     | 'sidebar.settings'

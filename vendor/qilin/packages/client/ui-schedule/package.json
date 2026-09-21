@@ -1,7 +1,7 @@
 {
   "name": "@qilin/client-ui-schedule",
   "description": "Read-only active Schedule catalog in the Web Session header",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -34,8 +34,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/client/ui-schedule"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "publishConfig": {
     "access": "public"

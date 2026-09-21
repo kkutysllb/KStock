@@ -1,14 +1,17 @@
 {
   "name": "@qilin/session-reference",
   "description": "Cross-session snapshot references and durable untrusted model context (ctx.sessionReferenceResolver)",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/context/session-reference"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -46,7 +49,7 @@
   "dependencies": {
     "@qilin/brand": "workspace:^",
     "@qilin/util-values": "workspace:^",
-    "@deepseek-ai/schemastery": "workspace:^",
+    "@qilin/schemastery": "workspace:^",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
@@ -61,6 +64,7 @@
     "@qilin/session-query": "workspace:^",
     "@qilin/session-title": "workspace:^",
     "@qilin/spill": "workspace:^",
+    "@qilin/subagent": "workspace:^",
     "@qilin/system-prompt": "workspace:^",
     "@qilin/typert-protocol": "workspace:^"
   },
@@ -88,6 +92,7 @@
     "@qilin/session-query-sqlite": "workspace:^",
     "@qilin/session-title": "workspace:^",
     "@qilin/spill": "workspace:^",
+    "@qilin/subagent": "workspace:^",
     "@qilin/spill-local": "workspace:^",
     "@qilin/system-prompt": "workspace:^",
     "@qilin/tool-fs": "workspace:^",

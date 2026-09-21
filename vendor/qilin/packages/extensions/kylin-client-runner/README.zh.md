@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`qilin-kylin-client-runner` 让页面运行动态 Kylin 包的浏览器半：它应答 host 的运行请求、把浏览器半源码装载进页面成为活插件，并在 host 撤回该次运行时把它移除。人可以批准或拒绝一次运行——也可以直接启动一次——而本包回报的结果变成模型读到的 `cordis_run` 工具结果。激活时什么都不装载，刷新后也不恢复；一页只在有人应答运行请求或在此主动要求时，才运行动态包。
+`qilin-kylin-client-runner` 为程序调用方和现有浏览器控件运行进程内动态包的浏览器部分。它在请求获批或用户显式操作后加载定义，并在 Host 撤销运行时移除定义。页面刷新不会恢复定义。Creator UI 插件通过 Plugin Manager 使用已安装的 Client 模块。
 
 ## 目录
 
@@ -80,7 +80,7 @@ kind: "package-reference"
 当包级约定不够用时阅读以下页面。它们从浏览器半逐步进入发问的 host、其运行被应答的工具，以及渲染它的界面。
 
 - [Host runner](../kylin-host-runner/README.zh.md)——本包应答的注册表与运行往返。
-- [工具包](../tool-kylin/README.zh.md)——运行请求到达本页的模型侧工具。
+- [工具包](../tool-kylin/README.zh.md)——只读运行时 API 发现。
 - [UI 包](../ui-kylin/README.zh.md)——操作这个面的面板与卡片。
 - [extensions 子系统](../../../docs/subsystems/extensions.zh.md)——生成的 `ctx.dynamicCordisRunner` API 与 `cordis/*` 事件。
 - [客户端外壳与动态包 Agent Note](../../../.agents/notes/implemented/architecture/2026-08-15-client-shells-and-dynamic-packages.zh.md)——浏览器半的包归属与构建面。
@@ -90,7 +90,7 @@ kind: "package-reference"
 <a id="model-experience"></a>
 ## 模型体验
 
-### 由模型发起那次 run 的最终回答
+### Host 转发的运行结果
 
 #### 模型看到的内容
 
@@ -102,7 +102,7 @@ kind: "package-reference"
 
 #### KV Cache 影响
 
-只追加。回答只作为「本来就在途的那次请求」的工具结果到达模型、延长历史尾部；本包撰写的内容不会重写或重排更早的请求 token，因此原本可复用的前缀仍然可复用。同一定义的多次运行各自产出各自的结果，而不是替换更早那一个。
+Host steering 追加到会话历史；本包不改写更早的消息。
 
 ### run 落定之后的渲染期失败
 

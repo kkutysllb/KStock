@@ -2,7 +2,7 @@
 import { stripTypeScriptTypes } from 'node:module'
 import { isAbsolute } from 'node:path'
 import { Context } from '@qilin/kylin'
-import z from '@deepseek-ai/schemastery'
+import z from '@qilin/schemastery'
 import { PtcRuntime } from '@qilin/ptc-runtime'
 import type { PtcBindingNamespace, PtcJsonValue, PtcRunFailure, PtcRunRequest, PtcRunResult, PtcRunSandbox, PtcRunSpec } from '@qilin/ptc-runtime'
 import { MAX_TIMER_DELAY_MS, clampTimeout } from '@qilin/timeout'
@@ -225,9 +225,9 @@ export class NodePtcRuntime extends PtcRuntime {
       // oxlint-disable-next-line typescript/no-unnecessary-condition -- Cancellation can settle during awaited confinement.
       if (settled) return await result.promise
       if (confined !== undefined) sandbox.enforcement = confined.enforcement
-      // Native launchers need executable search and Windows system paths before the child installs its model environment.
+      // Electron needs its Node-mode selector until bootstrap; the child then removes it with other ambient values.
       const env: NodeJS.ProcessEnv = Object.fromEntries(Object.keys(process.env)
-        .filter(key => !STARTUP_ENVIRONMENT_NAMES.has(key.toUpperCase()))
+        .filter(key => !STARTUP_ENVIRONMENT_NAMES.has(key.toUpperCase()) && key.toUpperCase() !== 'ELECTRON_RUN_AS_NODE')
         .map(key => [key, undefined]))
       if (packaged) {
         env.QILIN_PTC_RUNTIME_NODE = '1'

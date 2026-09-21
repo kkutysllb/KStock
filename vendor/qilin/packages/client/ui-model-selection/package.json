@@ -1,14 +1,17 @@
 {
   "name": "@qilin/client-ui-model-selection",
   "description": "Model selection over the shared model catalog, Session projection, and session.selectModel",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/client/ui-model-selection"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -62,6 +65,7 @@
     "@types/react-dom": "~18.3.0",
     "@qilin/client-store": "workspace:^",
     "@qilin/session": "workspace:^",
+    "@qilin/util-values": "workspace:^",
     "@qilin/client-ui-renderer": "workspace:^",
     "@qilin/client-ui-session": "workspace:^",
     "clsx": "^2.1.1"

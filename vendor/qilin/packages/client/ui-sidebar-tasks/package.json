@@ -1,14 +1,17 @@
 {
   "name": "@qilin/client-ui-sidebar-tasks",
   "description": "Subagent topology and background-job tab type for the right Sidebar: this Session's direct-child catalog, the descendant totals its summary lineage records, and its live job list",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/client/ui-sidebar-tasks"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -45,7 +48,6 @@
     "@qilin/kylin": "workspace:^"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
     "@qilin/api-remotes": "workspace:^",
     "@qilin/api-session-controller": "workspace:^",
     "@qilin/client-locale": "workspace:^",
@@ -55,6 +57,8 @@
     "@qilin/client-ui-session": "workspace:^",
     "@qilin/client-ui-sidebar-right": "workspace:^",
     "@qilin/client-ui-slots": "workspace:^",
+    "@qilin/client-ui-workspace": "workspace:^",
+    "@qilin/kylin": "workspace:^",
     "@qilin/session": "workspace:^",
     "@qilin/subagent": "workspace:^",
     "@qilin/typert-protocol": "workspace:^",

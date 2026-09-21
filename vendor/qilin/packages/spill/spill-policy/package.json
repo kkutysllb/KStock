@@ -1,14 +1,17 @@
 {
   "name": "@qilin/spill-policy",
   "description": "Tool-result spill policy for the QiLin — replaces oversized plain-text tool results with a retained preview plus a spill-file path (no service API)",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/spill/spill-policy"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -40,7 +43,7 @@
     "@qilin/kylin": "workspace:^"
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@qilin/schemastery": "workspace:^"
   },
   "devDependencies": {
     "@qilin/agent": "workspace:^",

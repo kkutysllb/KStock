@@ -1,14 +1,17 @@
 {
   "name": "@qilin/host-open-in-app",
   "description": "Host half of open-in-app: resolved application catalog, icons, and the launch endpoint as three webServer routes",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/host/open-in-app"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -39,7 +42,7 @@
     "@qilin/launch-environment": "workspace:^",
     "@qilin/native-command": "workspace:^",
     "@qilin/subprocess": "workspace:^",
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@qilin/schemastery": "workspace:^"
   },
   "peerDependencies": {
     "@qilin/kylin": "workspace:^"

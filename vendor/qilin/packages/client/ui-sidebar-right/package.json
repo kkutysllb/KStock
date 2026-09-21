@@ -1,14 +1,17 @@
 {
   "name": "@qilin/client-ui-sidebar-right",
   "description": "Right Sidebar: the docking surface's session-bound state, its panel and header expand control, and the navigation service over it",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/client/ui-sidebar-right"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -32,8 +35,7 @@
         "@qilin/client-resources",
         "@qilin/client-ui-conversation",
         "@qilin/client-ui-layout",
-        "@qilin/client-ui-session",
-        "@qilin/util-workspace-path"
+        "@qilin/client-ui-session"
       ],
       "platform": "web"
     }
@@ -70,7 +72,8 @@
     "react-dom": "^18.2.0",
     "picomatch": "^4.0.4",
     "clsx": "^2.0.0",
-    "@qilin/util-crypto": "workspace:^"
+    "@qilin/util-crypto": "workspace:^",
+    "zod": "^4.4.3"
   },
   "files": [
     "lib/index.js",

@@ -1,5 +1,5 @@
 import { Context, Fiber, Inject } from '@qilin/kylin'
-import { deepEqual, isNullable } from '@deepseek-ai/cosmokit'
+import { deepEqual, isNullable } from '@qilin/cosmokit'
 import { Loader } from '../index.ts'
 import { EntryGroup } from './group.ts'
 import { EntryTree } from './tree.ts'
@@ -185,6 +185,6 @@ export class Entry {
     const plugin = this.loader.unwrapExports(exports)
     this._patchContext([])
     this.loader.showLog(this, 'apply')
-    this.fiber = this.ctx.registry.plugin(plugin, this.options.config, this.getOuterStack)
+    this.fiber = this.ctx.registry.plugin(plugin, this.options.config, this.getOuterStack).ctx.fiber
   }
 }

@@ -17,7 +17,7 @@ import { join } from 'node:path'
 import { SessionId } from '@qilin/session'
 import {
   acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
-  launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
+  launchWebScaffold, openSettingsDialog, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
 import { ZH_BROWSER_LOCALE, saveFailureShot } from './support.ts'
 
@@ -97,18 +97,24 @@ describe('web e2e: settings modal and General preferences', () => {
     await dialog.getByRole('button', { name: '模型' }).click()
     await expect.poll(() => dialog.getByRole('button', { name: '模型' }).getAttribute('aria-current'), { timeout: 5_000 }).toBe('true')
     expect(await dialog.getByRole('button', { name: '通用设置' }).getAttribute('aria-current')).toBeNull()
-    // Plugins is a read-only projection of the same assembled Loader tree.
-    // Capture one stable shipped row rather than the whole inventory so adding
-    // an unrelated plugin does not rewrite this surface's golden.
-    await dialog.getByRole('button', { name: '插件', exact: true }).click()
-    await dialog.getByRole('heading', { name: '插件', exact: true }).waitFor({ timeout: 10_000 })
+    // Built-in plugins: the section hosts the management tab (its own scenario
+    // files drive that tab over a profile runtime) and the read-only Plugin
+    // list, a projection of the same assembled Loader tree. The inventory tab
+    // carries the rows below; capture one stable shipped row rather than the
+    // whole inventory so adding an unrelated plugin does not rewrite this
+    // surface's golden.
+    await dialog.getByRole('button', { name: '内置插件', exact: true }).click()
+    await dialog.getByRole('heading', { name: '内置插件', exact: true }).waitFor({ timeout: 10_000 })
     await dialog.getByRole('tab', { name: '插件列表', exact: true }).click()
-    // The preset group opens first with its display-only switcher; the global
-    // plane starts collapsed and expands on demand.
+    // Both groups start collapsed; the preset group's header still carries its display-only switcher.
     const presetSwitcher = dialog.getByRole('button', { name: '选择要查看的 Agent 预设' })
     await presetSwitcher.waitFor({ timeout: 10_000 })
     // The shipped default's zh display name comes from the zh dictionaries.
     expect(await presetSwitcher.textContent()).toBe('标准模式（默认）')
+    const presetToggle = dialog.getByRole('button', { name: '会话插件', exact: true })
+    expect(await presetToggle.getAttribute('aria-expanded')).toBe('false')
+    expect(await dialog.locator('[data-plugin-scope="preset"] [data-plugin-entry]').count()).toBe(0)
+    await presetToggle.click()
     await dialog.getByRole('button', { name: /^全局/ }).click()
     const pluginRow = dialog.locator(PLUGIN_ROW_SELECTOR)
     await pluginRow.waitFor({ timeout: 10_000 })
@@ -121,10 +127,20 @@ describe('web e2e: settings modal and General preferences', () => {
     // presets took over included, preset compositions excluded.
     expect(await dialog.locator('[data-plugin-scope="global"] [data-plugin-entry]').count())
       .toBe(expectedPluginCount)
+    // The enablement tag is the row's collapsed status: an active fiber draws no
+    // dot, so no global row names the active phase. Guard the assertion against
+    // matching nothing because no row is enabled.
+    expect(await dialog.locator('[data-plugin-scope="global"] [data-plugin-entry] button[aria-label$="已启用"]').count())
+      .toBeGreaterThan(0)
+    expect(await dialog.locator('[data-plugin-scope="global"] [role="img"][aria-label="运行中"]').count()).toBe(0)
     expect(await dialog.locator('[data-plugin-count]').getAttribute('data-plugin-count'))
       .toBe(String(expectedPluginCount))
-    expect(await dialog.getByRole('button', { name: '插件', exact: true }).getAttribute('aria-current')).toBe('true')
+    expect(await dialog.getByRole('button', { name: '内置插件', exact: true }).getAttribute('aria-current')).toBe('true')
+    // Two contributions render the section's tab row; the inventory tab stays
+    // selected, and the management tab hosts the plugin manager.
+    expect(await dialog.getByRole('tab').count()).toBe(2)
     expect(await dialog.getByRole('tab', { name: '插件列表', exact: true }).getAttribute('aria-selected')).toBe('true')
+    expect(await dialog.getByRole('tab', { name: '插件管理', exact: true }).getAttribute('aria-selected')).toBe('false')
     expect(await dialog.getByRole('button', { name: '模型' }).getAttribute('aria-current')).toBeNull()
     const pluginsSnapshot = await captureStableAria(
       page,
@@ -274,7 +290,7 @@ describe('web e2e: settings modal and General preferences', () => {
         return {
           attr: document.body.hasAttribute('data-ds-dark-theme'),
           background: getComputedStyle(boot).backgroundColor,
-          colorScheme: document.documentElement.style.colorScheme,
+          colorScheme: getComputedStyle(document.documentElement).colorScheme,
         }
       })
       expect(state).toEqual({
@@ -651,11 +667,17 @@ describe('web e2e: settings modal and General preferences', () => {
       await dialog.getByRole('button', { name: 'English' }).waitFor({ timeout: 10_000 })
       // The plugin list resolves shipped preset names through the en
       // dictionaries instead of echoing the preset files' Chinese metadata.
-      await dialog.getByRole('button', { name: 'Plugins', exact: true }).click()
-      await dialog.getByRole('tab', { name: 'Plugin list', exact: true }).click()
+      await dialog.getByRole('button', { name: 'Built-in plugins', exact: true }).click()
       const presetSwitcher = dialog.getByRole('button', { name: 'Choose the agent preset to inspect' })
       await presetSwitcher.waitFor({ timeout: 10_000 })
       expect(await presetSwitcher.textContent()).toBe('Standard mode (default)')
+      // The plugin manager speaks the en dictionary too: its sidebar entry
+      // and the unavailable notice a scaffold without a profile runtime shows.
+      await enPage.keyboard.press('Escape')
+      await expect.poll(() => enPage.getByRole('dialog', { name: 'Settings' }).count(), { timeout: 5_000 }).toBe(0)
+      await enPage.getByRole('navigation', { name: 'Global panels' }).getByRole('button', { name: 'Plugins', exact: true }).click()
+      await enPage.getByText('This deployment runs without a manageable profile, so plugins cannot be installed or switched here.', { exact: true })
+        .waitFor({ timeout: 10_000 })
       // This page has no closing inventory spec to sweep its console, so the
       // scenario clears both tripwire channels itself.
       expect(enTripwire.pageErrors).toEqual([])
@@ -700,6 +722,25 @@ describe('web e2e: settings modal and General preferences', () => {
       await fresh.close()
     }
   }, 90_000)
+
+  it('hosts the management tab and the inventory as the Plugins section tab row', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-settings-plugins-tabs'))
+    const dialog = await openSettingsDialog(page, '账户', '设置')
+    await dialog.getByRole('button', { name: '内置插件', exact: true }).click()
+    await dialog.getByRole('heading', { name: '内置插件', exact: true }).waitFor({ timeout: 10_000 })
+    // Two contributions render the section's tab row; the management tab is
+    // selected first, and switching to the inventory shows the read-only list.
+    expect(await dialog.getByRole('tab').count()).toBe(2)
+    expect(await dialog.getByRole('tab', { name: '插件管理', exact: true }).getAttribute('aria-selected')).toBe('true')
+    await dialog.getByRole('tab', { name: '插件列表', exact: true }).click()
+    expect(await dialog.getByRole('tab', { name: '插件列表', exact: true }).getAttribute('aria-selected')).toBe('true')
+    expect(await dialog.getByRole('tab', { name: '插件管理', exact: true }).getAttribute('aria-selected')).toBe('false')
+    await dialog.getByRole('searchbox', { name: '搜索插件' }).waitFor({ timeout: 10_000 })
+    // Back to the management tab: the plugin manager's own cards page.
+    await dialog.getByRole('tab', { name: '插件管理', exact: true }).click()
+    await dialog.locator('[data-plugin-panel]').getByRole('heading', { name: '插件', exact: true }).waitFor({ timeout: 10_000 })
+    expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     expect(tripwire.warnings).toEqual([])

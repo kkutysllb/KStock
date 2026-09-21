@@ -1,14 +1,17 @@
 {
   "name": "@qilin/api-remotes",
   "description": "Remote BFF assembly for application-selected Host capabilities",
-  "version": "3.0.0",
+  "version": "3.0.4",
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "url": "git+https://github.com/kkutysllb/QiLin.git",
     "directory": "packages/api/remotes"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -71,7 +74,7 @@
     "@qilin/file-reference": "workspace:^",
     "@qilin/goal": "workspace:^",
     "@qilin/host-plugin-inventory": "workspace:^",
-    "@qilin/host-plugin-manager": "workspace:^",
+    "@qilin/plugin-manager": "workspace:^",
     "@qilin/llm": "workspace:^",
     "@qilin/mcp-servers": "workspace:^",
     "@qilin/message-feedback": "workspace:^",
@@ -89,6 +92,7 @@
     "@qilin/api-workspace-files": "workspace:^",
     "zod": "^4.4.3",
     "@qilin/command-feedback": "workspace:^",
-    "@qilin/api-terminal-controller": "workspace:^"
+    "@qilin/api-terminal-controller": "workspace:^",
+    "@qilin/office-to-pdf": "workspace:^"
   }
 }

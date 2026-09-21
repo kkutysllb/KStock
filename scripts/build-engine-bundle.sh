@@ -4,7 +4,11 @@
 # 产物: dist-exe/
 #   kstock-engine(.exe)        引擎单文件可执行（含 Node 24 运行时与全部依赖，
 #                              上游 build-exe-for-python-sdk 产物改名）
-#   kstock-engine-*-rg 等       引擎伴随二进制（ripgrep / spawn-helper）
+#   kstock-engine-rg 等         引擎伴随二进制（ripgrep / spawn-helper）
+#   kstock-engine-office/       引擎 office sidecar 目录（3.0.2+ 引擎新增：
+#                              LibreOffice 转换依赖闭包，SEA 运行时按
+#                              <exe>-office/package.json 解析，缺目录则
+#                              web-app bundle 的 office-to-pdf 插件加载失败）
 #   plugins/{web,quant,client-brand}/   KStock 插件包（lib 产物 + 清单）
 #   presets/                   KStock agent preset 目录（kstock/presets 原样拷贝，
 #                              含随行技能目录 kstock-investor/skills/）
@@ -68,14 +72,20 @@ fi
 echo "==> 组装 $OUT_DIR"
 mkdir -p "$OUT_DIR/plugins" "$OUT_DIR/skills"
 
-# 引擎可执行 + 伴随二进制，统一改名为 kstock-engine*（壳按此名解析）。
-rm -f "$OUT_DIR"/kstock-engine*
+# 引擎可执行 + 伴随产物，统一改名为 kstock-engine*（壳按此名解析）。
+# 文件类（exe/-rg/-spawn-helper）直接 cp；目录类（-office sidecar）cp -R
+# 整树复制，清理也用 -rf 覆盖目录残留。
+rm -rf "$OUT_DIR"/kstock-engine*
 for suffix_file in "$ENGINE_REPO/dist-exe/$UPSTREAM_EXE_BASE" "$ENGINE_REPO/dist-exe/$UPSTREAM_EXE_BASE"-*; do
   [ -e "$suffix_file" ] || continue
   base="$(basename "$suffix_file")"
   suffix="${base#"$UPSTREAM_EXE_BASE"}"
-  cp "$suffix_file" "$OUT_DIR/kstock-engine""$suffix"
-  chmod +x "$OUT_DIR/kstock-engine""$suffix"
+  if [ -d "$suffix_file" ]; then
+    cp -R "$suffix_file" "$OUT_DIR/kstock-engine""$suffix"
+  else
+    cp "$suffix_file" "$OUT_DIR/kstock-engine""$suffix"
+    chmod +x "$OUT_DIR/kstock-engine""$suffix"
+  fi
 done
 [ -f "$OUT_DIR/kstock-engine" ] || { echo "!! 引擎可执行缺失：$ENGINE_REPO/dist-exe/$UPSTREAM_EXE_BASE" >&2; exit 1; }
 
@@ -111,6 +121,8 @@ case "$(uname -s)" in
     if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
       echo "==> 签名 macOS 引擎二进制（Developer ID + timestamp + hardened runtime）"
       for MACHO in "$OUT_DIR"/kstock-engine*; do
+        # 跳过 office sidecar 等目录（codesign 只签可执行文件）。
+        [ -f "$MACHO" ] || continue
         codesign --force --timestamp --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$MACHO"
       done
       codesign --verify --strict "$OUT_DIR/kstock-engine"

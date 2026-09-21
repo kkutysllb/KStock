@@ -80,6 +80,29 @@ describe('a-priori root and declaration gate', () => {
 })
 
 describe('lifecycle cascade (one axis)', () => {
+  it('publishes Factory child mutations only after every sibling declaration is installed', () => {
+    const core = new SlotCore()
+    const observed: unknown[] = []
+    core.onMutate((key) => {
+      if (key === 'test.single') observed.push(core.specDynamic('test.session'))
+    })
+    const registerFactory = core.registerFactory as unknown as (
+      options: object,
+      component: unknown,
+    ) => () => void
+
+    registerFactory({
+      name: 'test.atomic-factory',
+      scope: 'root',
+      children: {
+        'test.single': { kind: 'single', scope: 'root' },
+        'test.session': { kind: 'single', scope: 'session' },
+      },
+    }, Comp)
+
+    expect(observed).toEqual([{ kind: 'single', scope: 'session' }])
+  })
+
   it('disposing a declaring entry collapses child slots and their contributions recursively', () => {
     const core = new SlotCore()
     const disposeFrame = mountFrame(core)
@@ -143,6 +166,14 @@ describe('kind semantics', () => {
     // @ts-expect-error list registration requires options.id
     expect(() => core.register({ name: 'test.list' }, Comp)).toThrow('requires options.id')
     expect(core.entries('test.list').map(e => e.options.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('list: section lands on the stored entry for grouped rendering', () => {
+    const core = new SlotCore()
+    mountFrame(core)
+    core.register({ name: 'test.list', id: 'a', section: 'Group' }, Comp)
+    core.register({ name: 'test.list', id: 'b' }, Comp)
+    expect(core.entries('test.list').map(e => e.options.section)).toEqual(['Group', undefined])
   })
 
   it('chain: missing select throws; select and priority land on the stored entry', () => {
