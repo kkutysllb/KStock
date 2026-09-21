@@ -673,6 +673,23 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                                   <span className="ksq-item-meta">持仓 {day.holdings.length}</span>
                                 </summary>
                                 <div className="ksq-rebalance-body">
+                                  <div className="ksq-rebalance-dayhead">
+                                    <button
+                                      className="ksq-linkbtn"
+                                      type="button"
+                                      onClick={() => exportCsv(
+                                        `调仓-${selected?.name ?? 'strategy'}-${day.date}.csv`,
+                                        ['类型', '代码', '数量'],
+                                        [
+                                          ...day.buys.map(item => ['换入', item.code, String(item.quantity)]),
+                                          ...day.sells.map(item => ['换出', item.code, String(item.quantity)]),
+                                          ...day.holdings.map(item => ['持仓', item.code, String(item.quantity)]),
+                                        ],
+                                      )}
+                                    >
+                                      导出本日 CSV
+                                    </button>
+                                  </div>
                                   <div className="ksq-rebalance-cols">
                                     {day.buys.length > 0 && (
                                       <div className="ksq-rebalance-side">

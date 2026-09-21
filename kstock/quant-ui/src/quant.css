@@ -1174,6 +1174,7 @@ a.ksq-news-title:hover {
 
 .ksq-rebalance-body { padding: 6px 10px 10px 22px; display: flex; flex-direction: column; gap: 6px; }
 
+.ksq-rebalance-dayhead { display: flex; justify-content: flex-end; }
 .ksq-rebalance-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 720px) { .ksq-rebalance-cols { grid-template-columns: 1fr; } }
 .ksq-rebalance-side p { margin: 0 0 4px; font-size: 12px; font-weight: 500; }
