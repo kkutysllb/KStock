@@ -1445,6 +1445,8 @@ _CHAN_RETURN_REPLACEMENT = """        # KStock patch: 分型列表（窗口内�
         fenxing_marks = []
         for fx in result.fenxings:
             k = fx.kline
+            if k is None:
+                continue
             if window_start is not None and k.timestamp < window_start:
                 continue
             fenxing_marks.append({
@@ -1455,6 +1457,9 @@ _CHAN_RETURN_REPLACEMENT = """        # KStock patch: 分型列表（窗口内�
             })
         backchi_details = []
         for bc in result.backchi_analyses:
+            # 未完成的段（current/previous_seg 为 None）跳过，防属性访问崩。
+            if bc.current_seg is None or bc.previous_seg is None:
+                continue
             try:
                 valid = bc.is_valid_backchi()
             except Exception:
