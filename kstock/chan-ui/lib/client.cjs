@@ -7,7 +7,7 @@ window.__ModuleLoader__.load({
 		let react = require("react");
 		let react_jsx_runtime = require("react/jsx-runtime");
 		//#region ../quant-ui/src/quant.css?raw
-		var quant_default = "/* KStock 量化工作台面板样式（@kstock/quant 客户端半端）。\n *\n * 全部类名以 ksq- 前缀隔离；颜色走引擎 dsw 别名 token（随明暗主题\n * 自动切换），强调色沿用 KStock 品牌绿。由客户端 bundle 以 ?raw 内联，\n * apply() 时注入 <style data-kstock=\"quant-pages\">。 */\n\n.ksq-page {\n  height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  color: var(--dsw-alias-label-primary);\n  background: color-mix(in srgb, var(--dsw-alias-bg-base) 88%, transparent);\n}\n\n/* ── 顶部：标题 + 库切换 tab ─────────────────────────────── */\n\n.ksq-topbar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 16px;\n  padding: 14px 22px 0;\n  flex: none;\n}\n\n.ksq-title {\n  display: flex;\n  align-items: baseline;\n  gap: 10px;\n  min-width: 0;\n}\n\n.ksq-title strong {\n  font-size: 17px;\n  letter-spacing: 0.2px;\n}\n\n.ksq-title span {\n  font-size: 12px;\n  color: var(--dsw-alias-label-tertiary);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n\n.ksq-topbar-actions {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  flex: none;\n}\n\n.ksq-count {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  font-size: 12px;\n  color: var(--dsw-alias-label-secondary);\n}\n\n.ksq-tabs {\n  display: flex;\n  gap: 4px;\n  padding: 10px 22px 0;\n  border-bottom: 1px solid var(--dsw-alias-border-l2);\n  flex: none;\n}\n\n.ksq-tab {\n  appearance: none;\n  border: none;\n  background: transparent;\n  color: var(--dsw-alias-label-secondary);\n  font-size: 13px;\n  padding: 8px 14px 10px;\n  cursor: pointer;\n  border-bottom: 2px solid transparent;\n  margin-bottom: -1px;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n}\n\n.ksq-tab:hover { color: var(--dsw-alias-label-primary); }\n\n.ksq-tab.active {\n  color: var(--dsw-alias-label-primary);\n  border-bottom-color: var(--dsw-alias-brand-primary);\n  font-weight: 600;\n}\n\n/* ── 通用控件 ─────────────────────────────────────────────── */\n\n.ksq-iconbtn {\n  appearance: none;\n  border: 1px solid transparent;\n  background: transparent;\n  color: var(--dsw-alias-label-secondary);\n  width: 28px;\n  height: 28px;\n  border-radius: 7px;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n}\n\n.ksq-iconbtn:hover {\n  background: var(--dsw-alias-interactive-bg-hover);\n  color: var(--dsw-alias-label-primary);\n}\n\n.ksq-iconbtn:disabled { opacity: 0.5; cursor: default; }\n.ksq-iconbtn.danger:hover { color: #e64646; }\n\n.ksq-btn {\n  appearance: none;\n  border: 1px solid var(--dsw-alias-border-l2);\n  background: var(--dsw-alias-bg-layer-2);\n  color: var(--dsw-alias-label-primary);\n  font-size: 12px;\n  padding: 5px 12px;\n  border-radius: 7px;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n}\n\n.ksq-btn:hover { background: var(--dsw-alias-interactive-bg-hover); }\n\n.ksq-linkbtn {\n  appearance: none;\n  border: none;\n  background: transparent;\n  color: var(--dsw-alias-link);\n  font-size: 12px;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  padding: 0;\n}\n\n.ksq-linkbtn:hover { text-decoration: underline; }\n\n.ksq-search {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  border: 1px solid var(--dsw-alias-border-l2);\n  background: var(--dsw-alias-bg-layer-1);\n  border-radius: 8px;\n  padding: 6px 10px;\n  color: var(--dsw-alias-label-tertiary);\n  min-width: 260px;\n}\n\n.ksq-search input {\n  border: none;\n  outline: none;\n  background: transparent;\n  color: var(--dsw-alias-label-primary);\n  font-size: 13px;\n  flex: 1;\n}\n\n.ksq-search input::placeholder { color: var(--dsw-alias-label-tertiary); }\n\n.ksq-spin { animation: ksq-rotate 0.9s linear infinite; }\n\n@keyframes ksq-rotate {\n  to { transform: rotate(360deg); }\n}\n\n.ksq-error {\n  margin: 10px 22px 0;\n  padding: 8px 12px;\n  border: 1px solid rgba(230, 70, 70, 0.4);\n  border-radius: 8px;\n  background: rgba(230, 70, 70, 0.08);\n  color: #e64646;\n  font-size: 12.5px;\n}\n\n.ksq-loading {\n  margin: 24px 22px;\n  color: var(--dsw-alias-label-tertiary);\n  font-size: 13px;\n}\n\n.ksq-empty {\n  margin: 40px auto;\n  max-width: 420px;\n  text-align: center;\n  color: var(--dsw-alias-label-tertiary);\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 8px;\n  font-size: 13px;\n}\n\n.ksq-empty strong { color: var(--dsw-alias-label-secondary); font-size: 14px; }\n\n.ksq-mono {\n  font-family: ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, monospace;\n  font-size: 0.92em;\n}\n\n/* 数值语义色 */\n.ksq-up { color: #31c7a2; }\n.ksq-down { color: #e64646; }\n.ksq-warn { color: #e8a33d; }\n\n/* ── 数据表 ─────────────────────────────────────────────── */\n\n.ksq-table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: 12.5px;\n}\n\n.ksq-table th {\n  text-align: left;\n  font-weight: 500;\n  color: var(--dsw-alias-label-tertiary);\n  padding: 6px 10px;\n  border-bottom: 1px solid var(--dsw-alias-border-l2);\n  white-space: nowrap;\n}\n\n.ksq-table td {\n  padding: 7px 10px;\n  border-bottom: 1px solid var(--dsw-alias-border-l3);\n  color: var(--dsw-alias-label-primary);\n  white-space: nowrap;\n}\n\n.ksq-table td.num { text-align: right; font-variant-numeric: tabular-nums; }\n.ksq-table tr.selected td { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); }\n.ksq-table input[type=\"checkbox\"] { accent-color: var(--dsw-alias-brand-primary); }\n\n/* 长文本单元格裁剪（agent 写入的股票池/口径描述可达数百字，nowrap 下会把\n   操作列挤出视口）：max-width + ellipsis，全文走 title 悬浮。 */\n.ksq-table td.ksq-cell-clip {\n  max-width: 230px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n\n/* 表格横向滚动兜底：窗口再窄操作列（报告/看板）也始终可达，不整页溢出。 */\n.ksq-table-wrap { overflow-x: auto; }\n.ksq-table-wrap .ksq-table { min-width: 640px; }\n\n/* ── 内容区骨架 ─────────────────────────────────────────── */\n\n.ksq-body {\n  flex: 1;\n  overflow: auto;\n  padding: 14px 22px 26px;\n}\n\n.ksq-toolbar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  margin-bottom: 14px;\n}\n\n/* ── 策略/因子/选股：列表 + 详情双栏 ────────────────────── */\n\n.ksq-split {\n  display: grid;\n  grid-template-columns: 264px 1fr;\n  gap: 16px;\n  align-items: start;\n}\n\n.ksq-list {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  position: sticky;\n  top: 0;\n}\n\n.ksq-list-item {\n  appearance: none;\n  text-align: left;\n  border: 1px solid var(--dsw-alias-border-l3);\n  background: var(--dsw-alias-bg-layer-1);\n  border-radius: 10px;\n  padding: 9px 12px;\n  cursor: pointer;\n  color: var(--dsw-alias-label-primary);\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n\n.ksq-list-item:hover { border-color: var(--dsw-alias-border-l2); }\n\n.ksq-list-item.active {\n  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent);\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, var(--dsw-alias-bg-layer-1));\n}\n\n.ksq-item-name {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  font-size: 13px;\n  font-weight: 600;\n  overflow: hidden;\n}\n\n.ksq-item-name > span.ksq-name-text {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.ksq-dot {\n  width: 7px;\n  height: 7px;\n  border-radius: 50%;\n  flex: none;\n}\n\n.ksq-dot.tone-live { background: #31c7a2; }\n.ksq-dot.tone-idle { background: #8f98a2; }\n.ksq-dot.tone-bad { background: #e64646; }\n\n.ksq-item-meta {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n  font-size: 11.5px;\n  color: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-chip {\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 999px;\n  padding: 0 7px;\n  font-size: 11px;\n  line-height: 18px;\n}\n\n.ksq-badge {\n  border-radius: 5px;\n  padding: 1px 7px;\n  font-size: 11px;\n  line-height: 18px;\n  flex: none;\n}\n\n.ksq-badge.tone-live {\n  color: #31c7a2;\n  background: rgba(49, 199, 162, 0.12);\n}\n\n.ksq-badge.tone-idle {\n  color: var(--dsw-alias-label-secondary);\n  background: var(--dsw-alias-bg-layer-3);\n}\n\n.ksq-badge.tone-bad {\n  color: #e64646;\n  background: rgba(230, 70, 70, 0.1);\n}\n\n.ksq-detail { min-width: 0; display: flex; flex-direction: column; gap: 14px; }\n\n.ksq-hint {\n  color: var(--dsw-alias-label-tertiary);\n  font-size: 12.5px;\n  margin: 6px 0;\n}\n\n.ksq-identity { border-bottom: 1px solid var(--dsw-alias-border-l3); padding-bottom: 10px; }\n\n.ksq-identity-head {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n}\n\n.ksq-identity-head h2 { font-size: 16px; margin: 0; }\n\n.ksq-hypothesis {\n  margin: 6px 0 4px;\n  font-size: 12.5px;\n  color: var(--dsw-alias-label-secondary);\n  line-height: 1.6;\n}\n\n.ksq-section-title {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--dsw-alias-label-primary);\n  margin: 4px 0 8px;\n}\n\n/* 版本时间线 */\n.ksq-versions { display: flex; flex-direction: column; gap: 8px; padding-left: 14px; }\n\n.ksq-version {\n  position: relative;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n  background: var(--dsw-alias-bg-layer-1);\n  padding: 9px 12px;\n}\n\n.ksq-version.latest { border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 45%, transparent); }\n\n.ksq-version::before {\n  content: \"\";\n  position: absolute;\n  left: -11px;\n  top: 16px;\n  width: 7px;\n  height: 7px;\n  border-radius: 50%;\n  background: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-version.latest::before { background: var(--dsw-alias-brand-primary); }\n\n.ksq-version-head {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  font-size: 12.5px;\n}\n\n.ksq-version-note {\n  margin: 5px 0 0;\n  font-size: 12px;\n  color: var(--dsw-alias-label-secondary);\n}\n\n/* 对比块 */\n.ksq-compare {\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 12px;\n  background: var(--dsw-alias-bg-layer-1);\n  padding: 12px 14px;\n}\n\n.ksq-compare h3 { font-size: 13px; margin: 0 0 8px; }\n\n.ksq-note {\n  font-size: 12px;\n  color: var(--dsw-alias-label-tertiary);\n  margin: 4px 0;\n}\n\n.ksq-chart { margin-top: 10px; }\n\n.ksq-chart h4 {\n  font-size: 12px;\n  font-weight: 500;\n  color: var(--dsw-alias-label-secondary);\n  margin: 0 0 6px;\n}\n\n.ksq-chart svg { max-width: 100%; height: auto; }\n\n/* 选股 criteria 摘要 */\n.ksq-criteria {\n  font-size: 12px;\n  color: var(--dsw-alias-label-secondary);\n  background: var(--dsw-alias-bg-layer-2);\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 8px;\n  padding: 8px 10px;\n  margin: 6px 0 0;\n  white-space: pre-wrap;\n  word-break: break-word;\n  max-height: 160px;\n  overflow: auto;\n}\n\n/* 选股 picks 表 */\n.ksq-picks-meta { display: flex; gap: 14px; font-size: 12px; color: var(--dsw-alias-label-tertiary); margin: 6px 0; }\n\n/* ── 报告库 ─────────────────────────────────────────────── */\n\n.ksq-report-group { margin-bottom: 16px; }\n\n.ksq-report-heading {\n  appearance: none;\n  border: none;\n  background: transparent;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  color: var(--dsw-alias-label-secondary);\n  font-size: 13px;\n  cursor: pointer;\n  padding: 4px 0 8px;\n  width: 100%;\n}\n\n.ksq-report-heading h2 { font-size: 13px; margin: 0; font-weight: 600; color: var(--dsw-alias-label-primary); }\n.ksq-report-heading span { color: var(--dsw-alias-label-tertiary); font-size: 12px; }\n\n.ksq-report-grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));\n  gap: 10px;\n}\n\n.ksq-report-card {\n  display: flex;\n  gap: 12px;\n  align-items: flex-start;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 12px;\n  background: var(--dsw-alias-bg-layer-1);\n  padding: 12px 14px;\n}\n\n.ksq-report-icon {\n  flex: none;\n  width: 34px;\n  height: 34px;\n  border-radius: 9px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: var(--dsw-alias-brand-primary);\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent);\n}\n\n.ksq-report-copy { flex: 1; min-width: 0; }\n\n.ksq-report-copy h3 {\n  margin: 0 0 4px;\n  font-size: 13.5px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.ksq-report-meta {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 4px 12px;\n  font-size: 11.5px;\n  color: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-report-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; flex: none; }\n\n/* 报告预览浮层 */\n.ksq-overlay {\n  position: fixed;\n  inset: 0;\n  z-index: 80;\n  background: rgba(3, 13, 11, 0.72);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  padding: 40px;\n}\n\n.ksq-dialog {\n  width: min(1080px, 100%);\n  height: 100%;\n  display: flex;\n  flex-direction: column;\n  border-radius: 14px;\n  overflow: hidden;\n  background: var(--dsw-alias-bg-layer-1);\n  border: 1px solid var(--dsw-alias-border-l2);\n}\n\n.ksq-dialog-bar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  padding: 10px 14px;\n  border-bottom: 1px solid var(--dsw-alias-border-l2);\n  flex: none;\n}\n\n.ksq-dialog-bar strong {\n  font-size: 13px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.ksq-dialog iframe {\n  flex: 1;\n  border: none;\n  background: #fff;\n}\n\n/* 确认弹窗 */\n.ksq-confirm {\n  width: min(420px, 100%);\n  height: auto;\n  border-radius: 14px;\n  padding: 18px;\n  gap: 10px;\n}\n\n.ksq-confirm h3 { margin: 0; font-size: 15px; }\n.ksq-confirm p { margin: 0; font-size: 12.5px; color: var(--dsw-alias-label-secondary); line-height: 1.6; }\n\n.ksq-confirm-actions {\n  display: flex;\n  justify-content: flex-end;\n  gap: 8px;\n  margin-top: 8px;\n}\n\n.ksq-btn.danger {\n  color: #fff;\n  background: #c0392b;\n  border-color: #c0392b;\n}\n\n.ksq-btn.danger:hover { background: #a93226; }\n\n/* 复制成功提示 */\n.ksq-toast {\n  position: fixed;\n  bottom: 28px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 90;\n  /* 自洽深色药丸：不依赖宿主 toast token（--dsw-alias-toast-bg 在宿主不存在，\n     回退 bg-overlay 是遮罩 scrim 色——黑条不可读）。深底浅字双主题通用。 */\n  background: rgba(3, 13, 11, 0.92);\n  color: #e8edef;\n  border: 1px solid rgba(255, 255, 255, 0.1);\n  font-size: 12.5px;\n  border-radius: 999px;\n  padding: 8px 16px;\n  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);\n}\n\n/* ── 财经新闻面板（@kstock/client-news）────────────────────────── */\n\n.ksq-news-list {\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n  padding-bottom: 8px;\n}\n\n.ksq-news-item {\n  position: relative;\n  padding: 12px 16px 12px 20px;\n  border: 1px solid var(--dsw-alias-border-l2);\n  border-radius: 12px;\n  background: var(--dsw-alias-bg-layer-2);\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  overflow: hidden;\n  transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;\n}\n\n/* 左侧品牌色细轨：常亮 55%，hover 点满。 */\n.ksq-news-item::before {\n  content: '';\n  position: absolute;\n  left: 0;\n  top: 0;\n  bottom: 0;\n  width: 3px;\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 100%, transparent);\n  opacity: .45;\n  transition: opacity .15s ease;\n}\n\n.ksq-news-item:hover {\n  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 35%, var(--dsw-alias-border-l2));\n  transform: translateY(-1px);\n  box-shadow: 0 4px 16px color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);\n}\n\n.ksq-news-item:hover::before {\n  opacity: 1;\n}\n\n.ksq-news-meta {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  font-size: 11.5px;\n  color: var(--dsw-alias-label-tertiary);\n  font-variant-numeric: tabular-nums;\n}\n\n.ksq-news-source {\n  padding: 1.5px 8px;\n  border-radius: 99px;\n  font-size: 11px;\n  font-weight: 500;\n  letter-spacing: .3px;\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 13%, transparent);\n  color: var(--dsw-alias-brand-primary);\n  white-space: nowrap;\n}\n\n.ksq-news-dot {\n  width: 3px;\n  height: 3px;\n  border-radius: 50%;\n  background: currentColor;\n  opacity: .55;\n  flex: none;\n}\n\n.ksq-news-time {\n  margin-left: auto;\n  white-space: nowrap;\n}\n\n.ksq-news-title {\n  font-size: 14px;\n  font-weight: 600;\n  line-height: 1.5;\n  color: var(--dsw-alias-label-primary);\n  text-decoration: none;\n}\n\na.ksq-news-title:hover {\n  color: var(--dsw-alias-link);\n}\n\n.ksq-news-summary {\n  margin: 0;\n  font-size: 12.5px;\n  line-height: 1.6;\n  color: var(--dsw-alias-label-secondary);\n  display: -webkit-box;\n  -webkit-line-clamp: 2;\n  -webkit-box-orient: vertical;\n  overflow: hidden;\n}\n\n.ksq-news-toolbar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  padding: 10px 22px 0;\n  flex: none;\n}\n\n.ksq-news-toolbar .ksq-tabs { margin-bottom: 0; }\n\n.ksq-news-toolbar-right {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  min-width: 0;\n}\n\n.ksq-news-toolbar-right .ksq-search { margin-bottom: 0; flex: 1; min-width: 220px; max-width: 460px; }\n\n.ksq-news-watchedit {\n  padding: 8px 22px 0;\n  flex: none;\n}\n\n.ksq-news-watchedit input {\n  width: 100%;\n  box-sizing: border-box;\n  padding: 7px 12px;\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 40%, var(--dsw-alias-border-l2));\n  background: var(--dsw-alias-bg-layer-2);\n  color: var(--dsw-alias-label-primary);\n  font-size: 13px;\n}\n\n/* 双栏：主列表 + 统计侧栏（窄面板时侧栏隐藏）。 */\n.ksq-news-split {\n  display: flex;\n  gap: 20px;\n  align-items: flex-start;\n  width: 100%;\n  max-width: 1360px;\n  margin: 0 auto;\n}\n\n.ksq-news-main {\n  flex: 1;\n  min-width: 0;\n}\n\n.ksq-news-item.read { opacity: .58; }\n.ksq-news-item.read:hover { opacity: 1; }\n\n.ksq-news-item.watched {\n  border-color: color-mix(in srgb, #f59e0b 45%, var(--dsw-alias-border-l2));\n  background: color-mix(in srgb, #f59e0b 5%, var(--dsw-alias-bg-layer-2));\n}\n\n.ksq-news-item.watched::before {\n  background: #f59e0b;\n}\n\n.ksq-news-watchflag {\n  padding: 1px 7px;\n  border-radius: 99px;\n  font-size: 10.5px;\n  font-weight: 600;\n  letter-spacing: .5px;\n  color: #f59e0b;\n  background: color-mix(in srgb, #f59e0b 16%, transparent);\n}\n\n.ksq-news-stocks {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n\n.ksq-news-stocktag {\n  all: unset;\n  box-sizing: border-box;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  padding: 2px 9px;\n  border-radius: 6px;\n  font-size: 12px;\n  font-weight: 500;\n  color: var(--dsw-alias-label-primary);\n  background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);\n  border: 1px solid var(--dsw-alias-border-l2);\n  transition: border-color .12s ease, background .12s ease;\n}\n\n.ksq-news-stocktag:hover {\n  border-color: var(--dsw-alias-brand-primary);\n  color: var(--dsw-alias-brand-primary);\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);\n}\n\n.ksq-news-actions {\n  display: flex;\n  justify-content: flex-end;\n  font-size: 12.5px;\n}\n\n/* 统计侧栏 */\n.ksq-news-stats {\n  flex: none;\n  width: 220px;\n  display: flex;\n  flex-direction: column;\n  gap: 14px;\n  position: sticky;\n  top: 0;\n}\n\n@media (max-width: 980px) {\n  .ksq-news-stats { display: none; }\n  .ksq-news-split { display: block; }\n}\n\n.ksq-news-stats-block {\n  border: 1px solid var(--dsw-alias-border-l2);\n  border-radius: 12px;\n  background: var(--dsw-alias-bg-layer-2);\n  padding: 12px 14px;\n}\n\n.ksq-news-stats-head {\n  font-size: 13px;\n  font-weight: 600;\n  margin-bottom: 10px;\n  display: flex;\n  justify-content: space-between;\n  align-items: baseline;\n}\n\n.ksq-news-stats-head span {\n  font-size: 11px;\n  font-weight: 400;\n  color: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-news-stats-empty {\n  margin: 0;\n  font-size: 12px;\n  color: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-news-trending {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n\n.ksq-news-trendword {\n  all: unset;\n  box-sizing: border-box;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  padding: 2.5px 9px;\n  border-radius: 99px;\n  font-size: 12px;\n  color: var(--dsw-alias-label-secondary);\n  background: color-mix(in srgb, var(--dsw-alias-label-primary) 6%, transparent);\n  border: 1px solid var(--dsw-alias-border-l2);\n}\n\n.ksq-news-trendword:hover {\n  color: var(--dsw-alias-brand-primary);\n  border-color: var(--dsw-alias-brand-primary);\n}\n\n.ksq-news-trendword em {\n  font-style: normal;\n  font-size: 10.5px;\n  color: var(--dsw-alias-label-tertiary);\n  font-variant-numeric: tabular-nums;\n}\n\n.ksq-news-freq {\n  display: flex;\n  align-items: flex-end;\n  gap: 2px;\n  height: 50px;\n}\n\n.ksq-news-freq-bar {\n  flex: 1;\n  min-width: 3px;\n  border-radius: 2px 2px 0 0;\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent);\n}\n\n.ksq-news-freq-bar:hover {\n  background: var(--dsw-alias-brand-primary);\n}\n\n/* ── 联动任务目标选择菜单（§26-10，新闻/选股库共用）────────────── */\n\n.ksq-target-overlay { z-index: 95; padding: 40px; background: rgba(3, 13, 11, 0.45); }\n\n.ksq-target-menu {\n  width: min(480px, 100%);\n  max-height: min(70vh, 560px);\n  overflow-y: auto;\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  background: var(--dsw-alias-bg-layer-1);\n  border: 1px solid var(--dsw-alias-border-l2);\n  border-radius: 12px;\n  padding: 12px;\n  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);\n}\n\n.ksq-target-head {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  padding: 4px 8px 10px;\n  border-bottom: 1px solid var(--dsw-alias-border-l3);\n  margin-bottom: 6px;\n}\n\n.ksq-target-item {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  width: 100%;\n  padding: 9px 10px;\n  border: none;\n  border-radius: 8px;\n  background: transparent;\n  color: var(--dsw-alias-label-primary);\n  text-align: left;\n  cursor: pointer;\n  font-size: 13px;\n}\n\n.ksq-target-item:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent); }\n.ksq-target-item:disabled { opacity: 0.55; cursor: default; }\n.ksq-target-item.last { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent); }\n\n.ksq-target-name { font-weight: 500; flex: none; }\n.ksq-target-path {\n  flex: 1;\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;\n  font-size: 11.5px;\n  color: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-target-error { color: #e64646; font-size: 12.5px; margin: 4px 8px; }\n.ksq-target-cancel { align-self: flex-end; margin-top: 4px; }\n\n/* ── 选股库：口径芯片（P4）+ 命中趋势（P3）────────────────────── */\n\n.ksq-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 2px; }\n.ksq-chips .ksq-chip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }\n\n.ksq-trend {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  padding: 8px 10px;\n  margin: 6px 0 10px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n}\n\n.ksq-trend-label {\n  flex: none;\n  font-size: 11.5px;\n  color: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-trend-bars {\n  flex: 1;\n  display: flex;\n  align-items: flex-end;\n  justify-content: flex-start;\n  gap: 4px;\n  height: 44px;\n  min-width: 0;\n}\n\n.ksq-trend-col {\n  display: flex;\n  align-items: flex-end;\n  gap: 2px;\n  height: 100%;\n  cursor: default;\n}\n\n.ksq-trend-bar {\n  width: 9px;\n  min-height: 3px;\n  border-radius: 2px 2px 0 0;\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 60%, transparent);\n}\n\n.ksq-trend-bar:hover { background: var(--dsw-alias-brand-primary); }\n\n.ksq-trend-bar.consensus { background: #31c7a2; }\n.ksq-trend-bar.consensus:hover { background: #22a06b; }\n\n/* ── 因子库：跨因子概览（F3，IC 均值零轴双向横条）──────────────── */\n\n.ksq-factors-overview {\n  display: flex;\n  align-items: flex-start;\n  gap: 10px;\n  padding: 10px 12px;\n  margin-bottom: 12px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n}\n\n.ksq-fo-rows { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }\n\n.ksq-fo-row {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  width: 100%;\n  padding: 3px 6px;\n  border: none;\n  border-radius: 6px;\n  background: transparent;\n  color: var(--dsw-alias-label-primary);\n  text-align: left;\n  cursor: pointer;\n  font-size: 12px;\n}\n\n.ksq-fo-row:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); }\n.ksq-fo-row.active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); }\n\n.ksq-fo-name {\n  flex: none;\n  width: 128px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 500;\n}\n\n.ksq-fo-bar {\n  flex: 1;\n  position: relative;\n  height: 10px;\n  min-width: 0;\n}\n\n/* 零轴：容器中缝 1px 基线；正值条从中线向右，负值向左。 */\n.ksq-fo-bar::before {\n  content: '';\n  position: absolute;\n  left: 50%;\n  top: -2px;\n  bottom: -2px;\n  width: 1px;\n  background: var(--dsw-alias-border-l3);\n}\n\n.ksq-fo-fill {\n  position: absolute;\n  top: 1px;\n  bottom: 1px;\n  border-radius: 2px;\n}\n\n.ksq-fo-fill.up { background: #31c7a2; }\n.ksq-fo-fill.down { background: #e64646; }\n\n.ksq-fo-value { flex: none; width: 52px; text-align: right; font-variant-numeric: tabular-nums; }\n.ksq-fo-ir { flex: none; width: 64px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }\n\n/* ── 策略库：调仓记录（§28-5，按日折叠）────────────────────────── */\n\n.ksq-rebalances {\n  max-height: 380px;\n  overflow-y: auto;\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 8px;\n  padding: 6px;\n}\n\n.ksq-rebalance { border-bottom: 1px solid var(--dsw-alias-border-l3); }\n.ksq-rebalance:last-child { border-bottom: none; }\n\n.ksq-rebalance summary {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  padding: 5px 8px;\n  cursor: pointer;\n  font-size: 12.5px;\n  list-style: none;\n  border-radius: 6px;\n}\n\n.ksq-rebalance summary::-webkit-details-marker { display: none; }\n.ksq-rebalance summary::before { content: '\\25B8'; color: var(--dsw-alias-label-tertiary); transition: transform 0.12s; }\n.ksq-rebalance[open] summary::before { transform: rotate(90deg); }\n.ksq-rebalance summary:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent); }\n\n.ksq-rebalance-body { padding: 6px 10px 10px 22px; display: flex; flex-direction: column; gap: 6px; }\n\n.ksq-rebalance-dayhead { display: flex; justify-content: flex-end; }\n\n/* ── 版本迭代面板（§28-10「从此版本改进」）────────────────────── */\n\n.ksq-iter {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  margin-top: 8px;\n  padding: 10px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 8px;\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 4%, transparent);\n}\n\n.ksq-iter-chip { cursor: pointer; background: transparent; }\n.ksq-iter-chip.active {\n  border-color: var(--dsw-alias-brand-primary);\n  color: var(--dsw-alias-brand-primary);\n  font-weight: 500;\n}\n\n.ksq-iter-input {\n  height: 30px;\n  padding: 0 10px;\n  border-radius: 8px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  background: transparent;\n  color: inherit;\n  font-size: 12.5px;\n}\n.ksq-rebalance-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }\n@media (max-width: 720px) { .ksq-rebalance-cols { grid-template-columns: 1fr; } }\n.ksq-rebalance-side p { margin: 0 0 4px; font-size: 12px; font-weight: 500; }\n.ksq-rebalance-side .ksq-table { font-size: 11.5px; }\n\n\n/* ── 图表视觉比例锚定（viewBox 拉伸陷阱修复）──────────────────────\n   图表 SVG viewBox 固定宽（560/720），宽面板被拉伸 1.5-2x，字号视觉\n   翻倍显巨大。统一锚定 max-width：560 系 ≤660px（放大上限 1.18x）、\n   720 系（缠论 K 线）≤880px；height:auto 保持宽高比。 */\n.ksq-chart svg { max-width: 660px; height: auto; }\n.ksq-chan-chart svg { max-width: 880px; height: auto; display: block; }\n\n/* ── 缠论研究面板（§29-C1，@kstock/client-chan）────────────────── */\n\n.ksq-chan-input {\n  width: 260px;\n  height: 30px;\n  padding: 0 10px;\n  border-radius: 8px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  background: transparent;\n  color: inherit;\n  font-size: 12.5px;\n}\n\n.ksq-chan-select {\n  height: 30px;\n  padding: 0 6px;\n  border-radius: 8px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  background: transparent;\n  color: inherit;\n  font-size: 12.5px;\n}\n\n.ksq-chan-summary {\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));\n  gap: 10px;\n  margin-top: 12px;\n}\n\n.ksq-chan-card {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  padding: 10px 12px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n  font-size: 12.5px;\n}\n\n.ksq-chan-card strong { font-size: 12px; color: var(--dsw-alias-label-tertiary); font-weight: 500; }\n.ksq-chan-card span { color: var(--dsw-alias-label-primary); }\n\n.ksq-chan-radar {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  padding: 10px 12px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n}\n\n.ksq-chan-radar svg { width: 156px; flex: none; }\n.ksq-chan-radar-meta { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }\n\n.ksq-chan-signals {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  padding: 10px 12px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n}\n\n.ksq-chan-signals strong { font-size: 12px; color: var(--dsw-alias-label-tertiary); font-weight: 500; }\n\n/* ── 缠论面板：左图右栏布局 + 右侧信息栏（§29-7）────────────────── */\n\n.ksq-chan-main {\n  display: flex;\n  gap: 14px;\n  align-items: flex-start;\n  margin-top: 12px;\n}\n\n.ksq-chan-chartwrap { flex: 1; min-width: 0; }\n.ksq-chan-chartwrap svg { width: 100%; max-width: 880px; height: auto; display: block; }\n\n.ksq-chan-side {\n  flex: none;\n  width: 268px;\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n\n.ksq-chan-sidecard {\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  padding: 10px 12px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n  font-size: 12.5px;\n}\n\n.ksq-chan-sidecard strong { font-size: 12px; color: var(--dsw-alias-label-tertiary); font-weight: 500; }\n\n.ksq-chan-levelrow em { font-style: normal; font-weight: 500; margin-right: 6px; }\n\n.ksq-chan-signal {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  padding: 4px 6px;\n  border: none;\n  border-radius: 6px;\n  background: transparent;\n  color: var(--dsw-alias-label-primary);\n  font-size: 12px;\n  text-align: left;\n  cursor: pointer;\n}\n\n.ksq-chan-signal:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); }\n.ksq-chan-signal em { font-style: normal; font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--dsw-alias-label-tertiary); flex: none; }\n.ksq-chan-signal span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.ksq-chan-signal b { font-weight: 500; font-variant-numeric: tabular-nums; }\n.ksq-chan-signal.up b { color: #e05656; }\n.ksq-chan-signal.down b { color: #2f9e77; }\n\n@media (max-width: 1080px) {\n  .ksq-chan-main { flex-direction: column; }\n  .ksq-chan-side { width: 100%; }\n}\n\n/* ── 缠论研究改版（三栏证据台）：证据链卡 · 共享件 ───────────────────── */\n.ksq-chanx-card {\n  background: var(--dsw-alias-surface-1, #101a16);\n  border: 1px solid var(--dsw-alias-border-l2);\n  border-radius: 8px;\n  padding: 10px 10px 8px;\n  display: flex; flex-direction: column; gap: 8px;\n}\n.ksq-chanx-card-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }\n.ksq-chanx-card-hd strong { font-size: 12.5px; color: var(--dsw-alias-label-primary); }\n.ksq-chanx-card > button, .ksq-chanx-card > p { margin: 0; }\n.ksq-chanx-chain {\n  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px;\n  padding: 7px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px;\n  background: linear-gradient(90deg, rgba(232,163,61,0.08), transparent 70%);\n  font-size: 12px;\n}\n.ksq-chanx-chain-node { display: inline-flex; align-items: center; gap: 6px; color: var(--dsw-alias-label-primary); }\n.ksq-chanx-chain-node em { font-style: normal; color: var(--dsw-alias-label-tertiary); }\n.ksq-chanx-badge {\n  display: inline-block; font-size: 11px; line-height: 1.6; padding: 0 7px;\n  border-radius: 99px; border: 1px solid var(--dsw-alias-border-l2);\n  color: var(--dsw-alias-label-secondary); white-space: nowrap;\n}\n.ksq-chanx-badge.up { color: #e05656; border-color: rgba(224,86,86,0.45); background: rgba(224,86,86,0.08); }\n.ksq-chanx-badge.down { color: #2f9e77; border-color: rgba(47,158,119,0.45); background: rgba(47,158,119,0.08); }\n.ksq-chanx-badge.zs { color: #c792ea; border-color: rgba(199,146,234,0.45); }\n.ksq-chanx-bar {\n  flex: 1; height: 8px; border-radius: 4px; overflow: hidden;\n  background: var(--dsw-alias-surface-2, #0d1613); display: inline-block;\n}\n.ksq-chanx-bar i { display: block; height: 100%; border-radius: 4px; }\n.ksq-chanx-bcrow, .ksq-chanx-bsrow, .ksq-chanx-zsrow {\n  text-align: left; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px;\n  background: var(--dsw-alias-surface-2, #0d1613); padding: 7px 8px;\n  display: flex; flex-direction: column; gap: 5px; cursor: pointer; color: inherit;\n  font: inherit; width: 100%;\n}\n.ksq-chanx-bcrow:hover, .ksq-chanx-bsrow:hover, .ksq-chanx-zsrow:hover,\n.ksq-chanx-bcrow:focus-visible, .ksq-chanx-bsrow:focus-visible, .ksq-chanx-zsrow:focus-visible {\n  border-color: var(--dsw-alias-brand-primary);\n}\n.ksq-chanx-bcrow.valid { border-left: 3px solid #e64646; }\n.ksq-chanx-bsrow:disabled { cursor: default; opacity: 0.85; }\n.ksq-chanx-bcrow-hd, .ksq-chanx-bsrow-hd { display: flex; align-items: center; gap: 6px; justify-content: space-between; }\n.ksq-chanx-bsrow-hd b { margin-left: auto; }\n.ksq-chanx-areabars, .ksq-chanx-relbar { display: flex; align-items: center; gap: 6px; font-size: 11px; }\n.ksq-chanx-areabars .ksq-item-meta, .ksq-chanx-relbar .ksq-item-meta { flex: none; width: 34px; }\n.ksq-chanx-relbar b, .ksq-chanx-areabars b { font-weight: 500; font-variant-numeric: tabular-nums; flex: none; min-width: 34px; text-align: right; }\n.ksq-chanx-ok { font-size: 10px; color: #2f9e77; border: 1px solid rgba(47,158,119,0.4); border-radius: 3px; padding: 0 3px; flex: none; }\n.ksq-chanx-bcrow-ft { display: flex; gap: 10px; flex-wrap: wrap; }\n.ksq-chanx-why { font-size: 11px; color: var(--dsw-alias-label-tertiary); line-height: 1.5; }\n.ksq-chanx-zspos { display: flex; }\n@keyframes ksq-chanx-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }\n.ksq-chanx-hl { animation: ksq-chanx-pulse 1.1s ease-in-out 2; }\n\n/* 信息条涨跌专用语义色：与主图 A 股红涨绿跌蜡烛同向\n   （区别于通用 ksq-up 绿 / ksq-down 红——二者与蜡烛同屏语义相反）。 */\n.ksq-chanx-up { color: #e05656; }\n.ksq-chanx-down { color: #31c7a2; }\n\n/* ── 缠论研究改版：右栏状态（雷达/矩阵/折叠 chips）─────────────────── */\n.ksq-chanx-radarblock { display: flex; gap: 10px; align-items: flex-start; }\n.ksq-chanx-radarsvg { width: 156px; flex: none; }\n.ksq-chanx-radar-meta { display: flex; flex-direction: column; gap: 5px; font-size: 13px; min-width: 0; flex: 1; }\n.ksq-chanx-radar-meta strong { font-size: 14px; }\n.ksq-chanx-dims { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }\n.ksq-chanx-dims li { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; }\n.ksq-chanx-dims li em { font-style: normal; color: var(--dsw-alias-label-tertiary); cursor: help; }\n.ksq-chanx-dims li b { font-weight: 500; font-variant-numeric: tabular-nums; }\n.ksq-chanx-matrix { width: 100%; border-collapse: collapse; font-size: 11.5px; }\n.ksq-chanx-matrix th { text-align: left; color: var(--dsw-alias-label-tertiary); font-weight: 400; padding: 2px 4px; border-bottom: 1px solid var(--dsw-alias-border-l2); }\n.ksq-chanx-matrix td { padding: 3px 4px; border-bottom: 1px solid var(--dsw-alias-border-l1, var(--dsw-alias-border-l2)); }\n.ksq-chanx-matrix tr.cur td:first-child { color: var(--dsw-alias-brand-primary); font-weight: 600; }\n.ksq-chanx-matrix tr.res-up td { background: rgba(224,86,86,0.07); }\n.ksq-chanx-matrix tr.res-down td { background: rgba(47,158,119,0.07); }\n.ksq-chanx-chips summary { cursor: pointer; font-size: 12px; color: var(--dsw-alias-label-tertiary); padding: 4px 0; }\n.ksq-chanx-chips .ksq-chips { padding: 4px 0 2px; }\n/* KeyLevelsCard 键值行专用类：禁止用 .ksq-chanx-card span 这类宽选择器——特异性 (0,1,1) 会压制 ksq-item-meta/ksq-chanx-ok/badge 等单类规则 */\n.ksq-chanx-kv { color: var(--dsw-alias-label-primary); font-size: 12px; }\n";
+		var quant_default = "/* KStock 量化工作台面板样式（@kstock/quant 客户端半端）。\n *\n * 全部类名以 ksq- 前缀隔离；颜色走引擎 dsw 别名 token（随明暗主题\n * 自动切换），强调色沿用 KStock 品牌绿。由客户端 bundle 以 ?raw 内联，\n * apply() 时注入 <style data-kstock=\"quant-pages\">。 */\n\n.ksq-page {\n  height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  color: var(--dsw-alias-label-primary);\n  background: color-mix(in srgb, var(--dsw-alias-bg-base) 88%, transparent);\n}\n\n/* ── 顶部：标题 + 库切换 tab ─────────────────────────────── */\n\n.ksq-topbar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 16px;\n  padding: 14px 22px 0;\n  flex: none;\n}\n\n.ksq-title {\n  display: flex;\n  align-items: baseline;\n  gap: 10px;\n  min-width: 0;\n}\n\n.ksq-title strong {\n  font-size: 17px;\n  letter-spacing: 0.2px;\n}\n\n.ksq-title span {\n  font-size: 12px;\n  color: var(--dsw-alias-label-tertiary);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n\n.ksq-topbar-actions {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  flex: none;\n}\n\n.ksq-count {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  font-size: 12px;\n  color: var(--dsw-alias-label-secondary);\n}\n\n.ksq-tabs {\n  display: flex;\n  gap: 4px;\n  padding: 10px 22px 0;\n  border-bottom: 1px solid var(--dsw-alias-border-l2);\n  flex: none;\n}\n\n.ksq-tab {\n  appearance: none;\n  border: none;\n  background: transparent;\n  color: var(--dsw-alias-label-secondary);\n  font-size: 13px;\n  padding: 8px 14px 10px;\n  cursor: pointer;\n  border-bottom: 2px solid transparent;\n  margin-bottom: -1px;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n}\n\n.ksq-tab:hover { color: var(--dsw-alias-label-primary); }\n\n.ksq-tab.active {\n  color: var(--dsw-alias-label-primary);\n  border-bottom-color: var(--dsw-alias-brand-primary);\n  font-weight: 600;\n}\n\n/* ── 通用控件 ─────────────────────────────────────────────── */\n\n.ksq-iconbtn {\n  appearance: none;\n  border: 1px solid transparent;\n  background: transparent;\n  color: var(--dsw-alias-label-secondary);\n  width: 28px;\n  height: 28px;\n  border-radius: 7px;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n}\n\n.ksq-iconbtn:hover {\n  background: var(--dsw-alias-interactive-bg-hover);\n  color: var(--dsw-alias-label-primary);\n}\n\n.ksq-iconbtn:disabled { opacity: 0.5; cursor: default; }\n.ksq-iconbtn.danger:hover { color: #e64646; }\n\n.ksq-btn {\n  appearance: none;\n  border: 1px solid var(--dsw-alias-border-l2);\n  background: var(--dsw-alias-bg-layer-2);\n  color: var(--dsw-alias-label-primary);\n  font-size: 12px;\n  padding: 5px 12px;\n  border-radius: 7px;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n}\n\n.ksq-btn:hover { background: var(--dsw-alias-interactive-bg-hover); }\n\n.ksq-linkbtn {\n  appearance: none;\n  border: none;\n  background: transparent;\n  color: var(--dsw-alias-link);\n  font-size: 12px;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  padding: 0;\n}\n\n.ksq-linkbtn:hover { text-decoration: underline; }\n\n.ksq-search {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  border: 1px solid var(--dsw-alias-border-l2);\n  background: var(--dsw-alias-bg-layer-1);\n  border-radius: 8px;\n  padding: 6px 10px;\n  color: var(--dsw-alias-label-tertiary);\n  min-width: 260px;\n}\n\n.ksq-search input {\n  border: none;\n  outline: none;\n  background: transparent;\n  color: var(--dsw-alias-label-primary);\n  font-size: 13px;\n  flex: 1;\n}\n\n.ksq-search input::placeholder { color: var(--dsw-alias-label-tertiary); }\n\n.ksq-spin { animation: ksq-rotate 0.9s linear infinite; }\n\n@keyframes ksq-rotate {\n  to { transform: rotate(360deg); }\n}\n\n.ksq-error {\n  margin: 10px 22px 0;\n  padding: 8px 12px;\n  border: 1px solid rgba(230, 70, 70, 0.4);\n  border-radius: 8px;\n  background: rgba(230, 70, 70, 0.08);\n  color: #e64646;\n  font-size: 12.5px;\n}\n\n.ksq-loading {\n  margin: 24px 22px;\n  color: var(--dsw-alias-label-tertiary);\n  font-size: 13px;\n}\n\n.ksq-empty {\n  margin: 40px auto;\n  max-width: 420px;\n  text-align: center;\n  color: var(--dsw-alias-label-tertiary);\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 8px;\n  font-size: 13px;\n}\n\n.ksq-empty strong { color: var(--dsw-alias-label-secondary); font-size: 14px; }\n\n.ksq-mono {\n  font-family: ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, monospace;\n  font-size: 0.92em;\n}\n\n/* 数值语义色 */\n.ksq-up { color: #31c7a2; }\n.ksq-down { color: #e64646; }\n.ksq-warn { color: #e8a33d; }\n\n/* ── 数据表 ─────────────────────────────────────────────── */\n\n.ksq-table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: 12.5px;\n}\n\n.ksq-table th {\n  text-align: left;\n  font-weight: 500;\n  color: var(--dsw-alias-label-tertiary);\n  padding: 6px 10px;\n  border-bottom: 1px solid var(--dsw-alias-border-l2);\n  white-space: nowrap;\n}\n\n.ksq-table td {\n  padding: 7px 10px;\n  border-bottom: 1px solid var(--dsw-alias-border-l3);\n  color: var(--dsw-alias-label-primary);\n  white-space: nowrap;\n}\n\n.ksq-table td.num { text-align: right; font-variant-numeric: tabular-nums; }\n.ksq-table tr.selected td { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); }\n.ksq-table input[type=\"checkbox\"] { accent-color: var(--dsw-alias-brand-primary); }\n\n/* 长文本单元格裁剪（agent 写入的股票池/口径描述可达数百字，nowrap 下会把\n   操作列挤出视口）：max-width + ellipsis，全文走 title 悬浮。 */\n.ksq-table td.ksq-cell-clip {\n  max-width: 230px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n\n/* 表格横向滚动兜底：窗口再窄操作列（报告/看板）也始终可达，不整页溢出。 */\n.ksq-table-wrap { overflow-x: auto; }\n.ksq-table-wrap .ksq-table { min-width: 640px; }\n\n/* ── 内容区骨架 ─────────────────────────────────────────── */\n\n.ksq-body {\n  flex: 1;\n  overflow: auto;\n  padding: 14px 22px 26px;\n}\n\n.ksq-toolbar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  margin-bottom: 14px;\n}\n\n/* ── 策略/因子/选股：列表 + 详情双栏 ────────────────────── */\n\n.ksq-split {\n  display: grid;\n  grid-template-columns: 264px 1fr;\n  gap: 16px;\n  align-items: start;\n}\n\n.ksq-list {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  position: sticky;\n  top: 0;\n}\n\n.ksq-list-item {\n  appearance: none;\n  text-align: left;\n  border: 1px solid var(--dsw-alias-border-l3);\n  background: var(--dsw-alias-bg-layer-1);\n  border-radius: 10px;\n  padding: 9px 12px;\n  cursor: pointer;\n  color: var(--dsw-alias-label-primary);\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n\n.ksq-list-item:hover { border-color: var(--dsw-alias-border-l2); }\n\n.ksq-list-item.active {\n  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent);\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, var(--dsw-alias-bg-layer-1));\n}\n\n.ksq-item-name {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  font-size: 13px;\n  font-weight: 600;\n  overflow: hidden;\n}\n\n.ksq-item-name > span.ksq-name-text {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.ksq-dot {\n  width: 7px;\n  height: 7px;\n  border-radius: 50%;\n  flex: none;\n}\n\n.ksq-dot.tone-live { background: #31c7a2; }\n.ksq-dot.tone-idle { background: #8f98a2; }\n.ksq-dot.tone-bad { background: #e64646; }\n\n.ksq-item-meta {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n  font-size: 11.5px;\n  color: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-chip {\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 999px;\n  padding: 0 7px;\n  font-size: 11px;\n  line-height: 18px;\n}\n\n.ksq-badge {\n  border-radius: 5px;\n  padding: 1px 7px;\n  font-size: 11px;\n  line-height: 18px;\n  flex: none;\n}\n\n.ksq-badge.tone-live {\n  color: #31c7a2;\n  background: rgba(49, 199, 162, 0.12);\n}\n\n.ksq-badge.tone-idle {\n  color: var(--dsw-alias-label-secondary);\n  background: var(--dsw-alias-bg-layer-3);\n}\n\n.ksq-badge.tone-bad {\n  color: #e64646;\n  background: rgba(230, 70, 70, 0.1);\n}\n\n.ksq-detail { min-width: 0; display: flex; flex-direction: column; gap: 14px; }\n\n.ksq-hint {\n  color: var(--dsw-alias-label-tertiary);\n  font-size: 12.5px;\n  margin: 6px 0;\n}\n\n.ksq-identity { border-bottom: 1px solid var(--dsw-alias-border-l3); padding-bottom: 10px; }\n\n.ksq-identity-head {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n}\n\n.ksq-identity-head h2 { font-size: 16px; margin: 0; }\n\n.ksq-hypothesis {\n  margin: 6px 0 4px;\n  font-size: 12.5px;\n  color: var(--dsw-alias-label-secondary);\n  line-height: 1.6;\n}\n\n.ksq-section-title {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  font-size: 13px;\n  font-weight: 600;\n  color: var(--dsw-alias-label-primary);\n  margin: 4px 0 8px;\n}\n\n/* 版本时间线 */\n.ksq-versions { display: flex; flex-direction: column; gap: 8px; padding-left: 14px; }\n\n.ksq-version {\n  position: relative;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n  background: var(--dsw-alias-bg-layer-1);\n  padding: 9px 12px;\n}\n\n.ksq-version.latest { border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 45%, transparent); }\n\n.ksq-version::before {\n  content: \"\";\n  position: absolute;\n  left: -11px;\n  top: 16px;\n  width: 7px;\n  height: 7px;\n  border-radius: 50%;\n  background: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-version.latest::before { background: var(--dsw-alias-brand-primary); }\n\n.ksq-version-head {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  font-size: 12.5px;\n}\n\n.ksq-version-note {\n  margin: 5px 0 0;\n  font-size: 12px;\n  color: var(--dsw-alias-label-secondary);\n}\n\n/* 对比块 */\n.ksq-compare {\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 12px;\n  background: var(--dsw-alias-bg-layer-1);\n  padding: 12px 14px;\n}\n\n.ksq-compare h3 { font-size: 13px; margin: 0 0 8px; }\n\n.ksq-note {\n  font-size: 12px;\n  color: var(--dsw-alias-label-tertiary);\n  margin: 4px 0;\n}\n\n.ksq-chart { margin-top: 10px; }\n\n.ksq-chart h4 {\n  font-size: 12px;\n  font-weight: 500;\n  color: var(--dsw-alias-label-secondary);\n  margin: 0 0 6px;\n}\n\n.ksq-chart svg { max-width: 100%; height: auto; }\n\n/* 选股 criteria 摘要 */\n.ksq-criteria {\n  font-size: 12px;\n  color: var(--dsw-alias-label-secondary);\n  background: var(--dsw-alias-bg-layer-2);\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 8px;\n  padding: 8px 10px;\n  margin: 6px 0 0;\n  white-space: pre-wrap;\n  word-break: break-word;\n  max-height: 160px;\n  overflow: auto;\n}\n\n/* 选股 picks 表 */\n.ksq-picks-meta { display: flex; gap: 14px; font-size: 12px; color: var(--dsw-alias-label-tertiary); margin: 6px 0; }\n\n/* ── 报告库 ─────────────────────────────────────────────── */\n\n.ksq-report-group { margin-bottom: 16px; }\n\n.ksq-report-heading {\n  appearance: none;\n  border: none;\n  background: transparent;\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  color: var(--dsw-alias-label-secondary);\n  font-size: 13px;\n  cursor: pointer;\n  padding: 4px 0 8px;\n  width: 100%;\n}\n\n.ksq-report-heading h2 { font-size: 13px; margin: 0; font-weight: 600; color: var(--dsw-alias-label-primary); }\n.ksq-report-heading span { color: var(--dsw-alias-label-tertiary); font-size: 12px; }\n\n.ksq-report-grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));\n  gap: 10px;\n}\n\n.ksq-report-card {\n  display: flex;\n  gap: 12px;\n  align-items: flex-start;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 12px;\n  background: var(--dsw-alias-bg-layer-1);\n  padding: 12px 14px;\n}\n\n.ksq-report-icon {\n  flex: none;\n  width: 34px;\n  height: 34px;\n  border-radius: 9px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: var(--dsw-alias-brand-primary);\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent);\n}\n\n.ksq-report-copy { flex: 1; min-width: 0; }\n\n.ksq-report-copy h3 {\n  margin: 0 0 4px;\n  font-size: 13.5px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.ksq-report-meta {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 4px 12px;\n  font-size: 11.5px;\n  color: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-report-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; flex: none; }\n\n/* 报告预览浮层 */\n.ksq-overlay {\n  position: fixed;\n  inset: 0;\n  z-index: 80;\n  background: rgba(3, 13, 11, 0.72);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  padding: 40px;\n}\n\n.ksq-dialog {\n  width: min(1080px, 100%);\n  height: 100%;\n  display: flex;\n  flex-direction: column;\n  border-radius: 14px;\n  overflow: hidden;\n  background: var(--dsw-alias-bg-layer-1);\n  border: 1px solid var(--dsw-alias-border-l2);\n}\n\n.ksq-dialog-bar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  padding: 10px 14px;\n  border-bottom: 1px solid var(--dsw-alias-border-l2);\n  flex: none;\n}\n\n.ksq-dialog-bar strong {\n  font-size: 13px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.ksq-dialog iframe {\n  flex: 1;\n  border: none;\n  background: #fff;\n}\n\n/* 确认弹窗 */\n.ksq-confirm {\n  width: min(420px, 100%);\n  height: auto;\n  border-radius: 14px;\n  padding: 18px;\n  gap: 10px;\n}\n\n.ksq-confirm h3 { margin: 0; font-size: 15px; }\n.ksq-confirm p { margin: 0; font-size: 12.5px; color: var(--dsw-alias-label-secondary); line-height: 1.6; }\n\n.ksq-confirm-actions {\n  display: flex;\n  justify-content: flex-end;\n  gap: 8px;\n  margin-top: 8px;\n}\n\n.ksq-btn.danger {\n  color: #fff;\n  background: #c0392b;\n  border-color: #c0392b;\n}\n\n.ksq-btn.danger:hover { background: #a93226; }\n\n/* 复制成功提示 */\n.ksq-toast {\n  position: fixed;\n  bottom: 28px;\n  left: 50%;\n  transform: translateX(-50%);\n  z-index: 90;\n  /* 自洽深色药丸：不依赖宿主 toast token（--dsw-alias-toast-bg 在宿主不存在，\n     回退 bg-overlay 是遮罩 scrim 色——黑条不可读）。深底浅字双主题通用。 */\n  background: rgba(3, 13, 11, 0.92);\n  color: #e8edef;\n  border: 1px solid rgba(255, 255, 255, 0.1);\n  font-size: 12.5px;\n  border-radius: 999px;\n  padding: 8px 16px;\n  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);\n}\n\n/* ── 财经新闻面板（@kstock/client-news）────────────────────────── */\n\n.ksq-news-list {\n  display: flex;\n  flex-direction: column;\n  gap: 12px;\n  padding-bottom: 8px;\n}\n\n.ksq-news-item {\n  position: relative;\n  padding: 12px 16px 12px 20px;\n  border: 1px solid var(--dsw-alias-border-l2);\n  border-radius: 12px;\n  background: var(--dsw-alias-bg-layer-2);\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  overflow: hidden;\n  transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;\n}\n\n/* 左侧品牌色细轨：常亮 55%，hover 点满。 */\n.ksq-news-item::before {\n  content: '';\n  position: absolute;\n  left: 0;\n  top: 0;\n  bottom: 0;\n  width: 3px;\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 100%, transparent);\n  opacity: .45;\n  transition: opacity .15s ease;\n}\n\n.ksq-news-item:hover {\n  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 35%, var(--dsw-alias-border-l2));\n  transform: translateY(-1px);\n  box-shadow: 0 4px 16px color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);\n}\n\n.ksq-news-item:hover::before {\n  opacity: 1;\n}\n\n.ksq-news-meta {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  font-size: 11.5px;\n  color: var(--dsw-alias-label-tertiary);\n  font-variant-numeric: tabular-nums;\n}\n\n.ksq-news-source {\n  padding: 1.5px 8px;\n  border-radius: 99px;\n  font-size: 11px;\n  font-weight: 500;\n  letter-spacing: .3px;\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 13%, transparent);\n  color: var(--dsw-alias-brand-primary);\n  white-space: nowrap;\n}\n\n.ksq-news-dot {\n  width: 3px;\n  height: 3px;\n  border-radius: 50%;\n  background: currentColor;\n  opacity: .55;\n  flex: none;\n}\n\n.ksq-news-time {\n  margin-left: auto;\n  white-space: nowrap;\n}\n\n.ksq-news-title {\n  font-size: 14px;\n  font-weight: 600;\n  line-height: 1.5;\n  color: var(--dsw-alias-label-primary);\n  text-decoration: none;\n}\n\na.ksq-news-title:hover {\n  color: var(--dsw-alias-link);\n}\n\n.ksq-news-summary {\n  margin: 0;\n  font-size: 12.5px;\n  line-height: 1.6;\n  color: var(--dsw-alias-label-secondary);\n  display: -webkit-box;\n  -webkit-line-clamp: 2;\n  -webkit-box-orient: vertical;\n  overflow: hidden;\n}\n\n.ksq-news-toolbar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 12px;\n  padding: 10px 22px 0;\n  flex: none;\n}\n\n.ksq-news-toolbar .ksq-tabs { margin-bottom: 0; }\n\n.ksq-news-toolbar-right {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  min-width: 0;\n}\n\n.ksq-news-toolbar-right .ksq-search { margin-bottom: 0; flex: 1; min-width: 220px; max-width: 460px; }\n\n.ksq-news-watchedit {\n  padding: 8px 22px 0;\n  flex: none;\n}\n\n.ksq-news-watchedit input {\n  width: 100%;\n  box-sizing: border-box;\n  padding: 7px 12px;\n  border-radius: 8px;\n  border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 40%, var(--dsw-alias-border-l2));\n  background: var(--dsw-alias-bg-layer-2);\n  color: var(--dsw-alias-label-primary);\n  font-size: 13px;\n}\n\n/* 双栏：主列表 + 统计侧栏（窄面板时侧栏隐藏）。 */\n.ksq-news-split {\n  display: flex;\n  gap: 20px;\n  align-items: flex-start;\n  width: 100%;\n  max-width: 1360px;\n  margin: 0 auto;\n}\n\n.ksq-news-main {\n  flex: 1;\n  min-width: 0;\n}\n\n.ksq-news-item.read { opacity: .58; }\n.ksq-news-item.read:hover { opacity: 1; }\n\n.ksq-news-item.watched {\n  border-color: color-mix(in srgb, #f59e0b 45%, var(--dsw-alias-border-l2));\n  background: color-mix(in srgb, #f59e0b 5%, var(--dsw-alias-bg-layer-2));\n}\n\n.ksq-news-item.watched::before {\n  background: #f59e0b;\n}\n\n.ksq-news-watchflag {\n  padding: 1px 7px;\n  border-radius: 99px;\n  font-size: 10.5px;\n  font-weight: 600;\n  letter-spacing: .5px;\n  color: #f59e0b;\n  background: color-mix(in srgb, #f59e0b 16%, transparent);\n}\n\n.ksq-news-stocks {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n\n.ksq-news-stocktag {\n  all: unset;\n  box-sizing: border-box;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  padding: 2px 9px;\n  border-radius: 6px;\n  font-size: 12px;\n  font-weight: 500;\n  color: var(--dsw-alias-label-primary);\n  background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);\n  border: 1px solid var(--dsw-alias-border-l2);\n  transition: border-color .12s ease, background .12s ease;\n}\n\n.ksq-news-stocktag:hover {\n  border-color: var(--dsw-alias-brand-primary);\n  color: var(--dsw-alias-brand-primary);\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);\n}\n\n.ksq-news-actions {\n  display: flex;\n  justify-content: flex-end;\n  font-size: 12.5px;\n}\n\n/* 统计侧栏 */\n.ksq-news-stats {\n  flex: none;\n  width: 220px;\n  display: flex;\n  flex-direction: column;\n  gap: 14px;\n  position: sticky;\n  top: 0;\n}\n\n@media (max-width: 980px) {\n  .ksq-news-stats { display: none; }\n  .ksq-news-split { display: block; }\n}\n\n.ksq-news-stats-block {\n  border: 1px solid var(--dsw-alias-border-l2);\n  border-radius: 12px;\n  background: var(--dsw-alias-bg-layer-2);\n  padding: 12px 14px;\n}\n\n.ksq-news-stats-head {\n  font-size: 13px;\n  font-weight: 600;\n  margin-bottom: 10px;\n  display: flex;\n  justify-content: space-between;\n  align-items: baseline;\n}\n\n.ksq-news-stats-head span {\n  font-size: 11px;\n  font-weight: 400;\n  color: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-news-stats-empty {\n  margin: 0;\n  font-size: 12px;\n  color: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-news-trending {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n}\n\n.ksq-news-trendword {\n  all: unset;\n  box-sizing: border-box;\n  cursor: pointer;\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  padding: 2.5px 9px;\n  border-radius: 99px;\n  font-size: 12px;\n  color: var(--dsw-alias-label-secondary);\n  background: color-mix(in srgb, var(--dsw-alias-label-primary) 6%, transparent);\n  border: 1px solid var(--dsw-alias-border-l2);\n}\n\n.ksq-news-trendword:hover {\n  color: var(--dsw-alias-brand-primary);\n  border-color: var(--dsw-alias-brand-primary);\n}\n\n.ksq-news-trendword em {\n  font-style: normal;\n  font-size: 10.5px;\n  color: var(--dsw-alias-label-tertiary);\n  font-variant-numeric: tabular-nums;\n}\n\n.ksq-news-freq {\n  display: flex;\n  align-items: flex-end;\n  gap: 2px;\n  height: 50px;\n}\n\n.ksq-news-freq-bar {\n  flex: 1;\n  min-width: 3px;\n  border-radius: 2px 2px 0 0;\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent);\n}\n\n.ksq-news-freq-bar:hover {\n  background: var(--dsw-alias-brand-primary);\n}\n\n/* ── 联动任务目标选择菜单（§26-10，新闻/选股库共用）────────────── */\n\n.ksq-target-overlay { z-index: 95; padding: 40px; background: rgba(3, 13, 11, 0.45); }\n\n.ksq-target-menu {\n  width: min(480px, 100%);\n  max-height: min(70vh, 560px);\n  overflow-y: auto;\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  background: var(--dsw-alias-bg-layer-1);\n  border: 1px solid var(--dsw-alias-border-l2);\n  border-radius: 12px;\n  padding: 12px;\n  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);\n}\n\n.ksq-target-head {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  padding: 4px 8px 10px;\n  border-bottom: 1px solid var(--dsw-alias-border-l3);\n  margin-bottom: 6px;\n}\n\n.ksq-target-item {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  width: 100%;\n  padding: 9px 10px;\n  border: none;\n  border-radius: 8px;\n  background: transparent;\n  color: var(--dsw-alias-label-primary);\n  text-align: left;\n  cursor: pointer;\n  font-size: 13px;\n}\n\n.ksq-target-item:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent); }\n.ksq-target-item:disabled { opacity: 0.55; cursor: default; }\n.ksq-target-item.last { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent); }\n\n.ksq-target-name { font-weight: 500; flex: none; }\n.ksq-target-path {\n  flex: 1;\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;\n  font-size: 11.5px;\n  color: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-target-error { color: #e64646; font-size: 12.5px; margin: 4px 8px; }\n.ksq-target-cancel { align-self: flex-end; margin-top: 4px; }\n\n/* ── 选股库：口径芯片（P4）+ 命中趋势（P3）────────────────────── */\n\n.ksq-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 2px; }\n.ksq-chips .ksq-chip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }\n\n.ksq-trend {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  padding: 8px 10px;\n  margin: 6px 0 10px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n}\n\n.ksq-trend-label {\n  flex: none;\n  font-size: 11.5px;\n  color: var(--dsw-alias-label-tertiary);\n}\n\n.ksq-trend-bars {\n  flex: 1;\n  display: flex;\n  align-items: flex-end;\n  justify-content: flex-start;\n  gap: 4px;\n  height: 44px;\n  min-width: 0;\n}\n\n.ksq-trend-col {\n  display: flex;\n  align-items: flex-end;\n  gap: 2px;\n  height: 100%;\n  cursor: default;\n}\n\n.ksq-trend-bar {\n  width: 9px;\n  min-height: 3px;\n  border-radius: 2px 2px 0 0;\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 60%, transparent);\n}\n\n.ksq-trend-bar:hover { background: var(--dsw-alias-brand-primary); }\n\n.ksq-trend-bar.consensus { background: #31c7a2; }\n.ksq-trend-bar.consensus:hover { background: #22a06b; }\n\n/* ── 因子库：跨因子概览（F3，IC 均值零轴双向横条）──────────────── */\n\n.ksq-factors-overview {\n  display: flex;\n  align-items: flex-start;\n  gap: 10px;\n  padding: 10px 12px;\n  margin-bottom: 12px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n}\n\n.ksq-fo-rows { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }\n\n.ksq-fo-row {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  width: 100%;\n  padding: 3px 6px;\n  border: none;\n  border-radius: 6px;\n  background: transparent;\n  color: var(--dsw-alias-label-primary);\n  text-align: left;\n  cursor: pointer;\n  font-size: 12px;\n}\n\n.ksq-fo-row:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); }\n.ksq-fo-row.active { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); }\n\n.ksq-fo-name {\n  flex: none;\n  width: 128px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  font-weight: 500;\n}\n\n.ksq-fo-bar {\n  flex: 1;\n  position: relative;\n  height: 10px;\n  min-width: 0;\n}\n\n/* 零轴：容器中缝 1px 基线；正值条从中线向右，负值向左。 */\n.ksq-fo-bar::before {\n  content: '';\n  position: absolute;\n  left: 50%;\n  top: -2px;\n  bottom: -2px;\n  width: 1px;\n  background: var(--dsw-alias-border-l3);\n}\n\n.ksq-fo-fill {\n  position: absolute;\n  top: 1px;\n  bottom: 1px;\n  border-radius: 2px;\n}\n\n.ksq-fo-fill.up { background: #31c7a2; }\n.ksq-fo-fill.down { background: #e64646; }\n\n.ksq-fo-value { flex: none; width: 52px; text-align: right; font-variant-numeric: tabular-nums; }\n.ksq-fo-ir { flex: none; width: 64px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }\n\n/* ── 策略库：调仓记录（§28-5，按日折叠）────────────────────────── */\n\n.ksq-rebalances {\n  max-height: 380px;\n  overflow-y: auto;\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 8px;\n  padding: 6px;\n}\n\n.ksq-rebalance { border-bottom: 1px solid var(--dsw-alias-border-l3); }\n.ksq-rebalance:last-child { border-bottom: none; }\n\n.ksq-rebalance summary {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  padding: 5px 8px;\n  cursor: pointer;\n  font-size: 12.5px;\n  list-style: none;\n  border-radius: 6px;\n}\n\n.ksq-rebalance summary::-webkit-details-marker { display: none; }\n.ksq-rebalance summary::before { content: '\\25B8'; color: var(--dsw-alias-label-tertiary); transition: transform 0.12s; }\n.ksq-rebalance[open] summary::before { transform: rotate(90deg); }\n.ksq-rebalance summary:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent); }\n\n.ksq-rebalance-body { padding: 6px 10px 10px 22px; display: flex; flex-direction: column; gap: 6px; }\n\n.ksq-rebalance-dayhead { display: flex; justify-content: flex-end; }\n\n/* ── 版本迭代面板（§28-10「从此版本改进」）────────────────────── */\n\n.ksq-iter {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n  margin-top: 8px;\n  padding: 10px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 8px;\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 4%, transparent);\n}\n\n.ksq-iter-chip { cursor: pointer; background: transparent; }\n.ksq-iter-chip.active {\n  border-color: var(--dsw-alias-brand-primary);\n  color: var(--dsw-alias-brand-primary);\n  font-weight: 500;\n}\n\n.ksq-iter-input {\n  height: 30px;\n  padding: 0 10px;\n  border-radius: 8px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  background: transparent;\n  color: inherit;\n  font-size: 12.5px;\n}\n.ksq-rebalance-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }\n@media (max-width: 720px) { .ksq-rebalance-cols { grid-template-columns: 1fr; } }\n.ksq-rebalance-side p { margin: 0 0 4px; font-size: 12px; font-weight: 500; }\n.ksq-rebalance-side .ksq-table { font-size: 11.5px; }\n\n\n/* ── 图表视觉比例锚定（viewBox 拉伸陷阱修复）──────────────────────\n   图表 SVG viewBox 固定宽（560/720），宽面板被拉伸 1.5-2x，字号视觉\n   翻倍显巨大。统一锚定 max-width：560 系 ≤660px（放大上限 1.18x）、\n   720 系（缠论 K 线）≤880px；height:auto 保持宽高比。 */\n.ksq-chart svg { max-width: 660px; height: auto; }\n.ksq-chan-chart svg { max-width: 880px; height: auto; display: block; }\n\n/* ── 缠论研究面板（§29-C1，@kstock/client-chan）────────────────── */\n\n.ksq-chan-input {\n  width: 260px;\n  height: 30px;\n  padding: 0 10px;\n  border-radius: 8px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  background: transparent;\n  color: inherit;\n  font-size: 12.5px;\n}\n\n.ksq-chan-select {\n  height: 30px;\n  padding: 0 6px;\n  border-radius: 8px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  background: transparent;\n  color: inherit;\n  font-size: 12.5px;\n}\n\n.ksq-chan-summary {\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));\n  gap: 10px;\n  margin-top: 12px;\n}\n\n.ksq-chan-card {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  padding: 10px 12px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n  font-size: 12.5px;\n}\n\n.ksq-chan-card strong { font-size: 12px; color: var(--dsw-alias-label-tertiary); font-weight: 500; }\n.ksq-chan-card span { color: var(--dsw-alias-label-primary); }\n\n.ksq-chan-radar {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  padding: 10px 12px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n}\n\n.ksq-chan-radar svg { width: 156px; flex: none; }\n.ksq-chan-radar-meta { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }\n\n.ksq-chan-signals {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  padding: 10px 12px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n}\n\n.ksq-chan-signals strong { font-size: 12px; color: var(--dsw-alias-label-tertiary); font-weight: 500; }\n\n/* ── 缠论面板：左图右栏布局 + 右侧信息栏（§29-7）────────────────── */\n\n.ksq-chan-main {\n  display: flex;\n  gap: 14px;\n  align-items: flex-start;\n  margin-top: 12px;\n}\n\n.ksq-chan-chartwrap { flex: 1; min-width: 0; }\n.ksq-chan-chartwrap svg { width: 100%; max-width: 880px; height: auto; display: block; }\n\n.ksq-chan-side {\n  flex: none;\n  width: 268px;\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n\n.ksq-chan-sidecard {\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  padding: 10px 12px;\n  border: 1px solid var(--dsw-alias-border-l3);\n  border-radius: 10px;\n  font-size: 12.5px;\n}\n\n.ksq-chan-sidecard strong { font-size: 12px; color: var(--dsw-alias-label-tertiary); font-weight: 500; }\n\n.ksq-chan-levelrow em { font-style: normal; font-weight: 500; margin-right: 6px; }\n\n.ksq-chan-signal {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  padding: 4px 6px;\n  border: none;\n  border-radius: 6px;\n  background: transparent;\n  color: var(--dsw-alias-label-primary);\n  font-size: 12px;\n  text-align: left;\n  cursor: pointer;\n}\n\n.ksq-chan-signal:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); }\n.ksq-chan-signal em { font-style: normal; font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--dsw-alias-label-tertiary); flex: none; }\n.ksq-chan-signal span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.ksq-chan-signal b { font-weight: 500; font-variant-numeric: tabular-nums; }\n.ksq-chan-signal.up b { color: #e05656; }\n.ksq-chan-signal.down b { color: #2f9e77; }\n\n@media (max-width: 1080px) {\n  .ksq-chan-main { flex-direction: column; }\n  .ksq-chan-side { width: 100%; }\n}\n\n/* ── 缠论研究改版（三栏证据台）：证据链卡 · 共享件 ───────────────────── */\n.ksq-chanx-card {\n  background: var(--dsw-alias-surface-1, #101a16);\n  border: 1px solid var(--dsw-alias-border-l2);\n  border-radius: 8px;\n  padding: 10px 10px 8px;\n  display: flex; flex-direction: column; gap: 8px;\n}\n.ksq-chanx-card-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }\n.ksq-chanx-card-hd strong { font-size: 12.5px; color: var(--dsw-alias-label-primary); }\n.ksq-chanx-card > button, .ksq-chanx-card > p { margin: 0; }\n.ksq-chanx-chain {\n  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px;\n  padding: 7px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px;\n  background: linear-gradient(90deg, rgba(232,163,61,0.08), transparent 70%);\n  font-size: 12px;\n}\n.ksq-chanx-chain-node { display: inline-flex; align-items: center; gap: 6px; color: var(--dsw-alias-label-primary); }\n.ksq-chanx-chain-node em { font-style: normal; color: var(--dsw-alias-label-tertiary); }\n.ksq-chanx-badge {\n  display: inline-block; font-size: 11px; line-height: 1.6; padding: 0 7px;\n  border-radius: 99px; border: 1px solid var(--dsw-alias-border-l2);\n  color: var(--dsw-alias-label-secondary); white-space: nowrap;\n}\n.ksq-chanx-badge.up { color: #e05656; border-color: rgba(224,86,86,0.45); background: rgba(224,86,86,0.08); }\n.ksq-chanx-badge.down { color: #2f9e77; border-color: rgba(47,158,119,0.45); background: rgba(47,158,119,0.08); }\n.ksq-chanx-badge.zs { color: #c792ea; border-color: rgba(199,146,234,0.45); }\n.ksq-chanx-bar {\n  flex: 1; height: 8px; border-radius: 4px; overflow: hidden;\n  background: var(--dsw-alias-surface-2, #0d1613); display: inline-block;\n}\n.ksq-chanx-bar i { display: block; height: 100%; border-radius: 4px; }\n.ksq-chanx-bcrow, .ksq-chanx-bsrow, .ksq-chanx-zsrow {\n  text-align: left; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px;\n  background: var(--dsw-alias-surface-2, #0d1613); padding: 7px 8px;\n  display: flex; flex-direction: column; gap: 5px; cursor: pointer; color: inherit;\n  font: inherit; width: 100%;\n}\n.ksq-chanx-bcrow:hover, .ksq-chanx-bsrow:hover, .ksq-chanx-zsrow:hover,\n.ksq-chanx-bcrow:focus-visible, .ksq-chanx-bsrow:focus-visible, .ksq-chanx-zsrow:focus-visible {\n  border-color: var(--dsw-alias-brand-primary);\n}\n.ksq-chanx-bcrow.valid { border-left: 3px solid #e64646; }\n.ksq-chanx-bsrow:disabled { cursor: default; opacity: 0.85; }\n.ksq-chanx-bcrow-hd, .ksq-chanx-bsrow-hd { display: flex; align-items: center; gap: 6px; justify-content: space-between; }\n.ksq-chanx-bsrow-hd b { margin-left: auto; }\n.ksq-chanx-areabars, .ksq-chanx-relbar { display: flex; align-items: center; gap: 6px; font-size: 11px; }\n.ksq-chanx-areabars .ksq-item-meta, .ksq-chanx-relbar .ksq-item-meta { flex: none; width: 34px; }\n.ksq-chanx-relbar b, .ksq-chanx-areabars b { font-weight: 500; font-variant-numeric: tabular-nums; flex: none; min-width: 34px; text-align: right; }\n.ksq-chanx-ok { font-size: 10px; color: #2f9e77; border: 1px solid rgba(47,158,119,0.4); border-radius: 3px; padding: 0 3px; flex: none; }\n.ksq-chanx-bcrow-ft { display: flex; gap: 10px; flex-wrap: wrap; }\n.ksq-chanx-why { font-size: 11px; color: var(--dsw-alias-label-tertiary); line-height: 1.5; }\n.ksq-chanx-zspos { display: flex; }\n@keyframes ksq-chanx-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }\n.ksq-chanx-hl { animation: ksq-chanx-pulse 1.1s ease-in-out 2; }\n\n/* 信息条涨跌专用语义色：与主图 A 股红涨绿跌蜡烛同向\n   （区别于通用 ksq-up 绿 / ksq-down 红——二者与蜡烛同屏语义相反）。 */\n.ksq-chanx-up { color: #e05656; }\n.ksq-chanx-down { color: #31c7a2; }\n\n/* ── 缠论研究改版：右栏状态（雷达/矩阵/折叠 chips）─────────────────── */\n.ksq-chanx-radarblock { display: flex; gap: 10px; align-items: flex-start; }\n.ksq-chanx-radarsvg { width: 156px; flex: none; }\n.ksq-chanx-radar-meta { display: flex; flex-direction: column; gap: 5px; font-size: 13px; min-width: 0; flex: 1; }\n.ksq-chanx-radar-meta strong { font-size: 14px; }\n.ksq-chanx-dims { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }\n.ksq-chanx-dims li { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; }\n.ksq-chanx-dims li em { font-style: normal; color: var(--dsw-alias-label-tertiary); cursor: help; }\n.ksq-chanx-dims li b { font-weight: 500; font-variant-numeric: tabular-nums; }\n.ksq-chanx-matrix { width: 100%; border-collapse: collapse; font-size: 11.5px; }\n.ksq-chanx-matrix th { text-align: left; color: var(--dsw-alias-label-tertiary); font-weight: 400; padding: 2px 4px; border-bottom: 1px solid var(--dsw-alias-border-l2); }\n.ksq-chanx-matrix td { padding: 3px 4px; border-bottom: 1px solid var(--dsw-alias-border-l1, var(--dsw-alias-border-l2)); }\n.ksq-chanx-matrix tr.cur td:first-child { color: var(--dsw-alias-brand-primary); font-weight: 600; }\n.ksq-chanx-matrix tr.res-up td { background: rgba(224,86,86,0.07); }\n.ksq-chanx-matrix tr.res-down td { background: rgba(47,158,119,0.07); }\n.ksq-chanx-chips summary { cursor: pointer; font-size: 12px; color: var(--dsw-alias-label-tertiary); padding: 4px 0; }\n.ksq-chanx-chips .ksq-chips { padding: 4px 0 2px; }\n/* KeyLevelsCard 键值行专用类：禁止用 .ksq-chanx-card span 这类宽选择器——特异性 (0,1,1) 会压制 ksq-item-meta/ksq-chanx-ok/badge 等单类规则 */\n.ksq-chanx-kv { color: var(--dsw-alias-label-primary); font-size: 12px; }\n\n/* ── 缠论研究改版：三栏布局 + 窄屏 Tab ─────────────────────────────── */\n.ksq-chanx-grid {\n  display: grid; gap: 10px; align-items: start;\n  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 330px) minmax(236px, 268px);\n}\n.ksq-chanx-grid.narrow { grid-template-columns: minmax(0, 1fr); }\n.ksq-chanx-chartcol-wrap { min-width: 0; }\n.ksq-chanx-chartcol { display: flex; flex-direction: column; gap: 6px; min-width: 0; }\n.ksq-chanx-chartcol svg { width: 100%; height: auto; display: block; }\n.ksq-chanx-infobar { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }\n.ksq-chanx-infobar b { font-size: 20px; font-variant-numeric: tabular-nums; }\n.ksq-chanx-infobar .ksq-item-meta { margin-left: auto; }\n.ksq-chanx-evi, .ksq-chanx-side2 { display: flex; flex-direction: column; gap: 8px; min-width: 0; }\n.ksq-chanx-tabpanel { border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 8px; }\n.ksq-chanx-tabs { display: flex; gap: 6px; margin-bottom: 8px; }\n.ksq-chanx-tab {\n  font: inherit; font-size: 12px; padding: 3px 12px; border-radius: 99px;\n  border: 1px solid var(--dsw-alias-border-l2); background: transparent;\n  color: var(--dsw-alias-label-tertiary); cursor: pointer;\n}\n.ksq-chanx-tab.on {\n  color: #0b120f; background: var(--dsw-alias-brand-primary); border-color: var(--dsw-alias-brand-primary); font-weight: 600;\n}\n";
 		//#endregion
 		//#region ../quant-ui/src/task-target.tsx
 		/**
@@ -335,7 +335,7 @@ window.__ModuleLoader__.load({
 		* 旧副本可能先注入抢占幂等位（first-inject-wins）——版本不匹配即撤旧
 		* 换新，保证最终落页的是最新构建的样式副本。改 quant.css 时同步抬版本。
 		*/
-		const STYLE_VERSION = "2026-09-21.6-chan6";
+		const STYLE_VERSION = "2026-09-21.7-chan7";
 		/** 把 ksq 样式注入 <head>（幂等 + 版本淘汰旧副本）。 */
 		function injectQuantStyles() {
 			const existing = document.querySelector(`style[data-kstock="${STYLE_ID}"]`);
@@ -364,6 +364,14 @@ window.__ModuleLoader__.load({
 			"weekly",
 			"monthly"
 		];
+		/** 联立矩阵四行窗口：当前级别 + 低一档（若有）+ 高两档；边界向另一侧顺延。 */
+		function matrixLevels(level) {
+			const opts = LEVEL_OPTIONS;
+			const idx = opts.indexOf(level);
+			const cur = idx >= 0 ? idx : opts.indexOf("daily");
+			const start = Math.max(0, Math.min(cur - 1, opts.length - 4));
+			return opts.slice(start, start + 4);
+		}
 		/** 引擎 payload → 图表切片（宽松解析，字段缺失给安全默认）。 */
 		function parseChart(payload) {
 			const c = asRec(payload.chart_data);
@@ -471,6 +479,40 @@ window.__ModuleLoader__.load({
 		function resolveIndex(map, time) {
 			return map.get(time) ?? map.get(time.slice(0, 10)) ?? -1;
 		}
+		/** 背驰类型关键词 → 方向（顶/底/未知=盘整类）。 */
+		function backchiKind(backchiType) {
+			const t = backchiType.toLowerCase();
+			if (t.includes("top") || backchiType.includes("顶")) return "top";
+			if (t.includes("bottom") || backchiType.includes("底")) return "bottom";
+			return null;
+		}
+		/** 前段 vs 现段的价格极值对照：顶背驰看新高、底背驰看新低（动力学缺了形态对照就是半句话）。 */
+		function backchiPriceRelation(chart, dateIndex, bc) {
+			const range = (start, end) => {
+				const i1 = resolveIndex(dateIndex, start);
+				const i2 = resolveIndex(dateIndex, end);
+				if (i1 < 0 || i2 < 0 || i2 < i1) return null;
+				return chart.kline.slice(i1, i2 + 1);
+			};
+			const prev = range(bc.previousStart, bc.previousEnd);
+			const cur = range(bc.currentStart, bc.currentEnd);
+			if (prev === null || cur === null || prev.length === 0 || cur.length === 0) return null;
+			const highs = (ks) => ks.reduce((m, k) => Math.max(m, k[3]), -Infinity);
+			const lows = (ks) => ks.reduce((m, k) => Math.min(m, k[2]), Infinity);
+			const kind = backchiKind(bc.backchiType);
+			const prevHigh = highs(prev);
+			const curHigh = highs(cur);
+			const prevLow = lows(prev);
+			const curLow = lows(cur);
+			return {
+				prevHigh,
+				prevLow,
+				curHigh,
+				curLow,
+				newExtreme: kind === "top" ? curHigh > prevHigh : kind === "bottom" ? curLow < prevLow : false,
+				kind
+			};
+		}
 		function zhongshuPosition(price, zs) {
 			if (price === null) return null;
 			const top = zs.gg ?? zs.high;
@@ -478,6 +520,226 @@ window.__ModuleLoader__.load({
 			if (price > top) return "above";
 			if (price < bottom) return "below";
 			return "inside";
+		}
+		/** 下一步推演：按现价相对中枢/震荡带位置给出规则文案（数字随区间动态嵌入）。 */
+		function zhongshuForecast(price, zs) {
+			const pos = zhongshuPosition(price, zs);
+			const top = zs.gg ?? zs.high;
+			const bottom = zs.dd ?? zs.low;
+			const f = (v) => v.toFixed(2);
+			if (pos === "above") return `已上破震荡上沿 GG ${f(top)}：回踩不破 ZG ${f(zs.high)} → 三买成立`;
+			if (pos === "below") return `已跌破震荡下沿 DD ${f(bottom)}：反抽不回中枢 → 中枢下移/走势转弱`;
+			if (price !== null && price > zs.high) return `中枢上沿区内：放量破 GG ${f(top)} → 三买观察`;
+			if (price !== null && price < zs.low) return `中枢下沿区内：跌破 DD ${f(bottom)} → 防中枢下移`;
+			return `中枢震荡中：关注 GG ${f(top)} / DD ${f(bottom)} 的突破方向`;
+		}
+		/** 引擎 type_cn（中文走势名）→ 方向；「多」「空」并存的复合措辞（如「多空分歧」）视为 flat。雷达级别共振与矩阵共用此单源。 */
+		function typeCnDir(cn) {
+			const up = cn.includes("上涨") || cn.includes("多");
+			const down = cn.includes("下跌") || cn.includes("空");
+			if (up && !down) return "up";
+			if (down && !up) return "down";
+			return "flat";
+		}
+		const clamp100 = (v) => Math.max(0, Math.min(100, v));
+		/** 七维合成（详见规格 §4.2，每维 basis 说明计算依据；数据缺失 → null 退出总分）。 */
+		function radarDims(payload, matrixRows) {
+			const morph = asRec(payload.morphology);
+			const trend = asRec(payload.trend_analysis);
+			const c = asRec(payload.chart_data);
+			const klines = asNum(morph.klines_count) ?? 0;
+			const processed = asNum(morph.processed_klines_count) ?? 0;
+			const bis = asNum(morph.bis_count) ?? 0;
+			const segs = asNum(morph.segs_count) ?? 0;
+			const fxs = asNum(morph.fenxings_count) ?? 0;
+			const zsList = asArr(c.zhongshu_zones).map(asRec);
+			const backchis = asArr(c.backchis).map(asRec);
+			const dims = [];
+			{
+				const a = klines > 0 ? Math.min(1, processed / klines) : 0;
+				const b = bis > 0 ? Math.min(1, fxs / (bis * 2)) : 0;
+				const d = segs > 0 ? Math.min(1, bis / (segs * 3)) : bis > 0 ? .5 : 0;
+				const value = klines > 0 && bis > 0 ? clamp100((a + b + d) / 3 * 100) : null;
+				dims.push({
+					key: "morph-integrity",
+					label: "形态完整度",
+					value,
+					basis: `处理保留 ${processed}/${klines} · 分型/笔 ${fxs}/${bis} · 笔/段 ${bis}/${segs}`
+				});
+			}
+			{
+				const last = zsList.length > 0 ? zsList[zsList.length - 1] : null;
+				const stab = last !== null ? asNum(last.stability) : null;
+				dims.push({
+					key: "zs-stability",
+					label: "中枢稳定度",
+					value: stab !== null ? clamp100(stab * 100) : null,
+					basis: last !== null ? `最新中枢稳定度 ${stab ?? "—"}` : "本级别无中枢数据"
+				});
+			}
+			{
+				const strength = asNum(trend.trend_strength);
+				dims.push({
+					key: "trend-strength",
+					label: "走势强度",
+					value: strength !== null ? clamp100(strength * 100) : null,
+					basis: `trend_strength=${strength ?? "—"}（${asStr(trend.type_cn) || "未判定"}）`
+				});
+			}
+			{
+				let adj = 0;
+				let count = 0;
+				for (const bc of backchis) {
+					if (bc.valid !== true) continue;
+					count += 1;
+					const kind = backchiKind(asStr(bc.backchi_type));
+					const div = Math.abs(asNum(bc.macd_divergence) ?? 0);
+					const magnitude = Math.min(30, div * 200);
+					adj += kind === "top" ? -magnitude : kind === "bottom" ? magnitude : 0;
+				}
+				dims.push({
+					key: "backchi-pressure",
+					label: "背驰压力",
+					value: count > 0 ? clamp100(50 + adj) : null,
+					basis: count > 0 ? `有效背驰 ${count} 处（顶=空方/底=多方），净调整 ${adj.toFixed(0)}` : "无有效背驰"
+				});
+			}
+			{
+				const latest = asArr(payload.latest_signals).map(asRec)[0] ?? null;
+				const rel = latest !== null ? asNum(latest.reliability) : null;
+				dims.push({
+					key: "bs-quality",
+					label: "买卖点质量",
+					value: rel !== null ? clamp100(rel * 100) : null,
+					basis: latest !== null ? `最新信号 ${asStr(latest.type)} 可靠度 ${rel ?? "—"}` : "近期无买卖点信号"
+				});
+			}
+			{
+				const dirs = matrixRows.filter((r) => r.status === "ok" && r.data !== void 0).map((r) => typeCnDir(asStr(asRec(r.data.trend_analysis).type_cn)));
+				const directional = dirs.filter((d) => d !== "flat");
+				if (directional.length >= 2) {
+					const up = directional.filter((d) => d === "up").length;
+					const majority = Math.max(up, directional.length - up);
+					dims.push({
+						key: "level-resonance",
+						label: "级别共振",
+						value: clamp100(majority / directional.length * 100),
+						basis: `联立 ${directional.length}/${dirs.length} 行有方向，一致率 ${Math.round(majority / directional.length * 100)}%`
+					});
+				} else dims.push({
+					key: "level-resonance",
+					label: "级别共振",
+					value: null,
+					basis: "有方向级别的行不足 2 行"
+				});
+			}
+			{
+				const kline = asArr(c.kline).map(asArr);
+				const vols = asArr(c.volumes).map((v) => asNum(v) ?? 0);
+				const n = Math.min(20, kline.length, vols.length);
+				if (n >= 6) {
+					let up = 0;
+					let down = 0;
+					for (let i = kline.length - n; i < kline.length; i += 1) if (Number(kline[i]?.[1] ?? 0) >= Number(kline[i]?.[0] ?? 0)) up += vols[i] ?? 0;
+					else down += vols[i] ?? 0;
+					const bias = up + down > 0 ? (up - down) / (up + down) : 0;
+					dims.push({
+						key: "volume-fit",
+						label: "量能配合",
+						value: clamp100(50 + bias * 80),
+						basis: `近 ${n} 根上涨量/下跌量偏移 ${(bias * 100).toFixed(0)}%（正=多头量占优）`
+					});
+				} else dims.push({
+					key: "volume-fit",
+					label: "量能配合",
+					value: null,
+					basis: "K 线/量数据不足"
+				});
+			}
+			return dims;
+		}
+		function radarSummary(dims) {
+			const values = dims.filter((d) => d.value !== null).map((d) => d.value);
+			if (values.length === 0) return {
+				score: null,
+				direction: "neutral"
+			};
+			const score = values.reduce((a, b) => a + b, 0) / values.length;
+			const direction = score >= 55 ? "bullish" : score <= 45 ? "bearish" : "neutral";
+			return {
+				score: Math.round(score * 10) / 10,
+				direction
+			};
+		}
+		/** 引擎买卖点 type（中文 str(BuySellPointType)，如「一类买点」）→ pointWhy/marker 查找键（'1buy' 等）；已是枚举形态时原样小写。 */
+		function pointTypeKey(type) {
+			const cls = type.includes("一") ? "1" : type.includes("二") ? "2" : type.includes("三") ? "3" : "";
+			const side = type.includes("买") ? "buy" : type.includes("卖") ? "sell" : "";
+			return cls !== "" && side !== "" ? `${cls}${side}` : type.toLowerCase();
+		}
+		/** 引擎 zhongshu_type（中文 str(ZhongShuType)，如「扩展中枢」）→ 徽章短标签；英文枚举值兼容。 */
+		function zhongshuTypeLabel(raw) {
+			if (raw !== void 0) {
+				if (raw.includes("扩展") || raw === "extended") return "扩展";
+				if (raw.includes("复杂") || raw === "complex") return "复杂";
+				if (raw.includes("趋势") || raw === "trend") return "趋势";
+				if (raw.includes("盘整") || raw === "consolidation") return "盘整";
+			}
+			return "普通";
+		}
+		/** 信号时间戳比较键：数值时间戳优先，其次 Date.parse 可解析字符串，均不可用退 -∞（排序中保持原有相对顺序）。 */
+		const stampOf = (r) => {
+			const n = asNum(r.timestamp);
+			if (n !== null) return n;
+			const p = Date.parse(asStr(r.timestamp));
+			return Number.isNaN(p) ? -Infinity : p;
+		};
+		/** 合并买卖两侧按 timestamp 取最近 n 条（新→旧）——「最近 N 条信号」语义，修复拼接尾取导致单侧被淹没。 */
+		function latestSignals(payload, n) {
+			const dynamics = asRec(payload.dynamics);
+			return [...asArr(dynamics.buy_points).map(asRec), ...asArr(dynamics.sell_points).map(asRec)].sort((a, b) => stampOf(b) - stampOf(a)).slice(0, Math.max(0, n));
+		}
+		/** 买卖点类型 → 缠论定义行（hasBackchi 时附背驰联动提示）。 */
+		function pointWhy(pointType, hasBackchi) {
+			const t = pointType.toLowerCase();
+			const table = {
+				"1buy": "下跌趋势 + 底背驰 → 一类买点（趋势力度衰竭的首个反转点）",
+				"2buy": "一买后回调不创新低 → 二类买点（反转确认）",
+				"3buy": "中枢上沿突破后回踩不回中枢 → 三类买点（中枢结束确认）",
+				"1sell": "上涨趋势 + 顶背驰 → 一类卖点（趋势力度衰竭的首个反转点）",
+				"2sell": "一卖后反抽不创新高 → 二类卖点（反转确认）",
+				"3sell": "中枢下沿跌破后反抽不回中枢 → 三类卖点（中枢结束确认）"
+			};
+			const base = table[t.split(".")[0] ?? t] ?? table[pointType] ?? "缠论结构条件触发";
+			return hasBackchi ? `${base} · 动力确认见背驰卡` : base;
+		}
+		const countCn = (n) => n <= 0 ? "无" : n === 1 ? "单" : n === 2 ? "两" : `${n}`;
+		/** 推导总链：走势结构 → 背驰 → 买卖点 → 操作参考（缺环节以「—」占位）。 */
+		function evidenceChain(payload, chart) {
+			const trend = asRec(payload.trend_analysis);
+			const morph = asRec(payload.morphology);
+			const advice = asRec(payload.trading_advice);
+			const typeCn = asStr(trend.type_cn);
+			const zsCount = asNum(morph.zhongshus_count) ?? 0;
+			const segs = [];
+			segs.push(typeCn !== "" ? `${typeCn}${countCn(zsCount)}中枢` : "走势未判定");
+			const backchis = chart?.backchis ?? [];
+			const valid = backchis.filter((bc) => bc.valid);
+			if (valid.length > 0) {
+				const kind = backchiKind(valid[valid.length - 1].backchiType);
+				segs.push(`末段${kind === "top" ? "顶" : kind === "bottom" ? "底" : "盘整"}背驰成立`);
+			} else segs.push(backchis.length > 0 ? "背驰未确认" : "暂无背驰");
+			const dynamics = asRec(payload.dynamics);
+			const buys = asArr(dynamics.buy_points).map(asRec);
+			const sells = asArr(dynamics.sell_points).map(asRec);
+			const latest = [...buys, ...sells].reduce((acc, r) => acc === null || stampOf(r) > stampOf(acc) ? r : acc, null) ?? asArr(payload.latest_signals).map(asRec)[0] ?? null;
+			if (latest !== null) {
+				const higher = latest.confirmed_by_higher === true;
+				segs.push(`${asStr(latest.type) || "信号"}${higher ? "·高级别✓" : "·待高级别确认"}`);
+			} else segs.push("无买卖点");
+			const action = asStr(advice.recommended_action);
+			segs.push(action !== "" ? `参考：${action}` : "—");
+			return segs;
 		}
 		//#endregion
 		//#region src/client/chart.tsx
@@ -1167,64 +1429,399 @@ window.__ModuleLoader__.load({
 			});
 		}
 		//#endregion
-		//#region src/client/page.tsx
+		//#region src/client/evidence.tsx
 		/**
-		* 缠论研究面板：交互式 K 线缠论图 + 形态/走势/信号摘要 + Agent 深度解读。
-		*
-		* 数据走宿主 `POST /kstock-api/chan-analyze`（{stock, level} → 引擎 JSON，
-		* 60s 服务端缓存）。图表为自研 SVG，实现拆分在 chart.tsx：蜡烛（A 股红涨绿跌）+
-		* 笔/段折线 + 中枢矩形 + 买卖点徽章 + 成交量副图 + 信息条/可靠度环/结构上下文，
-		* hover 十字线逐根读值。
-		* 深度解读走 TaskTargetMenu（chan 类型独立记忆落点）。
+		* 中栏「动力学×形态学」证据链：推导总链 + 背驰判定卡 + 买卖点证据链卡
+		* + 中枢演化卡。全部可点击 → 主图定位并脉冲高亮（onFocus 回调上抛）。
 		*/
-		/** 桥（index.tsx 注入；页面为 slot 组件拿不到 ctx，模块级单例传递）。 */
-		let chanBridge = null;
-		/** 七类信号雷达（SVG 七边形，czsc 式分类）。 */
-		function SignalRadar({ radar, score, direction, strength }) {
-			const categories = [
-				"cxt",
-				"tas",
-				"vol",
-				"bar",
-				"pos",
-				"jcc",
-				"sta"
-			];
-			const labels = {
-				cxt: "形态",
-				tas: "走势",
-				vol: "量能",
-				bar: "K线",
-				pos: "位置",
-				jcc: "交叉",
-				sta: "统计"
-			};
-			const cx = 78, cy = 72, r = 52;
-			const angle = (i) => Math.PI * 2 * i / categories.length - Math.PI / 2;
-			const point = (i, value) => [cx + Math.cos(angle(i)) * r * value, cy + Math.sin(angle(i)) * r * value];
-			const polygon = categories.map((c) => {
-				const v = asNum(radar[c]);
-				return v === null ? .5 : Math.max(0, Math.min(1, v / 100));
-			}).map((v, i) => point(i, v).join(",")).join(" ");
+		const backchiTypeCn = (raw) => {
+			const kind = backchiKind(raw);
+			if (kind === "top") return "顶背驰";
+			if (kind === "bottom") return "底背驰";
+			return "盘整背驰";
+		};
+		/** ⓪ 推导总链：segments 用 → 串起的一句话推理（derive.evidenceChain 产出）。 */
+		function ChainStrip({ segments }) {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+				className: "ksq-chanx-chain",
+				children: segments.map((seg, i) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+					className: "ksq-chanx-chain-node",
+					children: [i > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("em", {
+						"aria-hidden": true,
+						children: "→"
+					}), seg]
+				}, i))
+			});
+		}
+		/** ① 背驰判定卡：MACD 面积对比条 + 价格关系 + 结论徽章。 */
+		function BackchiCard({ chart, onFocus }) {
+			if (chart === null) return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: "ksq-chanx-card",
+				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "ksq-chanx-card-hd",
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "① 背驰判定" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+						className: "ksq-item-meta",
+						children: "动力学 · MACD 力度对比"
+					})]
+				}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+					className: "ksq-item-meta",
+					children: "图表数据未就绪。"
+				})]
+			});
+			const di = dateIndexOf(chart.dates);
+			const items = chart.backchis.map((bc, i) => ({
+				bc,
+				i
+			})).sort((a, b) => a.bc.valid === b.bc.valid ? a.i - b.i : a.bc.valid ? -1 : 1);
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-				className: "ksq-chan-radar",
+				className: "ksq-chanx-card",
+				children: [
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						className: "ksq-chanx-card-hd",
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "① 背驰判定" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+							className: "ksq-item-meta",
+							children: "动力学 · MACD 力度对比"
+						})]
+					}),
+					items.length === 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+						className: "ksq-item-meta",
+						children: "本级别暂无背驰记录（未出现可比较的同向段）。"
+					}),
+					items.map(({ bc, i }) => {
+						const prevArea = bc.previousMacdArea ?? null;
+						const curArea = bc.currentMacdArea ?? null;
+						const max = Math.max(prevArea ?? 0, curArea ?? 0, 1e-4);
+						const rel = backchiPriceRelation(chart, di, bc);
+						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+							type: "button",
+							className: `ksq-chanx-bcrow${bc.valid ? " valid" : ""}`,
+							onClick: () => {
+								const s = Math.max(0, resolveIndex(di, bc.previousStart));
+								const e0 = resolveIndex(di, bc.currentEnd);
+								onFocus({
+									startIdx: s,
+									endIdx: e0 >= 0 ? e0 : chart.dates.length - 1,
+									hl: {
+										kind: "backchi",
+										id: i
+									}
+								});
+							},
+							title: `定位 ${bc.previousStart.slice(0, 10)} ~ ${bc.currentEnd.slice(0, 10)}`,
+							children: [
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+									className: "ksq-chanx-bcrow-hd",
+									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+										className: `ksq-chanx-badge ${bc.valid ? backchiKind(bc.backchiType) === "top" ? "down" : "up" : ""}`,
+										children: [
+											backchiTypeCn(bc.backchiType),
+											" · ",
+											bc.valid ? "成立" : "未确认"
+										]
+									}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+										className: "ksq-item-meta ksq-mono",
+										children: bc.currentEnd.slice(0, 10)
+									})]
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+									className: "ksq-chanx-areabars",
+									children: [
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+											className: "ksq-item-meta",
+											children: "前段"
+										}),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+											className: "ksq-chanx-bar",
+											children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("i", { style: {
+												width: `${(prevArea ?? 0) / max * 100}%`,
+												background: "var(--dsw-alias-border-l2)"
+											} })
+										}),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", {
+											className: "ksq-mono",
+											children: prevArea !== null ? prevArea.toFixed(3) : "—"
+										})
+									]
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+									className: "ksq-chanx-areabars",
+									children: [
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+											className: "ksq-item-meta",
+											children: "现段"
+										}),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+											className: "ksq-chanx-bar",
+											children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("i", { style: {
+												width: `${(curArea ?? 0) / max * 100}%`,
+												background: "#e05656"
+											} })
+										}),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", {
+											className: "ksq-mono",
+											children: curArea !== null ? curArea.toFixed(3) : "—"
+										})
+									]
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+									className: "ksq-chanx-bcrow-ft",
+									children: [bc.macdDivergence !== void 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+										className: "ksq-item-meta",
+										children: ["力度差 ", bc.macdDivergence.toFixed(3)]
+									}), rel !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+										className: "ksq-item-meta",
+										children: ["价格 ", rel.kind === "top" ? `${rel.prevHigh.toFixed(2)}→${rel.curHigh.toFixed(2)}${rel.newExtreme ? " 新高" : " 未新高"}` : rel.kind === "bottom" ? `${rel.prevLow.toFixed(2)}→${rel.curLow.toFixed(2)}${rel.newExtreme ? " 新低" : " 未新低"}` : "盘整区间对照"]
+									})]
+								})
+							]
+						}, i);
+					})
+				]
+			});
+		}
+		/** ② 买卖点证据链卡：类型 + 可靠度条 + 级别确认 + 「为什么」定义行。 */
+		function BSPointsCard({ payload, chart, onFocus }) {
+			const di = chart !== null ? dateIndexOf(chart.dates) : null;
+			const hasValidBackchi = (chart?.backchis ?? []).some((bc) => bc.valid);
+			/** 动力学 type（中文「一类买点」/枚举 '1buy'）→ 图上 marker 索引（label=BUY_1 形态），找不到返回 -1。 */
+			const markerIndexOf = (type, time) => {
+				const m = /^(\d)(buy|sell)$/.exec(pointTypeKey(type));
+				if (m === null) return -1;
+				const side = m[2] === "buy" ? "BUY" : "SELL";
+				return chart?.markers.findIndex((mk) => (mk.label ?? "").toUpperCase() === `${side}_${m[1]}` && mk.time.slice(0, 10) === time.slice(0, 10)) ?? -1;
+			};
+			const rows = latestSignals(payload, 6);
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: "ksq-chanx-card",
+				children: [
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						className: "ksq-chanx-card-hd",
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "② 买卖点证据链" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+							className: "ksq-item-meta",
+							children: "形态 × 动力联立"
+						})]
+					}),
+					rows.length === 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+						className: "ksq-item-meta",
+						children: "当前级别无买卖点信号。"
+					}),
+					rows.map((r) => {
+						const time = asStr(r.timestamp);
+						const price = asNum(r.price);
+						const rel = asNum(r.reliability);
+						const type = asStr(r.type);
+						const isBuy = type.includes("buy") || type.includes("买");
+						const idx = di !== null ? resolveIndex(di, time) : -1;
+						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+							type: "button",
+							className: "ksq-chanx-bsrow",
+							disabled: idx < 0,
+							onClick: () => {
+								if (idx >= 0) onFocus({
+									startIdx: idx,
+									endIdx: idx,
+									hl: {
+										kind: "point",
+										id: markerIndexOf(type, time)
+									}
+								});
+							},
+							children: [
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+									className: "ksq-chanx-bsrow-hd",
+									children: [
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+											className: `ksq-chanx-badge ${isBuy ? "up" : "down"}`,
+											children: type || "信号"
+										}),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", {
+											className: "ksq-mono",
+											children: price !== null ? price.toFixed(2) : "—"
+										}),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+											className: "ksq-item-meta ksq-mono",
+											children: time.slice(0, 10)
+										})
+									]
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+									className: "ksq-chanx-relbar",
+									title: `可靠度 ${rel ?? "—"}`,
+									children: [
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+											className: "ksq-item-meta",
+											children: "可靠度"
+										}),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+											className: "ksq-chanx-bar",
+											children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("i", { style: {
+												width: `${(rel ?? 0) * 100}%`,
+												background: isBuy ? "#31c7a2" : "#e64646"
+											} })
+										}),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", {
+											className: "ksq-mono",
+											children: rel !== null ? rel.toFixed(2) : "—"
+										}),
+										r.confirmed_by_higher === true && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+											className: "ksq-chanx-ok",
+											title: "高级别确认",
+											children: "高✓"
+										}),
+										r.confirmed_by_lower === true && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+											className: "ksq-chanx-ok",
+											title: "低级别确认",
+											children: "低✓"
+										})
+									]
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+									className: "ksq-chanx-why",
+									children: pointWhy(pointTypeKey(type), hasValidBackchi)
+								})
+							]
+						}, `${time}-${type}`);
+					})
+				]
+			});
+		}
+		/** ③ 中枢演化卡：类型/区间/延伸/稳定度 + 现价位置 + 推演。 */
+		function ZhongshuCard({ chart, payload, onFocus }) {
+			if (chart === null || chart.zhongshus.length === 0) return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: "ksq-chanx-card",
+				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "ksq-chanx-card-hd",
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "③ 中枢演化" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+						className: "ksq-item-meta",
+						children: "形态学"
+					})]
+				}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+					className: "ksq-item-meta",
+					children: "本级别暂无中枢（笔/段尚未构成三段重叠区间）。"
+				})]
+			});
+			const di = dateIndexOf(chart.dates);
+			const zones = chart.zhongshus.slice(-2).reverse();
+			const lastClose = chart.kline.length > 0 ? chart.kline[chart.kline.length - 1][1] : null;
+			const trendCn = asStr(asRec(payload.trend_analysis).type_cn);
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: "ksq-chanx-card",
+				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "ksq-chanx-card-hd",
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "③ 中枢演化" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+						className: "ksq-item-meta",
+						children: trendCn || "形态学"
+					})]
+				}), zones.map((zs, i) => {
+					const absIdx = chart.zhongshus.length - 1 - i;
+					const pos = zhongshuPosition(lastClose, zs);
+					const s = Math.max(0, resolveIndex(di, zs.start_time));
+					const e0 = resolveIndex(di, zs.end_time);
+					const e = e0 >= 0 ? e0 : chart.dates.length - 1;
+					return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+						type: "button",
+						className: "ksq-chanx-zsrow",
+						onClick: () => onFocus({
+							startIdx: s,
+							endIdx: e,
+							hl: {
+								kind: "zhongshu",
+								id: absIdx
+							}
+						}),
+						children: [
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+								className: "ksq-chanx-bsrow-hd",
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+									className: "ksq-chanx-badge zs",
+									children: [
+										zhongshuTypeLabel(zs.zhongshuType),
+										"中枢",
+										zs.extendCount !== void 0 && zs.extendCount > 0 ? ` ·延伸${zs.extendCount}` : ""
+									]
+								}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("b", {
+									className: "ksq-mono",
+									children: [
+										zs.low.toFixed(2),
+										"~",
+										zs.high.toFixed(2)
+									]
+								})]
+							}),
+							zs.stability !== void 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+								className: "ksq-chanx-relbar",
+								children: [
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+										className: "ksq-item-meta",
+										children: "稳定度"
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+										className: "ksq-chanx-bar",
+										children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("i", { style: {
+											width: `${zs.stability * 100}%`,
+											background: "#c792ea"
+										} })
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", {
+										className: "ksq-mono",
+										children: zs.stability.toFixed(2)
+									})
+								]
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+								className: "ksq-chanx-zspos",
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+									className: `ksq-chanx-badge ${pos === "above" ? "up" : pos === "below" ? "down" : ""}`,
+									children: [
+										"现价 ",
+										lastClose !== null ? lastClose.toFixed(2) : "—",
+										" · ",
+										pos === "above" ? "中枢上方" : pos === "below" ? "中枢下方" : "震荡带内"
+									]
+								})
+							}),
+							absIdx === chart.zhongshus.length - 1 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+								className: "ksq-chanx-why",
+								children: zhongshuForecast(lastClose, zs)
+							})
+						]
+					}, absIdx);
+				})]
+			});
+		}
+		//#endregion
+		//#region src/client/status.tsx
+		/**
+		* 右栏状态：缠论原生七维雷达（替换 czsc 七类）+ 多级别联立矩阵 +
+		* 关键位/综合评估 + 折叠的信号明细 chips。
+		*/
+		/** 缠论原生雷达：七边形 + 维度值列表（title 悬浮显示计算依据）。 */
+		function ChanRadar({ dims, summary }) {
+			const cx = 78, cy = 72, r = 52;
+			const angle = (i) => Math.PI * 2 * i / dims.length - Math.PI / 2;
+			const point = (i, value) => [cx + Math.cos(angle(i)) * r * value, cy + Math.sin(angle(i)) * r * value];
+			const polygon = dims.map((d, i) => point(i, d.value !== null ? Math.min(1, Math.max(.04, d.value / 100)) : .04).join(",")).join(" ");
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: "ksq-chanx-radarblock",
 				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("svg", {
 					viewBox: "0 0 156 144",
 					role: "img",
-					"aria-label": "信号雷达",
+					"aria-label": "缠论雷达",
+					className: "ksq-chanx-radarsvg",
 					children: [
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("title", { children: `缠论雷达 ${summary.score ?? "—"} 分（${summary.direction === "bullish" ? "偏多" : summary.direction === "bearish" ? "偏空" : "中性"}）` }),
 						[
 							.25,
 							.5,
 							.75,
 							1
 						].map((ring) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("polygon", {
-							points: categories.map((_, i) => point(i, ring).join(",")).join(" "),
+							points: dims.map((_, i) => point(i, ring).join(",")).join(" "),
 							fill: "none",
 							stroke: "var(--dsw-alias-border-l3)",
 							strokeWidth: "0.6"
 						}, ring)),
-						categories.map((cat, i) => {
+						dims.map((d, i) => {
 							const [px, py] = point(i, 1);
 							return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
 								x1: cx,
@@ -1233,43 +1830,253 @@ window.__ModuleLoader__.load({
 								y2: py,
 								stroke: "var(--dsw-alias-border-l3)",
 								strokeWidth: "0.6"
-							}, cat);
+							}, d.key);
 						}),
 						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("polygon", {
 							points: polygon,
-							fill: "rgba(232,163,61,0.3)",
+							fill: "rgba(232,163,61,0.28)",
 							stroke: "#e8a33d",
 							strokeWidth: "1.4"
 						}),
-						categories.map((cat, i) => {
-							const [px, py] = point(i, 1.22);
+						dims.map((d, i) => {
+							const [px, py] = point(i, 1.15);
 							return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
 								x: px,
 								y: py + 3,
-								fontSize: "9",
+								fontSize: "8.5",
 								textAnchor: "middle",
-								fill: "var(--dsw-alias-label-tertiary)",
-								children: labels[cat] ?? cat
-							}, `l-${cat}`);
+								fill: d.value === null ? "var(--dsw-alias-label-tertiary)" : "var(--dsw-alias-label-secondary)",
+								opacity: d.value === null ? .55 : 1,
+								children: d.label
+							}, `l-${d.key}`);
 						})
 					]
 				}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-					className: "ksq-chan-radar-meta",
-					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("strong", {
-						className: direction === "bullish" ? "ksq-up" : direction === "bearish" ? "ksq-down" : "",
-						children: [
-							score !== null ? score.toFixed(1) : "—",
-							" 分 · ",
-							direction === "bullish" ? "偏多" : direction === "bearish" ? "偏空" : direction
-						]
-					}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
-						className: "ksq-item-meta",
-						children: ["强度：", strength === "weak" ? "弱" : strength === "strong" ? "强" : strength]
-					})]
+					className: "ksq-chanx-radar-meta",
+					children: [
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("strong", {
+							className: summary.direction === "bullish" ? "ksq-up" : summary.direction === "bearish" ? "ksq-down" : "",
+							children: [
+								summary.score !== null ? summary.score.toFixed(1) : "—",
+								" 分 · ",
+								summary.direction === "bullish" ? "偏多" : summary.direction === "bearish" ? "偏空" : "中性"
+							]
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("ul", {
+							className: "ksq-chanx-dims",
+							children: dims.map((d) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("li", {
+								title: d.basis,
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("em", { children: d.label }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", {
+									className: d.value === null ? "" : d.value >= 55 ? "ksq-up" : d.value <= 45 ? "ksq-down" : "",
+									children: d.value !== null ? d.value.toFixed(0) : "—"
+								})]
+							}, d.key))
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+							className: "ksq-item-meta",
+							children: "悬浮维度看计算依据；缺维退出总分"
+						})
+					]
 				})]
 			});
 		}
-		/** 深度解读提示词（结构摘要 + 信号明细 → czsc 式信号字典作解读输入）。 */
+		const dirCn = (data) => {
+			const cn = asStr(asRec(data.trend_analysis).type_cn);
+			const dir = typeCnDir(cn);
+			return {
+				cn: cn !== "" ? cn : "未判定",
+				dir
+			};
+		};
+		/** 多级别联立矩阵：四行级别 × 方向/买卖点/得分/背驰，多数方向高亮共振。 */
+		function LevelMatrix({ rows }) {
+			const dirs = rows.filter((r) => r.status === "ok" && r.data !== void 0).map((r) => dirCn(r.data).dir).filter((d) => d !== "flat");
+			const up = dirs.filter((d) => d === "up").length;
+			const down = dirs.length - up;
+			const majority = dirs.length >= 2 ? up > down ? "up" : down > up ? "down" : null : null;
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: "ksq-chanx-card",
+				children: [
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						className: "ksq-chanx-card-hd",
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "多级别联立" }), majority !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+							className: `ksq-chanx-badge ${majority === "up" ? "up" : "down"}`,
+							children: ["共振", majority === "up" ? "偏多" : "偏空"]
+						})]
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("table", {
+						className: "ksq-chanx-matrix",
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("tr", { children: [
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "级别" }),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "方向" }),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "买卖点" }),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "分" }),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "背驰" })
+						] }) }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("tbody", { children: rows.map((row) => {
+							const current = row.current === true;
+							if (row.status !== "ok" || row.data === void 0) return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("tr", {
+								className: current ? "cur" : "",
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("td", { children: [row.level, current ? " *" : ""] }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
+									colSpan: 4,
+									className: "ksq-item-meta",
+									children: row.status === "loading" ? "加载中…" : row.status === "error" ? "加载失败" : "数据不足"
+								})]
+							}, row.level);
+							const d = row.data;
+							const { cn, dir } = dirCn(d);
+							const dynamics = asRec(d.dynamics);
+							const latestPoint = latestSignals(d, 1)[0];
+							const score = asNum(asRec(d.signal_scores).final_score);
+							const backchi = asNum(dynamics.backchi_count);
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("tr", {
+								className: `${current ? "cur" : ""} ${majority !== null && dir === majority ? majority === "up" ? "res-up" : "res-down" : ""}`,
+								children: [
+									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("td", { children: [row.level, current ? " *" : ""] }),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
+										className: dir === "up" ? "ksq-up" : dir === "down" ? "ksq-down" : "",
+										children: cn
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: latestPoint !== void 0 ? asStr(latestPoint.type) || "—" : "—" }),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
+										className: "ksq-mono",
+										children: score !== null ? score.toFixed(0) : "—"
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
+										className: "ksq-mono",
+										children: backchi !== null ? String(backchi) : "—"
+									})
+								]
+							}, row.level);
+						}) })]
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+						className: "ksq-item-meta",
+						children: "* 当前级别 · 同向行高亮 = 共振；分钟级依赖 tushare 配额"
+					})
+				]
+			});
+		}
+		/** 关键位 + 综合评估（risk/confidence 此前未展示）。 */
+		function KeyLevelsCard({ advice, lastZhongshu, assessment }) {
+			const risk = asNum(assessment.risk_level);
+			const confidence = asNum(assessment.confidence_score);
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: "ksq-chanx-card",
+				children: [
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+						className: "ksq-chanx-card-hd",
+						children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "关键位 / 评估" })
+					}),
+					lastZhongshu !== null ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+						className: "ksq-chanx-kv",
+						children: [
+							"中枢 ",
+							lastZhongshu.low.toFixed(2),
+							" ~ ",
+							lastZhongshu.high.toFixed(2),
+							"（中轴 ",
+							lastZhongshu.center.toFixed(2),
+							"）"
+						]
+					}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+						className: "ksq-item-meta",
+						children: [
+							"上沿压力 ",
+							lastZhongshu.high.toFixed(2),
+							" · 下沿支撑 ",
+							lastZhongshu.low.toFixed(2)
+						]
+					})] }) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+						className: "ksq-item-meta",
+						children: "无中枢数据"
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+						className: "ksq-chanx-kv",
+						children: [
+							"入场 ",
+							asNum(advice.entry_price)?.toFixed(2) ?? "—",
+							" · 止损 ",
+							asNum(advice.stop_loss)?.toFixed(2) ?? "—",
+							" · 目标 ",
+							asNum(advice.take_profit)?.toFixed(2) ?? "—"
+						]
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						className: "ksq-chanx-relbar",
+						children: [
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-item-meta",
+								children: "风险"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-chanx-bar",
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("i", { style: {
+									width: `${(risk ?? 0) * 100}%`,
+									background: "#e64646"
+								} })
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", {
+								className: "ksq-mono",
+								children: risk !== null ? risk.toFixed(2) : "—"
+							})
+						]
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						className: "ksq-chanx-relbar",
+						children: [
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-item-meta",
+								children: "置信"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-chanx-bar",
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("i", { style: {
+									width: `${(confidence ?? 0) * 100}%`,
+									background: "#5ab0ff"
+								} })
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", {
+								className: "ksq-mono",
+								children: confidence !== null ? confidence.toFixed(2) : "—"
+							})
+						]
+					})
+				]
+			});
+		}
+		/** 折叠的信号明细 chips（修复分类后的 czsc 评分详情，默认收起）。 */
+		function SignalDetailsCollapsible({ scores }) {
+			const details = asArr(scores.signal_details).map(asRec);
+			if (details.length === 0) return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(react_jsx_runtime.Fragment, {});
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("details", {
+				className: "ksq-chanx-chips",
+				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("summary", { children: [
+					"信号明细（",
+					details.length,
+					"）"
+				] }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+					className: "ksq-chips",
+					children: details.map((r, index) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+						className: "ksq-chip ksq-mono",
+						children: [
+							asStr(r.name),
+							" ",
+							asStr(r.value)
+						]
+					}, index))
+				})]
+			});
+		}
+		//#endregion
+		//#region src/client/page.tsx
+		/**
+		* 缠论研究页（三栏证据台）：主图 + 中栏「动力学×形态学」证据链 + 右栏
+		* 状态（缠论雷达/联立矩阵/关键位）。数据走宿主 POST /kstock-api/chan-analyze；
+		* 深度解读走 TaskTargetMenu（chan 类型独立记忆落点）。
+		*/
+		/** 桥（index.tsx 注入；页面为 slot 组件拿不到 ctx，模块级单例传递）。 */
+		let chanBridge = null;
+		/** 深度解读提示词（与改版前一致，喂结构摘要 + 信号明细）。 */
 		function interpretChanPrompt(payload, stock, level) {
 			const morph = asRec(payload.morphology);
 			const trend = asRec(payload.trend_analysis);
@@ -1285,7 +2092,22 @@ window.__ModuleLoader__.load({
 			});
 			return `缠论研究面板对 ${asStr(payload.stock_name) || stock}（${asStr(payload.stock_code)}，${level} 级）的结构分析：K线 ${asNum(morph.klines_count) ?? "?"} 根 → 分型 ${asNum(morph.fenxings_count) ?? "?"} / 笔 ${asNum(morph.bis_count) ?? "?"} / 段 ${asNum(morph.segs_count) ?? "?"} / 中枢 ${asNum(morph.zhongshus_count) ?? "?"}${zhongshus.length > 0 ? `（区间 ${zhongshus.join("、")}）` : ""}；走势 ${asStr(trend.type_cn) || asStr(trend.type)}（强度 ${asNum(trend.trend_strength) ?? "?"}），现价 ${asNum(trend.latest_price) ?? "?"}；买卖点 买 ${asNum(asRec(payload.dynamics).buy_points_count) ?? 0} / 卖 ${asNum(asRec(payload.dynamics).sell_points_count) ?? 0}，背驰 ${asNum(asRec(payload.dynamics).backchi_count) ?? 0} 处；操作参考 ${asStr(advice.recommended_action)}；信号评分 ${asNum(scores.final_score) ?? "?"}（${asStr(scores.direction)} / ${asStr(scores.strength)}），信号明细：${signals.length > 0 ? signals.join("；") : "无"}。请做缠论深度解读：当前级别在走势中的位置（趋势/盘整）、中枢演化方向、买卖点的级别联立确认（可再跑多级别）、背驰与动能结构、操作计划（入场/止损/目标位与级别匹配）与失效条件。可用 stock-analysis 技能的缠论引擎补充多级别分析；数据缺失诚实标注「无数据」，不构成投资建议。`;
 		}
-		/** 缠论研究页：左 K 线（缩放/拖拽）+ 右信息栏（摘要/多级别/信号流/关键位）。 */
+		/** 窄屏检测（<1100px 中栏并入右栏 Tab 化）。 */
+		function useNarrow() {
+			const [narrow, setNarrow] = (0, react.useState)(() => typeof window !== "undefined" && window.matchMedia("(max-width: 1100px)").matches);
+			(0, react.useEffect)(() => {
+				const mq = window.matchMedia("(max-width: 1100px)");
+				const onChange = (event) => {
+					setNarrow(event.matches);
+				};
+				mq.addEventListener("change", onChange);
+				return () => {
+					mq.removeEventListener("change", onChange);
+				};
+			}, []);
+			return narrow;
+		}
+		/** 缠论研究页：三栏证据台（宽屏）/ 图上 + Tab 面板（窄屏）。 */
 		function ChanPage({ useWorkspaces } = {}) {
 			const [stock, setStock] = (0, react.useState)("");
 			const [level, setLevel] = (0, react.useState)("daily");
@@ -1298,7 +2120,11 @@ window.__ModuleLoader__.load({
 			const [loading, setLoading] = (0, react.useState)(false);
 			const [error, setError] = (0, react.useState)(null);
 			const [pendingAsk, setPendingAsk] = (0, react.useState)(null);
-			const [levelsBrief, setLevelsBrief] = (0, react.useState)({});
+			const [matrix, setMatrix] = (0, react.useState)({});
+			const [highlight, setHighlight] = (0, react.useState)(null);
+			const [sideTab, setSideTab] = (0, react.useState)("evidence");
+			const narrow = useNarrow();
+			const hlTimer = (0, react.useRef)(null);
 			const analyze = (0, react.useCallback)(async (targetStock, targetLevel) => {
 				if (targetStock.trim() === "") return;
 				setLoading(true);
@@ -1324,6 +2150,7 @@ window.__ModuleLoader__.load({
 						start: 0,
 						count: Math.max(1, next?.dates.length ?? 1)
 					});
+					setHighlight(null);
 				} catch (err) {
 					setError(err instanceof Error ? err.message : "分析失败");
 					setPayload(null);
@@ -1338,12 +2165,11 @@ window.__ModuleLoader__.load({
 			const stockCode = payload !== null ? asStr(payload.stock_code) : "";
 			(0, react.useEffect)(() => {
 				if (stockCode === "") {
-					setLevelsBrief({});
+					setMatrix({});
 					return;
 				}
-				const idx = LEVEL_OPTIONS.indexOf(level);
-				const others = LEVEL_OPTIONS.slice(idx + 1, idx + 3).length >= 2 ? LEVEL_OPTIONS.slice(idx + 1, idx + 3) : LEVEL_OPTIONS.slice(0, 2);
-				setLevelsBrief(Object.fromEntries(others.map((l) => [l, "loading"])));
+				const others = matrixLevels(level).filter((l) => l !== level);
+				setMatrix(Object.fromEntries(others.map((l) => [l, "loading"])));
 				for (const other of others) fetch("/kstock-api/chan-analyze", {
 					method: "POST",
 					headers: { "content-type": "application/json" },
@@ -1354,63 +2180,124 @@ window.__ModuleLoader__.load({
 				}).then(async (response) => {
 					if (!response.ok) throw new Error("fail");
 					const data = await response.json();
-					setLevelsBrief((current) => ({
+					const parsed = parseChart(data);
+					if (parsed === null || parsed.dates.length < 30) throw new Error("insufficient");
+					setMatrix((current) => ({
 						...current,
 						[other]: data
 					}));
 				}).catch(() => {
-					setLevelsBrief((current) => ({
+					setMatrix((current) => ({
 						...current,
 						[other]: "error"
 					}));
 				});
 			}, [stockCode, level]);
-			/** 信号定位：把 K 线窗口聚焦到该索引 ±40 根。 */
-			const focusIndex = (0, react.useCallback)((index, total) => {
+			/** 卡片联动：视图聚焦到区间 + 脉冲高亮 2.4s 后自清。 */
+			const onCardFocus = (0, react.useCallback)((focus) => {
+				const total = chart?.dates.length ?? 0;
+				if (total === 0) return;
+				const span = Math.max(40, focus.endIdx - focus.startIdx + 24);
+				const start = Math.max(0, Math.min(total - span, focus.startIdx - 12));
 				setView({
-					start: Math.max(0, Math.min(Math.max(0, total - 80), index - 40)),
-					count: Math.min(80, Math.max(15, total))
+					start,
+					count: Math.min(span, total)
 				});
-			}, []);
+				if (focus.hl.id >= 0) {
+					setHighlight({
+						kind: focus.hl.kind,
+						id: focus.hl.id
+					});
+					if (hlTimer.current !== null) window.clearTimeout(hlTimer.current);
+					hlTimer.current = window.setTimeout(() => {
+						setHighlight(null);
+					}, 2400);
+				}
+			}, [chart]);
 			const morph = payload !== null ? asRec(payload.morphology) : {};
-			const trend = payload !== null ? asRec(payload.trend_analysis) : {};
 			const dynamics = payload !== null ? asRec(payload.dynamics) : {};
 			const advice = payload !== null ? asRec(payload.trading_advice) : {};
 			const scores = payload !== null ? asRec(payload.signal_scores) : {};
-			const total = chart?.dates.length ?? 0;
-			const signalRows = [];
-			if (chart !== null) {
-				const dateIndex = dateIndexOf(chart.dates);
-				for (const marker of chart.markers) {
-					const time = asStr(marker.time);
-					const index = resolveIndex(dateIndex, time);
-					if (index >= 0) signalRows.push({
-						key: `m-${index}-${asStr(marker.label)}`,
-						date: time.slice(0, 10),
-						label: asStr(marker.label ?? marker.type ?? "信号"),
-						price: asNum(marker.price),
-						index
-					});
-				}
-				for (const bi of chart.biLines.slice(-6).reverse()) {
-					const endIndex = resolveIndex(dateIndex, bi.end_time);
-					if (endIndex >= 0) signalRows.push({
-						key: `b-${endIndex}`,
-						date: bi.end_time.slice(0, 10),
-						label: `笔转折（${bi.end_price >= bi.start_price ? "向上" : "向下"}）`,
-						price: bi.end_price,
-						index: endIndex
-					});
-				}
-			}
+			const assessment = payload !== null ? asRec(payload.assessment) : {};
 			const lastZhongshu = chart !== null && chart.zhongshus.length > 0 ? chart.zhongshus[chart.zhongshus.length - 1] ?? null : null;
+			const matrixRows = matrixLevels(level).map((l) => {
+				if (l === level) return {
+					level: l,
+					status: "ok",
+					data: payload ?? void 0,
+					current: true
+				};
+				const cell = matrix[l];
+				if (cell === void 0) return {
+					level: l,
+					status: "empty"
+				};
+				if (cell === "loading") return {
+					level: l,
+					status: "loading"
+				};
+				if (cell === "error") return {
+					level: l,
+					status: "empty"
+				};
+				return {
+					level: l,
+					status: "ok",
+					data: cell
+				};
+			});
+			const matrixBriefs = matrixRows.map((r) => r.status === "ok" && r.data !== void 0 ? {
+				status: "ok",
+				data: r.data
+			} : { status: r.status === "loading" ? "loading" : "error" });
+			const dims = payload !== null ? radarDims(payload, matrixBriefs) : [];
+			const summary = radarSummary(dims);
+			const evidenceColumn = /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: "ksq-chanx-evi",
+				children: [
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)(ChainStrip, { segments: payload !== null ? evidenceChain(payload, chart) : [] }),
+					chart !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(BackchiCard, {
+						chart,
+						onFocus: onCardFocus
+					}),
+					payload !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(BSPointsCard, {
+						payload,
+						chart,
+						onFocus: onCardFocus
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)(ZhongshuCard, {
+						chart,
+						payload: payload ?? {},
+						onFocus: onCardFocus
+					})
+				]
+			});
+			const statusColumn = /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: "ksq-chanx-side2",
+				children: [
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+						className: "ksq-chanx-card",
+						children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ChanRadar, {
+							dims,
+							summary
+						})
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)(LevelMatrix, { rows: matrixRows }),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)(KeyLevelsCard, {
+						advice,
+						lastZhongshu,
+						assessment
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)(SignalDetailsCollapsible, { scores })
+				]
+			});
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: "ksq-page",
 				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("header", {
 					className: "ksq-topbar",
 					children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 						className: "ksq-title",
-						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "缠论研究" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: "笔段中枢 · 买卖点 · 背驰 · 信号雷达" })]
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "缠论研究" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: "动力学 × 形态学 · 证据链 · 级别联立" })]
 					})
 				}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 					className: "ksq-body",
@@ -1451,11 +2338,19 @@ window.__ModuleLoader__.load({
 								payload !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 									className: "ksq-count",
 									children: [
-										asStr(payload.stock_name),
+										"笔 ",
+										asNum(morph.bis_count) ?? "—",
+										" · 段 ",
+										asNum(morph.segs_count) ?? "—",
+										" · 中枢 ",
+										asNum(morph.zhongshus_count) ?? "—",
 										" ",
-										asStr(payload.stock_code),
-										" · ",
-										asStr(payload.time_level)
+										"· 买 ",
+										asNum(dynamics.buy_points_count) ?? 0,
+										" / 卖 ",
+										asNum(dynamics.sell_points_count) ?? 0,
+										" · 背驰 ",
+										asNum(dynamics.backchi_count) ?? 0
 									]
 								}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 									className: "ksq-linkbtn",
@@ -1472,164 +2367,55 @@ window.__ModuleLoader__.load({
 							className: "ksq-note",
 							children: error
 						}),
-						payload !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-							className: "ksq-chan-main",
+						payload !== null && chart !== null && !narrow && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+							className: "ksq-chanx-grid",
+							children: [
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+									className: "ksq-chanx-chartcol-wrap",
+									children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ChanChart, {
+										chart,
+										payload,
+										view,
+										onViewChange: setView,
+										highlight
+									})
+								}),
+								evidenceColumn,
+								statusColumn
+							]
+						}),
+						payload !== null && chart !== null && narrow && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+							className: "ksq-chanx-grid narrow",
 							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-								className: "ksq-chan-chartwrap",
-								children: chart !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ChanChart, {
+								className: "ksq-chanx-chartcol-wrap",
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ChanChart, {
 									chart,
 									payload,
 									view,
 									onViewChange: setView,
-									highlight: null
+									highlight
 								})
-							}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("aside", {
-								className: "ksq-chan-side",
-								children: [
-									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-										className: "ksq-chan-sidecard",
-										children: [
-											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "结构" }),
-											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
-												"笔 ",
-												asNum(morph.bis_count) ?? "—",
-												" · 段 ",
-												asNum(morph.segs_count) ?? "—",
-												" · 中枢 ",
-												asNum(morph.zhongshus_count) ?? "—"
-											] }),
-											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
-												asStr(trend.type_cn) || "—",
-												" · 强度 ",
-												asNum(trend.trend_strength) ?? "—",
-												" · 现价 ",
-												asNum(trend.latest_price) ?? "—"
-											] }),
-											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
-												"买 ",
-												asNum(dynamics.buy_points_count) ?? 0,
-												" / 卖 ",
-												asNum(dynamics.sell_points_count) ?? 0,
-												" · 背驰 ",
-												asNum(dynamics.backchi_count) ?? 0
-											] }),
-											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
-												className: "ksq-item-meta",
-												children: ["操作参考 ", asStr(advice.recommended_action) || "—"]
-											})
-										]
-									}),
-									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-										className: "ksq-chan-sidecard",
-										children: [
-											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "多级别联立" }),
-											Object.entries(levelsBrief).map(([lvl, brief]) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
-												className: "ksq-chan-levelrow",
-												children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("em", { children: lvl }), brief === "loading" ? "加载中…" : brief === "error" ? "加载失败" : /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
-													" ",
-													asStr(asRec(brief.trend_analysis).type_cn) || "—",
-													" ",
-													"买",
-													asNum(asRec(brief.dynamics).buy_points_count) ?? 0,
-													"/卖",
-													asNum(asRec(brief.dynamics).sell_points_count) ?? 0,
-													" ",
-													asNum(asRec(brief.signal_scores).final_score)?.toFixed(0) ?? "—",
-													"分"
-												] })]
-											}, lvl)),
-											Object.keys(levelsBrief).length === 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
-												className: "ksq-item-meta",
-												children: "—"
-											})
-										]
-									}),
-									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-										className: "ksq-chan-sidecard",
-										children: [
-											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "信号流（点击定位图）" }),
-											signalRows.length === 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
-												className: "ksq-item-meta",
-												children: "无买卖点/笔转折信号"
-											}),
-											signalRows.slice(0, 10).map((row) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
-												type: "button",
-												className: `ksq-chan-signal ${row.label.includes("买") || row.label.startsWith("B") ? "up" : row.label.includes("卖") || row.label.startsWith("S") ? "down" : ""}`,
-												onClick: () => {
-													if (total > 0) focusIndex(row.index, total);
-												},
-												title: `定位到 ${row.date}`,
-												children: [
-													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("em", { children: row.date }),
-													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: row.label }),
-													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", { children: row.price !== null ? row.price.toFixed(2) : "" })
-												]
-											}, row.key))
-										]
-									}),
-									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-										className: "ksq-chan-sidecard",
-										children: [
-											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "关键位" }),
-											lastZhongshu !== null ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
-												"中枢 ",
-												lastZhongshu.low.toFixed(2),
-												" ~ ",
-												lastZhongshu.high.toFixed(2),
-												"（中轴 ",
-												lastZhongshu.center.toFixed(2),
-												"）"
-											] }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
-												className: "ksq-item-meta",
-												children: [
-													"上沿压力 ",
-													lastZhongshu.high.toFixed(2),
-													" · 下沿支撑 ",
-													lastZhongshu.low.toFixed(2)
-												]
-											})] }) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
-												className: "ksq-item-meta",
-												children: "无中枢数据"
-											}),
-											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
-												"入场 ",
-												asNum(advice.entry_price)?.toFixed(2) ?? "—",
-												" · 止损 ",
-												asNum(advice.stop_loss)?.toFixed(2) ?? "—",
-												" · 目标 ",
-												asNum(advice.take_profit)?.toFixed(2) ?? "—"
-											] })
-										]
-									})
-								]
-							})]
-						}),
-						payload !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-							className: "ksq-chan-summary",
-							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(SignalRadar, {
-								radar: asRec(scores.radar_data),
-								score: asNum(scores.final_score),
-								direction: asStr(scores.direction),
-								strength: asStr(scores.strength)
 							}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-								className: "ksq-chan-signals",
-								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "信号明细" }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-									className: "ksq-chips",
-									children: [asArr(scores.signal_details).slice(0, 12).map((item, index) => {
-										const r = asRec(item);
-										return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
-											className: "ksq-chip ksq-mono",
-											children: [
-												asStr(r.name),
-												" ",
-												asStr(r.value)
-											]
-										}, index);
-									}), asArr(scores.signal_details).length === 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
-										className: "ksq-item-meta",
-										children: "无信号"
+								className: "ksq-chanx-tabpanel",
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+									className: "ksq-chanx-tabs",
+									role: "tablist",
+									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+										type: "button",
+										role: "tab",
+										"aria-selected": sideTab === "evidence",
+										className: `ksq-chanx-tab${sideTab === "evidence" ? " on" : ""}`,
+										onClick: () => setSideTab("evidence"),
+										children: "证据链"
+									}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+										type: "button",
+										role: "tab",
+										"aria-selected": sideTab === "status",
+										className: `ksq-chanx-tab${sideTab === "status" ? " on" : ""}`,
+										onClick: () => setSideTab("status"),
+										children: "状态 / 联立"
 									})]
-								})]
+								}), sideTab === "evidence" ? evidenceColumn : statusColumn]
 							})]
 						}),
 						pendingAsk !== null && chanBridge !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(TaskTargetMenu, {

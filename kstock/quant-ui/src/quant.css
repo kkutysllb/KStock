@@ -1425,3 +1425,27 @@ a.ksq-news-title:hover {
 .ksq-chanx-chips .ksq-chips { padding: 4px 0 2px; }
 /* KeyLevelsCard 键值行专用类：禁止用 .ksq-chanx-card span 这类宽选择器——特异性 (0,1,1) 会压制 ksq-item-meta/ksq-chanx-ok/badge 等单类规则 */
 .ksq-chanx-kv { color: var(--dsw-alias-label-primary); font-size: 12px; }
+
+/* ── 缠论研究改版：三栏布局 + 窄屏 Tab ─────────────────────────────── */
+.ksq-chanx-grid {
+  display: grid; gap: 10px; align-items: start;
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 330px) minmax(236px, 268px);
+}
+.ksq-chanx-grid.narrow { grid-template-columns: minmax(0, 1fr); }
+.ksq-chanx-chartcol-wrap { min-width: 0; }
+.ksq-chanx-chartcol { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ksq-chanx-chartcol svg { width: 100%; height: auto; display: block; }
+.ksq-chanx-infobar { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ksq-chanx-infobar b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.ksq-chanx-infobar .ksq-item-meta { margin-left: auto; }
+.ksq-chanx-evi, .ksq-chanx-side2 { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ksq-chanx-tabpanel { border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 8px; }
+.ksq-chanx-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.ksq-chanx-tab {
+  font: inherit; font-size: 12px; padding: 3px 12px; border-radius: 99px;
+  border: 1px solid var(--dsw-alias-border-l2); background: transparent;
+  color: var(--dsw-alias-label-tertiary); cursor: pointer;
+}
+.ksq-chanx-tab.on {
+  color: #0b120f; background: var(--dsw-alias-brand-primary); border-color: var(--dsw-alias-brand-primary); font-weight: 600;
+}
