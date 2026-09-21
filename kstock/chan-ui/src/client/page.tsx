@@ -9,73 +9,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { TaskTargetMenu, type TaskRouterBridge, type UseWorkspaces } from '@kstock/quant-ui'
-
-/** 引擎 JSON 的宽松取值助手。 */
-type Rec = Record<string, unknown>
-const asRec = (v: unknown): Rec => (typeof v === 'object' && v !== null ? v as Rec : {})
-const asArr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
-const asNum = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
-const asStr = (v: unknown): string => (typeof v === 'string' ? v : '')
+import {
+  asArr, asNum, asRec, asStr, dateIndexOf, parseChart,
+  LEVEL_OPTIONS, type ChartSlice, type Rec,
+} from './derive.ts'
 
 /** 桥（index.tsx 注入；页面为 slot 组件拿不到 ctx，模块级单例传递）。 */
 let chanBridge: TaskRouterBridge | null = null
 
-/** 图表数据切片（引擎 chart_data）。 */
-interface ChartSlice {
-  dates: string[]
-  kline: Array<[number, number, number, number]> // [open, close, low, high]
-  volumes: number[]
-  biLines: Array<{ start_time: string; end_time: string; start_price: number; end_price: number; direction?: string }>
-  segLines: Array<{ start_time: string; end_time: string; start_price: number; end_price: number }>
-  zhongshus: Array<{ start_time: string; end_time: string; high: number; low: number; center: number; gg?: number; dd?: number; extendCount?: number }>
-  markers: Array<Rec>
-  macd: { dif: Array<number | null>; dea: Array<number | null>; hist: Array<number | null> }
-  fenxings: Array<{ time: string; fenxingType: string; price: number; strength: number }>
-  backchis: Array<{ backchiType: string; valid: boolean; currentStart: string; currentEnd: string; previousStart: string; previousEnd: string }>
-}
-
-function parseChart(payload: Rec): ChartSlice | null {
-  const c = asRec(payload.chart_data)
-  const dates = asArr(c.dates).map(asStr)
-  const kline = asArr(c.kline).map(item => {
-    const k = asArr(item)
-    return [Number(k[0]), Number(k[1]), Number(k[2]), Number(k[3])] as [number, number, number, number]
-  })
-  if (dates.length < 2 || kline.length !== dates.length) return null
-  return {
-    dates,
-    kline,
-    volumes: asArr(c.volumes).map(v => asNum(v) ?? 0),
-    biLines: asArr(c.bi_lines).map(item => {
-      const r = asRec(item)
-      return { start_time: asStr(r.start_time), end_time: asStr(r.end_time), start_price: asNum(r.start_price) ?? 0, end_price: asNum(r.end_price) ?? 0 }
-    }),
-    segLines: asArr(c.seg_lines).map(item => {
-      const r = asRec(item)
-      return { start_time: asStr(r.start_time), end_time: asStr(r.end_time), start_price: asNum(r.start_price) ?? 0, end_price: asNum(r.end_price) ?? 0 }
-    }),
-    zhongshus: asArr(c.zhongshu_zones).map(item => {
-      const r = asRec(item)
-      return { start_time: asStr(r.start_time), end_time: asStr(r.end_time), high: asNum(r.high) ?? 0, low: asNum(r.low) ?? 0, center: asNum(r.center) ?? 0, gg: asNum(r.gg) ?? undefined, dd: asNum(r.dd) ?? undefined, extendCount: asNum(r.extend_count) ?? undefined }
-    }),
-    markers: asArr(c.markers).map(asRec),
-    macd: {
-      dif: asArr(asRec(c.macd).dif),
-      dea: asArr(asRec(c.macd).dea),
-      hist: asArr(asRec(c.macd).hist),
-    } as ChartSlice['macd'],
-    fenxings: asArr(c.fenxings).map(item => {
-      const r = asRec(item)
-      return { time: asStr(r.time), fenxingType: asStr(r.fenxing_type), price: asNum(r.price) ?? 0, strength: asNum(r.strength) ?? 0 }
-    }),
-    backchis: asArr(c.backchis).map(item => {
-      const r = asRec(item)
-      return { backchiType: asStr(r.backchi_type), valid: r.valid === true, currentStart: asStr(r.current_start), currentEnd: asStr(r.current_end), previousStart: asStr(r.previous_start), previousEnd: asStr(r.previous_end) }
-    }),
-  }
-}
-
-const LEVEL_OPTIONS = ['5min', '15min', '30min', '60min', '90min', '120min', 'daily', 'weekly', 'monthly'] as const
 const W = 720
 const H_MAIN = 300
 const H_VOL = 56
@@ -130,8 +71,7 @@ function ChanChart({ chart, view, onViewChange }: { chart: ChartSlice; view: { s
   const x = (index: number) => PAD_L + (index - view.start + 0.5) * slot
 
   // 日期（YYYY-MM-DD 前缀）→ 全局索引。
-  const dateIndex = new Map<string, number>()
-  dates.forEach((date, index) => dateIndex.set(date.slice(0, 10), index))
+  const dateIndex = dateIndexOf(dates)
   function indexOfTimeLocal(time: string): number {
     return dateIndex.get(time.slice(0, 10)) ?? -1
   }
@@ -286,7 +226,8 @@ function ChanChart({ chart, view, onViewChange }: { chart: ChartSlice; view: { s
       })}
       {/* 买卖点徽章（一二三类分类：B1/B2/B3/S1/S2/S3） */}
       {chart.markers.map((marker, i) => {
-        const time = asStr(marker.time ?? marker.date)
+        // date 为历史兜底字段（引擎实际发 time），类型迁至 ChartMarker 后需显式读取。
+        const time = asStr(marker.time ?? asRec(marker).date)
         const index = indexOfTime(time)
         const price = asNum(marker.price)
         if (index < 0 || price === null || index < view.start || index >= winEnd) return null
@@ -515,10 +456,9 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
   // 信号流数据：买卖点 markers + 最近 6 笔端点（可点击定位）。
   const signalRows: Array<{ key: string; date: string; label: string; price: number | null; index: number }> = []
   if (chart !== null) {
-    const dateIndex = new Map<string, number>()
-    chart.dates.forEach((date, index) => dateIndex.set(date.slice(0, 10), index))
+    const dateIndex = dateIndexOf(chart.dates)
     for (const marker of chart.markers) {
-      const time = asStr(marker.time ?? marker.date)
+      const time = asStr(marker.time ?? asRec(marker).date)
       const index = dateIndex.get(time.slice(0, 10)) ?? -1
       if (index >= 0) {
         signalRows.push({ key: `m-${index}-${asStr(marker.label)}`, date: time.slice(0, 10), label: asStr(marker.label ?? marker.type ?? '信号'), price: asNum(marker.price), index })

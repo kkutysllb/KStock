@@ -348,21 +348,23 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		//#endregion
-		//#region src/client/page.tsx
-		/**
-		* 缠论研究面板：交互式 K 线缠论图 + 形态/走势/信号摘要 + Agent 深度解读。
-		*
-		* 数据走宿主 `POST /kstock-api/chan-analyze`（{stock, level} → 引擎 JSON，
-		* 60s 服务端缓存）。图表自研 SVG：蜡烛（A 股红涨绿跌）+ 笔/段折线 +
-		* 中枢矩形 + 买卖点徽章 + 成交量副图，hover 十字线逐根读值。
-		* 深度解读走 TaskTargetMenu（chan 类型独立记忆落点）。
-		*/
+		//#region src/client/derive.ts
 		const asRec = (v) => typeof v === "object" && v !== null ? v : {};
 		const asArr = (v) => Array.isArray(v) ? v : [];
 		const asNum = (v) => typeof v === "number" && Number.isFinite(v) ? v : null;
 		const asStr = (v) => typeof v === "string" ? v : "";
-		/** 桥（index.tsx 注入；页面为 slot 组件拿不到 ctx，模块级单例传递）。 */
-		let chanBridge = null;
+		const LEVEL_OPTIONS = [
+			"5min",
+			"15min",
+			"30min",
+			"60min",
+			"90min",
+			"120min",
+			"daily",
+			"weekly",
+			"monthly"
+		];
+		/** 引擎 payload → 图表切片（宽松解析，字段缺失给安全默认）。 */
 		function parseChart(payload) {
 			const c = asRec(payload.chart_data);
 			const dates = asArr(c.dates).map(asStr);
@@ -408,10 +410,24 @@ window.__ModuleLoader__.load({
 						center: asNum(r.center) ?? 0,
 						gg: asNum(r.gg) ?? void 0,
 						dd: asNum(r.dd) ?? void 0,
-						extendCount: asNum(r.extend_count) ?? void 0
+						extendCount: asNum(r.extend_count) ?? void 0,
+						zhongshuType: asStr(r.zhongshu_type) || void 0,
+						stability: asNum(r.stability) ?? void 0
 					};
 				}),
-				markers: asArr(c.markers).map(asRec),
+				markers: asArr(c.markers).map((item) => {
+					const r = asRec(item);
+					return {
+						time: asStr(r.time),
+						price: asNum(r.price) ?? 0,
+						type: asStr(r.type) || void 0,
+						label: asStr(r.label) || void 0,
+						reliability: asNum(r.reliability) ?? void 0,
+						strength: asNum(r.strength) ?? void 0,
+						confirmedByHigher: r.confirmed_by_higher === true,
+						confirmedByLower: r.confirmed_by_lower === true
+					};
+				}),
 				macd: {
 					dif: asArr(asRec(c.macd).dif),
 					dea: asArr(asRec(c.macd).dea),
@@ -434,22 +450,32 @@ window.__ModuleLoader__.load({
 						currentStart: asStr(r.current_start),
 						currentEnd: asStr(r.current_end),
 						previousStart: asStr(r.previous_start),
-						previousEnd: asStr(r.previous_end)
+						previousEnd: asStr(r.previous_end),
+						currentMacdArea: asNum(r.current_macd_area) ?? void 0,
+						previousMacdArea: asNum(r.previous_macd_area) ?? void 0,
+						macdDivergence: asNum(r.macd_divergence) ?? void 0
 					};
 				})
 			};
 		}
-		const LEVEL_OPTIONS = [
-			"5min",
-			"15min",
-			"30min",
-			"60min",
-			"90min",
-			"120min",
-			"daily",
-			"weekly",
-			"monthly"
-		];
+		/** 日期(YYYY-MM-DD 前 10 位) → 全局索引表。 */
+		function dateIndexOf(dates) {
+			const map = /* @__PURE__ */ new Map();
+			dates.forEach((date, index) => map.set(date.slice(0, 10), index));
+			return map;
+		}
+		//#endregion
+		//#region src/client/page.tsx
+		/**
+		* 缠论研究面板：交互式 K 线缠论图 + 形态/走势/信号摘要 + Agent 深度解读。
+		*
+		* 数据走宿主 `POST /kstock-api/chan-analyze`（{stock, level} → 引擎 JSON，
+		* 60s 服务端缓存）。图表自研 SVG：蜡烛（A 股红涨绿跌）+ 笔/段折线 +
+		* 中枢矩形 + 买卖点徽章 + 成交量副图，hover 十字线逐根读值。
+		* 深度解读走 TaskTargetMenu（chan 类型独立记忆落点）。
+		*/
+		/** 桥（index.tsx 注入；页面为 slot 组件拿不到 ctx，模块级单例传递）。 */
+		let chanBridge = null;
 		const W = 720;
 		const H_MAIN = 300;
 		const H_VOL = 56;
@@ -500,8 +526,7 @@ window.__ModuleLoader__.load({
 			const slot = (W - PAD_L - PAD_R) / view.count;
 			const winEnd = view.start + view.count;
 			const x = (index) => PAD_L + (index - view.start + .5) * slot;
-			const dateIndex = /* @__PURE__ */ new Map();
-			dates.forEach((date, index) => dateIndex.set(date.slice(0, 10), index));
+			const dateIndex = dateIndexOf(dates);
 			function indexOfTimeLocal(time) {
 				return dateIndex.get(time.slice(0, 10)) ?? -1;
 			}
@@ -741,7 +766,7 @@ window.__ModuleLoader__.load({
 						}, `fx-${i}`);
 					}),
 					chart.markers.map((marker, i) => {
-						const time = asStr(marker.time ?? marker.date);
+						const time = asStr(marker.time ?? asRec(marker).date);
 						const index = indexOfTime(time);
 						const price = asNum(marker.price);
 						if (index < 0 || price === null || index < view.start || index >= winEnd) return null;
@@ -1229,10 +1254,9 @@ window.__ModuleLoader__.load({
 			const total = chart?.dates.length ?? 0;
 			const signalRows = [];
 			if (chart !== null) {
-				const dateIndex = /* @__PURE__ */ new Map();
-				chart.dates.forEach((date, index) => dateIndex.set(date.slice(0, 10), index));
+				const dateIndex = dateIndexOf(chart.dates);
 				for (const marker of chart.markers) {
-					const time = asStr(marker.time ?? marker.date);
+					const time = asStr(marker.time ?? asRec(marker).date);
 					const index = dateIndex.get(time.slice(0, 10)) ?? -1;
 					if (index >= 0) signalRows.push({
 						key: `m-${index}-${asStr(marker.label)}`,
