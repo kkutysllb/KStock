@@ -428,29 +428,108 @@ window.__ModuleLoader__.load({
 		const PAD_L = 54;
 		const PAD_R = 14;
 		const H_TOTAL = 382;
-		/** K 线缠论主图（含成交量副图；hover 十字线逐根读值）。 */
+		/**
+		* K 线缠论主图（含成交量副图）：滚轮缩放（鼠标为锚）+ 拖拽平移 +
+		* 双击复位 + hover 十字线逐根读值。价格轴按可视窗口自适应。
+		*/
 		function ChanChart({ chart }) {
 			const { dates, kline, volumes } = chart;
+			const total = dates.length;
 			const svgRef = (0, react.useRef)(null);
+			const [view, setView] = (0, react.useState)({
+				start: 0,
+				count: total
+			});
 			const [hover, setHover] = (0, react.useState)(null);
-			const lows = kline.map((k) => k[2]).concat(chart.zhongshus.map((z) => z.low));
-			const highs = kline.map((k) => k[3]).concat(chart.zhongshus.map((z) => z.high));
+			const dragRef = (0, react.useRef)(null);
+			const [dragging, setDragging] = (0, react.useState)(false);
+			(0, react.useEffect)(() => {
+				setView({
+					start: 0,
+					count: total
+				});
+				setHover(null);
+			}, [total, chart]);
+			const clampView = (start, count) => {
+				const c = Math.max(15, Math.min(total, Math.round(count)));
+				return {
+					start: Math.max(0, Math.min(total - c, Math.round(start))),
+					count: c
+				};
+			};
+			(0, react.useEffect)(() => {
+				const el = svgRef.current;
+				if (el === null) return;
+				const onWheel = (event) => {
+					event.preventDefault();
+					const rect = el.getBoundingClientRect();
+					if (rect.width === 0) return;
+					const vx = (event.clientX - rect.left) / rect.width * W;
+					const ratio = Math.max(0, Math.min(1, (vx - PAD_L) / (W - PAD_L - PAD_R)));
+					setView((current) => {
+						const anchor = current.start + ratio * current.count;
+						const factor = event.deltaY < 0 ? 1 / 1.18 : 1.18;
+						const newCount = current.count * factor;
+						return clampView(anchor - ratio * newCount, newCount);
+					});
+				};
+				el.addEventListener("wheel", onWheel, { passive: false });
+				return () => {
+					el.removeEventListener("wheel", onWheel);
+				};
+			}, [total]);
+			const slot = (W - PAD_L - PAD_R) / view.count;
+			const winEnd = view.start + view.count;
+			const x = (index) => PAD_L + (index - view.start + .5) * slot;
+			const visK = kline.slice(view.start, winEnd);
+			const lows = visK.map((k) => k[2]).concat(chart.zhongshus.filter((z) => {
+				const i1 = indexOfTimeLocal(z.start_time);
+				return indexOfTimeLocal(z.end_time) >= view.start && i1 <= winEnd;
+			}).map((z) => z.low));
+			const highs = visK.map((k) => k[3]).concat(chart.zhongshus.filter((z) => {
+				const i1 = indexOfTimeLocal(z.start_time);
+				return indexOfTimeLocal(z.end_time) >= view.start && i1 <= winEnd;
+			}).map((z) => z.high));
 			const pMin = Math.min(...lows);
 			const pSpan = Math.max(...highs) - pMin || 1;
-			const vMax = Math.max(...volumes, 1);
-			const slot = (W - PAD_L - PAD_R) / dates.length;
-			const x = (index) => PAD_L + (index + .5) * slot;
+			const vMax = Math.max(...volumes.slice(view.start, winEnd), 1);
 			const yMain = (price) => 12 + (1 - (price - pMin) / pSpan) * (H_MAIN - 26);
 			const yVol = (volume) => 304 + (1 - volume / vMax) * (H_VOL - 10);
 			const dateIndex = /* @__PURE__ */ new Map();
 			dates.forEach((date, index) => dateIndex.set(date.slice(0, 10), index));
-			const indexOfTime = (time) => dateIndex.get(time.slice(0, 10)) ?? -1;
-			const onMove = (event) => {
+			function indexOfTimeLocal(time) {
+				return dateIndex.get(time.slice(0, 10)) ?? -1;
+			}
+			const indexOfTime = indexOfTimeLocal;
+			const vxOf = (event) => {
 				const rect = svgRef.current?.getBoundingClientRect();
-				if (rect === void 0 || rect.width === 0) return;
-				const vx = (event.clientX - rect.left) / rect.width * W;
-				const index = Math.floor((vx - PAD_L) / slot);
-				setHover(index >= 0 && index < dates.length ? index : null);
+				if (rect === void 0 || rect.width === 0) return -1;
+				return (event.clientX - rect.left) / rect.width * W;
+			};
+			const onPointerDown = (event) => {
+				const vx = vxOf(event);
+				if (vx < PAD_L) return;
+				dragRef.current = {
+					x: vx,
+					start: view.start
+				};
+				setDragging(true);
+				event.currentTarget.setPointerCapture(event.pointerId);
+			};
+			const onPointerMove = (event) => {
+				const vx = vxOf(event);
+				if (vx < 0) return;
+				if (dragRef.current !== null) {
+					const deltaIdx = -(vx - dragRef.current.x) / slot;
+					setView(clampView(dragRef.current.start + deltaIdx, view.count));
+					return;
+				}
+				const index = Math.floor((vx - PAD_L) / slot) + view.start;
+				setHover(index >= view.start && index < winEnd ? index : null);
+			};
+			const endDrag = () => {
+				dragRef.current = null;
+				setDragging(false);
 			};
 			const hoverK = hover !== null ? kline[hover] ?? null : null;
 			const hoverOpen = hoverK?.[0];
@@ -461,8 +540,24 @@ window.__ModuleLoader__.load({
 				viewBox: `0 0 ${W} ${H_TOTAL}`,
 				role: "img",
 				"aria-label": "缠论 K 线结构图",
-				onMouseMove: onMove,
-				onMouseLeave: () => setHover(null),
+				style: {
+					cursor: dragging ? "grabbing" : "crosshair",
+					touchAction: "none"
+				},
+				onPointerDown,
+				onPointerMove,
+				onPointerUp: endDrag,
+				onPointerLeave: () => {
+					endDrag();
+					setHover(null);
+				},
+				onDoubleClick: () => {
+					setView({
+						start: 0,
+						count: total
+					});
+					setHover(null);
+				},
 				children: [
 					[
 						0,
@@ -491,7 +586,7 @@ window.__ModuleLoader__.load({
 					chart.zhongshus.map((zone, i) => {
 						const x1 = indexOfTime(zone.start_time);
 						const x2 = indexOfTime(zone.end_time);
-						if (x1 < 0 || x2 < x1) return null;
+						if (x1 < 0 || x2 < x1 || x2 < view.start || x1 > winEnd) return null;
 						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [
 							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
 								x: x(x1) - slot / 2,
@@ -513,7 +608,7 @@ window.__ModuleLoader__.load({
 								strokeDasharray: "2,3"
 							}),
 							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
-								x: x(x1) + 2,
+								x: Math.max(56, x(x1) + 2),
 								y: yMain(zone.high) - 3,
 								fontSize: "9.5",
 								fill: "#c792ea",
@@ -526,7 +621,8 @@ window.__ModuleLoader__.load({
 							})
 						] }, `zs-${i}`);
 					}),
-					kline.map((k, index) => {
+					visK.map((k, offset) => {
+						const index = view.start + offset;
 						const color = k[1] >= k[0] ? "#e05656" : "#2f9e77";
 						const cx = x(index);
 						const bodyTop = yMain(Math.max(k[0], k[1]));
@@ -550,7 +646,7 @@ window.__ModuleLoader__.load({
 					chart.biLines.map((bi, i) => {
 						const x1 = indexOfTime(bi.start_time);
 						const x2 = indexOfTime(bi.end_time);
-						if (x1 < 0 || x2 < 0) return null;
+						if (x1 < 0 || x2 < 0 || x2 < view.start || x1 > winEnd) return null;
 						return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
 							x1: x(x1),
 							y1: yMain(bi.start_price),
@@ -564,7 +660,7 @@ window.__ModuleLoader__.load({
 					chart.segLines.map((seg, i) => {
 						const x1 = indexOfTime(seg.start_time);
 						const x2 = indexOfTime(seg.end_time);
-						if (x1 < 0 || x2 < 0) return null;
+						if (x1 < 0 || x2 < 0 || x2 < view.start || x1 > winEnd) return null;
 						return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
 							x1: x(x1),
 							y1: yMain(seg.start_price),
@@ -580,7 +676,7 @@ window.__ModuleLoader__.load({
 						const time = asStr(marker.time ?? marker.date);
 						const index = indexOfTime(time);
 						const price = asNum(marker.price);
-						if (index < 0 || price === null) return null;
+						if (index < 0 || price === null || index < view.start || index >= winEnd) return null;
 						const label = asStr(marker.label ?? marker.type ?? "?");
 						const isBuy = label.toLowerCase().includes("b") || label.includes("买");
 						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("circle", {
@@ -606,17 +702,17 @@ window.__ModuleLoader__.load({
 						y2: 304,
 						stroke: "var(--dsw-alias-border-l3)"
 					}),
-					volumes.map((volume, index) => {
-						const k = kline[index];
-						const up = k !== void 0 && k[1] >= k[0];
+					visK.map((k, offset) => {
+						const volume = volumes[view.start + offset] ?? 0;
+						const up = k[1] >= k[0];
 						return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
-							x: x(index) - Math.max(.8, slot * .32),
+							x: x(view.start + offset) - Math.max(.8, slot * .32),
 							y: yVol(volume),
 							width: Math.max(1.6, slot * .64),
 							height: 350 - yVol(volume),
 							fill: up ? "#e05656" : "#2f9e77",
 							opacity: "0.55"
-						}, `v-${index}`);
+						}, `v-${view.start + offset}`);
 					}),
 					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
 						x: PAD_L - 6,
@@ -677,7 +773,21 @@ window.__ModuleLoader__.load({
 								x: 214,
 								y: H_TOTAL - 4,
 								fill: "var(--dsw-alias-label-tertiary)",
-								children: "中枢 · B/S 买卖点"
+								children: "中枢 · 滚轮缩放 · 拖拽平移 · 双击复位"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+								x: W - PAD_R,
+								y: H_TOTAL - 4,
+								fontSize: "9",
+								textAnchor: "end",
+								fill: "var(--dsw-alias-label-tertiary)",
+								children: [
+									view.start + 1,
+									"-",
+									winEnd,
+									"/",
+									total
+								]
 							})
 						]
 					}),
@@ -746,7 +856,8 @@ window.__ModuleLoader__.load({
 										"涨跌 ",
 										hoverPct !== null ? `${hoverPct >= 0 ? "+" : ""}${hoverPct.toFixed(2)}%` : "—",
 										" · 量 ",
-										(volumes[hover] ?? 0) / 1e4 >= 100 ? `${((volumes[hover] ?? 0) / 1e4).toFixed(0)}万手` : `${((volumes[hover] ?? 0) / 1e4).toFixed(1)}万手`
+										((volumes[hover] ?? 0) / 1e4).toFixed(1),
+										"万手"
 									]
 								})
 							] })

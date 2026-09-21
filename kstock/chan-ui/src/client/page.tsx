@@ -67,33 +67,107 @@ const PAD_L = 54
 const PAD_R = 14
 const H_TOTAL = H_MAIN + H_VOL + 26
 
-/** K 线缠论主图（含成交量副图；hover 十字线逐根读值）。 */
+/**
+ * K 线缠论主图（含成交量副图）：滚轮缩放（鼠标为锚）+ 拖拽平移 +
+ * 双击复位 + hover 十字线逐根读值。价格轴按可视窗口自适应。
+ */
 function ChanChart({ chart }: { chart: ChartSlice }): React.ReactElement {
   const { dates, kline, volumes } = chart
+  const total = dates.length
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const [view, setView] = useState({ start: 0, count: total })
   const [hover, setHover] = useState<number | null>(null)
+  const dragRef = useRef<{ x: number; start: number } | null>(null)
+  const [dragging, setDragging] = useState(false)
 
-  const lows = kline.map(k => k[2]).concat(chart.zhongshus.map(z => z.low))
-  const highs = kline.map(k => k[3]).concat(chart.zhongshus.map(z => z.high))
+  useEffect(() => { setView({ start: 0, count: total }); setHover(null) }, [total, chart])
+
+  const clampView = (start: number, count: number): { start: number; count: number } => {
+    const c = Math.max(15, Math.min(total, Math.round(count)))
+    const st = Math.max(0, Math.min(total - c, Math.round(start)))
+    return { start: st, count: c }
+  }
+
+  // 滚轮缩放：鼠标位置为锚（non-passive 监听，阻止页面滚动）。
+  useEffect(() => {
+    const el = svgRef.current
+    if (el === null) return
+    const onWheel = (event: WheelEvent): void => {
+      event.preventDefault()
+      const rect = el.getBoundingClientRect()
+      if (rect.width === 0) return
+      const vx = ((event.clientX - rect.left) / rect.width) * W
+      const ratio = Math.max(0, Math.min(1, (vx - PAD_L) / (W - PAD_L - PAD_R)))
+      setView(current => {
+        const anchor = current.start + ratio * current.count
+        const factor = event.deltaY < 0 ? 1 / 1.18 : 1.18
+        const newCount = current.count * factor
+        return clampView(anchor - ratio * newCount, newCount)
+      })
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => { el.removeEventListener('wheel', onWheel) }
+  }, [total])
+
+  const plotW = W - PAD_L - PAD_R
+  const slot = plotW / view.count
+  const winEnd = view.start + view.count
+  const x = (index: number) => PAD_L + (index - view.start + 0.5) * slot
+
+  // 价格轴按可视窗口自适应（窗口内蜡烛 + 相交中枢）。
+  const visK = kline.slice(view.start, winEnd)
+  const lows = visK.map(k => k[2]).concat(chart.zhongshus.filter(z => {
+    const i1 = indexOfTimeLocal(z.start_time); const i2 = indexOfTimeLocal(z.end_time)
+    return i2 >= view.start && i1 <= winEnd
+  }).map(z => z.low))
+  const highs = visK.map(k => k[3]).concat(chart.zhongshus.filter(z => {
+    const i1 = indexOfTimeLocal(z.start_time); const i2 = indexOfTimeLocal(z.end_time)
+    return i2 >= view.start && i1 <= winEnd
+  }).map(z => z.high))
   const pMin = Math.min(...lows)
   const pMax = Math.max(...highs)
   const pSpan = pMax - pMin || 1
-  const vMax = Math.max(...volumes, 1)
-  const slot = (W - PAD_L - PAD_R) / dates.length
-  const x = (index: number) => PAD_L + (index + 0.5) * slot
+  const vMax = Math.max(...volumes.slice(view.start, winEnd), 1)
   const yMain = (price: number) => 12 + (1 - (price - pMin) / pSpan) * (H_MAIN - 26)
   const yVol = (volume: number) => H_MAIN + 4 + (1 - volume / vMax) * (H_VOL - 10)
-  // 日期（YYYY-MM-DD 前缀）→ 索引（笔/段/中枢的时间轴定位）。
+
+  // 日期（YYYY-MM-DD 前缀）→ 全局索引。
   const dateIndex = new Map<string, number>()
   dates.forEach((date, index) => dateIndex.set(date.slice(0, 10), index))
-  const indexOfTime = (time: string): number => dateIndex.get(time.slice(0, 10)) ?? -1
+  function indexOfTimeLocal(time: string): number {
+    return dateIndex.get(time.slice(0, 10)) ?? -1
+  }
+  const indexOfTime = indexOfTimeLocal
 
-  const onMove = (event: React.MouseEvent<SVGSVGElement>): void => {
+  const vxOf = (event: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>): number => {
     const rect = svgRef.current?.getBoundingClientRect()
-    if (rect === undefined || rect.width === 0) return
-    const vx = ((event.clientX - rect.left) / rect.width) * W
-    const index = Math.floor((vx - PAD_L) / slot)
-    setHover(index >= 0 && index < dates.length ? index : null)
+    if (rect === undefined || rect.width === 0) return -1
+    return ((event.clientX - rect.left) / rect.width) * W
+  }
+
+  const onPointerDown = (event: React.PointerEvent<SVGSVGElement>): void => {
+    const vx = vxOf(event)
+    if (vx < PAD_L) return
+    dragRef.current = { x: vx, start: view.start }
+    setDragging(true)
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const onPointerMove = (event: React.PointerEvent<SVGSVGElement>): void => {
+    const vx = vxOf(event)
+    if (vx < 0) return
+    if (dragRef.current !== null) {
+      const deltaIdx = -(vx - dragRef.current.x) / slot
+      setView(clampView(dragRef.current.start + deltaIdx, view.count))
+      return
+    }
+    const index = Math.floor((vx - PAD_L) / slot) + view.start
+    setHover(index >= view.start && index < winEnd ? index : null)
+  }
+
+  const endDrag = (): void => {
+    dragRef.current = null
+    setDragging(false)
   }
 
   const hoverK = hover !== null ? kline[hover] ?? null : null
@@ -102,7 +176,18 @@ function ChanChart({ chart }: { chart: ChartSlice }): React.ReactElement {
   const hoverPct = hoverOpen !== undefined && hoverOpen > 0 && hoverClose !== undefined ? ((hoverClose - hoverOpen) / hoverOpen * 100) : null
 
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${W} ${H_TOTAL}`} role="img" aria-label="缠论 K 线结构图" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${W} ${H_TOTAL}`}
+      role="img"
+      aria-label="缠论 K 线结构图"
+      style={{ cursor: dragging ? 'grabbing' : 'crosshair', touchAction: 'none' }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerLeave={() => { endDrag(); setHover(null) }}
+      onDoubleClick={() => { setView({ start: 0, count: total }); setHover(null) }}
+    >
       {/* 价格网格 */}
       {[0, 0.25, 0.5, 0.75, 1].map(ratio => {
         const price = pMin + pSpan * (1 - ratio)
@@ -113,21 +198,22 @@ function ChanChart({ chart }: { chart: ChartSlice }): React.ReactElement {
           </g>
         )
       })}
-      {/* 中枢矩形（先画，垫底） */}
+      {/* 中枢矩形（垫底；与窗口相交即画，窗口外自动裁剪） */}
       {chart.zhongshus.map((zone, i) => {
         const x1 = indexOfTime(zone.start_time)
         const x2 = indexOfTime(zone.end_time)
-        if (x1 < 0 || x2 < x1) return null
+        if (x1 < 0 || x2 < x1 || x2 < view.start || x1 > winEnd) return null
         return (
           <g key={`zs-${i}`}>
             <rect x={x(x1) - slot / 2} y={yMain(zone.high)} width={(x2 - x1 + 1) * slot} height={Math.max(2, yMain(zone.low) - yMain(zone.high))} fill="rgba(199,146,234,0.14)" stroke="#c792ea" strokeDasharray="4,3" rx="2" />
             <line x1={x(x1) - slot / 2} y1={yMain(zone.center)} x2={x(x2) + slot / 2} y2={yMain(zone.center)} stroke="#c792ea" strokeWidth="1" strokeDasharray="2,3" />
-            <text x={x(x1) + 2} y={yMain(zone.high) - 3} fontSize="9.5" fill="#c792ea">中枢 {zone.low.toFixed(2)}~{zone.high.toFixed(2)}</text>
+            <text x={Math.max(PAD_L + 2, x(x1) + 2)} y={yMain(zone.high) - 3} fontSize="9.5" fill="#c792ea">中枢 {zone.low.toFixed(2)}~{zone.high.toFixed(2)}</text>
           </g>
         )
       })}
-      {/* 蜡烛（A 股红涨绿跌） */}
-      {kline.map((k, index) => {
+      {/* 蜡烛（仅窗口内） */}
+      {visK.map((k, offset) => {
+        const index = view.start + offset
         const up = k[1] >= k[0]
         const color = up ? '#e05656' : '#2f9e77'
         const cx = x(index)
@@ -140,16 +226,16 @@ function ChanChart({ chart }: { chart: ChartSlice }): React.ReactElement {
           </g>
         )
       })}
-      {/* 笔（半透明折线） */}
+      {/* 笔（半透明折线；窗口相交即画） */}
       {chart.biLines.map((bi, i) => {
         const x1 = indexOfTime(bi.start_time); const x2 = indexOfTime(bi.end_time)
-        if (x1 < 0 || x2 < 0) return null
+        if (x1 < 0 || x2 < 0 || x2 < view.start || x1 > winEnd) return null
         return <line key={`bi-${i}`} x1={x(x1)} y1={yMain(bi.start_price)} x2={x(x2)} y2={yMain(bi.end_price)} stroke="#e8a33d" strokeWidth="1.6" opacity="0.85" />
       })}
       {/* 线段（更粗虚线） */}
       {chart.segLines.map((seg, i) => {
         const x1 = indexOfTime(seg.start_time); const x2 = indexOfTime(seg.end_time)
-        if (x1 < 0 || x2 < 0) return null
+        if (x1 < 0 || x2 < 0 || x2 < view.start || x1 > winEnd) return null
         return <line key={`seg-${i}`} x1={x(x1)} y1={yMain(seg.start_price)} x2={x(x2)} y2={yMain(seg.end_price)} stroke="#5ab0ff" strokeWidth="2.2" strokeDasharray="7,4" opacity="0.9" />
       })}
       {/* 买卖点徽章 */}
@@ -157,7 +243,7 @@ function ChanChart({ chart }: { chart: ChartSlice }): React.ReactElement {
         const time = asStr(marker.time ?? marker.date)
         const index = indexOfTime(time)
         const price = asNum(marker.price)
-        if (index < 0 || price === null) return null
+        if (index < 0 || price === null || index < view.start || index >= winEnd) return null
         const label = asStr(marker.label ?? marker.type ?? '?')
         const isBuy = label.toLowerCase().includes('b') || label.includes('买')
         return (
@@ -167,13 +253,13 @@ function ChanChart({ chart }: { chart: ChartSlice }): React.ReactElement {
           </g>
         )
       })}
-      {/* 成交量副图 */}
+      {/* 成交量副图（仅窗口内） */}
       <line x1={PAD_L} y1={H_MAIN + 4} x2={W - PAD_R} y2={H_MAIN + 4} stroke="var(--dsw-alias-border-l3)" />
-      {volumes.map((volume, index) => {
-        const k = kline[index]
-        const up = k !== undefined && k[1] >= k[0]
+      {visK.map((k, offset) => {
+        const volume = volumes[view.start + offset] ?? 0
+        const up = k[1] >= k[0]
         return (
-          <rect key={`v-${index}`} x={x(index) - Math.max(0.8, slot * 0.32)} y={yVol(volume)} width={Math.max(1.6, slot * 0.64)} height={H_MAIN + 4 + (H_VOL - 10) - yVol(volume)} fill={up ? '#e05656' : '#2f9e77'} opacity="0.55" />
+          <rect key={`v-${view.start + offset}`} x={x(view.start + offset) - Math.max(0.8, slot * 0.32)} y={yVol(volume)} width={Math.max(1.6, slot * 0.64)} height={H_MAIN + 4 + (H_VOL - 10) - yVol(volume)} fill={up ? '#e05656' : '#2f9e77'} opacity="0.55" />
         )
       })}
       <text x={PAD_L - 6} y={H_MAIN + 14} fontSize="9" textAnchor="end" fill="var(--dsw-alias-label-tertiary)">量</text>
@@ -185,7 +271,8 @@ function ChanChart({ chart }: { chart: ChartSlice }): React.ReactElement {
         <line x1={PAD_L + 90} y1={H_TOTAL - 7} x2={PAD_L + 110} y2={H_TOTAL - 7} stroke="#5ab0ff" strokeWidth="2" strokeDasharray="6,3" />
         <text x={PAD_L + 114} y={H_TOTAL - 4} fill="var(--dsw-alias-label-tertiary)">线段 ·</text>
         <rect x={PAD_L + 142} y={H_TOTAL - 12} width="14" height="8" fill="rgba(199,146,234,0.2)" stroke="#c792ea" strokeDasharray="3,2" />
-        <text x={PAD_L + 160} y={H_TOTAL - 4} fill="var(--dsw-alias-label-tertiary)">中枢 · B/S 买卖点</text>
+        <text x={PAD_L + 160} y={H_TOTAL - 4} fill="var(--dsw-alias-label-tertiary)">中枢 · 滚轮缩放 · 拖拽平移 · 双击复位</text>
+        <text x={W - PAD_R} y={H_TOTAL - 4} fontSize="9" textAnchor="end" fill="var(--dsw-alias-label-tertiary)">{view.start + 1}-{winEnd}/{total}</text>
       </g>
       {/* hover 十字线 + tooltip */}
       {hover !== null && hoverOpen !== undefined && hoverClose !== undefined && hoverK !== null && (
@@ -198,7 +285,7 @@ function ChanChart({ chart }: { chart: ChartSlice }): React.ReactElement {
             <text x={W - 210} y={36} fontSize="10" fill="#e8edef">开 {hoverOpen.toFixed(2)} 收 {hoverClose.toFixed(2)}</text>
             <text x={W - 210} y={49} fontSize="10" fill="#e8edef">低 {hoverK[2]?.toFixed(2) ?? '—'} 高 {hoverK[3]?.toFixed(2) ?? '—'}</text>
             <text x={W - 210} y={61} fontSize="10" fill={hoverPct !== null && hoverPct >= 0 ? '#e05656' : '#2f9e77'}>
-              涨跌 {hoverPct !== null ? `${hoverPct >= 0 ? '+' : ''}${hoverPct.toFixed(2)}%` : '—'} · 量 {(volumes[hover] ?? 0) / 10000 >= 100 ? `${((volumes[hover] ?? 0) / 10000).toFixed(0)}万手` : `${((volumes[hover] ?? 0) / 10000).toFixed(1)}万手`}
+              涨跌 {hoverPct !== null ? `${hoverPct >= 0 ? '+' : ''}${hoverPct.toFixed(2)}%` : '—'} · 量 {((volumes[hover] ?? 0) / 10000).toFixed(1)}万手
             </text>
           </g>
         </g>
