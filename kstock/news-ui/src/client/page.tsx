@@ -61,6 +61,17 @@ export function bindAgentBridge(bridge: import('@kstock/quant-ui').TaskRouterBri
   agentBridge = bridge
 }
 
+/**
+ * 内嵌浏览器打开回调（apply 时注入 ctx.sidebarRight.openTab('browser')）。
+ * 未注入（sidebarRight 服务缺席）时保持 null —— 标题链接退回原生行为
+ * （新标签 → 壳转系统浏览器），不阻断阅读。
+ */
+let embeddedBrowserOpen: ((url: string) => void) | null = null
+
+export function bindEmbeddedBrowser(open: ((url: string) => void) | null): void {
+  embeddedBrowserOpen = open
+}
+
 /** 稳定字符串哈希（已读集键，djb2）。 */
 function hash(text: string): string {
   let value = 5381
@@ -404,7 +415,15 @@ function NewsCard({ item, watched, read, onRead, onAsk, archived = false }: {
           href={item.url}
           target="_blank"
           rel="noreferrer noopener"
-          onClick={(event) => event.stopPropagation()}
+          title={embeddedBrowserOpen === null ? undefined : '右栏内嵌浏览器打开（站点拒绝嵌入时可在浏览器标签内转系统浏览器）'}
+          onClick={(event) => {
+            event.stopPropagation()
+            // 左键单击走右栏内嵌浏览器（引擎 3.0.2+ ui-sidebar-browser）；
+            // 未接线时保留原生新标签行为；中键/修饰键点击不拦截。
+            if (embeddedBrowserOpen === null || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
+            event.preventDefault()
+            embeddedBrowserOpen(item.url)
+          }}
         >
           {item.title}
         </a>

@@ -18,27 +18,45 @@
  */
 
 import { IconNews, buildTaskRouterBridge, injectQuantStyles, type QuantClientContext, type TaskRouterDeps } from '@kstock/quant-ui'
-import { bindAgentBridge, NewsPage } from './page.tsx'
+import { bindAgentBridge, bindEmbeddedBrowser, NewsPage } from './page.tsx'
 
 /** 面板键：main slot 与侧栏入口共用。 */
 const PANEL_KEY = 'kstock-client-news'
 
-/** sessions + layout + uiWorkspace + workspaces 的最小结构面（共享桥消费）。 */
-interface NewsClientContext extends QuantClientContext, TaskRouterDeps {}
+/**
+ * sessions + layout + uiWorkspace + workspaces + sidebarRight 的最小结构面
+ * （共享桥消费 + 内嵌浏览器打开）。sidebarRight 为引擎 3.0.2+ 右栏导航
+ * 服务（ui-sidebar-right 提供），openTab('browser') 命中 ui-sidebar-browser
+ * 注册的右栏内嵌浏览器标签。
+ */
+interface NewsClientContext extends QuantClientContext, TaskRouterDeps {
+  sidebarRight?: {
+    openTab(kind: 'browser', options?: { params?: { url?: string } }): void
+  }
+}
 
 /** 侧栏图标（sidebar.panellist 的组件收到 {size, active} props）。 */
 function NavIcon({ size }: { size?: number }) {
   return <IconNews size={size ?? 18} />
 }
 
-/** 必需服务：slot 注册表 + 会话作用域 + 面板切换 + 工作区面。 */
-export const inject = ['slots', 'sessions', 'layout', 'uiWorkspace', 'workspaces']
+/** 必需服务：slot 注册表 + 会话作用域 + 面板切换 + 工作区面 + 右栏导航。 */
+export const inject = ['slots', 'sessions', 'layout', 'uiWorkspace', 'workspaces', 'sidebarRight']
 
 /** 客户端插件体。 */
 export function apply(ctx: NewsClientContext): void {
   ctx.effect(() => {
     injectQuantStyles()
     bindAgentBridge(buildTaskRouterBridge(ctx))
+    // 新闻标题点击 → 右栏内嵌浏览器（与引擎 ui-chat openExternalLink 同姿势）。
+    // browser 标签缺席（如未来组合变动）时退回原生新标签（壳转系统浏览器）。
+    bindEmbeddedBrowser((url) => {
+      try {
+        ctx.sidebarRight?.openTab('browser', { params: { url } })
+      } catch {
+        window.open(url, '_blank', 'noopener,noreferrer')
+      }
+    })
     ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL_KEY }, NewsPage))
     ctx.slots.inject('sidebar.panellist', () => ctx.slots.register(
       { name: 'sidebar.panellist', id: PANEL_KEY, order: 140, label: '财经新闻' },
