@@ -154,7 +154,7 @@ class ChanDataFetcher:
         '120min': ('60min',  120,  TimeLevel.MIN_120),
         'daily':  ('daily',  365,  TimeLevel.DAILY),
         'weekly': ('weekly', 1095, TimeLevel.WEEKLY),
-        'monthly':('monthly',2555, TimeLevel.MONTHLY),
+        'monthly':('monthly',3650, TimeLevel.MONTHLY),  # KStock patch: 2555 天=84 根月线<100 永不可达，提到 10 年
     }
 
     # 指数名称映射表
@@ -336,11 +336,12 @@ class ChanDataFetcher:
                     except Exception:
                         continue
             else:
-                # 分钟线
+                # 分钟线（KStock patch: 分钟线日期格式——stk_mins 期望完整
+                # datetime，%Y%m%d 会被宽松解析成截断窗口只返回零头）
                 df = _fetch_kline_data(
                     ts_code=ts_code, asset='E',
-                    start_date=start_date.strftime('%Y%m%d'),
-                    end_date=end_date.strftime('%Y%m%d'),
+                    start_date=start_date.strftime('%Y-%m-%d 00:00:00'),
+                    end_date=end_date.strftime('%Y-%m-%d 23:59:59'),
                     freq=ts_freq
                 )
                 if df is None or df.empty:
@@ -544,6 +545,9 @@ class StockChanAnalyzer:
         active_zhongshus = result.get_active_zhongshus()
         zhongshu_info = []
         for zs in active_zhongshus:
+            # KStock patch: 未确认中枢 start/end_time 可能为 None（weekly 复现）
+            if zs.start_time is None or zs.end_time is None:
+                continue
             zhongshu_info.append({
                 'high': round(zs.high, 2),
                 'low': round(zs.low, 2),
@@ -647,6 +651,8 @@ class StockChanAnalyzer:
         # 笔数据 — 连接分型端点的折线
         bi_lines = []
         for bi in result.bis:
+            if bi.start_time is None or bi.end_time is None:
+                continue
             bi_lines.append({
                 'start_time': bi.start_time.strftime('%Y-%m-%d %H:%M'),
                 'end_time': bi.end_time.strftime('%Y-%m-%d %H:%M'),
@@ -658,6 +664,8 @@ class StockChanAnalyzer:
         # 线段数据 — 比笔更粗的折线
         seg_lines = []
         for seg in result.segs:
+            if seg.start_time is None or seg.end_time is None:
+                continue
             seg_lines.append({
                 'start_time': seg.start_time.strftime('%Y-%m-%d %H:%M'),
                 'end_time': seg.end_time.strftime('%Y-%m-%d %H:%M'),
@@ -705,6 +713,8 @@ class StockChanAnalyzer:
         fenxing_marks = []
         for fx in result.fenxings:
             k = fx.kline
+            if k is None:
+                continue
             if window_start is not None and k.timestamp < window_start:
                 continue
             fenxing_marks.append({
@@ -715,6 +725,12 @@ class StockChanAnalyzer:
             })
         backchi_details = []
         for bc in result.backchi_analyses:
+            # 未完成的段（对象或其 start/end_time 为 None）跳过，防属性访问崩
+            # （weekly 级实测：未确认段的 start_time 字段本身为 None）。
+            if (bc.current_seg is None or bc.previous_seg is None
+                    or bc.current_seg.start_time is None or bc.current_seg.end_time is None
+                    or bc.previous_seg.start_time is None or bc.previous_seg.end_time is None):
+                continue
             try:
                 valid = bc.is_valid_backchi()
             except Exception:

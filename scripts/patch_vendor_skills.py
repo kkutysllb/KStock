@@ -1457,8 +1457,11 @@ _CHAN_RETURN_REPLACEMENT = """        # KStock patch: 分型列表（窗口内�
             })
         backchi_details = []
         for bc in result.backchi_analyses:
-            # 未完成的段（current/previous_seg 为 None）跳过，防属性访问崩。
-            if bc.current_seg is None or bc.previous_seg is None:
+            # 未完成的段（对象或其 start/end_time 为 None）跳过，防属性访问崩
+            # （weekly 级实测：未确认段的 start_time 字段本身为 None）。
+            if (bc.current_seg is None or bc.previous_seg is None
+                    or bc.current_seg.start_time is None or bc.current_seg.end_time is None
+                    or bc.previous_seg.start_time is None or bc.previous_seg.end_time is None):
                 continue
             try:
                 valid = bc.is_valid_backchi()
@@ -1493,18 +1496,20 @@ def _fix_chan_dynamics_output(text: str) -> str | None:
     """缠论引擎 chart_data 动力学全套输出；已修/锚点失配返回 None。"""
     if _CHAN_PATCH_MARKER in text:
         return None
-    for anchor, replacement in (
-        (_CHAN_MACD_ANCHOR, _CHAN_MACD_REPLACEMENT),
-        (_CHAN_ZS_ANCHOR, _CHAN_ZS_REPLACEMENT),
-        (_CHAN_MARKER_ANCHOR, _CHAN_MARKER_REPLACEMENT),
-        (_CHAN_RETURN_ANCHOR, _CHAN_RETURN_REPLACEMENT),
-    ):
-        if anchor not in text:
-            return None
+    # bi/seg 组装的 None 守卫（weekly 级结构少，未确认段 start_time 为
+    # None 直接 strftime 崩——实测 weekly 100% 复现）。
+    bi_guard_anchor = "        for bi in result.bis:" + chr(10) + "            bi_lines.append({"
+    bi_guard_repl = "        for bi in result.bis:" + chr(10) + "            if bi.start_time is None or bi.end_time is None:" + chr(10) + "                continue" + chr(10) + "            bi_lines.append({"
+    seg_guard_anchor = "        for seg in result.segs:" + chr(10) + "            seg_lines.append({"
+    seg_guard_repl = "        for seg in result.segs:" + chr(10) + "            if seg.start_time is None or seg.end_time is None:" + chr(10) + "                continue" + chr(10) + "            seg_lines.append({"
+    if bi_guard_anchor not in text or seg_guard_anchor not in text:
+        return None
     patched = text.replace(_CHAN_MACD_ANCHOR, _CHAN_MACD_REPLACEMENT, 1)
     patched = patched.replace(_CHAN_ZS_ANCHOR, _CHAN_ZS_REPLACEMENT, 1)
     patched = patched.replace(_CHAN_MARKER_ANCHOR, _CHAN_MARKER_REPLACEMENT, 1)
     patched = patched.replace(_CHAN_RETURN_ANCHOR, _CHAN_RETURN_REPLACEMENT, 1)
+    patched = patched.replace(bi_guard_anchor, bi_guard_repl, 1)
+    patched = patched.replace(seg_guard_anchor, seg_guard_repl, 1)
     return patched
 
 
@@ -1525,6 +1530,95 @@ def _fix_chan_pandas3_freq(text: str) -> str | None:
         return None
     return text.replace(_CHAN_FREQ_ANCHOR, _CHAN_FREQ_REPLACEMENT, 1)
 
+
+
+# ── 补丁 19：缠论引擎分钟线日期格式 + monthly 数据窗口 ────────────────
+# 实测铁证：stk_mins 期望 'YYYY-MM-DD HH:MM:SS'，引擎传 '%Y%m%d' 被宽松
+# 解析后只返回零头（60min 60 天仅 42 根，完整格式同窗口 395 根）——
+# 数据源有分页且正常，是引擎参数缺陷。monthly lookback 2555 天 = 84 根
+# 月线 < min_count 100，数学上永不可达 → 提到 3650（120 根）。
+_CHAN_MINUTE_MARKER = "KStock patch: 分钟线日期格式"
+_CHAN_MINUTE_ANCHOR = (
+    "            else:" + chr(10)
+    + "                # 分钟线" + chr(10)
+    + "                df = _fetch_kline_data(" + chr(10)
+    + "                    ts_code=ts_code, asset='E'," + chr(10)
+    + "                    start_date=start_date.strftime('%Y%m%d')," + chr(10)
+    + "                    end_date=end_date.strftime('%Y%m%d')," + chr(10)
+    + "                    freq=ts_freq" + chr(10)
+    + "                )"
+)
+_CHAN_MINUTE_REPLACEMENT = (
+    "            else:" + chr(10)
+    + "                # 分钟线（KStock patch: 分钟线日期格式——stk_mins 期望完整" + chr(10)
+    + "                # datetime，%Y%m%d 会被宽松解析成截断窗口只返回零头）" + chr(10)
+    + "                df = _fetch_kline_data(" + chr(10)
+    + "                    ts_code=ts_code, asset='E'," + chr(10)
+    + "                    start_date=start_date.strftime('%Y-%m-%d 00:00:00')," + chr(10)
+    + "                    end_date=end_date.strftime('%Y-%m-%d 23:59:59')," + chr(10)
+    + "                    freq=ts_freq" + chr(10)
+    + "                )"
+)
+_CHAN_MONTHLY_ANCHOR = "        'monthly':('monthly',2555, TimeLevel.MONTHLY),"
+_CHAN_MONTHLY_REPLACEMENT = "        'monthly':('monthly',3650, TimeLevel.MONTHLY),  # KStock patch: 2555 天=84 根月线<100 永不可达，提到 10 年"
+
+
+def _fix_chan_minute_dates(text: str) -> str | None:
+    """分钟线日期格式 + monthly lookback；已修/锚点失配返回 None。"""
+    if _CHAN_MINUTE_MARKER in text:
+        return None
+    if _CHAN_MINUTE_ANCHOR not in text or _CHAN_MONTHLY_ANCHOR not in text:
+        return None
+    patched = text.replace(_CHAN_MINUTE_ANCHOR, _CHAN_MINUTE_REPLACEMENT, 1)
+    return patched.replace(_CHAN_MONTHLY_ANCHOR, _CHAN_MONTHLY_REPLACEMENT, 1)
+
+
+
+# ── 补丁 20：缠论引擎背驰阈值放宽 + 中枢组装 None 守卫 ────────────────
+# 实测宁德时代日线同向段力度比 0.85/0.82 全被 0.8 阈值拦下（要求衰减
+# 20% 才认背驰）——两年典型趋势背驰股九档全 0 买点。实战背驰参考 12%
+# 衰减：阈值放宽 0.8 → 0.88。附带：active_zhongshus 组装的
+# zs.start_time.strftime 在未确认中枢上崩（weekly 复现），加 None 守卫。
+_CHAN_BSP_REL = "public/stock-analysis/chan_theory_v2/models/chan_buy_sell_points.py"
+_CHAN_DIV_MARKER = "KStock patch: 背驰阈值"
+_CHAN_DIV_ANCHOR = "        return current_seg.strength < prev_seg.strength * 0.8"
+_CHAN_DIV_REPLACEMENT = (
+    "        # KStock patch: 背驰阈值 0.8→0.88（衰减 12% 即认——实测宁德时代" + chr(10)
+    + "        # 日线同向段力度比 0.85/0.82 的典型趋势背驰被 20% 阈值全拦）" + chr(10)
+    + "        return current_seg.strength < prev_seg.strength * 0.88"
+)
+
+
+def _fix_chan_divergence_threshold(text: str) -> str | None:
+    """背驰阈值放宽（models/chan_buy_sell_points.py）；已修/失配返回 None。"""
+    if _CHAN_DIV_MARKER in text:
+        return None
+    if _CHAN_DIV_ANCHOR not in text:
+        return None
+    return text.replace(_CHAN_DIV_ANCHOR, _CHAN_DIV_REPLACEMENT, 1)
+
+
+_CHAN_ZSGUARD_MARKER = "KStock patch: 未确认中枢"
+_CHAN_ZSGUARD_ANCHOR = (
+    "        for zs in active_zhongshus:" + chr(10)
+    + "            zhongshu_info.append({"
+)
+_CHAN_ZSGUARD_REPLACEMENT = (
+    "        for zs in active_zhongshus:" + chr(10)
+    + "            # KStock patch: 未确认中枢 start/end_time 可能为 None（weekly 复现）" + chr(10)
+    + "            if zs.start_time is None or zs.end_time is None:" + chr(10)
+    + "                continue" + chr(10)
+    + "            zhongshu_info.append({"
+)
+
+
+def _fix_chan_zhongshu_guard(text: str) -> str | None:
+    """中枢组装 None 守卫（analyze_stock_chan.py）；已修/失配返回 None。"""
+    if _CHAN_ZSGUARD_MARKER in text:
+        return None
+    if _CHAN_ZSGUARD_ANCHOR not in text:
+        return None
+    return text.replace(_CHAN_ZSGUARD_ANCHOR, _CHAN_ZSGUARD_REPLACEMENT, 1)
 
 
 # ── KStock 自有技能 ensure（kstock/skills → vendor/skills/public）────────
@@ -1771,6 +1865,18 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     # 缠论引擎 pandas3 频率别名（120min 级别崩，补丁 18）。
     if chan_script.exists():
         if _patch_file(chan_script, _CHAN_SCRIPT_REL, _fix_chan_pandas3_freq):
+            changed.append(_CHAN_SCRIPT_REL)
+    # 缠论引擎分钟线日期格式 + monthly 窗口（补丁 19）。
+    if chan_script.exists():
+        if _patch_file(chan_script, _CHAN_SCRIPT_REL, _fix_chan_minute_dates):
+            changed.append(_CHAN_SCRIPT_REL)
+    # 缠论引擎背驰阈值（models，补丁 20）+ 中枢组装守卫（analyze 脚本）。
+    bsp_script = vendor_root / _CHAN_BSP_REL
+    if bsp_script.exists():
+        if _patch_file(bsp_script, _CHAN_BSP_REL, _fix_chan_divergence_threshold):
+            changed.append(_CHAN_BSP_REL)
+    if chan_script.exists():
+        if _patch_file(chan_script, _CHAN_SCRIPT_REL, _fix_chan_zhongshu_guard):
             changed.append(_CHAN_SCRIPT_REL)
     # preset 随行技能目录发布（技能随 preset 分发，cordis 模式）。
     if _publish_preset_skills(vendor_root):
