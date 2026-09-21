@@ -84,7 +84,7 @@
 ## 5. 引擎侧小补丁（唯一后端改动）
 
 - 位置：`vendor/skills/public/stock-analysis/chan_theory_v2/core/signal_scorer.py`；
-- 内容：`_get_category()` 前缀猜测 → 38 信号键显式映射表（bi_*/fx_power/zs_*/backchi/decision/bs_signal/three_bi/five_bi/seven_bi/first_*/second_bs/third_bs → cxt；trend_type → tas；macd_cross/double_ma/kdj_cross/dif_zero/ma_system/boll_status/rsi_status → jcc；atr → sta；bar_* → bar；vol_* → vol；jcc_* → jcc）。pos 类全库无信号，映射表注释说明。
+- 内容（经代码审查修正）：`_get_category()` 增加 `_SIGNAL_CATEGORY_OVERRIDE` 显式表——仅 8 个技术指标裸键（macd_cross/dif_zero/double_ma/ma_system/boll_status/kdj_cross/rsi_status/atr → tas，与评分表 `tas_*` 前缀分类一致；trend_type 实为 `cxt_trend_type_signal` 产出的裸键，默认 cxt 已正确，不进表）；bar_*/vol_*/jcc_* 前缀兜底保留。另在 `score_single_signal()` 裸键查分 miss 时按类别前缀补齐重试（评分表 157 键全带前缀、信号库产出裸键，查分 miss 是 radar 钉死 50 的另一半根因，只改分组不动分数无效）。sta/pos 在信号库全库无信号，保持空且不参与加权（诚实呈现）。
 - 登记 `scripts/patch_vendor_skills.py` 补丁 22（锚定 `_get_category` 原实现），apply 后镜像四 preset（stock-analysis/standard/chan-theory-expert/stock-screener）。
 - 上游变更 → 锚点失配静默跳过（既有纪律），radar_data/category_scores 恢复语义后前端虽不再依赖，但综合评分与信号明细 chips 重新可用。
 - 注：analyzed JSON 的 signal_scores 结构不变，无接口变更。
@@ -111,5 +111,5 @@
    - 背驰卡/买卖点卡/中枢卡点击 → 主图定位与高亮联动；
    - **daily/weekly/30min 三级别雷达形状实测不同**（直接验证原始痛点已治）；
    - 证据链卡片在 000001（有结构数据）与分钟级配额不足股上均不崩、缺失态诚实；
-3. 补丁 22 应用后四 preset 的 signal_scorer 一致，`category_scores` 中 cxt/tas/vol/bar/jcc/sta 非空（pos 全库无信号，保持空且不参与加权）；
+3. 补丁 22/23 应用后四 preset 的 signal_scorer 一致，真实数据下 `category_counts` 中 cxt/tas/vol/bar/jcc 非空（sta/pos 全库无信号，保持空且不参与加权），且 `radar_data` 的 tas/cxt 轴随级别变化（不再钉死 50）；
 4. 不回退既有功能：缩放/拖拽/复位/Agent 深度解读/多级别摘要。

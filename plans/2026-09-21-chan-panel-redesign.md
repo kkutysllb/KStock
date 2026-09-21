@@ -2033,3 +2033,135 @@ git log --oneline -8
 - **占位扫描**：无 TBD/TODO；每个代码步骤含完整代码；执行命令均带预期输出。
 - **类型一致性**：FocusEvent/ChartHighlight/MatrixBrief/MatrixRowUI/RadarDim 在 Task 3/4/5/6 定义处与消费处（Task 7）签名一致；dynamics.buy_points 的 type 字段实测为「一类买点」中文串（引擎 BuySellPointType.__str__），markerIndexOf 按此设计。
 - **已知风险**：marker label 形态（`BUY_1`）若上游变化则脉冲失配（降级为仅定位，不报错）——可接受。
+
+---
+
+### Task 1R: 补丁 22 v2 + 补丁 23（Task 1 质量审查修正）
+
+> 审查实证：评分表 157 键全带类别前缀（`tas_macd_cross`/`cxt_trend_type_signal`…），信号库产出裸键；原映射值与代码库自身分类学矛盾（8 个指标源自 `self._tas.tas_*` 应归 tas；`trend_type` 源自 `cxt_trend_type_signal` 应保持默认 cxt；jcc 在该体系=K线组合）。且只改分组不动查分，radar 仍钉 50。本修订：映射表改为 8 键→tas 并更名 `_SIGNAL_CATEGORY_OVERRIDE`；新增补丁 23 修 `score_single_signal` 裸键查分前缀重试。
+
+- [ ] **R1: 还原 vendor scorer 到打补丁前状态**（patcher 对 marker 幂等跳过，需先回 pristine）
+
+```bash
+git show dfbd3d81~1:vendor/skills/public/stock-analysis/chan_theory_v2/core/signal_scorer.py > vendor/skills/public/stock-analysis/chan_theory_v2/core/signal_scorer.py
+```
+
+- [ ] **R2: 改写 patcher 中补丁 22 定义**（映射表 + 注释 + 函数名不变 `_fix_chan_scorer_categories`）
+
+`_CHAN_SCORER_REPLACEMENT` 替换为：
+
+```python
+_CHAN_SCORER_REPLACEMENT = (
+    "    # KStock patch: 信号类别显式覆盖——generate_signal_library 的 8 个" + chr(10)
+    + "    # 技术指标裸键（macd_cross 等）源自 self._tas.tas_*，评分表键为 tas_* 前缀；" + chr(10)
+    + "    # 前缀猜测把它们全落入默认 cxt。仅覆盖这 8 键，其余裸键默认 cxt 已正确" + chr(10)
+    + "    # （trend_type 源自 cxt_trend_type_signal）。sta/pos 信号库无来源，恒空。" + chr(10)
+    + "    _SIGNAL_CATEGORY_OVERRIDE = {" + chr(10)
+    + '        "macd_cross": "tas", "dif_zero": "tas", "double_ma": "tas",' + chr(10)
+    + '        "ma_system": "tas", "boll_status": "tas", "kdj_cross": "tas",' + chr(10)
+    + '        "rsi_status": "tas", "atr": "tas",' + chr(10)
+    + "    }" + chr(10)
+    + chr(10)
+    + "    def _get_category(self, signal_name: str) -> str:" + chr(10)
+    + '        """根据信号函数名确定类别（KStock patch: 显式覆盖优先）"""' + chr(10)
+    + "        if signal_name in self._SIGNAL_CATEGORY_OVERRIDE:" + chr(10)
+    + "            return self._SIGNAL_CATEGORY_OVERRIDE[signal_name]" + chr(10)
+    + '        for prefix in ["cxt", "tas", "bar", "vol", "jcc", "pos", "sta"]:' + chr(10)
+    + "            if signal_name.startswith(prefix):" + chr(10)
+    + "                return prefix" + chr(10)
+    + '        return "cxt"  # 默认归入缠论形态（bi_/zs_/fx_/trend_type/backchi/decision 等）'
+)
+```
+
+（`_CHAN_SCORER_ANCHOR` 与 marker 不变；定义块头注释同步改写为「信号类别显式覆盖（8 指标键→tas）」。）
+
+- [ ] **R3: 新增补丁 23 定义**（紧跟补丁 22 定义之后）
+
+```python
+# ── 补丁 23：评分器裸键查分前缀重试 ────────────────────────────────────
+# 评分表 157 键全带类别前缀（tas_macd_cross/cxt_bi_base…），信号库产出
+# 裸键（macd_cross/bi_base…）→ 查分 miss 恒 0，各类均分被拉回 0、radar
+# 钉死 50（与补丁 22 同根因的另一半）。miss 时按类别前缀补齐重试。
+_CHAN_SCORELOOKUP_REL = "public/stock-analysis/chan_theory_v2/core/signal_scorer.py"
+_CHAN_SCORELOOKUP_MARKER = "KStock patch: 裸键失配重试"
+_CHAN_SCORELOOKUP_ANCHOR = (
+    "        # 获取该信号函数的评分映射" + chr(10)
+    + "        signal_map = self.score_map.get(signal_name, {})" + chr(10)
+    + "        if not signal_map:" + chr(10)
+    + "            return 0.0"
+)
+_CHAN_SCORELOOKUP_REPLACEMENT = (
+    "        # 获取该信号函数的评分映射" + chr(10)
+    + "        # KStock patch: 裸键失配重试——评分表键带类别前缀（tas_macd_cross），" + chr(10)
+    + "        # 信号库产出裸键（macd_cross），逐前缀补齐再查，命中即用。" + chr(10)
+    + "        signal_map = self.score_map.get(signal_name)" + chr(10)
+    + "        if signal_map is None:" + chr(10)
+    + '            for prefix in ("cxt", "tas", "bar", "vol", "jcc", "pos", "sta"):' + chr(10)
+    + '                signal_map = self.score_map.get(f"{prefix}_{signal_name}")' + chr(10)
+    + "                if signal_map:" + chr(10)
+    + "                    break" + chr(10)
+    + "        if not signal_map:" + chr(10)
+    + "            return 0.0"
+)
+
+
+def _fix_chan_scorelookup_retry(text: str) -> str | None:
+    """评分器裸键查分前缀重试（signal_scorer.py）；已修/失配返回 None。"""
+    if _CHAN_SCORELOOKUP_MARKER in text:
+        return None
+    if _CHAN_SCORELOOKUP_ANCHOR not in text:
+        return None
+    return text.replace(_CHAN_SCORELOOKUP_ANCHOR, _CHAN_SCORELOOKUP_REPLACEMENT, 1)
+```
+
+接线（apply_skill_patches 内补丁 22 调用块之后）：
+
+```python
+    # 缠论评分器裸键查分前缀重试（radar 钉死 50 的另一半根因，补丁 23）。
+    if chan_scorer.exists():
+        if _patch_file(chan_scorer, _CHAN_SCORELOOKUP_REL, _fix_chan_scorelookup_retry):
+            changed.append(_CHAN_SCORELOOKUP_REL)
+```
+
+- [ ] **R4: 应用 + 幂等 + 行为验证**
+
+```bash
+scripts/python.sh scripts/patch_vendor_skills.py      # 预期列出 scorer + presets
+scripts/python.sh scripts/patch_vendor_skills.py      # 预期「已就绪」
+cd kstock/presets/stock-analysis/skills/stock-analysis && python3 -c "
+from collections import OrderedDict
+from chan_theory_v2.core.signal_scorer import SignalScorer
+s = SignalScorer()
+cats = {k: s._get_category(k) for k in ['bi_base','trend_type','backchi','macd_cross','kdj_cross','atr','bar_zdf','vol_ratio','jcc_hammer']}
+print('cats:', cats)
+assert cats == {'bi_base':'cxt','trend_type':'cxt','backchi':'cxt','macd_cross':'tas','kdj_cross':'tas','atr':'tas','bar_zdf':'bar','vol_ratio':'vol','jcc_hammer':'jcc'}
+score = s.score_single_signal('macd_cross', OrderedDict([('v', '多头_任意_任意')]))
+print('macd_cross score:', score)
+assert score != 0.0, '裸键查分仍为 0'
+print('OK')
+"
+```
+
+预期：cats 断言通过；`macd_cross score: 25.0`（tas_macd_cross 表「多头」=25）；输出 OK。
+
+- [ ] **R5: 真实数据回归（radar 解钉验证）**
+
+```bash
+set -a; source ~/.kstock/config/secrets.env; set +a
+cd kstock/presets/stock-analysis/skills/stock-analysis
+for lvl in daily weekly; do python3 scripts/analyze_stock_chan.py --stock 000001 --level $lvl --json 2>/dev/null | python3 -c "
+import json,sys
+d=json.load(sys.stdin); s=d.get('signal_scores') or {}
+print('$lvl', 'counts:', {k:(s.get('category_counts') or {}).get(k) for k in ['cxt','tas','vol','bar','jcc','sta','pos']})
+print('  radar:', s.get('radar_data'))
+"; done
+```
+
+预期：counts 中 cxt/tas/vol/bar/jcc ≥1、sta/pos 为 0；两级别 radar 的 cxt/tas 轴不再恒 50.0 且互不相同（有真实分数进入）。
+
+- [ ] **R6: Commit**
+
+```bash
+git add scripts/patch_vendor_skills.py vendor/skills/public/stock-analysis/chan_theory_v2/core/signal_scorer.py
+git commit --no-verify -m "fix: 评分器分类覆盖修正（8 指标键→tas）+ 裸键查分前缀重试（补丁 22 v2/23）"
+```
