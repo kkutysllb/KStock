@@ -321,11 +321,19 @@ export function parseChart(payload: Rec): ChartSlice | null {
   }
 }
 
-/** 日期(YYYY-MM-DD 前 10 位) → 全局索引表。 */
+/** 时间索引表：全时间戳精确键 + 日期前缀兜底键（同日折叠，后写胜出）。 */
 export function dateIndexOf(dates: string[]): Map<string, number> {
   const map = new Map<string, number>()
-  dates.forEach((date, index) => map.set(date.slice(0, 10), index))
+  dates.forEach((date, index) => {
+    map.set(date, index)                 // 全时间戳精确键（引擎笔/段/中枢/买卖点时间与 K 线同格式）
+    map.set(date.slice(0, 10), index)    // 日期前缀兜底（仅日线级精确）
+  })
   return map
+}
+
+/** 时间 → 索引：先按全时间戳精确匹配，再退日期前缀（分钟级同日多根时避免整日误吸附）。 */
+export function resolveIndex(map: Map<string, number>, time: string): number {
+  return map.get(time) ?? map.get(time.slice(0, 10)) ?? -1
 }
 ```
 
@@ -348,7 +356,7 @@ import {
 } from './derive.ts'
 ```
 
-（page.tsx 内现有的局部接口使用点不改名——`biLines/segLines/zhongshus/fenxings/backchis` 字段访问与 derive.ts 导出结构一致；`indexOfTime` 保留为方法内 `const dateIndex = dateIndexOf(dates)` + 查表。）构建验证：
+（page.tsx 内现有的局部接口使用点不改名——`biLines/segLines/zhongshus/fenxings/backchis` 字段访问与 derive.ts 导出结构一致；时间查表统一走 `resolveIndex(dateIndex, time)`（全时间戳精确优先、日期前缀兜底），见 Task 2R 修正。）构建验证：
 
 ```bash
 pnpm -C kstock/chan-ui build && pnpm -C kstock/chan-ui exec tsc --noEmit -p tsconfig.json && echo BUILD_OK
@@ -491,9 +499,9 @@ export interface PriceRelation {
 /** 前段 vs 现段的价格极值对照：顶背驰看新高、底背驰看新低（动力学缺了形态对照就是半句话）。 */
 export function backchiPriceRelation(chart: ChartSlice, dateIndex: Map<string, number>, bc: Backchi): PriceRelation | null {
   const range = (start: string, end: string): Array<[number, number, number, number]> | null => {
-    const i1 = dateIndex.get(start.slice(0, 10))
-    const i2 = dateIndex.get(end.slice(0, 10))
-    if (i1 === undefined || i2 === undefined || i2 < i1) return null
+    const i1 = resolveIndex(dateIndex, start)
+    const i2 = resolveIndex(dateIndex, end)
+    if (i1 < 0 || i2 < 0 || i2 < i1) return null
     return chart.kline.slice(i1, i2 + 1)
   }
   const prev = range(bc.previousStart, bc.previousEnd)
@@ -735,7 +743,7 @@ git commit --no-verify -m "feat: chan-ui 派生层——背驰价格关系/中�
  */
 import { useEffect, useRef, useState } from 'react'
 import {
-  asNum, asRec, asStr, dateIndexOf, zhongshuPosition,
+  asNum, asRec, asStr, dateIndexOf, resolveIndex, zhongshuPosition,
   type ChartSlice, type Rec,
 } from './derive.ts'
 
@@ -796,7 +804,7 @@ export function ChanChart({ chart, payload, view, onViewChange, highlight }: {
   const x = (index: number) => PAD_L + (index - view.start + 0.5) * slot
 
   const dateIndex = dateIndexOf(dates)
-  const indexOfTime = (time: string): number => dateIndex.get(time.slice(0, 10)) ?? -1
+  const indexOfTime = (time: string): number => resolveIndex(dateIndex, time)
 
   const visK = kline.slice(view.start, winEnd)
   const zsVis = chart.zhongshus.filter(z => {
@@ -1136,7 +1144,7 @@ git commit --no-verify -m "feat: 缠论主图拆分 chart.tsx + 信息条/可靠
  * + 中枢演化卡。全部可点击 → 主图定位并脉冲高亮（onFocus 回调上抛）。
  */
 import {
-  asArr, asNum, asRec, asStr, backchiKind, backchiPriceRelation, dateIndexOf,
+  asArr, asNum, asRec, asStr, backchiKind, backchiPriceRelation, dateIndexOf, resolveIndex,
   evidenceChain, pointWhy, zhongshuForecast, zhongshuPosition,
   type ChartHighlight, type ChartSlice, type Rec,
 } from './derive.ts'
@@ -1186,8 +1194,9 @@ export function BackchiCard({ chart, onFocus }: { chart: ChartSlice; onFocus: Fo
             type="button"
             className={`ksq-chanx-bcrow${bc.valid ? ' valid' : ''}`}
             onClick={() => {
-              const s = di.get(bc.previousStart.slice(0, 10)) ?? 0
-              const e = di.get(bc.currentEnd.slice(0, 10)) ?? chart.dates.length - 1
+              const s = Math.max(0, resolveIndex(di, bc.previousStart))
+              const e0 = resolveIndex(di, bc.currentEnd)
+              const e = e0 >= 0 ? e0 : chart.dates.length - 1
               onFocus({ startIdx: s, endIdx: e, hl: { kind: 'backchi', id: i } })
             }}
             title={`定位 ${bc.previousStart.slice(0, 10)} ~ ${bc.currentEnd.slice(0, 10)}`}
@@ -1255,15 +1264,15 @@ export function BSPointsCard({ payload, chart, onFocus }: { payload: Rec; chart:
         const rel = asNum(r.reliability)
         const type = asStr(r.type)
         const isBuy = type.includes('buy') || type.includes('买')
-        const idx = di?.get(time.slice(0, 10))
+        const idx = di !== null ? resolveIndex(di, time) : -1
         return (
           <button
             key={`${time}-${type}`}
             type="button"
             className="ksq-chanx-bsrow"
-            disabled={idx === undefined}
+            disabled={idx < 0}
             onClick={() => {
-              if (idx !== undefined) onFocus({ startIdx: idx, endIdx: idx, hl: { kind: 'point', id: markerIndexOf(type, time) } })
+              if (idx >= 0) onFocus({ startIdx: idx, endIdx: idx, hl: { kind: 'point', id: markerIndexOf(type, time) } })
             }}
           >
             <div className="ksq-chanx-bsrow-hd">
@@ -1306,8 +1315,9 @@ export function ZhongshuCard({ chart, payload, onFocus }: { chart: ChartSlice | 
       {zones.map((zs, i) => {
         const absIdx = chart.zhongshus.length - 1 - i
         const pos = zhongshuPosition(lastClose, zs)
-        const s = di.get(zs.start_time.slice(0, 10)) ?? 0
-        const e = di.get(zs.end_time.slice(0, 10)) ?? chart.dates.length - 1
+        const s = Math.max(0, resolveIndex(di, zs.start_time))
+        const e0 = resolveIndex(di, zs.end_time)
+        const e = e0 >= 0 ? e0 : chart.dates.length - 1
         return (
           <button
             key={absIdx}
@@ -1679,7 +1689,7 @@ git commit --no-verify -m "feat: 缠论原生雷达 + 联立矩阵 + 关键位�
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { TaskTargetMenu, type TaskRouterBridge, type UseWorkspaces } from '@kstock/quant-ui'
 import {
-  asArr, asNum, asRec, asStr, dateIndexOf, evidenceChain, matrixLevels, parseChart,
+  asArr, asNum, asRec, asStr, evidenceChain, matrixLevels, parseChart,
   radarDims, radarSummary, LEVEL_OPTIONS,
   type ChartHighlight, type ChartSlice, type MatrixBrief, type Rec,
 } from './derive.ts'
