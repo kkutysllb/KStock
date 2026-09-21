@@ -91,6 +91,13 @@ export interface StrategyEquity {
   equity: unknown
 }
 
+/** 交易清单附件（trades.json，形状由 agent 写入，宽松 unknown）。 */
+export interface StrategyRunTrades {
+  run_id: string
+  version: number
+  trades: unknown
+}
+
 export const listStrategies = () => get<Strategy[]>('/kstock-api/strategies')
 export const listStrategyVersions = (id: string) => get<StrategyVersion[]>(`/kstock-api/strategies/${encodeURIComponent(id)}/versions`)
 export const listStrategyRuns = (id: string) => get<StrategyRunSummary[]>(`/kstock-api/strategies/${encodeURIComponent(id)}/runs`)
@@ -98,6 +105,8 @@ export const compareStrategyRuns = (id: string, runIds: string[]) =>
   get<StrategyRunComparison>(`/kstock-api/strategies/${encodeURIComponent(id)}/compare?runs=${runIds.map(encodeURIComponent).join(',')}`)
 export const getStrategyRunEquity = (id: string, runId: string) =>
   get<StrategyEquity>(`/kstock-api/strategies/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/equity`)
+export const getStrategyRunTrades = (id: string, runId: string) =>
+  get<StrategyRunTrades>(`/kstock-api/strategies/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/trades`)
 export const patchStrategy = (id: string, patch: { name?: string; status?: string; hypothesis?: string }) =>
   request<Strategy>(`/kstock-api/strategies/${encodeURIComponent(id)}`, { ...jsonBody(patch), method: 'PATCH' })
 

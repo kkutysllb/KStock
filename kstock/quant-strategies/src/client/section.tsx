@@ -9,6 +9,7 @@ import {
   compareStrategyRuns,
   fetchReportHtml,
   getStrategyRunEquity,
+  getStrategyRunTrades,
   listStrategies,
   listStrategyRuns,
   listStrategyVersions,
@@ -17,15 +18,18 @@ import {
   type StrategyEquity,
   type StrategyRunComparison,
   type StrategyRunSummary,
+  type StrategyRunTrades,
   type StrategyVersion,
 } from '@kstock/quant-ui'
 import { IconCopy, IconGitBranch, IconPlay } from '@kstock/quant-ui'
 import {
   CopyToast,
+  DrawdownChart,
   Empty,
   ErrorLine,
   LineOverlay,
   Loading,
+  PnlBars,
   PreviewDialog,
   RefreshButton,
   RUN_COLORS,
@@ -83,6 +87,34 @@ function runReportId(run: StrategyRunSummary | undefined): string | null {
   return typeof value === 'string' && value !== '' ? value : null
 }
 
+/** trades 附件归一：宽松 unknown → 平仓盈亏序列 + 摘要（防御式）。 */
+function tradesDigest(raw: unknown): {
+  pnlSeries: number[]
+  total: number
+  closes: number
+  maxWin: number
+  maxLoss: number
+  totalPnl: number
+} {
+  const list = Array.isArray(raw)
+    ? raw
+    : typeof raw === 'object' && raw !== null && Array.isArray((raw as { trades?: unknown }).trades)
+      ? (raw as { trades: unknown[] }).trades
+      : []
+  const rows = list.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+  const pnl = rows
+    .map(row => (typeof row.realized_pnl === 'number' && Number.isFinite(row.realized_pnl) ? row.realized_pnl : null))
+    .filter((value): value is number => value !== null && value !== 0)
+  return {
+    pnlSeries: pnl,
+    total: rows.length,
+    closes: pnl.length,
+    maxWin: pnl.length > 0 ? Math.max(...pnl) : 0,
+    maxLoss: pnl.length > 0 ? Math.min(...pnl) : 0,
+    totalPnl: pnl.reduce((sum, value) => sum + value, 0),
+  }
+}
+
 export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = {}) {
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [loading, setLoading] = useState(true)
@@ -97,6 +129,7 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
   const [refreshing, setRefreshing] = useState(false)
   const [reportView, setReportView] = useState<{ runId: string; htmlUrl: string } | null>(null)
   const [pendingInterpret, setPendingInterpret] = useState<string | null>(null)
+  const [detailView, setDetailView] = useState<{ runId: string; equity: StrategyEquity | null; trades: StrategyRunTrades | null } | null>(null)
   const { copy, toast } = useCopyPrompt()
 
   const reload = useCallback(async () => {
@@ -144,6 +177,7 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
     setEquities([])
     closeReportView()
     setPendingInterpret(null)
+    setDetailView(null)
     setError(null)
     let active = true
     void (async () => {
@@ -234,6 +268,21 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
       setError('看板加载失败（报告可能已删除）')
     }
   }, [reportView, runs, closeReportView])
+
+  /** 展开单 run 回测详情（L1+L2）：净值 + 回撤副图 + 盈亏柱 + 摘要。 */
+  const toggleDetail = useCallback(async (runId: string) => {
+    if (!selectedId) return
+    if (detailView?.runId === runId) {
+      setDetailView(null)
+      return
+    }
+    setDetailView({ runId, equity: null, trades: null })
+    const [equity, trades] = await Promise.all([
+      getStrategyRunEquity(selectedId, runId).catch(() => null),
+      getStrategyRunTrades(selectedId, runId).catch(() => null),
+    ])
+    setDetailView({ runId, equity, trades })
+  }, [selectedId, detailView])
 
   /** 回测「解读」（§28）：先弹目标选择菜单（strategy 类型记忆）。 */
   const askInterpret = useCallback((run: StrategyRunSummary) => {
@@ -377,7 +426,7 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                           <th>回撤 %</th>
                           <th>交易</th>
                           <th>时间</th>
-                          <th>看板 / 解读</th>
+                          <th>详情 / 看板 / 解读</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -400,12 +449,18 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                             <td className="num">{metric(run, 'trade_count')}</td>
                             <td>{formatDateTime(run.created_at)}</td>
                             <td>
+                              <button className="ksq-linkbtn" type="button" onClick={() => void toggleDetail(run.run_id)}>
+                                {detailView?.runId === run.run_id ? '收起' : '详情'}
+                              </button>
                               {runReportId(run) !== null && (
-                                <button className="ksq-linkbtn" type="button" onClick={() => void showReport(run.run_id)}>
-                                  {reportView?.runId === run.run_id ? '收起' : '看板'}
-                                </button>
+                                <>
+                                  {' '}
+                                  <button className="ksq-linkbtn" type="button" onClick={() => void showReport(run.run_id)}>
+                                    {reportView?.runId === run.run_id ? '收起' : '看板'}
+                                  </button>
+                                </>
                               )}
-                              {runReportId(run) !== null ? ' ' : ''}
+                              {' '}
                               <button className="ksq-linkbtn" type="button" onClick={() => askInterpret(run)}>解读</button>
                             </td>
                           </tr>
@@ -414,6 +469,62 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                     </table>
                   )}
                 </div>
+
+                {detailView !== null && (() => {
+                  const run = runs.find(item => item.run_id === detailView.runId)
+                  if (run === undefined) return null
+                  const nav = normalizeEquity(detailView.equity?.equity ?? [])
+                  const digest = tradesDigest(detailView.trades?.trades)
+                  const range = run.data_start !== '' && run.data_end !== '' ? `${run.data_start} ~ ${run.data_end}` : '—'
+                  return (
+                    <div className="ksq-compare">
+                      <h3>
+                        回测详情（{run.run_id.slice(5, 13)} · v{run.version} · {range}）
+                        <button className="ksq-linkbtn" type="button" onClick={() => setDetailView(null)}>收起</button>
+                      </h3>
+                      <table className="ksq-table">
+                        <tbody>
+                          <tr>
+                            {METRIC_KEYS.map(([key, label]) => (
+                              <td key={key}>{label}：<strong className={`num ${metricClass(key, run.metrics?.[key])}`}>{metric(run, key)}</strong></td>
+                            ))}
+                          </tr>
+                        </tbody>
+                      </table>
+                      {nav.length >= 2 ? (
+                        <>
+                          <div className="ksq-chart">
+                            <h4>策略净值（归一化，1 起点）</h4>
+                            <LineOverlay
+                              series={[{ label: `v${run.version} 净值`, values: nav, color: RUN_COLORS[0]! }]}
+                              baseline={1}
+                              title="策略净值曲线"
+                            />
+                          </div>
+                          <div className="ksq-chart">
+                            <h4>回撤（underwater）</h4>
+                            <DrawdownChart values={nav} title="回撤副图" />
+                          </div>
+                        </>
+                      ) : (
+                        <p className="ksq-note">该 run 未存净值附件（record_run 未附 equity），无法绘制曲线。</p>
+                      )}
+                      {digest.pnlSeries.length >= 2 ? (
+                        <>
+                          <div className="ksq-chart">
+                            <h4>每笔平仓盈亏</h4>
+                            <PnlBars values={digest.pnlSeries} title="每笔平仓盈亏柱" />
+                          </div>
+                          <p className="ksq-item-meta">
+                            交易 {digest.total} 笔 · 平仓 {digest.closes} 笔 · 单笔最大盈 {digest.maxWin.toLocaleString()} / 亏 {digest.maxLoss.toLocaleString()} · 累计已实现 {digest.totalPnl.toLocaleString()}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="ksq-note">该 run 未存交易清单附件（record_run 未附 trades），无法绘制盈亏分布。</p>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {comparison && (
                   <div className="ksq-compare">

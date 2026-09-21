@@ -45,6 +45,7 @@ window.__ModuleLoader__.load({
 		const listStrategyRuns = (id) => get(`/kstock-api/strategies/${encodeURIComponent(id)}/runs`);
 		const compareStrategyRuns = (id, runIds) => get(`/kstock-api/strategies/${encodeURIComponent(id)}/compare?runs=${runIds.map(encodeURIComponent).join(",")}`);
 		const getStrategyRunEquity = (id, runId) => get(`/kstock-api/strategies/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/equity`);
+		const getStrategyRunTrades = (id, runId) => get(`/kstock-api/strategies/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/trades`);
 		async function fetchReportHtml(reportId) {
 			const response = await fetch(`/kstock-api/reports/${encodeURIComponent(reportId)}/content`);
 			if (!response.ok) throw new KsqError(response.status, `报告加载失败（${response.status}）`);
@@ -629,6 +630,150 @@ window.__ModuleLoader__.load({
 				})
 			});
 		}
+		/**
+		* 回撤副图（underwater）：输入归一化净值序列，相对 running max 的回撤
+		* 百分比向下填充（0 线在顶，红区向下）。回测详情标配——回撤发生在哪、
+		* 持续多久、修复耗时一眼可读。
+		*/
+		function DrawdownChart({ values, title }) {
+			if (values.length < 2) return null;
+			let peak = -Infinity;
+			const dd = values.map((value) => {
+				peak = Math.max(peak, value);
+				return peak > 0 ? (value - peak) / peak * 100 : 0;
+			});
+			const min = Math.min(...dd, -.001);
+			const width = 560;
+			const height = 96;
+			const padLeft = 46;
+			const x = (index) => padLeft + index / Math.max(1, values.length - 1) * (width - padLeft - 12);
+			const y = (value) => 6 + value / min * (height - 22);
+			const line = dd.map((value, index) => `${index === 0 ? "M" : "L"}${x(index).toFixed(1)},${y(value).toFixed(1)}`).join(" ");
+			const area = `${line} L${x(dd.length - 1).toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(0).toFixed(1)} Z`;
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("svg", {
+				viewBox: `0 0 ${width} ${height}`,
+				role: "img",
+				"aria-label": title,
+				children: [
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", {
+						d: area,
+						fill: "rgba(230, 70, 70, 0.28)"
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", {
+						d: line,
+						fill: "none",
+						stroke: "#e64646",
+						strokeWidth: "1"
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+						x1: padLeft,
+						y1: y(0),
+						x2: width - 12,
+						y2: y(0),
+						stroke: "var(--dsw-alias-border-l2)"
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+						x: padLeft - 6,
+						y: y(0) + 4,
+						fontSize: "10",
+						textAnchor: "end",
+						fill: "var(--dsw-alias-label-tertiary)",
+						children: "0%"
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+						x: padLeft - 6,
+						y: height - 8,
+						fontSize: "10",
+						textAnchor: "end",
+						fill: "var(--dsw-alias-label-tertiary)",
+						children: [min.toFixed(1), "%"]
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+						x: padLeft,
+						y: height - 2,
+						fontSize: "9.5",
+						fill: "var(--dsw-alias-label-tertiary)",
+						children: [
+							"最大回撤 ",
+							min.toFixed(2),
+							"%（图内重算，供交叉校验）"
+						]
+					})
+				]
+			});
+		}
+		/**
+		* 每笔交易盈亏柱：0 轴按对称界居中，正绿负红。卖出笔 realized_pnl
+		* 序列的分布/连亏段/单笔极值直观呈现。
+		*/
+		function PnlBars({ values, title }) {
+			if (values.length === 0) return null;
+			const width = 560;
+			const height = 110;
+			const padLeft = 46;
+			const maxAbs = Math.max(...values.map((v) => Math.abs(v)), 1e-4);
+			const zeroY = 48;
+			const scale = (height - 26) / 2 / maxAbs;
+			const slot = (width - padLeft - 12) / values.length;
+			const barW = Math.max(1, slot * .8);
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("svg", {
+				viewBox: `0 0 ${width} ${height}`,
+				role: "img",
+				"aria-label": title,
+				children: [
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+						x1: padLeft,
+						y1: zeroY,
+						x2: width - 12,
+						y2: zeroY,
+						stroke: "var(--dsw-alias-border-l2)"
+					}),
+					values.map((value, index) => {
+						const h = Math.max(1, Math.abs(value) * scale);
+						const y = value >= 0 ? zeroY - h : zeroY;
+						return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+							x: padLeft + index * slot,
+							y,
+							width: barW,
+							height: h,
+							fill: value >= 0 ? "#31c7a2" : "#e64646",
+							opacity: "0.85"
+						}, index);
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+						x: padLeft - 6,
+						y: 52,
+						fontSize: "10",
+						textAnchor: "end",
+						fill: "var(--dsw-alias-label-tertiary)",
+						children: "0"
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+						x: padLeft - 6,
+						y: 12,
+						fontSize: "10",
+						textAnchor: "end",
+						fill: "#31c7a2",
+						children: ["+", maxAbs >= 1e3 ? `${(maxAbs / 1e3).toFixed(1)}k` : maxAbs.toFixed(0)]
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+						x: padLeft - 6,
+						y: height - 22,
+						fontSize: "10",
+						textAnchor: "end",
+						fill: "#e64646",
+						children: ["-", maxAbs >= 1e3 ? `${(maxAbs / 1e3).toFixed(1)}k` : maxAbs.toFixed(0)]
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+						x: padLeft,
+						y: height - 2,
+						fontSize: "9.5",
+						fill: "var(--dsw-alias-label-tertiary)",
+						children: [values.length, " 笔平仓（按时间序，绿盈红亏）"]
+					})
+				]
+			});
+		}
 		//#endregion
 		//#region ../quant-ui/src/index.ts
 		/**
@@ -720,6 +865,19 @@ window.__ModuleLoader__.load({
 			const value = run?.rules?.report_id;
 			return typeof value === "string" && value !== "" ? value : null;
 		}
+		/** trades 附件归一：宽松 unknown → 平仓盈亏序列 + 摘要（防御式）。 */
+		function tradesDigest(raw) {
+			const rows = (Array.isArray(raw) ? raw : typeof raw === "object" && raw !== null && Array.isArray(raw.trades) ? raw.trades : []).filter((item) => typeof item === "object" && item !== null);
+			const pnl = rows.map((row) => typeof row.realized_pnl === "number" && Number.isFinite(row.realized_pnl) ? row.realized_pnl : null).filter((value) => value !== null && value !== 0);
+			return {
+				pnlSeries: pnl,
+				total: rows.length,
+				closes: pnl.length,
+				maxWin: pnl.length > 0 ? Math.max(...pnl) : 0,
+				maxLoss: pnl.length > 0 ? Math.min(...pnl) : 0,
+				totalPnl: pnl.reduce((sum, value) => sum + value, 0)
+			};
+		}
 		function StrategiesSection({ useWorkspaces } = {}) {
 			const [strategies, setStrategies] = (0, react.useState)([]);
 			const [loading, setLoading] = (0, react.useState)(true);
@@ -734,6 +892,7 @@ window.__ModuleLoader__.load({
 			const [refreshing, setRefreshing] = (0, react.useState)(false);
 			const [reportView, setReportView] = (0, react.useState)(null);
 			const [pendingInterpret, setPendingInterpret] = (0, react.useState)(null);
+			const [detailView, setDetailView] = (0, react.useState)(null);
 			const { copy, toast } = useCopyPrompt();
 			const reload = (0, react.useCallback)(async () => {
 				setError(null);
@@ -775,6 +934,7 @@ window.__ModuleLoader__.load({
 				setEquities([]);
 				closeReportView();
 				setPendingInterpret(null);
+				setDetailView(null);
 				setError(null);
 				let active = true;
 				(async () => {
@@ -852,6 +1012,25 @@ window.__ModuleLoader__.load({
 				runs,
 				closeReportView
 			]);
+			/** 展开单 run 回测详情（L1+L2）：净值 + 回撤副图 + 盈亏柱 + 摘要。 */
+			const toggleDetail = (0, react.useCallback)(async (runId) => {
+				if (!selectedId) return;
+				if (detailView?.runId === runId) {
+					setDetailView(null);
+					return;
+				}
+				setDetailView({
+					runId,
+					equity: null,
+					trades: null
+				});
+				const [equity, trades] = await Promise.all([getStrategyRunEquity(selectedId, runId).catch(() => null), getStrategyRunTrades(selectedId, runId).catch(() => null)]);
+				setDetailView({
+					runId,
+					equity,
+					trades
+				});
+			}, [selectedId, detailView]);
 			/** 回测「解读」（§28）：先弹目标选择菜单（strategy 类型记忆）。 */
 			const askInterpret = (0, react.useCallback)((run) => {
 				if (selected === null) return;
@@ -1062,7 +1241,7 @@ window.__ModuleLoader__.load({
 										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "回撤 %" }),
 										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "交易" }),
 										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "时间" }),
-										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "看板 / 解读" })
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "详情 / 看板 / 解读" })
 									] }) }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("tbody", { children: runs.map((run) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("tr", {
 										className: compareIds.includes(run.run_id) ? "selected" : "",
 										children: [
@@ -1101,13 +1280,19 @@ window.__ModuleLoader__.load({
 											}),
 											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: formatDateTime(run.created_at) }),
 											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("td", { children: [
-												runReportId(run) !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+													className: "ksq-linkbtn",
+													type: "button",
+													onClick: () => void toggleDetail(run.run_id),
+													children: detailView?.runId === run.run_id ? "收起" : "详情"
+												}),
+												runReportId(run) !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [" ", /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 													className: "ksq-linkbtn",
 													type: "button",
 													onClick: () => void showReport(run.run_id),
 													children: reportView?.runId === run.run_id ? "收起" : "看板"
-												}),
-												runReportId(run) !== null ? " " : "",
+												})] }),
+												" ",
 												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
 													className: "ksq-linkbtn",
 													type: "button",
@@ -1118,6 +1303,89 @@ window.__ModuleLoader__.load({
 										]
 									}, run.run_id)) })]
 								})] }),
+								detailView !== null && (() => {
+									const run = runs.find((item) => item.run_id === detailView.runId);
+									if (run === void 0) return null;
+									const nav = normalizeEquity(detailView.equity?.equity ?? []);
+									const digest = tradesDigest(detailView.trades?.trades);
+									const range = run.data_start !== "" && run.data_end !== "" ? `${run.data_start} ~ ${run.data_end}` : "—";
+									return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+										className: "ksq-compare",
+										children: [
+											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("h3", { children: [
+												"回测详情（",
+												run.run_id.slice(5, 13),
+												" · v",
+												run.version,
+												" · ",
+												range,
+												"）",
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+													className: "ksq-linkbtn",
+													type: "button",
+													onClick: () => setDetailView(null),
+													children: "收起"
+												})
+											] }),
+											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("table", {
+												className: "ksq-table",
+												children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("tbody", { children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("tr", { children: METRIC_KEYS.map(([key, label]) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("td", { children: [
+													label,
+													"：",
+													/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", {
+														className: `num ${metricClass(key, run.metrics?.[key])}`,
+														children: metric(run, key)
+													})
+												] }, key)) }) })
+											}),
+											nav.length >= 2 ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+												className: "ksq-chart",
+												children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("h4", { children: "策略净值（归一化，1 起点）" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(LineOverlay, {
+													series: [{
+														label: `v${run.version} 净值`,
+														values: nav,
+														color: RUN_COLORS[0]
+													}],
+													baseline: 1,
+													title: "策略净值曲线"
+												})]
+											}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+												className: "ksq-chart",
+												children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("h4", { children: "回撤（underwater）" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(DrawdownChart, {
+													values: nav,
+													title: "回撤副图"
+												})]
+											})] }) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+												className: "ksq-note",
+												children: "该 run 未存净值附件（record_run 未附 equity），无法绘制曲线。"
+											}),
+											digest.pnlSeries.length >= 2 ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+												className: "ksq-chart",
+												children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("h4", { children: "每笔平仓盈亏" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(PnlBars, {
+													values: digest.pnlSeries,
+													title: "每笔平仓盈亏柱"
+												})]
+											}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("p", {
+												className: "ksq-item-meta",
+												children: [
+													"交易 ",
+													digest.total,
+													" 笔 · 平仓 ",
+													digest.closes,
+													" 笔 · 单笔最大盈 ",
+													digest.maxWin.toLocaleString(),
+													" / 亏 ",
+													digest.maxLoss.toLocaleString(),
+													" · 累计已实现 ",
+													digest.totalPnl.toLocaleString()
+												]
+											})] }) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+												className: "ksq-note",
+												children: "该 run 未存交易清单附件（record_run 未附 trades），无法绘制盈亏分布。"
+											})
+										]
+									});
+								})(),
 								comparison && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 									className: "ksq-compare",
 									children: [

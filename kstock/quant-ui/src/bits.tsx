@@ -199,3 +199,65 @@ export function PreviewDialog({ title, onClose, children }: { title: string; onC
     </div>
   )
 }
+
+/**
+ * 回撤副图（underwater）：输入归一化净值序列，相对 running max 的回撤
+ * 百分比向下填充（0 线在顶，红区向下）。回测详情标配——回撤发生在哪、
+ * 持续多久、修复耗时一眼可读。
+ */
+export function DrawdownChart({ values, title }: { values: number[]; title: string }): React.ReactElement | null {
+  if (values.length < 2) return null
+  let peak = -Infinity
+  const dd = values.map(value => {
+    peak = Math.max(peak, value)
+    return peak > 0 ? ((value - peak) / peak) * 100 : 0
+  })
+  const min = Math.min(...dd, -0.001)
+  const width = 560
+  const height = 96
+  const padLeft = 46
+  const x = (index: number) => padLeft + (index / Math.max(1, values.length - 1)) * (width - padLeft - 12)
+  const y = (value: number) => 6 + (value / min) * (height - 22) // 0 在顶，min 在底
+  const line = dd.map((value, index) => `${index === 0 ? 'M' : 'L'}${x(index).toFixed(1)},${y(value).toFixed(1)}`).join(' ')
+  const area = `${line} L${x(dd.length - 1).toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(0).toFixed(1)} Z`
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title}>
+      <path d={area} fill="rgba(230, 70, 70, 0.28)" />
+      <path d={line} fill="none" stroke="#e64646" strokeWidth="1" />
+      <line x1={padLeft} y1={y(0)} x2={width - 12} y2={y(0)} stroke="var(--dsw-alias-border-l2)" />
+      <text x={padLeft - 6} y={y(0) + 4} fontSize="10" textAnchor="end" fill="var(--dsw-alias-label-tertiary)">0%</text>
+      <text x={padLeft - 6} y={height - 8} fontSize="10" textAnchor="end" fill="var(--dsw-alias-label-tertiary)">{min.toFixed(1)}%</text>
+      <text x={padLeft} y={height - 2} fontSize="9.5" fill="var(--dsw-alias-label-tertiary)">最大回撤 {min.toFixed(2)}%（图内重算，供交叉校验）</text>
+    </svg>
+  )
+}
+
+/**
+ * 每笔交易盈亏柱：0 轴按对称界居中，正绿负红。卖出笔 realized_pnl
+ * 序列的分布/连亏段/单笔极值直观呈现。
+ */
+export function PnlBars({ values, title }: { values: number[]; title: string }): React.ReactElement | null {
+  if (values.length === 0) return null
+  const width = 560
+  const height = 110
+  const padLeft = 46
+  const maxAbs = Math.max(...values.map(v => Math.abs(v)), 0.0001)
+  const zeroY = 6 + (height - 26) / 2
+  const scale = (height - 26) / 2 / maxAbs
+  const slot = (width - padLeft - 12) / values.length
+  const barW = Math.max(1, slot * 0.8)
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title}>
+      <line x1={padLeft} y1={zeroY} x2={width - 12} y2={zeroY} stroke="var(--dsw-alias-border-l2)" />
+      {values.map((value, index) => {
+        const h = Math.max(1, Math.abs(value) * scale)
+        const y = value >= 0 ? zeroY - h : zeroY
+        return <rect key={index} x={padLeft + index * slot} y={y} width={barW} height={h} fill={value >= 0 ? '#31c7a2' : '#e64646'} opacity="0.85" />
+      })}
+      <text x={padLeft - 6} y={zeroY + 4} fontSize="10" textAnchor="end" fill="var(--dsw-alias-label-tertiary)">0</text>
+      <text x={padLeft - 6} y={12} fontSize="10" textAnchor="end" fill="#31c7a2">+{maxAbs >= 1000 ? `${(maxAbs / 1000).toFixed(1)}k` : maxAbs.toFixed(0)}</text>
+      <text x={padLeft - 6} y={height - 22} fontSize="10" textAnchor="end" fill="#e64646">-{maxAbs >= 1000 ? `${(maxAbs / 1000).toFixed(1)}k` : maxAbs.toFixed(0)}</text>
+      <text x={padLeft} y={height - 2} fontSize="9.5" fill="var(--dsw-alias-label-tertiary)">{values.length} 笔平仓（按时间序，绿盈红亏）</text>
+    </svg>
+  )
+}
