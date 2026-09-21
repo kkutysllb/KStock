@@ -1423,4 +1423,5 @@ a.ksq-news-title:hover {
 .ksq-chanx-matrix tr.res-down td { background: rgba(47,158,119,0.07); }
 .ksq-chanx-chips summary { cursor: pointer; font-size: 12px; color: var(--dsw-alias-label-tertiary); padding: 4px 0; }
 .ksq-chanx-chips .ksq-chips { padding: 4px 0 2px; }
-.ksq-chanx-card span { color: var(--dsw-alias-label-primary); font-size: 12px; }
+/* KeyLevelsCard 键值行专用类：禁止用 .ksq-chanx-card span 这类宽选择器——特异性 (0,1,1) 会压制 ksq-item-meta/ksq-chanx-ok/badge 等单类规则 */
+.ksq-chanx-kv { color: var(--dsw-alias-label-primary); font-size: 12px; }

@@ -3,7 +3,7 @@
  * 关键位/综合评估 + 折叠的信号明细 chips。
  */
 import {
-  asArr, asNum, asRec, asStr,
+  asArr, asNum, asRec, asStr, latestSignals, typeCnDir,
   type MatrixBrief, type RadarDim, type Rec,
 } from './derive.ts'
 
@@ -17,7 +17,7 @@ export function ChanRadar({ dims, summary }: {
   const point = (i: number, value: number): [number, number] =>
     [cx + Math.cos(angle(i)) * r * value, cy + Math.sin(angle(i)) * r * value]
   const polygon = dims
-    .map((d, i) => point(i, d.value !== null ? Math.max(0.04, d.value / 100) : 0.04).join(','))
+    .map((d, i) => point(i, d.value !== null ? Math.min(1, Math.max(0.04, d.value / 100)) : 0.04).join(','))
     .join(' ')
   return (
     <div className="ksq-chanx-radarblock">
@@ -32,7 +32,7 @@ export function ChanRadar({ dims, summary }: {
         })}
         <polygon points={polygon} fill="rgba(232,163,61,0.28)" stroke="#e8a33d" strokeWidth="1.4" />
         {dims.map((d, i) => {
-          const [px, py] = point(i, 1.22)
+          const [px, py] = point(i, 1.15)
           return (
             <text key={`l-${d.key}`} x={px} y={py + 3} fontSize="8.5" textAnchor="middle"
               fill={d.value === null ? 'var(--dsw-alias-label-tertiary)' : 'var(--dsw-alias-label-secondary)'}
@@ -66,18 +66,18 @@ export interface MatrixRowUI { level: string; status: 'ok' | 'loading' | 'error'
 
 const dirCn = (data: Rec): { cn: string; dir: 'up' | 'down' | 'flat' } => {
   const cn = asStr(asRec(data.trend_analysis).type_cn)
-  if (cn.includes('上涨') || cn.includes('多')) return { cn: cn || '—', dir: 'up' }
-  if (cn.includes('下跌') || cn.includes('空')) return { cn: cn || '—', dir: 'down' }
-  return { cn: cn || '未判定', dir: 'flat' }
+  const dir = typeCnDir(cn)
+  return { cn: cn !== '' ? cn : dir === 'flat' ? '未判定' : '—', dir }
 }
 
 /** 多级别联立矩阵：四行级别 × 方向/买卖点/得分/背驰，多数方向高亮共振。 */
 export function LevelMatrix({ rows }: { rows: MatrixRowUI[] }): React.ReactElement {
   const okRows = rows.filter(r => r.status === 'ok' && r.data !== undefined)
   const dirs = okRows.map(r => dirCn(r.data!).dir).filter(d => d !== 'flat')
-  const majority: 'up' | 'down' | null = dirs.length >= 2
-    ? (dirs.filter(d => d === 'up').length >= dirs.filter(d => d === 'down').length ? 'up' : 'down')
-    : null
+  const up = dirs.filter(d => d === 'up').length
+  const down = dirs.length - up
+  // 严格多数才出共振结论：平局与雷达一致率 50% 同口径，不渲染方向徽章/高亮
+  const majority: 'up' | 'down' | null = dirs.length >= 2 ? (up > down ? 'up' : down > up ? 'down' : null) : null
   return (
     <div className="ksq-chanx-card">
       <div className="ksq-chanx-card-hd">
@@ -100,7 +100,7 @@ export function LevelMatrix({ rows }: { rows: MatrixRowUI[] }): React.ReactEleme
                 <tr key={row.level} className={current ? 'cur' : ''}>
                   <td>{row.level}{current ? ' *' : ''}</td>
                   <td colSpan={4} className="ksq-item-meta">
-                    {row.status === 'loading' ? '加载中…' : row.status === 'empty' ? '数据不足' : '加载失败'}
+                    {row.status === 'loading' ? '加载中…' : row.status === 'error' ? '加载失败' : '数据不足'}
                   </td>
                 </tr>
               )
@@ -108,10 +108,7 @@ export function LevelMatrix({ rows }: { rows: MatrixRowUI[] }): React.ReactEleme
             const d = row.data
             const { cn, dir } = dirCn(d)
             const dynamics = asRec(d.dynamics)
-            const latestPoint = [
-              ...asArr(dynamics.buy_points).map(asRec),
-              ...asArr(dynamics.sell_points).map(asRec),
-            ].slice(-1)[0]
+            const latestPoint = latestSignals(d, 1)[0]
             const score = asNum(asRec(d.signal_scores).final_score)
             const backchi = asNum(dynamics.backchi_count)
             const resonant = majority !== null && dir === majority
@@ -145,11 +142,11 @@ export function KeyLevelsCard({ advice, lastZhongshu, assessment }: {
       <div className="ksq-chanx-card-hd"><strong>关键位 / 评估</strong></div>
       {lastZhongshu !== null ? (
         <>
-          <span>中枢 {lastZhongshu.low.toFixed(2)} ~ {lastZhongshu.high.toFixed(2)}（中轴 {lastZhongshu.center.toFixed(2)}）</span>
+          <span className="ksq-chanx-kv">中枢 {lastZhongshu.low.toFixed(2)} ~ {lastZhongshu.high.toFixed(2)}（中轴 {lastZhongshu.center.toFixed(2)}）</span>
           <span className="ksq-item-meta">上沿压力 {lastZhongshu.high.toFixed(2)} · 下沿支撑 {lastZhongshu.low.toFixed(2)}</span>
         </>
       ) : <span className="ksq-item-meta">无中枢数据</span>}
-      <span>入场 {asNum(advice.entry_price)?.toFixed(2) ?? '—'} · 止损 {asNum(advice.stop_loss)?.toFixed(2) ?? '—'} · 目标 {asNum(advice.take_profit)?.toFixed(2) ?? '—'}</span>
+      <span className="ksq-chanx-kv">入场 {asNum(advice.entry_price)?.toFixed(2) ?? '—'} · 止损 {asNum(advice.stop_loss)?.toFixed(2) ?? '—'} · 目标 {asNum(advice.take_profit)?.toFixed(2) ?? '—'}</span>
       <div className="ksq-chanx-relbar">
         <span className="ksq-item-meta">风险</span>
         <span className="ksq-chanx-bar"><i style={{ width: `${(risk ?? 0) * 100}%`, background: '#e64646' }} /></span>

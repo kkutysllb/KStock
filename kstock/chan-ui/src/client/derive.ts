@@ -194,6 +194,15 @@ export function zhongshuForecast(price: number | null, zs: ZhongshuZone): string
 
 // ── 缠论原生雷达 ─────────────────────────────────────────────────────────
 
+/** 引擎 type_cn（中文走势名）→ 方向；「多」「空」并存的复合措辞（如「多空分歧」）视为 flat。雷达级别共振与矩阵共用此单源。 */
+export function typeCnDir(cn: string): 'up' | 'down' | 'flat' {
+  const up = cn.includes('上涨') || cn.includes('多')
+  const down = cn.includes('下跌') || cn.includes('空')
+  if (up && !down) return 'up'
+  if (down && !up) return 'down'
+  return 'flat'
+}
+
 /** 卡片→主图联动高亮目标：id 为 kind 对应集合的数组下标——backchi→chart.backchis、point→chart.markers（买卖点）、zhongshu→chart.zhongshus。 */
 export interface ChartHighlight { kind: 'backchi' | 'point' | 'zhongshu'; id: number }
 
@@ -256,17 +265,8 @@ export function radarDims(payload: Rec, matrixRows: MatrixBrief[]): RadarDim[] {
     dims.push({ key: 'bs-quality', label: '买卖点质量', value: rel !== null ? clamp100(rel * 100) : null, basis: latest !== null ? `最新信号 ${asStr(latest.type)} 可靠度 ${rel ?? '—'}` : '近期无买卖点信号' })
   }
 
-  { // 级别共振：矩阵 ok 行方向多数一致率（<2 ok 行 → null；「多」「空」并存的复合措辞视为 flat）
-    type Dir = 'up' | 'down' | 'flat'
-    const dirOf = (data: Rec): Dir => {
-      const cn = asStr(asRec(data.trend_analysis).type_cn)
-      const up = cn.includes('上涨') || cn.includes('多')
-      const down = cn.includes('下跌') || cn.includes('空')
-      if (up && !down) return 'up'
-      if (down && !up) return 'down'
-      return 'flat'
-    }
-    const dirs = matrixRows.filter(r => r.status === 'ok' && r.data !== undefined).map(r => dirOf(r.data!))
+  { // 级别共振：矩阵 ok 行方向多数一致率（<2 ok 行 → null；方向判定单源 typeCnDir）
+    const dirs = matrixRows.filter(r => r.status === 'ok' && r.data !== undefined).map(r => typeCnDir(asStr(asRec(r.data!.trend_analysis).type_cn)))
     const directional = dirs.filter(d => d !== 'flat')
     if (directional.length >= 2) {
       const up = directional.filter(d => d === 'up').length

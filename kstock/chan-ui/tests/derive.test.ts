@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   backchiPriceRelation, dateIndexOf, evidenceChain, LEVEL_OPTIONS, latestSignals, matrixLevels, parseChart,
-  pointTypeKey, pointWhy, radarDims, radarSummary, resolveIndex, stampOf, zhongshuForecast, zhongshuPosition,
-  zhongshuTypeLabel,
+  pointTypeKey, pointWhy, radarDims, radarSummary, resolveIndex, stampOf, typeCnDir, zhongshuForecast,
+  zhongshuPosition, zhongshuTypeLabel,
 } from '../src/client/derive.ts'
 
 test('matrixLevels: 中间级别取低一档+当前+高两档', () => {
@@ -194,4 +194,12 @@ test('stampOf: 数值优先、字符串可解析、均失败退 -∞', () => {
   assert.equal(stampOf({ timestamp: 100 }), 100)
   assert.equal(stampOf({ timestamp: '2026-01-08 14:30' }), Date.parse('2026-01-08 14:30'))
   assert.equal(stampOf({ timestamp: 'not-a-date' }), -Infinity)
+})
+
+test('typeCnDir: 复合措辞 flat 单源（雷达级别共振与矩阵共享）', () => {
+  assert.equal(typeCnDir('上涨走势'), 'up')
+  assert.equal(typeCnDir('下跌走势'), 'down')
+  assert.equal(typeCnDir('盘整走势'), 'flat')
+  assert.equal(typeCnDir('多空分歧'), 'flat')
+  assert.equal(typeCnDir(''), 'flat')
 })
