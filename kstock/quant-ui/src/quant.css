@@ -1283,3 +1283,64 @@ a.ksq-news-title:hover {
 }
 
 .ksq-chan-signals strong { font-size: 12px; color: var(--dsw-alias-label-tertiary); font-weight: 500; }
+
+/* ── 缠论面板：左图右栏布局 + 右侧信息栏（§29-7）────────────────── */
+
+.ksq-chan-main {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-top: 12px;
+}
+
+.ksq-chan-chartwrap { flex: 1; min-width: 0; }
+.ksq-chan-chartwrap svg { width: 100%; max-width: 880px; height: auto; display: block; }
+
+.ksq-chan-side {
+  flex: none;
+  width: 268px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ksq-chan-sidecard {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+
+.ksq-chan-sidecard strong { font-size: 12px; color: var(--dsw-alias-label-tertiary); font-weight: 500; }
+
+.ksq-chan-levelrow em { font-style: normal; font-weight: 500; margin-right: 6px; }
+
+.ksq-chan-signal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ksq-chan-signal:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent); }
+.ksq-chan-signal em { font-style: normal; font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--dsw-alias-label-tertiary); flex: none; }
+.ksq-chan-signal span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ksq-chan-signal b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.ksq-chan-signal.up b { color: #e05656; }
+.ksq-chan-signal.down b { color: #2f9e77; }
+
+@media (max-width: 1080px) {
+  .ksq-chan-main { flex-direction: column; }
+  .ksq-chan-side { width: 100%; }
+}

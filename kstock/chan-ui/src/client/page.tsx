@@ -71,16 +71,14 @@ const H_TOTAL = H_MAIN + H_VOL + 26
  * K 线缠论主图（含成交量副图）：滚轮缩放（鼠标为锚）+ 拖拽平移 +
  * 双击复位 + hover 十字线逐根读值。价格轴按可视窗口自适应。
  */
-function ChanChart({ chart }: { chart: ChartSlice }): React.ReactElement {
+function ChanChart({ chart, view, onViewChange }: { chart: ChartSlice; view: { start: number; count: number }; onViewChange: React.Dispatch<React.SetStateAction<{ start: number; count: number }>> }): React.ReactElement {
   const { dates, kline, volumes } = chart
   const total = dates.length
   const svgRef = useRef<SVGSVGElement | null>(null)
-  const [view, setView] = useState({ start: 0, count: total })
+  const setView: React.Dispatch<React.SetStateAction<{ start: number; count: number }>> = onViewChange
   const [hover, setHover] = useState<number | null>(null)
   const dragRef = useRef<{ x: number; start: number } | null>(null)
   const [dragging, setDragging] = useState(false)
-
-  useEffect(() => { setView({ start: 0, count: total }); setHover(null) }, [total, chart])
 
   const clampView = (start: number, count: number): { start: number; count: number } => {
     const c = Math.max(15, Math.min(total, Math.round(count)))
@@ -356,15 +354,17 @@ function interpretChanPrompt(payload: Rec, stock: string, level: string): string
     + `可用 stock-analysis 技能的缠论引擎补充多级别分析；数据缺失诚实标注「无数据」，不构成投资建议。`
 }
 
-/** 缠论研究页。 */
+/** 缠论研究页：左 K 线（缩放/拖拽）+ 右信息栏（摘要/多级别/信号流/关键位）。 */
 export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = {}) {
   const [stock, setStock] = useState('')
   const [level, setLevel] = useState<string>('daily')
   const [payload, setPayload] = useState<Rec | null>(null)
   const [chart, setChart] = useState<ChartSlice | null>(null)
+  const [view, setView] = useState({ start: 0, count: 1 })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pendingAsk, setPendingAsk] = useState<string | null>(null)
+  const [levelsBrief, setLevelsBrief] = useState<Record<string, Rec | 'loading' | 'error'>>({})
 
   const analyze = useCallback(async (targetStock: string, targetLevel: string) => {
     if (targetStock.trim() === '') return
@@ -382,7 +382,9 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
       }
       const data = (await response.json()) as Rec
       setPayload(data)
-      setChart(parseChart(data))
+      const next = parseChart(data)
+      setChart(next)
+      setView({ start: 0, count: Math.max(1, next?.dates.length ?? 1) })
     } catch (err) {
       setError(err instanceof Error ? err.message : '分析失败')
       setPayload(null)
@@ -394,11 +396,62 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
 
   useEffect(() => { void analyze('000001', 'daily') }, [analyze])
 
+  // 多级别状态条（懒加载）：当前级别的更高两档并行取摘要。
+  const stockCode = payload !== null ? asStr(payload.stock_code) : ''
+  useEffect(() => {
+    if (stockCode === '') { setLevelsBrief({}); return }
+    const idx = LEVEL_OPTIONS.indexOf(level as (typeof LEVEL_OPTIONS)[number])
+    const others = LEVEL_OPTIONS.slice(idx + 1, idx + 3).length >= 2
+      ? LEVEL_OPTIONS.slice(idx + 1, idx + 3)
+      : LEVEL_OPTIONS.slice(0, 2)
+    setLevelsBrief(Object.fromEntries(others.map(l => [l, 'loading' as const])))
+    for (const other of others) {
+      void fetch('/kstock-api/chan-analyze', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ stock: stockCode, level: other }),
+      })
+        .then(async response => {
+          if (!response.ok) throw new Error('fail')
+          const data = (await response.json()) as Rec
+          setLevelsBrief(current => ({ ...current, [other]: data }))
+        })
+        .catch(() => { setLevelsBrief(current => ({ ...current, [other]: 'error' as const })) })
+    }
+  }, [stockCode, level])
+
+  /** 信号定位：把 K 线窗口聚焦到该索引 ±40 根。 */
+  const focusIndex = useCallback((index: number, total: number) => {
+    setView({ start: Math.max(0, Math.min(Math.max(0, total - 80), index - 40)), count: Math.min(80, Math.max(15, total)) })
+  }, [])
+
   const morph = payload !== null ? asRec(payload.morphology) : {}
   const trend = payload !== null ? asRec(payload.trend_analysis) : {}
   const dynamics = payload !== null ? asRec(payload.dynamics) : {}
   const advice = payload !== null ? asRec(payload.trading_advice) : {}
   const scores = payload !== null ? asRec(payload.signal_scores) : {}
+  const total = chart?.dates.length ?? 0
+
+  // 信号流数据：买卖点 markers + 最近 6 笔端点（可点击定位）。
+  const signalRows: Array<{ key: string; date: string; label: string; price: number | null; index: number }> = []
+  if (chart !== null) {
+    const dateIndex = new Map<string, number>()
+    chart.dates.forEach((date, index) => dateIndex.set(date.slice(0, 10), index))
+    for (const marker of chart.markers) {
+      const time = asStr(marker.time ?? marker.date)
+      const index = dateIndex.get(time.slice(0, 10)) ?? -1
+      if (index >= 0) {
+        signalRows.push({ key: `m-${index}-${asStr(marker.label)}`, date: time.slice(0, 10), label: asStr(marker.label ?? marker.type ?? '信号'), price: asNum(marker.price), index })
+      }
+    }
+    for (const bi of chart.biLines.slice(-6).reverse()) {
+      const endIndex = dateIndex.get(bi.end_time.slice(0, 10)) ?? -1
+      if (endIndex >= 0) {
+        signalRows.push({ key: `b-${endIndex}`, date: bi.end_time.slice(0, 10), label: `笔转折（${bi.end_price >= bi.start_price ? '向上' : '向下'}）`, price: bi.end_price, index: endIndex })
+      }
+    }
+  }
+  const lastZhongshu = chart !== null && chart.zhongshus.length > 0 ? chart.zhongshus[chart.zhongshus.length - 1] ?? null : null
 
   return (
     <div className="ksq-page">
@@ -440,34 +493,68 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
         </div>
         {error !== null && <p className="ksq-note">{error}</p>}
 
-        {chart !== null && (
-          <div className="ksq-chan-chart">
-            <ChanChart chart={chart} />
+        {payload !== null && (
+          <div className="ksq-chan-main">
+            <div className="ksq-chan-chartwrap">
+              {chart !== null && <ChanChart chart={chart} view={view} onViewChange={setView} />}
+            </div>
+            <aside className="ksq-chan-side">
+              <div className="ksq-chan-sidecard">
+                <strong>结构</strong>
+                <span>笔 {asNum(morph.bis_count) ?? '—'} · 段 {asNum(morph.segs_count) ?? '—'} · 中枢 {asNum(morph.zhongshus_count) ?? '—'}</span>
+                <span>{asStr(trend.type_cn) || '—'} · 强度 {asNum(trend.trend_strength) ?? '—'} · 现价 {asNum(trend.latest_price) ?? '—'}</span>
+                <span>买 {asNum(dynamics.buy_points_count) ?? 0} / 卖 {asNum(dynamics.sell_points_count) ?? 0} · 背驰 {asNum(dynamics.backchi_count) ?? 0}</span>
+                <span className="ksq-item-meta">操作参考 {asStr(advice.recommended_action) || '—'}</span>
+              </div>
+              <div className="ksq-chan-sidecard">
+                <strong>多级别联立</strong>
+                {Object.entries(levelsBrief).map(([lvl, brief]) => (
+                  <span key={lvl} className="ksq-chan-levelrow">
+                    <em>{lvl}</em>
+                    {brief === 'loading' ? '加载中…' : brief === 'error' ? '加载失败' : (
+                      <>
+                        {' '}{asStr(asRec(brief.trend_analysis).type_cn) || '—'}
+                        {' '}买{asNum(asRec(brief.dynamics).buy_points_count) ?? 0}/卖{asNum(asRec(brief.dynamics).sell_points_count) ?? 0}
+                        {' '}{asNum(asRec(brief.signal_scores).final_score)?.toFixed(0) ?? '—'}分
+                      </>
+                    )}
+                  </span>
+                ))}
+                {Object.keys(levelsBrief).length === 0 && <span className="ksq-item-meta">—</span>}
+              </div>
+              <div className="ksq-chan-sidecard">
+                <strong>信号流（点击定位图）</strong>
+                {signalRows.length === 0 && <span className="ksq-item-meta">无买卖点/笔转折信号</span>}
+                {signalRows.slice(0, 10).map(row => (
+                  <button
+                    key={row.key}
+                    type="button"
+                    className={`ksq-chan-signal ${row.label.includes('买') || row.label.startsWith('B') ? 'up' : row.label.includes('卖') || row.label.startsWith('S') ? 'down' : ''}`}
+                    onClick={() => { if (total > 0) focusIndex(row.index, total) }}
+                    title={`定位到 ${row.date}`}
+                  >
+                    <em>{row.date}</em>
+                    <span>{row.label}</span>
+                    <b>{row.price !== null ? row.price.toFixed(2) : ''}</b>
+                  </button>
+                ))}
+              </div>
+              <div className="ksq-chan-sidecard">
+                <strong>关键位</strong>
+                {lastZhongshu !== null ? (
+                  <>
+                    <span>中枢 {lastZhongshu.low.toFixed(2)} ~ {lastZhongshu.high.toFixed(2)}（中轴 {lastZhongshu.center.toFixed(2)}）</span>
+                    <span className="ksq-item-meta">上沿压力 {lastZhongshu.high.toFixed(2)} · 下沿支撑 {lastZhongshu.low.toFixed(2)}</span>
+                  </>
+                ) : <span className="ksq-item-meta">无中枢数据</span>}
+                <span>入场 {asNum(advice.entry_price)?.toFixed(2) ?? '—'} · 止损 {asNum(advice.stop_loss)?.toFixed(2) ?? '—'} · 目标 {asNum(advice.take_profit)?.toFixed(2) ?? '—'}</span>
+              </div>
+            </aside>
           </div>
         )}
 
         {payload !== null && (
           <div className="ksq-chan-summary">
-            <div className="ksq-chan-card">
-              <strong>形态</strong>
-              <span>K线 {asNum(morph.klines_count) ?? '—'} · 分型 {asNum(morph.fenxings_count) ?? '—'}</span>
-              <span>笔 {asNum(morph.bis_count) ?? '—'} · 段 {asNum(morph.segs_count) ?? '—'} · 中枢 {asNum(morph.zhongshus_count) ?? '—'}</span>
-            </div>
-            <div className="ksq-chan-card">
-              <strong>走势</strong>
-              <span>{asStr(trend.type_cn) || asStr(trend.type) || '—'} · 强度 {asNum(trend.trend_strength) ?? '—'}</span>
-              <span>现价 {asNum(trend.latest_price) ?? '—'} · 中枢 {asNum(trend.zhongshu_count) ?? '—'} 个</span>
-            </div>
-            <div className="ksq-chan-card">
-              <strong>买卖点 / 背驰</strong>
-              <span>买 {asNum(dynamics.buy_points_count) ?? 0} · 卖 {asNum(dynamics.sell_points_count) ?? 0}</span>
-              <span>背驰 {asNum(dynamics.backchi_count) ?? 0} 处</span>
-            </div>
-            <div className="ksq-chan-card">
-              <strong>操作参考</strong>
-              <span>{asStr(advice.recommended_action) || '—'}</span>
-              <span>入场 {asNum(advice.entry_price)?.toFixed(2) ?? '—'} · 止损 {asNum(advice.stop_loss)?.toFixed(2) ?? '—'} · 目标 {asNum(advice.take_profit)?.toFixed(2) ?? '—'}</span>
-            </div>
             <SignalRadar
               radar={asRec(scores.radar_data)}
               score={asNum(scores.final_score)}
