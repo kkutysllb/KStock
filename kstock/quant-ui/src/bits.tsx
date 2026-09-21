@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState, type ReactNode } from 'react'
+import type React from 'react'
 import { IconClose, IconRefresh } from './icons.tsx'
 
 export function formatDateTime(iso?: string | null): string {
@@ -106,25 +107,68 @@ export interface OverlaySeries {
 
 export const RUN_COLORS = ['#e8a33d', '#5ab0ff', '#22a06b', '#c792ea', '#e64646', '#8ee6c8']
 
-/** 通用多序列折线叠加图（策略净值 / 因子累计 IC 共用，自绘 SVG）。 */
-export function LineOverlay({ series, baseline, title }: { series: OverlaySeries[]; baseline?: number; title: string }) {
+/**
+ * SVG hover 交互层（三图表共用）：把鼠标屏幕坐标换算为绘图区索引
+ * （viewBox 缩放换算），越界置 null。
+ */
+function useSvgHover(width: number, padLeft: number, plotRight: number, maxIndex: number) {
+  const [hover, setHover] = useState<number | null>(null)
+  const onMove = (event: React.MouseEvent<SVGSVGElement>): void => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    if (rect.width === 0) return
+    const vx = ((event.clientX - rect.left) / rect.width) * width
+    const ratio = (vx - padLeft) / (plotRight - padLeft)
+    if (ratio < 0 || ratio > 1) {
+      setHover(null)
+      return
+    }
+    setHover(Math.min(maxIndex, Math.max(0, Math.round(ratio * maxIndex))))
+  }
+  return { hover, onMove, onLeave: () => { setHover(null) } }
+}
+
+/** hover tooltip 的半透明底板 + 文本行（动态宽度，防溢出钳位）。 */
+function HoverTooltip({ x, y, lines }: { x: number; y: number; lines: string[] }): React.ReactElement {
+  const widest = Math.max(...lines.map(line => line.length)) * 6.2 + 12
+  const boxH = lines.length * 13 + 8
+  const boxX = Math.min(x, 560 - widest - 4)
+  return (
+    <g pointerEvents="none">
+      <rect x={boxX} y={y} width={widest} height={boxH} rx="4" fill="rgba(3,13,11,0.82)" />
+      {lines.map((line, index) => (
+        <text key={line} x={boxX + 6} y={y + 15 + index * 13} fontSize="10.5" fill="#e8edef">{line}</text>
+      ))}
+    </g>
+  )
+}
+
+/** 通用多序列折线叠加图（策略净值 / 因子累计 IC 共用，自绘 SVG；
+ * hover 十字线 + 圆点 + tooltip，dates 可选提供 x 轴日期标签）。 */
+export function LineOverlay({ series, baseline, title, dates }: {
+  series: OverlaySeries[]
+  baseline?: number
+  title: string
+  dates?: string[]
+}) {
   const drawable = series.filter(item => item.values.length >= 2)
   if (drawable.length === 0) return null
   const width = 560
   const height = 240
   const padLeft = 46
   const padBottom = 26
+  const plotRight = width - 12
   const maxLen = Math.max(...drawable.map(item => item.values.length))
   const all = drawable.flatMap(item => item.values)
   const min = Math.min(...all, baseline ?? Infinity)
   const max = Math.max(...all, baseline ?? -Infinity)
   const span = max - min || 1
-  const x = (index: number, length: number) => padLeft + (index / Math.max(1, length - 1)) * (width - padLeft - 12)
+  const x = (index: number, length: number) => padLeft + (index / Math.max(1, length - 1)) * (plotRight - padLeft)
   const y = (value: number) => 14 + (1 - (value - min) / span) * (height - padBottom - 14)
+  const { hover, onMove, onLeave } = useSvgHover(width, padLeft, plotRight, maxLen - 1)
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title}>
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title} onMouseMove={onMove} onMouseLeave={onLeave}>
       {baseline !== undefined && (
-        <line x1={padLeft} y1={y(baseline)} x2={width - 12} y2={y(baseline)} stroke="var(--dsw-alias-border-l2)" strokeDasharray="3,3" />
+        <line x1={padLeft} y1={y(baseline)} x2={plotRight} y2={y(baseline)} stroke="var(--dsw-alias-border-l2)" strokeDasharray="3,3" />
       )}
       {baseline !== undefined && (
         <text x={padLeft - 6} y={y(baseline) + 4} fontSize="10" textAnchor="end" fill="var(--dsw-alias-label-tertiary)">
@@ -142,6 +186,24 @@ export function LineOverlay({ series, baseline, title }: { series: OverlaySeries
           strokeWidth="2"
         />
       ))}
+      {hover !== null && (
+        <g pointerEvents="none">
+          <line x1={x(hover, maxLen)} y1={10} x2={x(hover, maxLen)} y2={height - padBottom} stroke="var(--dsw-alias-border-l2)" />
+          {drawable.map(item => {
+            const index = Math.min(hover, item.values.length - 1)
+            const value = item.values[index]
+            if (value === undefined) return null
+            return <circle key={`pt-${item.label}`} cx={x(index, item.values.length)} cy={y(value)} r="3" fill={item.color} />
+          })}
+          <HoverTooltip x={plotRight - 180} y={12} lines={[
+            dates?.[hover] ?? `#${hover + 1}`,
+            ...drawable.map(item => {
+              const value = item.values[Math.min(hover, item.values.length - 1)]
+              return `${item.label}: ${value === undefined ? '—' : value.toFixed(4)}`
+            }),
+          ]} />
+        </g>
+      )}
       {drawable.map((item, row) => (
         <g key={`legend-${item.label}`}>
           <rect x={padLeft + row * 120} y={height - 14} width="10" height="10" fill={item.color} />
@@ -205,7 +267,7 @@ export function PreviewDialog({ title, onClose, children }: { title: string; onC
  * 百分比向下填充（0 线在顶，红区向下）。回测详情标配——回撤发生在哪、
  * 持续多久、修复耗时一眼可读。
  */
-export function DrawdownChart({ values, title }: { values: number[]; title: string }): React.ReactElement | null {
+export function DrawdownChart({ values, title, dates }: { values: number[]; title: string; dates?: string[] }): React.ReactElement | null {
   if (values.length < 2) return null
   let peak = -Infinity
   const dd = values.map(value => {
@@ -216,17 +278,30 @@ export function DrawdownChart({ values, title }: { values: number[]; title: stri
   const width = 560
   const height = 96
   const padLeft = 46
-  const x = (index: number) => padLeft + (index / Math.max(1, values.length - 1)) * (width - padLeft - 12)
+  const plotRight = width - 12
+  const x = (index: number) => padLeft + (index / Math.max(1, values.length - 1)) * (plotRight - padLeft)
   const y = (value: number) => 6 + (value / min) * (height - 22) // 0 在顶，min 在底
   const line = dd.map((value, index) => `${index === 0 ? 'M' : 'L'}${x(index).toFixed(1)},${y(value).toFixed(1)}`).join(' ')
   const area = `${line} L${x(dd.length - 1).toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(0).toFixed(1)} Z`
+  const { hover, onMove, onLeave } = useSvgHover(width, padLeft, plotRight, dd.length - 1)
+  const hoverValue = hover !== null ? dd[hover] : null
+  if (hoverValue === undefined) return null
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title}>
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title} onMouseMove={onMove} onMouseLeave={onLeave}>
       <path d={area} fill="rgba(230, 70, 70, 0.28)" />
       <path d={line} fill="none" stroke="#e64646" strokeWidth="1" />
-      <line x1={padLeft} y1={y(0)} x2={width - 12} y2={y(0)} stroke="var(--dsw-alias-border-l2)" />
+      <line x1={padLeft} y1={y(0)} x2={plotRight} y2={y(0)} stroke="var(--dsw-alias-border-l2)" />
       <text x={padLeft - 6} y={y(0) + 4} fontSize="10" textAnchor="end" fill="var(--dsw-alias-label-tertiary)">0%</text>
       <text x={padLeft - 6} y={height - 8} fontSize="10" textAnchor="end" fill="var(--dsw-alias-label-tertiary)">{min.toFixed(1)}%</text>
+      {hover !== null && hoverValue !== null && (
+        <g pointerEvents="none">
+          <line x1={x(hover)} y1={y(0)} x2={x(hover)} y2={height - 18} stroke="var(--dsw-alias-border-l2)" />
+          <HoverTooltip x={plotRight - 150} y={4} lines={[
+            dates?.[hover] ?? `#${hover + 1}`,
+            `回撤 ${hoverValue.toFixed(2)}%`,
+          ]} />
+        </g>
+      )}
       <text x={padLeft} y={height - 2} fontSize="9.5" fill="var(--dsw-alias-label-tertiary)">最大回撤 {min.toFixed(2)}%（图内重算，供交叉校验）</text>
     </svg>
   )
@@ -236,27 +311,48 @@ export function DrawdownChart({ values, title }: { values: number[]; title: stri
  * 每笔交易盈亏柱：0 轴按对称界居中，正绿负红。卖出笔 realized_pnl
  * 序列的分布/连亏段/单笔极值直观呈现。
  */
-export function PnlBars({ values, title }: { values: number[]; title: string }): React.ReactElement | null {
+export function PnlBars({ values, title, labels }: { values: number[]; title: string; labels?: string[] }): React.ReactElement | null {
   if (values.length === 0) return null
   const width = 560
   const height = 110
   const padLeft = 46
+  const plotRight = width - 12
   const maxAbs = Math.max(...values.map(v => Math.abs(v)), 0.0001)
   const zeroY = 6 + (height - 26) / 2
   const scale = (height - 26) / 2 / maxAbs
-  const slot = (width - padLeft - 12) / values.length
+  const slot = (plotRight - padLeft) / values.length
   const barW = Math.max(1, slot * 0.8)
+  const { hover, onMove, onLeave } = useSvgHover(width, padLeft, plotRight, values.length - 1)
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title}>
-      <line x1={padLeft} y1={zeroY} x2={width - 12} y2={zeroY} stroke="var(--dsw-alias-border-l2)" />
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title} onMouseMove={onMove} onMouseLeave={onLeave}>
+      <line x1={padLeft} y1={zeroY} x2={plotRight} y2={zeroY} stroke="var(--dsw-alias-border-l2)" />
       {values.map((value, index) => {
         const h = Math.max(1, Math.abs(value) * scale)
         const y = value >= 0 ? zeroY - h : zeroY
-        return <rect key={index} x={padLeft + index * slot} y={y} width={barW} height={h} fill={value >= 0 ? '#31c7a2' : '#e64646'} opacity="0.85" />
+        return (
+          <rect
+            key={index}
+            x={padLeft + index * slot}
+            y={y}
+            width={barW}
+            height={h}
+            fill={value >= 0 ? '#31c7a2' : '#e64646'}
+            opacity={hover === index ? 1 : 0.85}
+          />
+        )
       })}
+      {hover !== null && values[hover] !== undefined && (
+        <line x1={padLeft + hover * slot + barW / 2} y1={4} x2={padLeft + hover * slot + barW / 2} y2={height - 20} stroke="var(--dsw-alias-border-l2)" />
+      )}
       <text x={padLeft - 6} y={zeroY + 4} fontSize="10" textAnchor="end" fill="var(--dsw-alias-label-tertiary)">0</text>
       <text x={padLeft - 6} y={12} fontSize="10" textAnchor="end" fill="#31c7a2">+{maxAbs >= 1000 ? `${(maxAbs / 1000).toFixed(1)}k` : maxAbs.toFixed(0)}</text>
       <text x={padLeft - 6} y={height - 22} fontSize="10" textAnchor="end" fill="#e64646">-{maxAbs >= 1000 ? `${(maxAbs / 1000).toFixed(1)}k` : maxAbs.toFixed(0)}</text>
+      {hover !== null && values[hover] !== undefined && (
+        <HoverTooltip x={plotRight - 150} y={4} lines={[
+          labels?.[hover] ?? `第 ${hover + 1} 笔`,
+          `盈亏 ${values[hover].toLocaleString()}`,
+        ]} />
+      )}
       <text x={padLeft} y={height - 2} fontSize="9.5" fill="var(--dsw-alias-label-tertiary)">{values.length} 笔平仓（按时间序，绿盈红亏）</text>
     </svg>
   )

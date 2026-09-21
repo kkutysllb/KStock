@@ -143,6 +143,10 @@ EOF
   `annual_return_pct` / `sharpe_ratio` / `max_drawdown_pct` /
   `win_rate_pct` / `trade_count`；漏检可事后 UPDATE metrics_json 补；
 - equity 兼容 `[{date,equity}]` 与 `{dates,values}`（面板归一后叠加）；
+- **trades.json 建议同时含 positions 键**（精确口径）：`{"trades":[...],
+  "positions":[{"date":"YYYY-MM-DD","holdings":[{"code","quantity",
+  "weight" 可选}]}]}`——面板的调仓记录优先用快照差分；只有 trades
+  流水时面板自动推导（买卖累计），标注「流水推导口径」；
 - 引擎不可达时在最终回复里明说「未归档策略库」，其余交付照常。
 
 ## 输出纪律（强约束）

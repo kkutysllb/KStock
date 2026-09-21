@@ -87,32 +87,123 @@ function runReportId(run: StrategyRunSummary | undefined): string | null {
   return typeof value === 'string' && value !== '' ? value : null
 }
 
-/** trades 附件归一：宽松 unknown → 平仓盈亏序列 + 摘要（防御式）。 */
-function tradesDigest(raw: unknown): {
+/** 单笔交易行（宽松读取）。 */
+interface TradeRow {
+  date: string
+  code: string
+  action: string
+  quantity: number
+  pnl: number | null
+}
+
+/** 一个调仓日：换入 / 换出 / 日终持仓。 */
+interface RebalanceDay {
+  date: string
+  buys: Array<{ code: string; quantity: number }>
+  sells: Array<{ code: string; quantity: number }>
+  holdings: Array<{ code: string; quantity: number }>
+}
+
+/** trades 附件归一（防御式）：兼容顶层数组与 {trades, positions} 容器；
+ * positions 键（阶段五精确口径，逐日持仓快照）存在时用快照差分调仓，
+ * 否则从买卖流水累计推导。 */
+function tradesArtifact(raw: unknown): {
+  rows: TradeRow[]
   pnlSeries: number[]
+  pnlLabels: string[]
   total: number
   closes: number
   maxWin: number
   maxLoss: number
   totalPnl: number
+  rebalances: RebalanceDay[]
+  precise: boolean
 } {
-  const list = Array.isArray(raw)
-    ? raw
-    : typeof raw === 'object' && raw !== null && Array.isArray((raw as { trades?: unknown }).trades)
-      ? (raw as { trades: unknown[] }).trades
-      : []
-  const rows = list.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
-  const pnl = rows
-    .map(row => (typeof row.realized_pnl === 'number' && Number.isFinite(row.realized_pnl) ? row.realized_pnl : null))
-    .filter((value): value is number => value !== null && value !== 0)
-  return {
-    pnlSeries: pnl,
-    total: rows.length,
-    closes: pnl.length,
-    maxWin: pnl.length > 0 ? Math.max(...pnl) : 0,
-    maxLoss: pnl.length > 0 ? Math.min(...pnl) : 0,
-    totalPnl: pnl.reduce((sum, value) => sum + value, 0),
+  const container = typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+    ? raw as { trades?: unknown; positions?: unknown }
+    : {}
+  const list = Array.isArray(raw) ? raw : Array.isArray(container.trades) ? container.trades : []
+  const rows: TradeRow[] = list
+    .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+    .map(item => ({
+      date: typeof item.date === 'string' ? item.date : '',
+      code: typeof item.code === 'string' ? item.code : '',
+      action: typeof item.action === 'string' ? item.action.toLowerCase() : '',
+      quantity: typeof item.quantity === 'number' && Number.isFinite(item.quantity) ? item.quantity : 0,
+      pnl: typeof item.realized_pnl === 'number' && Number.isFinite(item.realized_pnl) ? item.realized_pnl : null,
+    }))
+    .filter(row => row.date !== '' && row.code !== '')
+  const closes = rows.filter(row => row.pnl !== null && row.pnl !== 0)
+  // 调仓视图：positions 快照差分（精确）优先，流水推导兜底。
+  let rebalances: RebalanceDay[] = []
+  let precise = false
+  if (Array.isArray(container.positions) && container.positions.length > 0) {
+    precise = true
+    const snapshots = container.positions
+      .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+      .map(item => ({
+        date: typeof item.date === 'string' ? item.date : '',
+        holdings: (Array.isArray(item.holdings) ? item.holdings : [])
+          .filter((h): h is Record<string, unknown> => typeof h === 'object' && h !== null)
+          .map(h => ({ code: typeof h.code === 'string' ? h.code : '', quantity: typeof h.quantity === 'number' ? h.quantity : 0 }))
+          .filter(h => h.code !== '' && h.quantity > 0),
+      }))
+      .filter(snap => snap.date !== '')
+      .sort((a, b) => a.date.localeCompare(b.date))
+    let prev = new Map<string, number>()
+    for (const snap of snapshots) {
+      const current = new Map(snap.holdings.map(h => [h.code, h.quantity]))
+      const buys = [...current].filter(([code, qty]) => qty > (prev.get(code) ?? 0)).map(([code, qty]) => ({ code, quantity: qty - (prev.get(code) ?? 0) }))
+      const sells = [...prev].filter(([code, qty]) => qty > (current.get(code) ?? 0)).map(([code, qty]) => ({ code, quantity: qty - (current.get(code) ?? 0) }))
+      rebalances.push({ date: snap.date, buys, sells, holdings: [...current].map(([code, quantity]) => ({ code, quantity })).sort((a, b) => b.quantity - a.quantity) })
+      prev = current
+    }
+  } else {
+    const byDate = new Map<string, TradeRow[]>()
+    for (const row of rows) {
+      const bucket = byDate.get(row.date) ?? []
+      bucket.push(row)
+      byDate.set(row.date, bucket)
+    }
+    const holding = new Map<string, number>()
+    for (const date of [...byDate.keys()].sort()) {
+      const dayRows = byDate.get(date) ?? []
+      const buys: Array<{ code: string; quantity: number }> = []
+      const sells: Array<{ code: string; quantity: number }> = []
+      for (const row of dayRows) {
+        const delta = row.action === 'sell' ? -row.quantity : row.quantity
+        holding.set(row.code, (holding.get(row.code) ?? 0) + delta)
+        if (row.action === 'sell') sells.push({ code: row.code, quantity: row.quantity })
+        else buys.push({ code: row.code, quantity: row.quantity })
+      }
+      const holdings = [...holding]
+        .filter(([, quantity]) => quantity > 0)
+        .map(([code, quantity]) => ({ code, quantity }))
+        .sort((a, b) => b.quantity - a.quantity)
+      rebalances.push({ date, buys, sells, holdings })
+    }
   }
+  return {
+    rows,
+    pnlSeries: closes.map(row => row.pnl as number),
+    pnlLabels: closes.map(row => `${row.date} ${row.code}`),
+    total: rows.length,
+    closes: closes.length,
+    maxWin: closes.length > 0 ? Math.max(...closes.map(row => row.pnl as number)) : 0,
+    maxLoss: closes.length > 0 ? Math.min(...closes.map(row => row.pnl as number)) : 0,
+    totalPnl: closes.reduce((sum, row) => sum + (row.pnl as number), 0),
+    rebalances,
+    precise,
+  }
+}
+
+/** equity 附件的日期轴（[{date, equity}] 形态时提供，纯数值形态为空）。 */
+function equityDates(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const dates = raw
+    .filter((item): item is { date: string } => typeof item === 'object' && item !== null && typeof (item as { date?: unknown }).date === 'string')
+    .map(item => item.date)
+  return dates.length === raw.length ? dates : undefined
 }
 
 export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = {}) {
@@ -473,8 +564,10 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                 {detailView !== null && (() => {
                   const run = runs.find(item => item.run_id === detailView.runId)
                   if (run === undefined) return null
-                  const nav = normalizeEquity(detailView.equity?.equity ?? [])
-                  const digest = tradesDigest(detailView.trades?.trades)
+                  const rawEquity = detailView.equity?.equity
+                  const nav = normalizeEquity(rawEquity ?? [])
+                  const dates = equityDates(rawEquity)
+                  const digest = tradesArtifact(detailView.trades?.trades)
                   const range = run.data_start !== '' && run.data_end !== '' ? `${run.data_start} ~ ${run.data_end}` : '—'
                   return (
                     <div className="ksq-compare">
@@ -494,16 +587,17 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                       {nav.length >= 2 ? (
                         <>
                           <div className="ksq-chart">
-                            <h4>策略净值（归一化，1 起点）</h4>
+                            <h4>策略净值（归一化，1 起点 · 悬停查看逐日数值）</h4>
                             <LineOverlay
                               series={[{ label: `v${run.version} 净值`, values: nav, color: RUN_COLORS[0]! }]}
                               baseline={1}
                               title="策略净值曲线"
+                              dates={dates}
                             />
                           </div>
                           <div className="ksq-chart">
-                            <h4>回撤（underwater）</h4>
-                            <DrawdownChart values={nav} title="回撤副图" />
+                            <h4>回撤（underwater · 悬停查看逐日回撤）</h4>
+                            <DrawdownChart values={nav} title="回撤副图" dates={dates} />
                           </div>
                         </>
                       ) : (
@@ -512,8 +606,8 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                       {digest.pnlSeries.length >= 2 ? (
                         <>
                           <div className="ksq-chart">
-                            <h4>每笔平仓盈亏</h4>
-                            <PnlBars values={digest.pnlSeries} title="每笔平仓盈亏柱" />
+                            <h4>每笔平仓盈亏（悬浮查看笔明细）</h4>
+                            <PnlBars values={digest.pnlSeries} title="每笔平仓盈亏柱" labels={digest.pnlLabels} />
                           </div>
                           <p className="ksq-item-meta">
                             交易 {digest.total} 笔 · 平仓 {digest.closes} 笔 · 单笔最大盈 {digest.maxWin.toLocaleString()} / 亏 {digest.maxLoss.toLocaleString()} · 累计已实现 {digest.totalPnl.toLocaleString()}
@@ -521,6 +615,43 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                         </>
                       ) : (
                         <p className="ksq-note">该 run 未存交易清单附件（record_run 未附 trades），无法绘制盈亏分布。</p>
+                      )}
+                      {digest.rebalances.length > 0 && (
+                        <div className="ksq-chart">
+                          <h4>
+                            调仓记录（{digest.rebalances.length} 个交易日{digest.precise ? ' · 快照精确口径' : ' · 流水推导口径'} · 点开看换仓与持仓）
+                          </h4>
+                          <div className="ksq-rebalances">
+                            {digest.rebalances.slice().reverse().map(day => (
+                              <details key={day.date} className="ksq-rebalance">
+                                <summary>
+                                  <span className="ksq-mono">{day.date}</span>
+                                  {day.buys.length > 0 && <span className="ksq-up">入 {day.buys.length}</span>}
+                                  {day.sells.length > 0 && <span className="ksq-down">出 {day.sells.length}</span>}
+                                  <span className="ksq-item-meta">持仓 {day.holdings.length}</span>
+                                </summary>
+                                <div className="ksq-rebalance-body">
+                                  {day.buys.length > 0 && (
+                                    <p className="ksq-item-meta">换入：{day.buys.map(item => `${item.code}×${item.quantity}`).join('、')}</p>
+                                  )}
+                                  {day.sells.length > 0 && (
+                                    <p className="ksq-item-meta">换出：{day.sells.map(item => `${item.code}×${item.quantity}`).join('、')}</p>
+                                  )}
+                                  <div className="ksq-table-wrap">
+                                    <table className="ksq-table">
+                                      <thead><tr><th>持仓代码</th><th>数量</th></tr></thead>
+                                      <tbody>
+                                        {day.holdings.map(item => (
+                                          <tr key={item.code}><td className="ksq-mono">{item.code}</td><td className="num">{item.quantity.toLocaleString()}</td></tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </details>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   )

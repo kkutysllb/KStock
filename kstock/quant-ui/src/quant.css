@@ -1139,3 +1139,37 @@ a.ksq-news-title:hover {
 
 .ksq-fo-value { flex: none; width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
 .ksq-fo-ir { flex: none; width: 64px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
+
+/* ── 策略库：调仓记录（§28-5，按日折叠）────────────────────────── */
+
+.ksq-rebalances {
+  max-height: 380px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 8px;
+  padding: 6px;
+}
+
+.ksq-rebalance { border-bottom: 1px solid var(--dsw-alias-border-l3); }
+.ksq-rebalance:last-child { border-bottom: none; }
+
+.ksq-rebalance summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 12.5px;
+  list-style: none;
+  border-radius: 6px;
+}
+
+.ksq-rebalance summary::-webkit-details-marker { display: none; }
+.ksq-rebalance summary::before { content: '\25B8'; color: var(--dsw-alias-label-tertiary); transition: transform 0.12s; }
+.ksq-rebalance[open] summary::before { transform: rotate(90deg); }
+.ksq-rebalance summary:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent); }
+
+.ksq-rebalance-body { padding: 6px 10px 10px 22px; display: flex; flex-direction: column; gap: 6px; }
