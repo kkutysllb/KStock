@@ -551,7 +551,12 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
             placeholder="代码或名称（600519 / 茅台 / 000001.SH）"
             spellCheck={false}
           />
-          <select className="ksq-chan-select" value={level} onChange={event => { setLevel(event.target.value); if (payload !== null) void analyze(stock || asStr(payload.stock_code), event.target.value) }}>
+          <select
+            className="ksq-chan-select"
+            title="分钟级（60/90/120min）依赖 tushare 分钟线配额，数据量可能不足而降级"
+            value={level}
+            onChange={event => { setLevel(event.target.value); if (payload !== null) void analyze(stock || asStr(payload.stock_code), event.target.value) }}
+          >
             {LEVEL_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
           </select>
           <button className="ksq-linkbtn" type="button" disabled={loading || stock.trim() === ''} onClick={() => void analyze(stock, level)}>

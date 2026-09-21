@@ -1508,6 +1508,25 @@ def _fix_chan_dynamics_output(text: str) -> str | None:
     return patched
 
 
+# ── 补丁 18：缠论引擎 pandas 3 频率别名修复（120min/90min 级别崩）────
+# pandas 3 移除 'T' 分钟别名（resample('120T') → ValueError: did you
+# mean min?）。90/120min 从 60min 重采样的 resample_freq 改 'min' 后缀。
+_CHAN_FREQ_MARKER = "KStock patch: pandas3 频率别名"
+_CHAN_FREQ_ANCHOR = "                    resample_freq = '90T' if level == '90min' else '120T'"
+_CHAN_FREQ_REPLACEMENT = (
+    "                    # KStock patch: pandas3 频率别名（T→min）" + chr(10) +
+    "                    resample_freq = '90min' if level == '90min' else '120min'"
+)
+def _fix_chan_pandas3_freq(text: str) -> str | None:
+    """90/120min resample 频率 pandas3 兼容；已修/锚点失配返回 None。"""
+    if _CHAN_FREQ_MARKER in text:
+        return None
+    if _CHAN_FREQ_ANCHOR not in text:
+        return None
+    return text.replace(_CHAN_FREQ_ANCHOR, _CHAN_FREQ_REPLACEMENT, 1)
+
+
+
 # ── KStock 自有技能 ensure（kstock/skills → vendor/skills/public）────────
 # 源码在 kstock/skills/<name>（上游同步整体覆盖 vendor 时不受影响），补丁器
 # 把它们 ensure 进 vendor 技能目录：html-report（自研渲染器）、market-linkage
@@ -1748,6 +1767,10 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     chan_script = vendor_root / _CHAN_SCRIPT_REL
     if chan_script.exists():
         if _patch_file(chan_script, _CHAN_SCRIPT_REL, _fix_chan_dynamics_output):
+            changed.append(_CHAN_SCRIPT_REL)
+    # 缠论引擎 pandas3 频率别名（120min 级别崩，补丁 18）。
+    if chan_script.exists():
+        if _patch_file(chan_script, _CHAN_SCRIPT_REL, _fix_chan_pandas3_freq):
             changed.append(_CHAN_SCRIPT_REL)
     # preset 随行技能目录发布（技能随 preset 分发，cordis 模式）。
     if _publish_preset_skills(vendor_root):

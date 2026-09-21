@@ -353,7 +353,8 @@ class ChanDataFetcher:
                 if level in ['90min', '120min']:
                     df['trade_time'] = pd.to_datetime(df['trade_time'])
                     df.set_index('trade_time', inplace=True)
-                    resample_freq = '90T' if level == '90min' else '120T'
+                    # KStock patch: pandas3 频率别名（T→min）
+                    resample_freq = '90min' if level == '90min' else '120min'
                     df = df.resample(resample_freq, label='right', closed='right').agg({
                         'open': 'first', 'high': 'max',
                         'low': 'min', 'close': 'last', 'vol': 'sum'
