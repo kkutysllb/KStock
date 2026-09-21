@@ -471,18 +471,22 @@ window.__ModuleLoader__.load({
 		function resolveIndex(map, time) {
 			return map.get(time) ?? map.get(time.slice(0, 10)) ?? -1;
 		}
+		function zhongshuPosition(price, zs) {
+			if (price === null) return null;
+			const top = zs.gg ?? zs.high;
+			const bottom = zs.dd ?? zs.low;
+			if (price > top) return "above";
+			if (price < bottom) return "below";
+			return "inside";
+		}
 		//#endregion
-		//#region src/client/page.tsx
+		//#region src/client/chart.tsx
 		/**
-		* 缠论研究面板：交互式 K 线缠论图 + 形态/走势/信号摘要 + Agent 深度解读。
-		*
-		* 数据走宿主 `POST /kstock-api/chan-analyze`（{stock, level} → 引擎 JSON，
-		* 60s 服务端缓存）。图表自研 SVG：蜡烛（A 股红涨绿跌）+ 笔/段折线 +
-		* 中枢矩形 + 买卖点徽章 + 成交量副图，hover 十字线逐根读值。
-		* 深度解读走 TaskTargetMenu（chan 类型独立记忆落点）。
+		* 缠论主图：K 线 + 笔/段/中枢/买卖点/背驰罩 + 量/MACD 副图。
+		* 迁移自 page.tsx 并增强：顶部信息条（现价/涨跌/走势/中枢位置徽章）、
+		* 买卖点可靠度环、卡片联动脉冲高亮、hover 结构上下文。
+		* 交互保留：滚轮缩放（鼠标锚点）/ 拖拽平移 / 双击复位 / 十字线读值。
 		*/
-		/** 桥（index.tsx 注入；页面为 slot 组件拿不到 ctx，模块级单例传递）。 */
-		let chanBridge = null;
 		const W = 720;
 		const H_MAIN = 300;
 		const H_VOL = 56;
@@ -490,11 +494,7 @@ window.__ModuleLoader__.load({
 		const PAD_R = 14;
 		const H_MACD = 62;
 		const H_TOTAL = 450;
-		/**
-		* K 线缠论主图（含成交量副图）：滚轮缩放（鼠标为锚）+ 拖拽平移 +
-		* 双击复位 + hover 十字线逐根读值。价格轴按可视窗口自适应。
-		*/
-		function ChanChart({ chart, view, onViewChange }) {
+		function ChanChart({ chart, payload, view, onViewChange, highlight }) {
 			const { dates, kline, volumes } = chart;
 			const total = dates.length;
 			const svgRef = (0, react.useRef)(null);
@@ -536,14 +536,12 @@ window.__ModuleLoader__.load({
 			const dateIndex = dateIndexOf(dates);
 			const indexOfTime = (time) => resolveIndex(dateIndex, time);
 			const visK = kline.slice(view.start, winEnd);
-			const lows = visK.map((k) => k[2]).concat(chart.zhongshus.filter((z) => {
+			const zsVis = chart.zhongshus.filter((z) => {
 				const i1 = indexOfTime(z.start_time);
 				return indexOfTime(z.end_time) >= view.start && i1 <= winEnd;
-			}).map((z) => z.low));
-			const highs = visK.map((k) => k[3]).concat(chart.zhongshus.filter((z) => {
-				const i1 = indexOfTime(z.start_time);
-				return indexOfTime(z.end_time) >= view.start && i1 <= winEnd;
-			}).map((z) => z.high));
+			});
+			const lows = visK.map((k) => k[2]).concat(zsVis.map((z) => z.low));
+			const highs = visK.map((k) => k[3]).concat(zsVis.map((z) => z.high));
 			const pMin = Math.min(...lows);
 			const pSpan = Math.max(...highs) - pMin || 1;
 			const vMax = Math.max(...volumes.slice(view.start, winEnd), 1);
@@ -583,480 +581,604 @@ window.__ModuleLoader__.load({
 			const hoverOpen = hoverK?.[0];
 			const hoverClose = hoverK?.[1];
 			const hoverPct = hoverOpen !== void 0 && hoverOpen > 0 && hoverClose !== void 0 ? (hoverClose - hoverOpen) / hoverOpen * 100 : null;
-			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("svg", {
-				ref: svgRef,
-				viewBox: `0 0 ${W} ${H_TOTAL}`,
-				role: "img",
-				"aria-label": "缠论 K 线结构图",
-				style: {
-					cursor: dragging ? "grabbing" : "crosshair",
-					touchAction: "none"
-				},
-				onPointerDown,
-				onPointerMove,
-				onPointerUp: endDrag,
-				onPointerLeave: () => {
-					endDrag();
-					setHover(null);
-				},
-				onDoubleClick: () => {
-					setView({
-						start: 0,
-						count: total
-					});
-					setHover(null);
-				},
-				children: [
-					[
-						0,
-						.25,
-						.5,
-						.75,
-						1
-					].map((ratio) => {
-						const price = pMin + pSpan * (1 - ratio);
-						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+			const trend = asRec(payload.trend_analysis);
+			const lastClose = kline.length > 0 ? kline[kline.length - 1][1] : null;
+			const prevClose = kline.length > 1 ? kline[kline.length - 2][1] : null;
+			const lastPct = lastClose !== null && prevClose !== null && prevClose > 0 ? (lastClose - prevClose) / prevClose * 100 : null;
+			const lastZs = chart.zhongshus.length > 0 ? chart.zhongshus[chart.zhongshus.length - 1] : null;
+			const zsPos = lastZs !== null ? zhongshuPosition(lastClose, lastZs) : null;
+			const hoverContext = hover !== null ? (() => {
+				const parts = [];
+				const time = dates[hover]?.slice(0, 10) ?? "";
+				const fx = chart.fenxings.find((f) => f.time.slice(0, 10) === time);
+				if (fx !== void 0) parts.push(fx.fenxingType === "top" ? "顶分型" : "底分型");
+				if (chart.biLines.some((b) => b.end_time.slice(0, 10) === time)) parts.push("笔端点");
+				const mk = chart.markers.find((m) => m.time.slice(0, 10) === time);
+				if (mk !== void 0) parts.push(`${mk.label ?? mk.type ?? "信号"}`);
+				if (chart.zhongshus.some((z) => {
+					const i1 = indexOfTime(z.start_time);
+					const i2 = indexOfTime(z.end_time);
+					return hover >= i1 && hover <= i2;
+				})) parts.push("中枢内");
+				return parts;
+			})() : [];
+			const hlClass = (kind, id) => highlight !== null && highlight.kind === kind && highlight.id === id ? "ksq-chanx-hl" : "";
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: "ksq-chanx-chartcol",
+				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "ksq-chanx-infobar",
+					children: [
+						lastClose !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", {
+							className: lastPct !== null && lastPct >= 0 ? "ksq-up" : "ksq-down",
+							children: lastClose.toFixed(2)
+						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+							className: lastPct !== null && lastPct >= 0 ? "ksq-up" : "ksq-down",
+							children: lastPct !== null ? `${lastPct >= 0 ? "+" : ""}${lastPct.toFixed(2)}%` : ""
+						})] }),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+							className: "ksq-chanx-badge",
+							children: asStr(trend.type_cn) || "走势未判定"
+						}),
+						zsPos !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+							className: `ksq-chanx-badge ${zsPos === "above" ? "up" : zsPos === "below" ? "down" : ""}`,
+							children: ["中枢", zsPos === "above" ? "上方" : zsPos === "below" ? "下方" : "震荡中"]
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+							className: "ksq-item-meta",
+							children: [
+								asStr(payload.stock_name),
+								" ",
+								asStr(payload.stock_code),
+								" · ",
+								asStr(payload.time_level)
+							]
+						})
+					]
+				}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("svg", {
+					ref: svgRef,
+					viewBox: `0 0 ${W} ${H_TOTAL}`,
+					role: "img",
+					"aria-label": "缠论 K 线结构图",
+					style: {
+						cursor: dragging ? "grabbing" : "crosshair",
+						touchAction: "none"
+					},
+					onPointerDown,
+					onPointerMove,
+					onPointerUp: endDrag,
+					onPointerLeave: () => {
+						endDrag();
+						setHover(null);
+					},
+					onDoubleClick: () => {
+						setView({
+							start: 0,
+							count: total
+						});
+						setHover(null);
+					},
+					children: [
+						[
+							0,
+							.25,
+							.5,
+							.75,
+							1
+						].map((ratio) => {
+							const price = pMin + pSpan * (1 - ratio);
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+								x1: PAD_L,
+								y1: yMain(price),
+								x2: W - PAD_R,
+								y2: yMain(price),
+								stroke: "var(--dsw-alias-border-l3)",
+								strokeDasharray: "2,4"
+							}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+								x: PAD_L - 6,
+								y: yMain(price) + 3,
+								fontSize: "10",
+								textAnchor: "end",
+								fill: "var(--dsw-alias-label-tertiary)",
+								children: price.toFixed(2)
+							})] }, `grid-${ratio}`);
+						}),
+						chart.backchis.map((bc, i) => {
+							const x1 = indexOfTime(bc.previousStart);
+							const x2 = indexOfTime(bc.currentEnd);
+							if (x1 < 0 || x2 < x1 || x2 < view.start || x1 > winEnd) return null;
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", {
+								className: hlClass("backchi", i),
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+									x: x(x1) - slot / 2,
+									y: 10,
+									width: (x2 - x1 + 1) * slot,
+									height: H_MAIN - 20,
+									fill: bc.valid ? "url(#ksq-chanx-bcshade)" : "rgba(230,70,70,0.04)",
+									stroke: bc.valid ? "#e64646" : "var(--dsw-alias-border-l2)",
+									strokeWidth: "0.8",
+									strokeDasharray: "3,4"
+								}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+									x: Math.max(56, x(x1) + 3),
+									y: 22,
+									fontSize: "9.5",
+									fill: bc.valid ? "#e64646" : "var(--dsw-alias-label-tertiary)",
+									children: bc.valid ? "背驰段对比" : "背驰未确认"
+								})]
+							}, `bc-${i}`);
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("defs", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("linearGradient", {
+							id: "ksq-chanx-bcshade",
+							x1: "0",
+							y1: "0",
+							x2: "0",
+							y2: "1",
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("stop", {
+								offset: "0%",
+								stopColor: "rgba(230,70,70,0.16)"
+							}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("stop", {
+								offset: "100%",
+								stopColor: "rgba(230,70,70,0.05)"
+							})]
+						}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("linearGradient", {
+							id: "ksq-chanx-zsshade",
+							x1: "0",
+							y1: "0",
+							x2: "0",
+							y2: "1",
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("stop", {
+								offset: "0%",
+								stopColor: "rgba(199,146,234,0.20)"
+							}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("stop", {
+								offset: "100%",
+								stopColor: "rgba(199,146,234,0.08)"
+							})]
+						})] }),
+						chart.zhongshus.map((zone, i) => {
+							const x1 = indexOfTime(zone.start_time);
+							const x2 = indexOfTime(zone.end_time);
+							if (x1 < 0 || x2 < x1 || x2 < view.start || x1 > winEnd) return null;
+							const zoneW = (x2 - x1 + 1) * slot;
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", {
+								className: hlClass("zhongshu", i),
+								children: [
+									zone.gg !== void 0 && zone.dd !== void 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+										x: x(x1) - slot / 2,
+										y: yMain(zone.gg),
+										width: zoneW,
+										height: Math.max(2, yMain(zone.dd) - yMain(zone.gg)),
+										fill: "none",
+										stroke: "#c792ea",
+										strokeWidth: "0.7",
+										strokeDasharray: "2,4",
+										opacity: "0.65"
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+										x: x(x1) - slot / 2,
+										y: yMain(zone.high),
+										width: zoneW,
+										height: Math.max(2, yMain(zone.low) - yMain(zone.high)),
+										fill: "url(#ksq-chanx-zsshade)",
+										stroke: "#c792ea",
+										strokeDasharray: "4,3",
+										rx: "2"
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+										x1: x(x1) - slot / 2,
+										y1: yMain(zone.center),
+										x2: x(x2) + slot / 2,
+										y2: yMain(zone.center),
+										stroke: "#c792ea",
+										strokeWidth: "1",
+										strokeDasharray: "2,3"
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+										x: Math.max(56, x(x1) + 2),
+										y: yMain(zone.high) - 3,
+										fontSize: "9.5",
+										fill: "#c792ea",
+										children: [
+											"中枢 ",
+											zone.low.toFixed(2),
+											"~",
+											zone.high.toFixed(2),
+											zone.extendCount !== void 0 && zone.extendCount > 0 ? ` ·延伸${zone.extendCount}` : "",
+											zone.stability !== void 0 ? ` ·稳定${zone.stability.toFixed(2)}` : ""
+										]
+									})
+								]
+							}, `zs-${i}`);
+						}),
+						visK.map((k, offset) => {
+							const index = view.start + offset;
+							const color = k[1] >= k[0] ? "#e05656" : "#2f9e77";
+							const cx = x(index);
+							const bodyTop = yMain(Math.max(k[0], k[1]));
+							const bodyBottom = yMain(Math.min(k[0], k[1]));
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+								x1: cx,
+								y1: yMain(k[3]),
+								x2: cx,
+								y2: yMain(k[2]),
+								stroke: color,
+								strokeWidth: Math.max(.6, slot * .12)
+							}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+								x: cx - Math.max(.8, slot * .32),
+								y: bodyTop,
+								width: Math.max(1.6, slot * .64),
+								height: Math.max(1, bodyBottom - bodyTop),
+								fill: color,
+								opacity: hover === index ? 1 : .88
+							})] }, `k-${index}`);
+						}),
+						chart.biLines.map((bi, i) => {
+							const x1 = indexOfTime(bi.start_time);
+							const x2 = indexOfTime(bi.end_time);
+							if (x1 < 0 || x2 < 0 || x2 < view.start || x1 > winEnd) return null;
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+								x1: x(x1),
+								y1: yMain(bi.start_price),
+								x2: x(x2),
+								y2: yMain(bi.end_price),
+								stroke: "#e8a33d",
+								strokeWidth: "1.6",
+								opacity: "0.85"
+							}, `bi-${i}`);
+						}),
+						chart.segLines.map((seg, i) => {
+							const x1 = indexOfTime(seg.start_time);
+							const x2 = indexOfTime(seg.end_time);
+							if (x1 < 0 || x2 < 0 || x2 < view.start || x1 > winEnd) return null;
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+								x1: x(x1),
+								y1: yMain(seg.start_price),
+								x2: x(x2),
+								y2: yMain(seg.end_price),
+								stroke: "#5ab0ff",
+								strokeWidth: "2.2",
+								strokeDasharray: "7,4",
+								opacity: "0.9"
+							}, `seg-${i}`);
+						}),
+						chart.fenxings.map((fx, i) => {
+							const index = indexOfTime(fx.time);
+							if (index < 0 || index < view.start || index >= winEnd) return null;
+							const isTop = fx.fenxingType === "top";
+							const py = isTop ? yMain(chart.kline[index]?.[3] ?? fx.price) : yMain(chart.kline[index]?.[2] ?? fx.price);
+							const dir = isTop ? 1 : -1;
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("g", {
+								opacity: view.count > 60 ? .45 : .9,
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", {
+									d: `M${x(index)},${py - dir * 5} l-4,${dir * 6} l8,0 Z`,
+									fill: isTop ? "#e64646" : "#2f9e77"
+								})
+							}, `fx-${i}`);
+						}),
+						chart.markers.map((marker, i) => {
+							const index = indexOfTime(marker.time);
+							if (index < 0 || index < view.start || index >= winEnd) return null;
+							const raw = marker.label ?? marker.type ?? "?";
+							const isBuy = raw.toUpperCase().includes("BUY") || raw.includes("买");
+							const cls = raw.match(/[123]/)?.[0] ?? "?";
+							const label = `${isBuy ? "B" : "S"}${cls}`;
+							const color = isBuy ? cls === "3" ? "#22a06b" : "#31c7a2" : cls === "3" ? "#c74040" : "#e64646";
+							const rel = marker.reliability ?? null;
+							const ringR = 11;
+							const circ = 2 * Math.PI * ringR;
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", {
+								className: hlClass("point", i),
+								children: [
+									rel !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("circle", {
+										cx: x(index),
+										cy: yMain(marker.price),
+										r: ringR,
+										fill: "none",
+										stroke: color,
+										strokeWidth: "1.6",
+										strokeDasharray: `${(Math.max(0, Math.min(1, rel)) * circ).toFixed(1)} ${circ.toFixed(1)}`,
+										transform: `rotate(-90 ${x(index)} ${yMain(marker.price)})`,
+										opacity: "0.9"
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("circle", {
+										cx: x(index),
+										cy: yMain(marker.price),
+										r: "8",
+										fill: color,
+										opacity: "0.95",
+										stroke: "#fff",
+										strokeWidth: "1"
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+										x: x(index),
+										y: yMain(marker.price) + 3,
+										fontSize: "8.5",
+										textAnchor: "middle",
+										fill: "#fff",
+										fontWeight: "700",
+										children: label
+									})
+								]
+							}, `mk-${i}`);
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
 							x1: PAD_L,
-							y1: yMain(price),
+							y1: 304,
 							x2: W - PAD_R,
-							y2: yMain(price),
-							stroke: "var(--dsw-alias-border-l3)",
-							strokeDasharray: "2,4"
-						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+							y2: 304,
+							stroke: "var(--dsw-alias-border-l3)"
+						}),
+						visK.map((k, offset) => {
+							const volume = volumes[view.start + offset] ?? 0;
+							const up = k[1] >= k[0];
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+								x: x(view.start + offset) - Math.max(.8, slot * .32),
+								y: yVol(volume),
+								width: Math.max(1.6, slot * .64),
+								height: 350 - yVol(volume),
+								fill: up ? "#e05656" : "#2f9e77",
+								opacity: "0.55"
+							}, `v-${view.start + offset}`);
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
 							x: PAD_L - 6,
-							y: yMain(price) + 3,
-							fontSize: "10",
+							y: 314,
+							fontSize: "9",
 							textAnchor: "end",
 							fill: "var(--dsw-alias-label-tertiary)",
-							children: price.toFixed(2)
-						})] }, `grid-${ratio}`);
-					}),
-					chart.backchis.filter((bc) => bc.valid).map((bc, i) => {
-						const x1 = indexOfTime(bc.previousStart);
-						const x2 = indexOfTime(bc.currentEnd);
-						if (x1 < 0 || x2 < x1 || x2 < view.start || x1 > winEnd) return null;
-						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
-							x: x(x1) - slot / 2,
-							y: 10,
-							width: (x2 - x1 + 1) * slot,
-							height: H_MAIN - 20,
-							fill: "rgba(230,70,70,0.07)",
-							stroke: "#e64646",
-							strokeWidth: "0.8",
-							strokeDasharray: "3,4"
-						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
-							x: Math.max(56, x(x1) + 3),
-							y: 22,
-							fontSize: "9.5",
-							fill: "#e64646",
-							children: "背驰段对比"
-						})] }, `bc-${i}`);
-					}),
-					chart.zhongshus.map((zone, i) => {
-						const x1 = indexOfTime(zone.start_time);
-						const x2 = indexOfTime(zone.end_time);
-						if (x1 < 0 || x2 < x1 || x2 < view.start || x1 > winEnd) return null;
-						const zoneW = (x2 - x1 + 1) * slot;
-						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [
-							zone.gg !== void 0 && zone.dd !== void 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
-								x: x(x1) - slot / 2,
-								y: yMain(zone.gg),
-								width: zoneW,
-								height: Math.max(2, yMain(zone.dd) - yMain(zone.gg)),
-								fill: "none",
-								stroke: "#c792ea",
-								strokeWidth: "0.7",
-								strokeDasharray: "2,4",
-								opacity: "0.65"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
-								x: x(x1) - slot / 2,
-								y: yMain(zone.high),
-								width: zoneW,
-								height: Math.max(2, yMain(zone.low) - yMain(zone.high)),
-								fill: "rgba(199,146,234,0.14)",
-								stroke: "#c792ea",
-								strokeDasharray: "4,3",
-								rx: "2"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
-								x1: x(x1) - slot / 2,
-								y1: yMain(zone.center),
-								x2: x(x2) + slot / 2,
-								y2: yMain(zone.center),
-								stroke: "#c792ea",
-								strokeWidth: "1",
-								strokeDasharray: "2,3"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
-								x: Math.max(56, x(x1) + 2),
-								y: yMain(zone.high) - 3,
-								fontSize: "9.5",
-								fill: "#c792ea",
-								children: [
-									"中枢 ",
-									zone.low.toFixed(2),
-									"~",
-									zone.high.toFixed(2),
-									zone.extendCount !== void 0 && zone.extendCount > 0 ? ` ·延伸${zone.extendCount}` : "",
-									zone.gg !== void 0 && zone.dd !== void 0 ? ` ·震荡 ${zone.dd.toFixed(2)}~${zone.gg.toFixed(2)}` : ""
-								]
-							})
-						] }, `zs-${i}`);
-					}),
-					visK.map((k, offset) => {
-						const index = view.start + offset;
-						const color = k[1] >= k[0] ? "#e05656" : "#2f9e77";
-						const cx = x(index);
-						const bodyTop = yMain(Math.max(k[0], k[1]));
-						const bodyBottom = yMain(Math.min(k[0], k[1]));
-						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
-							x1: cx,
-							y1: yMain(k[3]),
-							x2: cx,
-							y2: yMain(k[2]),
-							stroke: color,
-							strokeWidth: Math.max(.6, slot * .12)
-						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
-							x: cx - Math.max(.8, slot * .32),
-							y: bodyTop,
-							width: Math.max(1.6, slot * .64),
-							height: Math.max(1, bodyBottom - bodyTop),
-							fill: color,
-							opacity: hover === index ? 1 : .88
-						})] }, `k-${index}`);
-					}),
-					chart.biLines.map((bi, i) => {
-						const x1 = indexOfTime(bi.start_time);
-						const x2 = indexOfTime(bi.end_time);
-						if (x1 < 0 || x2 < 0 || x2 < view.start || x1 > winEnd) return null;
-						return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
-							x1: x(x1),
-							y1: yMain(bi.start_price),
-							x2: x(x2),
-							y2: yMain(bi.end_price),
-							stroke: "#e8a33d",
-							strokeWidth: "1.6",
-							opacity: "0.85"
-						}, `bi-${i}`);
-					}),
-					chart.segLines.map((seg, i) => {
-						const x1 = indexOfTime(seg.start_time);
-						const x2 = indexOfTime(seg.end_time);
-						if (x1 < 0 || x2 < 0 || x2 < view.start || x1 > winEnd) return null;
-						return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
-							x1: x(x1),
-							y1: yMain(seg.start_price),
-							x2: x(x2),
-							y2: yMain(seg.end_price),
-							stroke: "#5ab0ff",
-							strokeWidth: "2.2",
-							strokeDasharray: "7,4",
-							opacity: "0.9"
-						}, `seg-${i}`);
-					}),
-					chart.fenxings.map((fx, i) => {
-						const index = indexOfTime(fx.time);
-						if (index < 0 || index < view.start || index >= winEnd) return null;
-						const isTop = fx.fenxingType === "top";
-						const py = isTop ? yMain(chart.kline[index]?.[3] ?? fx.price) : yMain(chart.kline[index]?.[2] ?? fx.price);
-						const dir = isTop ? 1 : -1;
-						return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("g", {
-							opacity: view.count > 60 ? .45 : .9,
-							children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", {
-								d: `M${x(index)},${py - dir * 5} l-4,${dir * 6} l8,0 Z`,
-								fill: isTop ? "#e64646" : "#2f9e77"
-							})
-						}, `fx-${i}`);
-					}),
-					chart.markers.map((marker, i) => {
-						const time = asStr(marker.time);
-						const index = indexOfTime(time);
-						const price = asNum(marker.price);
-						if (index < 0 || price === null || index < view.start || index >= winEnd) return null;
-						const raw = asStr(marker.label ?? marker.type ?? "?");
-						const isBuy = raw.toUpperCase().includes("BUY") || raw.includes("买");
-						const cls = raw.match(/[123]/)?.[0] ?? "?";
-						const label = `${isBuy ? "B" : "S"}${cls}`;
-						const color = isBuy ? cls === "3" ? "#22a06b" : "#31c7a2" : cls === "3" ? "#c74040" : "#e64646";
-						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("circle", {
-							cx: x(index),
-							cy: yMain(price),
-							r: "8",
-							fill: color,
-							opacity: "0.95",
-							stroke: "#fff",
-							strokeWidth: "1"
-						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
-							x: x(index),
-							y: yMain(price) + 3,
-							fontSize: "8.5",
-							textAnchor: "middle",
-							fill: "#fff",
-							fontWeight: "700",
-							children: label
-						})] }, `mk-${i}`);
-					}),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
-						x1: PAD_L,
-						y1: 304,
-						x2: W - PAD_R,
-						y2: 304,
-						stroke: "var(--dsw-alias-border-l3)"
-					}),
-					visK.map((k, offset) => {
-						const volume = volumes[view.start + offset] ?? 0;
-						const up = k[1] >= k[0];
-						return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
-							x: x(view.start + offset) - Math.max(.8, slot * .32),
-							y: yVol(volume),
-							width: Math.max(1.6, slot * .64),
-							height: 350 - yVol(volume),
-							fill: up ? "#e05656" : "#2f9e77",
-							opacity: "0.55"
-						}, `v-${view.start + offset}`);
-					}),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
-						x: PAD_L - 6,
-						y: 314,
-						fontSize: "9",
-						textAnchor: "end",
-						fill: "var(--dsw-alias-label-tertiary)",
-						children: "量"
-					}),
-					(() => {
-						const yMacdTop = 362;
-						const hMacd = H_MACD - 12;
-						const windowHist = chart.macd.hist.slice(view.start, winEnd).map((v) => v ?? 0);
-						const windowDif = chart.macd.dif.slice(view.start, winEnd).map((v) => v ?? 0);
-						const windowDea = chart.macd.dea.slice(view.start, winEnd).map((v) => v ?? 0);
-						const mAbs = Math.max(...windowHist, ...windowDif, ...windowDea, 1e-4);
-						const yM = (value) => 387 - value / mAbs * (hMacd / 2 - 2);
-						const zeroY = yM(0);
-						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
-								x1: PAD_L,
-								y1: yMacdTop - 2,
-								x2: W - PAD_R,
-								y2: yMacdTop - 2,
-								stroke: "var(--dsw-alias-border-l3)"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
-								x1: PAD_L,
-								y1: zeroY,
-								x2: W - PAD_R,
-								y2: zeroY,
-								stroke: "var(--dsw-alias-border-l2)",
-								strokeDasharray: "2,3"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
-								x: PAD_L - 6,
-								y: zeroY + 3,
-								fontSize: "9",
-								textAnchor: "end",
-								fill: "var(--dsw-alias-label-tertiary)",
-								children: "0"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
-								x: PAD_L - 6,
-								y: 370,
-								fontSize: "9",
-								textAnchor: "end",
-								fill: "var(--dsw-alias-label-tertiary)",
-								children: mAbs.toFixed(2)
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
-								x: PAD_L - 6,
-								y: 412,
-								fontSize: "9",
-								textAnchor: "end",
-								fill: "var(--dsw-alias-label-tertiary)",
-								children: ["-", mAbs.toFixed(2)]
-							}),
-							windowHist.map((value, offset) => {
-								const index = view.start + offset;
-								const h = Math.abs(yM(value) - zeroY);
-								return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
-									x: x(index) - Math.max(.8, slot * .3),
-									y: value >= 0 ? zeroY - h : zeroY,
-									width: Math.max(1.6, slot * .6),
-									height: Math.max(.6, h),
-									fill: value >= 0 ? "#e05656" : "#2f9e77",
-									opacity: "0.6"
-								}, `mh-${index}`);
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("polyline", {
-								points: windowDif.map((value, offset) => `${x(view.start + offset)},${yM(value)}`).join(" "),
-								fill: "none",
-								stroke: "#e8a33d",
-								strokeWidth: "1.1"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("polyline", {
-								points: windowDea.map((value, offset) => `${x(view.start + offset)},${yM(value)}`).join(" "),
-								fill: "none",
-								stroke: "#5ab0ff",
-								strokeWidth: "1.1"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
-								x: 56,
-								y: 372,
-								fontSize: "9",
-								fill: "#e8a33d",
-								children: "DIF"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
-								x: 78,
-								y: 372,
-								fontSize: "9",
-								fill: "#5ab0ff",
-								children: "DEA"
-							})
-						] });
-					})(),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", {
-						fontSize: "9.5",
-						children: [
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
-								x: PAD_L,
-								y: H_TOTAL - 4,
-								fill: "var(--dsw-alias-label-tertiary)",
-								children: "红涨绿跌 ·"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
-								x1: 100,
-								y1: H_TOTAL - 7,
-								x2: 120,
-								y2: H_TOTAL - 7,
-								stroke: "#e8a33d",
-								strokeWidth: "1.6"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
-								x: 124,
-								y: H_TOTAL - 4,
-								fill: "var(--dsw-alias-label-tertiary)",
-								children: "笔 ·"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
-								x1: 144,
-								y1: H_TOTAL - 7,
-								x2: 164,
-								y2: H_TOTAL - 7,
-								stroke: "#5ab0ff",
-								strokeWidth: "2",
-								strokeDasharray: "6,3"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
-								x: 168,
-								y: H_TOTAL - 4,
-								fill: "var(--dsw-alias-label-tertiary)",
-								children: "线段 ·"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
-								x: 196,
-								y: H_TOTAL - 12,
-								width: "14",
-								height: "8",
-								fill: "rgba(199,146,234,0.2)",
-								stroke: "#c792ea",
-								strokeDasharray: "3,2"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
-								x: 214,
-								y: H_TOTAL - 4,
-								fill: "var(--dsw-alias-label-tertiary)",
-								children: "中枢 · 滚轮缩放 · 拖拽平移 · 双击复位"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
-								x: W - PAD_R,
-								y: H_TOTAL - 4,
-								fontSize: "9",
-								textAnchor: "end",
-								fill: "var(--dsw-alias-label-tertiary)",
-								children: [
-									view.start + 1,
-									"-",
-									winEnd,
-									"/",
-									total
-								]
-							})
-						]
-					}),
-					hover !== null && hoverOpen !== void 0 && hoverClose !== void 0 && hoverK !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", {
-						pointerEvents: "none",
-						children: [
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
-								x1: x(hover),
-								y1: 8,
-								x2: x(hover),
-								y2: 352,
-								stroke: "var(--dsw-alias-border-l2)"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("circle", {
-								cx: x(hover),
-								cy: yMain(hoverK[3] ?? hoverClose),
-								r: "2.5",
-								fill: "#e8edef"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [
-								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
-									x: W - 218,
-									y: 8,
-									width: "204",
-									height: "58",
-									rx: "4",
-									fill: "rgba(3,13,11,0.84)"
+							children: "量"
+						}),
+						(() => {
+							const yMacdTop = 362;
+							const hMacd = H_MACD - 12;
+							const windowHist = chart.macd.hist.slice(view.start, winEnd).map((v) => v ?? 0);
+							const windowDif = chart.macd.dif.slice(view.start, winEnd).map((v) => v ?? 0);
+							const windowDea = chart.macd.dea.slice(view.start, winEnd).map((v) => v ?? 0);
+							const mAbs = Math.max(...windowHist, ...windowDif, ...windowDea, 1e-4);
+							const yM = (value) => 387 - value / mAbs * (hMacd / 2 - 2);
+							const zeroY = yM(0);
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+									x1: PAD_L,
+									y1: yMacdTop - 2,
+									x2: W - PAD_R,
+									y2: yMacdTop - 2,
+									stroke: "var(--dsw-alias-border-l3)"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+									x1: PAD_L,
+									y1: zeroY,
+									x2: W - PAD_R,
+									y2: zeroY,
+									stroke: "var(--dsw-alias-border-l2)",
+									strokeDasharray: "2,3"
 								}),
 								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
-									x: W - 210,
-									y: 22,
-									fontSize: "10.5",
-									fill: "#e8edef",
-									children: dates[hover]?.slice(0, 10) ?? ""
+									x: PAD_L - 6,
+									y: zeroY + 3,
+									fontSize: "9",
+									textAnchor: "end",
+									fill: "var(--dsw-alias-label-tertiary)",
+									children: "0"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+									x: PAD_L - 6,
+									y: 370,
+									fontSize: "9",
+									textAnchor: "end",
+									fill: "var(--dsw-alias-label-tertiary)",
+									children: mAbs.toFixed(2)
 								}),
 								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
-									x: W - 210,
-									y: 36,
-									fontSize: "10",
-									fill: "#e8edef",
-									children: [
-										"开 ",
-										hoverOpen.toFixed(2),
-										" 收 ",
-										hoverClose.toFixed(2)
-									]
+									x: PAD_L - 6,
+									y: 412,
+									fontSize: "9",
+									textAnchor: "end",
+									fill: "var(--dsw-alias-label-tertiary)",
+									children: ["-", mAbs.toFixed(2)]
+								}),
+								windowHist.map((value, offset) => {
+									const index = view.start + offset;
+									const h = Math.abs(yM(value) - zeroY);
+									return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+										x: x(index) - Math.max(.8, slot * .3),
+										y: value >= 0 ? zeroY - h : zeroY,
+										width: Math.max(1.6, slot * .6),
+										height: Math.max(.6, h),
+										fill: value >= 0 ? "#e05656" : "#2f9e77",
+										opacity: "0.6"
+									}, `mh-${index}`);
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("polyline", {
+									points: windowDif.map((value, offset) => `${x(view.start + offset)},${yM(value)}`).join(" "),
+									fill: "none",
+									stroke: "#e8a33d",
+									strokeWidth: "1.1"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("polyline", {
+									points: windowDea.map((value, offset) => `${x(view.start + offset)},${yM(value)}`).join(" "),
+									fill: "none",
+									stroke: "#5ab0ff",
+									strokeWidth: "1.1"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+									x: 56,
+									y: 372,
+									fontSize: "9",
+									fill: "#e8a33d",
+									children: "DIF"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+									x: 78,
+									y: 372,
+									fontSize: "9",
+									fill: "#5ab0ff",
+									children: "DEA"
+								})
+							] });
+						})(),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", {
+							fontSize: "9.5",
+							children: [
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+									x: PAD_L,
+									y: H_TOTAL - 4,
+									fill: "var(--dsw-alias-label-tertiary)",
+									children: "红涨绿跌 ·"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+									x1: 100,
+									y1: H_TOTAL - 7,
+									x2: 120,
+									y2: H_TOTAL - 7,
+									stroke: "#e8a33d",
+									strokeWidth: "1.6"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+									x: 124,
+									y: H_TOTAL - 4,
+									fill: "var(--dsw-alias-label-tertiary)",
+									children: "笔 ·"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+									x1: 144,
+									y1: H_TOTAL - 7,
+									x2: 164,
+									y2: H_TOTAL - 7,
+									stroke: "#5ab0ff",
+									strokeWidth: "2",
+									strokeDasharray: "6,3"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+									x: 168,
+									y: H_TOTAL - 4,
+									fill: "var(--dsw-alias-label-tertiary)",
+									children: "线段 ·"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+									x: 196,
+									y: H_TOTAL - 12,
+									width: "14",
+									height: "8",
+									fill: "rgba(199,146,234,0.2)",
+									stroke: "#c792ea",
+									strokeDasharray: "3,2"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+									x: 214,
+									y: H_TOTAL - 4,
+									fill: "var(--dsw-alias-label-tertiary)",
+									children: "中枢 · 滚轮缩放 · 拖拽平移 · 双击复位"
 								}),
 								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
-									x: W - 210,
-									y: 49,
-									fontSize: "10",
-									fill: "#e8edef",
+									x: W - PAD_R,
+									y: H_TOTAL - 4,
+									fontSize: "9",
+									textAnchor: "end",
+									fill: "var(--dsw-alias-label-tertiary)",
 									children: [
-										"低 ",
-										hoverK[2]?.toFixed(2) ?? "—",
-										" 高 ",
-										hoverK[3]?.toFixed(2) ?? "—"
-									]
-								}),
-								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
-									x: W - 210,
-									y: 61,
-									fontSize: "10",
-									fill: hoverPct !== null && hoverPct >= 0 ? "#e05656" : "#2f9e77",
-									children: [
-										"涨跌 ",
-										hoverPct !== null ? `${hoverPct >= 0 ? "+" : ""}${hoverPct.toFixed(2)}%` : "—",
-										" · 量 ",
-										((volumes[hover] ?? 0) / 1e4).toFixed(1),
-										"万手"
+										view.start + 1,
+										"-",
+										winEnd,
+										"/",
+										total
 									]
 								})
-							] })
-						]
-					})
-				]
+							]
+						}),
+						hover !== null && hoverOpen !== void 0 && hoverClose !== void 0 && hoverK !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", {
+							pointerEvents: "none",
+							children: [
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+									x1: x(hover),
+									y1: 8,
+									x2: x(hover),
+									y2: 352,
+									stroke: "var(--dsw-alias-border-l2)"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("circle", {
+									cx: x(hover),
+									cy: yMain(hoverK[3] ?? hoverClose),
+									r: "2.5",
+									fill: "#e8edef"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+										x: W - 218,
+										y: 8,
+										width: "204",
+										height: 58 + (hoverContext.length > 0 ? 14 : 0),
+										rx: "4",
+										fill: "rgba(3,13,11,0.84)"
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+										x: W - 210,
+										y: 22,
+										fontSize: "10.5",
+										fill: "#e8edef",
+										children: dates[hover]?.slice(0, 10) ?? ""
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+										x: W - 210,
+										y: 36,
+										fontSize: "10",
+										fill: "#e8edef",
+										children: [
+											"开 ",
+											hoverOpen.toFixed(2),
+											" 收 ",
+											hoverClose.toFixed(2)
+										]
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+										x: W - 210,
+										y: 49,
+										fontSize: "10",
+										fill: "#e8edef",
+										children: [
+											"低 ",
+											hoverK[2]?.toFixed(2) ?? "—",
+											" 高 ",
+											hoverK[3]?.toFixed(2) ?? "—"
+										]
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+										x: W - 210,
+										y: 61,
+										fontSize: "10",
+										fill: hoverPct !== null && hoverPct >= 0 ? "#e05656" : "#2f9e77",
+										children: [
+											"涨跌 ",
+											hoverPct !== null ? `${hoverPct >= 0 ? "+" : ""}${hoverPct.toFixed(2)}%` : "—",
+											" · 量 ",
+											((volumes[hover] ?? 0) / 1e4).toFixed(1),
+											"万手"
+										]
+									}),
+									hoverContext.length > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+										x: W - 210,
+										y: 74,
+										fontSize: "9.5",
+										fill: "#e8a33d",
+										children: ["结构：", hoverContext.join(" · ")]
+									})
+								] })
+							]
+						})
+					]
+				})]
 			});
 		}
+		//#endregion
+		//#region src/client/page.tsx
+		/**
+		* 缠论研究面板：交互式 K 线缠论图 + 形态/走势/信号摘要 + Agent 深度解读。
+		*
+		* 数据走宿主 `POST /kstock-api/chan-analyze`（{stock, level} → 引擎 JSON，
+		* 60s 服务端缓存）。图表自研 SVG：蜡烛（A 股红涨绿跌）+ 笔/段折线 +
+		* 中枢矩形 + 买卖点徽章 + 成交量副图，hover 十字线逐根读值。
+		* 深度解读走 TaskTargetMenu（chan 类型独立记忆落点）。
+		*/
+		/** 桥（index.tsx 注入；页面为 slot 组件拿不到 ctx，模块级单例传递）。 */
+		let chanBridge = null;
 		/** 七类信号雷达（SVG 七边形，czsc 式分类）。 */
 		function SignalRadar({ radar, score, direction, strength }) {
 			const categories = [
@@ -1356,8 +1478,10 @@ window.__ModuleLoader__.load({
 								className: "ksq-chan-chartwrap",
 								children: chart !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ChanChart, {
 									chart,
+									payload,
 									view,
-									onViewChange: setView
+									onViewChange: setView,
+									highlight: null
 								})
 							}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("aside", {
 								className: "ksq-chan-side",
