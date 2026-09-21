@@ -2170,6 +2170,7 @@ window.__ModuleLoader__.load({
 			const stockCode = payload !== null ? asStr(payload.stock_code) : "";
 			(0, react.useEffect)(() => {
 				if (stockCode === "") {
+					matrixSeq.current += 1;
 					setMatrix({});
 					return;
 				}

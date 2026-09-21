@@ -109,7 +109,7 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
   // 联立矩阵：当前级别的其余 3 档并行拉取（含低一档；分钟级可能配额不足 → empty 行；硬失败 → error 行）。
   const stockCode = payload !== null ? asStr(payload.stock_code) : ''
   useEffect(() => {
-    if (stockCode === '') { setMatrix({}); return }
+    if (stockCode === '') { matrixSeq.current += 1; setMatrix({}); return }
     const my = ++matrixSeq.current
     const others = matrixLevels(level).filter(l => l !== level)
     setMatrix(Object.fromEntries(others.map(l => [l, 'loading' as const])))
