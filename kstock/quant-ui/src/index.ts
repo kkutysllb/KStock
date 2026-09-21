@@ -38,7 +38,7 @@ const STYLE_ID = 'kstock-quant-pages'
  * 旧副本可能先注入抢占幂等位（first-inject-wins）——版本不匹配即撤旧
  * 换新，保证最终落页的是最新构建的样式副本。改 quant.css 时同步抬版本。
  */
-const STYLE_VERSION = '2026-09-21.3-chan3'
+const STYLE_VERSION = '2026-09-21.4-chan4'
 
 /** 把 ksq 样式注入 <head>（幂等 + 版本淘汰旧副本）。 */
 export function injectQuantStyles(): void {

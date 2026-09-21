@@ -152,8 +152,8 @@ export function ChanChart({ chart, payload, view, onViewChange, highlight }: {
       <div className="ksq-chanx-infobar">
         {lastClose !== null && (
           <>
-            <b className={lastPct !== null && lastPct >= 0 ? 'ksq-up' : 'ksq-down'}>{lastClose.toFixed(2)}</b>
-            <span className={lastPct !== null && lastPct >= 0 ? 'ksq-up' : 'ksq-down'}>
+            <b className={lastPct !== null && lastPct >= 0 ? 'ksq-chanx-up' : 'ksq-chanx-down'}>{lastClose.toFixed(2)}</b>
+            <span className={lastPct !== null && lastPct >= 0 ? 'ksq-chanx-up' : 'ksq-chanx-down'}>
               {lastPct !== null ? `${lastPct >= 0 ? '+' : ''}${lastPct.toFixed(2)}%` : ''}
             </span>
           </>
