@@ -95,6 +95,56 @@ kk_common 解析：`PYTHONPATH` 加 `<strategy-research 基目录>/../../common/
    策略逻辑 / 回测口径 / 结果 / 敏感性 / 风险；
 2. 渲染 `-o reports/backtest-<策略名>.html`，归档报告库，present 呈现。
 
+## 阶段五：归档策略库（必做，交付后收口）
+
+把本次策略回测沉淀为「策略库」资产——工作台侧栏「策略库」面板可随时
+回看净值曲线叠加、跨版本对比、重跑。引擎本机 `http://127.0.0.1:18001`，
+三步（均 curl POST，失败不阻塞交付）：
+
+```bash
+# 1 建策略（hypothesis=一句话策略逻辑假设）
+STRATEGY_ID=$(curl -s -X POST http://127.0.0.1:18001/kstock-api/strategies \
+  -H 'content-type: application/json' \
+  -d '{"name":"双均线趋势","hypothesis":"20日上穿60日做多，A股日线趋势跟随"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["strategy_id"])')
+
+# 2 存代码版本（code=策略信号/回测核心代码全文，≤512KB，落
+#    signal_engine.py 记 sha256 链；params=均线窗口/费率等参数）
+curl -s -X POST http://127.0.0.1:18001/kstock-api/strategies/$STRATEGY_ID/versions \
+  -H 'content-type: application/json' \
+  -d @- <<'EOF'
+{"code":"（策略信号/回测核心代码全文贴入此处）",
+ "params":{"fast":20,"slow":60,"commission":0.001},
+ "change_note":"初版：20/60 双均线"}
+EOF
+
+# 3 存回测结果（metrics=面板渲染六键；equity=净值序列 ≤2MB；
+#    trades=交易清单 ≤4MB；rules 带 report_id 建看板链）
+curl -s -X POST http://127.0.0.1:18001/kstock-api/strategies/$STRATEGY_ID/runs \
+  -H 'content-type: application/json' -d @- <<'EOF'
+{"version":1,"data_start":"2024-09-20","data_end":"2026-09-18",
+ "rules":{"universe":"中证800","benchmark":"000300.SH",
+          "report_id":"report-xxxxxxxxxxxx（阶段四归档返回的 id）"},
+ "metrics":{"total_return_pct":32.5,"annual_return_pct":15.8,
+            "sharpe_ratio":1.21,"max_drawdown_pct":-18.3,
+            "win_rate_pct":54.2,"trade_count":87},
+ "equity":"（净值序列 JSON 贴入：[{date,equity}] 或 {dates,values}）",
+ "trades":"（交易清单 JSON 贴入）"}
+EOF
+```
+
+- **多策略研究**（一次对比 N 个策略/参数组）：每策略建独立资产，
+  name 带标识区分（如「双均线·20/60」「双均线·5/20」）；禁止因
+  "策略多"整体跳过归档只交报告；
+- **重跑同一策略**：不要 POST 新策略——`PATCH /kstock-api/strategies/{id}`
+  更新 hypothesis；代码或参数变化时 POST 新版本（sha256 变才换版）；
+  run 一律挂当前版本；
+- metrics 面板渲染键（**漏了对应列显示「—」**）：`total_return_pct` /
+  `annual_return_pct` / `sharpe_ratio` / `max_drawdown_pct` /
+  `win_rate_pct` / `trade_count`；漏检可事后 UPDATE metrics_json 补；
+- equity 兼容 `[{date,equity}]` 与 `{dates,values}`（面板归一后叠加）；
+- 引擎不可达时在最终回复里明说「未归档策略库」，其余交付照常。
+
 ## 输出纪律（强约束）
 
 - metrics 数值**原样转述**；demo(MOCK) 结果不得出现在结论里；

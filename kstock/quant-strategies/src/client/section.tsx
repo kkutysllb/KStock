@@ -7,10 +7,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   compareStrategyRuns,
+  fetchReportHtml,
   getStrategyRunEquity,
   listStrategies,
   listStrategyRuns,
   listStrategyVersions,
+  reportBlobUrl,
   type Strategy,
   type StrategyEquity,
   type StrategyRunComparison,
@@ -24,14 +26,18 @@ import {
   ErrorLine,
   LineOverlay,
   Loading,
+  PreviewDialog,
   RefreshButton,
   RUN_COLORS,
+  TaskTargetMenu,
   formatDateTime,
   metric,
   metricClass,
   statusBadge,
   useCopyPrompt,
+  type UseWorkspaces,
 } from '@kstock/quant-ui'
+import { getAgentBridge, interpretStrategyPrompt } from './agent.ts'
 
 /** 净值数据归一化：兼容 [{date,equity}] 与 {dates,values} 形态，统一为 1 起点。 */
 function normalizeEquity(raw: StrategyEquity['equity']): number[] {
@@ -62,7 +68,22 @@ const METRIC_KEYS = [
   ['trade_count', '交易次数'],
 ] as const
 
-export function StrategiesSection() {
+/** 空态引导：让 agent 把最近一次策略回测结果归档进策略库的复制提示词。 */
+const INGEST_PROMPT =
+  '请把本工作区最近一次策略回测任务的结果归档进 KStock 策略库（引擎 http://127.0.0.1:18001，不可达则跳过并明说）。三步：' +
+  '1) POST /kstock-api/strategies，body {name: 策略名, hypothesis: 一句话策略逻辑假设}；' +
+  '2) POST /kstock-api/strategies/{strategy_id}/versions，body {code: 策略信号/回测核心代码全文, params: 参数 JSON, change_note}；' +
+  '3) POST /kstock-api/strategies/{strategy_id}/runs，body {version, data_start, data_end, rules: {universe, benchmark, report_id 报告库看板链}, ' +
+  'metrics: {total_return_pct, annual_return_pct, sharpe_ratio, max_drawdown_pct, win_rate_pct, trade_count}, equity: 净值序列 JSON, trades: 交易清单 JSON}。' +
+  '多策略对比研究则每策略独立建资产，禁止整体跳过。数据取自工作区 data/ 与 reports/ 下的真实产物，禁止编造。'
+
+/** run 的 rules.report_id（阶段五看板建链）。 */
+function runReportId(run: StrategyRunSummary | undefined): string | null {
+  const value = run?.rules?.report_id
+  return typeof value === 'string' && value !== '' ? value : null
+}
+
+export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = {}) {
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -74,6 +95,8 @@ export function StrategiesSection() {
   const [comparison, setComparison] = useState<StrategyRunComparison | null>(null)
   const [equities, setEquities] = useState<StrategyEquity[]>([])
   const [refreshing, setRefreshing] = useState(false)
+  const [reportView, setReportView] = useState<{ runId: string; htmlUrl: string } | null>(null)
+  const [pendingInterpret, setPendingInterpret] = useState<string | null>(null)
   const { copy, toast } = useCopyPrompt()
 
   const reload = useCallback(async () => {
@@ -119,6 +142,8 @@ export function StrategiesSection() {
     setCompareIds([])
     setComparison(null)
     setEquities([])
+    closeReportView()
+    setPendingInterpret(null)
     setError(null)
     let active = true
     void (async () => {
@@ -178,7 +203,59 @@ export function StrategiesSection() {
     `（change_note：${version.change_note || '无'}），数据区间与交易规则参照该版本最近一次回测` +
     `（无历史记录则用近 2 年日线 + 默认 A 股规则）。跑完后把结果入库：` +
     `POST /kstock-api/strategies/${selectedId}/runs，version=${version.version}，` +
-    `附 data_start/data_end/rules/metrics/equity。`
+    `附 data_start/data_end/rules（含 report_id 看板链）/metrics` +
+    `（total_return_pct/annual_return_pct/sharpe_ratio/max_drawdown_pct/win_rate_pct/trade_count）/equity/trades。`
+
+  /** 关闭报告视图并释放 blob URL。 */
+  const closeReportView = useCallback(() => {
+    setReportView(current => {
+      if (current?.htmlUrl) URL.revokeObjectURL(current.htmlUrl)
+      return null
+    })
+  }, [])
+
+  /** 看板直嵌（rules.report_id → 报告库 HTML iframe），无链明示。 */
+  const showReport = useCallback(async (runId: string) => {
+    if (reportView?.runId === runId) {
+      closeReportView()
+      return
+    }
+    const run = runs.find(item => item.run_id === runId)
+    const reportId = runReportId(run)
+    closeReportView()
+    if (reportId === null) {
+      setError('该 run 未链接报告看板（rules 缺 report_id）')
+      return
+    }
+    try {
+      const html = await fetchReportHtml(reportId)
+      setReportView({ runId, htmlUrl: reportBlobUrl(html) })
+    } catch {
+      setError('看板加载失败（报告可能已删除）')
+    }
+  }, [reportView, runs, closeReportView])
+
+  /** 回测「解读」（§28）：先弹目标选择菜单（strategy 类型记忆）。 */
+  const askInterpret = useCallback((run: StrategyRunSummary) => {
+    if (selected === null) return
+    if (getAgentBridge() === null) {
+      setError('会话联动不可用（sessions/layout 服务缺席）')
+      return
+    }
+    const num = (value: unknown): number | undefined => (typeof value === 'number' && Number.isFinite(value) ? value : undefined)
+    setPendingInterpret(interpretStrategyPrompt({
+      strategyName: selected.name,
+      hypothesis: selected.hypothesis,
+      version: run.version,
+      range: run.data_start !== '' && run.data_end !== '' ? `${run.data_start} ~ ${run.data_end}` : '',
+      totalReturnPct: num(run.metrics?.total_return_pct),
+      annualReturnPct: num(run.metrics?.annual_return_pct),
+      sharpe: num(run.metrics?.sharpe_ratio),
+      maxDrawdownPct: num(run.metrics?.max_drawdown_pct),
+      winRatePct: num(run.metrics?.win_rate_pct),
+      tradeCount: num(run.metrics?.trade_count),
+    }))
+  }, [selected])
 
   const equitySeries = useMemo(
     () => equities.map((item, index) => ({
@@ -200,7 +277,7 @@ export function StrategiesSection() {
         <div className="ksq-split">
           <aside className="ksq-list">
             {strategies.length === 0
-              ? <p className="ksq-hint">暂无策略。在对话里让 agent 做「策略研究回测」并入库版本后，这里会出现策略资产。</p>
+              ? <p className="ksq-hint">暂无策略。用右侧提示词把最近一次回测结果入库。</p>
               : strategies.map(strategy => (
                 <button
                   key={strategy.strategy_id}
@@ -231,7 +308,18 @@ export function StrategiesSection() {
 
           <section className="ksq-detail">
             {!selected ? (
-              <p className="ksq-hint">从左侧选择一个策略查看版本时间线与回测对比。</p>
+              strategies.length === 0 ? (
+                <div className="ksq-empty">
+                  <strong>策略库还是空的</strong>
+                  <p>策略回测任务的产物目前只落在工作区文件（data/ 与 reports/）里。归档进策略库后，这里会出现可回看净值叠加、跨版本对比、重跑的策略资产。</p>
+                  <button className="ksq-linkbtn" type="button" onClick={() => copy(INGEST_PROMPT)}>
+                    <IconCopy size={11} /> 复制「把最近一次回测结果入库」提示词
+                  </button>
+                  <p className="ksq-item-meta">粘贴到对话发送即可；后续回测任务会按 strategy-backtest-theme 阶段五自动归档。</p>
+                </div>
+              ) : (
+                <p className="ksq-hint">从左侧选择一个策略查看版本时间线与回测对比。</p>
+              )
             ) : detailLoading ? (
               <Loading text="加载策略详情…" />
             ) : (
@@ -289,6 +377,7 @@ export function StrategiesSection() {
                           <th>回撤 %</th>
                           <th>交易</th>
                           <th>时间</th>
+                          <th>看板 / 解读</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -310,6 +399,15 @@ export function StrategiesSection() {
                             <td className={`num ${metricClass('max_drawdown_pct', run.metrics?.max_drawdown_pct)}`}>{metric(run, 'max_drawdown_pct')}</td>
                             <td className="num">{metric(run, 'trade_count')}</td>
                             <td>{formatDateTime(run.created_at)}</td>
+                            <td>
+                              {runReportId(run) !== null && (
+                                <button className="ksq-linkbtn" type="button" onClick={() => void showReport(run.run_id)}>
+                                  {reportView?.runId === run.run_id ? '收起' : '看板'}
+                                </button>
+                              )}
+                              {runReportId(run) !== null ? ' ' : ''}
+                              <button className="ksq-linkbtn" type="button" onClick={() => askInterpret(run)}>解读</button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -355,6 +453,22 @@ export function StrategiesSection() {
             )}
           </section>
         </div>
+      )}
+      {reportView !== null && (
+        <PreviewDialog title="策略回测看板" onClose={closeReportView}>
+          <iframe title="策略回测看板" src={reportView.htmlUrl} sandbox="allow-scripts" />
+        </PreviewDialog>
+      )}
+
+      {pendingInterpret !== null && getAgentBridge() !== null && (
+        <TaskTargetMenu
+          taskKind="strategy"
+          title="策略解读发送到…"
+          prompt={pendingInterpret}
+          bridge={getAgentBridge()!}
+          useWorkspaces={useWorkspaces}
+          onClose={() => setPendingInterpret(null)}
+        />
       )}
       <CopyToast text={toast} />
     </div>

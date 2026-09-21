@@ -45,6 +45,15 @@ window.__ModuleLoader__.load({
 		const listStrategyRuns = (id) => get(`/kstock-api/strategies/${encodeURIComponent(id)}/runs`);
 		const compareStrategyRuns = (id, runIds) => get(`/kstock-api/strategies/${encodeURIComponent(id)}/compare?runs=${runIds.map(encodeURIComponent).join(",")}`);
 		const getStrategyRunEquity = (id, runId) => get(`/kstock-api/strategies/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/equity`);
+		async function fetchReportHtml(reportId) {
+			const response = await fetch(`/kstock-api/reports/${encodeURIComponent(reportId)}/content`);
+			if (!response.ok) throw new KsqError(response.status, `报告加载失败（${response.status}）`);
+			return response.text();
+		}
+		/** 报告 HTML 的 blob 预览地址。显式带 utf-8 charset——blob 文档不继承响应头，缺失时中文会被按 windows-1252 解码。 */
+		function reportBlobUrl(html) {
+			return URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+		}
 		//#endregion
 		//#region ../quant-ui/src/task-target.tsx
 		/**
@@ -60,6 +69,257 @@ window.__ModuleLoader__.load({
 		* 按任务类型（news / pick）分别记忆上次选择，下次菜单首项即默认；
 		* 单击任意项 = 发送 + 记忆 + 关闭。
 		*/
+		/**
+		* 标准路由桥实现（面板共用：新闻/选股库/因子库）。current=当前会话
+		* （无则默认建）；workspace=connectWorkspace（复用/新建 blank 会话并挂
+		* 进工作区分组——修复裸 create({cwd}) 的「未分组」与产物散落）。
+		*/
+		function buildTaskRouterBridge(deps) {
+			return {
+				send: async (target, text) => {
+					const sessions = deps.sessions;
+					if (sessions === void 0) throw new Error("会话服务不可用");
+					let id;
+					if (target.kind === "workspace") {
+						const uiWorkspace = deps.uiWorkspace;
+						if (uiWorkspace === void 0) throw new Error("工作区服务不可用");
+						id = await uiWorkspace.connectWorkspace(target.workspaceId);
+						sessions.open(id);
+					} else {
+						id = sessions.list.getSnapshot().current;
+						if (id === void 0) {
+							id = await sessions.create();
+							sessions.open(id);
+						}
+					}
+					const conversation = sessions.scope(id)?.get("conversation");
+					if (conversation === void 0) throw new Error("会话作用域不可用（conversation 服务缺席）");
+					await conversation.send(text);
+				},
+				pickDirectory: () => {
+					if (deps.uiWorkspace === void 0) return Promise.reject(/* @__PURE__ */ new Error("工作区服务不可用"));
+					return deps.uiWorkspace.pickDirectory();
+				},
+				registerWorkspace: async (path) => {
+					if (deps.workspaces === void 0) throw new Error("工作区注册服务不可用");
+					return await deps.workspaces.create({ path });
+				},
+				gotoConversation: () => deps.layout?.selectPanel(null)
+			};
+		}
+		/** 按任务类型记忆上次选择（news / pick 各记各的，互不覆盖）。 */
+		function loadMemory(taskKind) {
+			try {
+				const raw = localStorage.getItem(`kstock-task-route-${taskKind}`);
+				if (raw === null) return null;
+				const parsed = JSON.parse(raw);
+				if (parsed.kind === "current") return parsed;
+				if (parsed.kind === "workspace" && typeof parsed.workspaceId === "string") return parsed;
+			} catch {}
+			return null;
+		}
+		function saveMemory(taskKind, target) {
+			try {
+				localStorage.setItem(`kstock-task-route-${taskKind}`, JSON.stringify(target));
+			} catch {}
+		}
+		/** 读设置页「量化工作区」统一配置（无记忆时的默认目标；不可达返回 null）。 */
+		async function fetchDefaultPath() {
+			try {
+				const response = await fetch("/kstock-api/quant-workspace");
+				if (!response.ok) return null;
+				const data = await response.json();
+				return typeof data.path === "string" && data.path.trim() !== "" ? data.path : null;
+			} catch {
+				return null;
+			}
+		}
+		const sameDir = (a, b) => {
+			const norm = (p) => p.replace(/\/+$/, "") || "/";
+			return norm(a) === norm(b);
+		};
+		const targetKey = (target) => target === null ? "" : target.kind === "current" ? "current" : `ws:${target.workspaceId}`;
+		/**
+		* 内层：useWorkspaces 恒存在（由外层 TaskTargetMenu 保证），hook 无条件
+		* 调用——Rules of Hooks 合规（禁在 useMemo 回调/条件分支里调 hook，
+		* 实测会炸 Minified React error #311）。
+		*/
+		function MenuBody({ useWorkspaces, ...rest }) {
+			const items = useWorkspaces((snapshot) => snapshot.items ?? []);
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(MenuView, {
+				...rest,
+				items
+			});
+		}
+		/**
+		* 目标选择菜单外壳（零 hook）：useWorkspaces 缺席时降级渲染空列表，
+		* 存在时挂 MenuBody。分支发生在内层组件挂载之前——不同组件各自持有
+		* 稳定的 hooks 链，不会触发 hooks 数量漂移。
+		*/
+		function TaskTargetMenu(props) {
+			const { useWorkspaces, ...rest } = props;
+			if (useWorkspaces === void 0) return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(MenuView, {
+				...rest,
+				items: []
+			});
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(MenuBody, {
+				...rest,
+				useWorkspaces
+			});
+		}
+		/** 目标选择菜单纯展示层：全部 hooks 无条件调用（items 由上层解析）。 */
+		function MenuView({ items, taskKind, title, prompt, bridge, onClose }) {
+			const [memory] = (0, react.useState)(() => loadMemory(taskKind));
+			const [defaultPath, setDefaultPath] = (0, react.useState)(null);
+			const [busy, setBusy] = (0, react.useState)(null);
+			const [error, setError] = (0, react.useState)(null);
+			(0, react.useEffect)(() => {
+				fetchDefaultPath().then(setDefaultPath);
+			}, []);
+			const orderedItems = (0, react.useMemo)(() => {
+				const list = [...items];
+				if (memory?.kind === "workspace") {
+					const index = list.findIndex((item) => item.workspaceId === memory.workspaceId);
+					if (index > 0) list.unshift(...list.splice(index, 1));
+				} else if (defaultPath !== null) {
+					const index = list.findIndex((item) => sameDir(item.path, defaultPath));
+					if (index > 0) list.unshift(...list.splice(index, 1));
+				}
+				return list;
+			}, [
+				items,
+				memory,
+				defaultPath
+			]);
+			(0, react.useEffect)(() => {
+				const onKey = (event) => {
+					if (event.key === "Escape") onClose();
+				};
+				window.addEventListener("keydown", onKey);
+				return () => window.removeEventListener("keydown", onKey);
+			}, [onClose]);
+			const dispatch = (key, run) => {
+				if (busy !== null) return;
+				setBusy(key);
+				setError(null);
+				run().then(() => {
+					bridge.gotoConversation();
+					onClose();
+				}).catch((err) => {
+					setBusy(null);
+					setError(err instanceof Error ? err.message : "发送失败");
+				});
+			};
+			const sendTo = (target) => {
+				saveMemory(taskKind, target);
+				dispatch(targetKey(target), () => bridge.send(target, prompt));
+			};
+			const browse = () => {
+				dispatch("browse", async () => {
+					const picked = await bridge.pickDirectory();
+					if (picked === null) {
+						onClose();
+						return;
+					}
+					const view = await bridge.registerWorkspace(picked);
+					sendTo({
+						kind: "workspace",
+						workspaceId: view.workspaceId,
+						path: view.path
+					});
+				});
+			};
+			const lastKey = targetKey(memory);
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+				className: "ksq-overlay ksq-target-overlay",
+				role: "dialog",
+				"aria-modal": "true",
+				"aria-label": title,
+				onClick: onClose,
+				children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "ksq-target-menu",
+					onClick: (event) => event.stopPropagation(),
+					children: [
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+							className: "ksq-target-head",
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: title }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-item-meta",
+								children: items.length > 0 ? "选择任务归属的工作区（记住本次选择）" : "未获取到工作区列表"
+							})]
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+							type: "button",
+							className: `ksq-target-item ${lastKey === "current" ? "last" : ""}`,
+							disabled: busy !== null,
+							onClick: () => sendTo({ kind: "current" }),
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-target-name",
+								children: "跟随当前会话"
+							}), lastKey === "current" && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-badge tone-live",
+								children: "上次"
+							})]
+						}),
+						orderedItems.map((workspace) => {
+							const key = `ws:${workspace.workspaceId}`;
+							const isLast = lastKey === key;
+							const isDefault = !isLast && lastKey === "" && defaultPath !== null && sameDir(workspace.path, defaultPath);
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+								type: "button",
+								className: `ksq-target-item ${isLast ? "last" : ""}`,
+								disabled: busy !== null,
+								onClick: () => sendTo({
+									kind: "workspace",
+									workspaceId: workspace.workspaceId,
+									path: workspace.path
+								}),
+								children: [
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+										className: "ksq-target-name",
+										children: workspace.title || workspace.path.split("/").filter(Boolean).pop() || workspace.path
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+										className: "ksq-target-path",
+										children: workspace.path
+									}),
+									isLast && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+										className: "ksq-badge tone-live",
+										children: "上次"
+									}),
+									isDefault && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+										className: "ksq-badge tone-idle",
+										children: "默认"
+									})
+								]
+							}, workspace.workspaceId);
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+							type: "button",
+							className: "ksq-target-item",
+							disabled: busy !== null,
+							onClick: browse,
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-target-name",
+								children: busy === "browse" ? "选择中…" : "浏览选择目录…"
+							}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "ksq-target-path",
+								children: "新目录将注册为工作区后再发送"
+							})]
+						}),
+						error !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+							className: "ksq-target-error",
+							children: error
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+							type: "button",
+							className: "ksq-linkbtn ksq-target-cancel",
+							onClick: onClose,
+							children: "取消（Esc）"
+						})
+					]
+				})
+			});
+		}
 		//#endregion
 		//#region ../quant-ui/src/icons.tsx
 		function Svg({ size = 16, className, children }) {
@@ -151,6 +411,12 @@ window.__ModuleLoader__.load({
 					height: "12",
 					rx: "2"
 				}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" })]
+			});
+		}
+		function IconClose(props) {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(Svg, {
+				...props,
+				children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M18 6 6 18M6 6l12 12" })
 			});
 		}
 		//#endregion
@@ -342,6 +608,27 @@ window.__ModuleLoader__.load({
 				]
 			});
 		}
+		/** 全屏预览浮层（报告 HTML iframe）。 */
+		function PreviewDialog({ title, onClose, children }) {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+				className: "ksq-overlay",
+				role: "dialog",
+				"aria-modal": "true",
+				"aria-label": title,
+				children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "ksq-dialog",
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						className: "ksq-dialog-bar",
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: title }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+							type: "button",
+							className: "ksq-btn",
+							onClick: onClose,
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconClose, { size: 13 }), " 关闭"]
+						})]
+					}), children]
+				})
+			});
+		}
 		//#endregion
 		//#region ../quant-ui/src/index.ts
 		/**
@@ -374,6 +661,30 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		//#endregion
+		//#region src/client/agent.ts
+		let agentBridge = null;
+		function bindAgentBridge(bridge) {
+			agentBridge = bridge;
+		}
+		/** 面板组件取桥（未绑定返回 null，按钮静默降级）。 */
+		function getAgentBridge() {
+			return agentBridge;
+		}
+		/** 回测「解读」提示词：带策略名/假设/六指标上下文。 */
+		function interpretStrategyPrompt(input) {
+			const hypothesis = input.hypothesis !== void 0 && input.hypothesis !== "" ? `（假设：${input.hypothesis}）` : "";
+			const parts = [];
+			if (input.totalReturnPct !== void 0) parts.push(`总收益 ${input.totalReturnPct}%`);
+			if (input.annualReturnPct !== void 0) parts.push(`年化 ${input.annualReturnPct}%`);
+			if (input.sharpe !== void 0) parts.push(`夏普 ${input.sharpe}`);
+			if (input.maxDrawdownPct !== void 0) parts.push(`最大回撤 ${input.maxDrawdownPct}%`);
+			if (input.winRatePct !== void 0) parts.push(`胜率 ${input.winRatePct}%`);
+			if (input.tradeCount !== void 0) parts.push(`${input.tradeCount} 笔`);
+			const stats = parts.length > 0 ? `，最近回测：${parts.join(" / ")}` : "";
+			const range = input.range !== void 0 && input.range !== "" ? `，区间 ${input.range}` : "";
+			return `策略库「${input.strategyName}」v${input.version}${hypothesis}${stats}${range}：请解读该回测结果——收益风险比在同类策略的水平、最大回撤的成因与修复空间、交易频率与费率敏感性、过拟合风险（参数敏感性/样本内偏差）与实盘跟踪建议。当前会话若未挂载 strategy-research 技能，用网页检索补充并标注来源，禁止编造数值；数据缺失诚实标注「无数据」，不构成投资建议。`;
+		}
+		//#endregion
 		//#region src/client/section.tsx
 		/**
 		* 策略库面板：列表 + 版本时间线 + 回测运行 + 跨版本对比（净值叠加）。
@@ -402,7 +713,14 @@ window.__ModuleLoader__.load({
 			["win_rate_pct", "胜率 %"],
 			["trade_count", "交易次数"]
 		];
-		function StrategiesSection() {
+		/** 空态引导：让 agent 把最近一次策略回测结果归档进策略库的复制提示词。 */
+		const INGEST_PROMPT = "请把本工作区最近一次策略回测任务的结果归档进 KStock 策略库（引擎 http://127.0.0.1:18001，不可达则跳过并明说）。三步：1) POST /kstock-api/strategies，body {name: 策略名, hypothesis: 一句话策略逻辑假设}；2) POST /kstock-api/strategies/{strategy_id}/versions，body {code: 策略信号/回测核心代码全文, params: 参数 JSON, change_note}；3) POST /kstock-api/strategies/{strategy_id}/runs，body {version, data_start, data_end, rules: {universe, benchmark, report_id 报告库看板链}, metrics: {total_return_pct, annual_return_pct, sharpe_ratio, max_drawdown_pct, win_rate_pct, trade_count}, equity: 净值序列 JSON, trades: 交易清单 JSON}。多策略对比研究则每策略独立建资产，禁止整体跳过。数据取自工作区 data/ 与 reports/ 下的真实产物，禁止编造。";
+		/** run 的 rules.report_id（阶段五看板建链）。 */
+		function runReportId(run) {
+			const value = run?.rules?.report_id;
+			return typeof value === "string" && value !== "" ? value : null;
+		}
+		function StrategiesSection({ useWorkspaces } = {}) {
 			const [strategies, setStrategies] = (0, react.useState)([]);
 			const [loading, setLoading] = (0, react.useState)(true);
 			const [error, setError] = (0, react.useState)(null);
@@ -414,6 +732,8 @@ window.__ModuleLoader__.load({
 			const [comparison, setComparison] = (0, react.useState)(null);
 			const [equities, setEquities] = (0, react.useState)([]);
 			const [refreshing, setRefreshing] = (0, react.useState)(false);
+			const [reportView, setReportView] = (0, react.useState)(null);
+			const [pendingInterpret, setPendingInterpret] = (0, react.useState)(null);
 			const { copy, toast } = useCopyPrompt();
 			const reload = (0, react.useCallback)(async () => {
 				setError(null);
@@ -453,6 +773,8 @@ window.__ModuleLoader__.load({
 				setCompareIds([]);
 				setComparison(null);
 				setEquities([]);
+				closeReportView();
+				setPendingInterpret(null);
 				setError(null);
 				let active = true;
 				(async () => {
@@ -496,7 +818,61 @@ window.__ModuleLoader__.load({
 				};
 			}, [selectedId, compareIds]);
 			/** 重跑提示词：新体系无 KStock MCP 工具，改为引导 agent 经 /kstock-api 入库。 */
-			const rerunPrompt = (version) => `请重跑策略库中的「${selected?.name ?? ""}」（${selectedId}）：策略代码与参数采用 v${version.version} 版本（change_note：${version.change_note || "无"}），数据区间与交易规则参照该版本最近一次回测（无历史记录则用近 2 年日线 + 默认 A 股规则）。跑完后把结果入库：POST /kstock-api/strategies/${selectedId}/runs，version=${version.version}，附 data_start/data_end/rules/metrics/equity。`;
+			const rerunPrompt = (version) => `请重跑策略库中的「${selected?.name ?? ""}」（${selectedId}）：策略代码与参数采用 v${version.version} 版本（change_note：${version.change_note || "无"}），数据区间与交易规则参照该版本最近一次回测（无历史记录则用近 2 年日线 + 默认 A 股规则）。跑完后把结果入库：POST /kstock-api/strategies/${selectedId}/runs，version=${version.version}，附 data_start/data_end/rules（含 report_id 看板链）/metrics（total_return_pct/annual_return_pct/sharpe_ratio/max_drawdown_pct/win_rate_pct/trade_count）/equity/trades。`;
+			/** 关闭报告视图并释放 blob URL。 */
+			const closeReportView = (0, react.useCallback)(() => {
+				setReportView((current) => {
+					if (current?.htmlUrl) URL.revokeObjectURL(current.htmlUrl);
+					return null;
+				});
+			}, []);
+			/** 看板直嵌（rules.report_id → 报告库 HTML iframe），无链明示。 */
+			const showReport = (0, react.useCallback)(async (runId) => {
+				if (reportView?.runId === runId) {
+					closeReportView();
+					return;
+				}
+				const reportId = runReportId(runs.find((item) => item.run_id === runId));
+				closeReportView();
+				if (reportId === null) {
+					setError("该 run 未链接报告看板（rules 缺 report_id）");
+					return;
+				}
+				try {
+					const html = await fetchReportHtml(reportId);
+					setReportView({
+						runId,
+						htmlUrl: reportBlobUrl(html)
+					});
+				} catch {
+					setError("看板加载失败（报告可能已删除）");
+				}
+			}, [
+				reportView,
+				runs,
+				closeReportView
+			]);
+			/** 回测「解读」（§28）：先弹目标选择菜单（strategy 类型记忆）。 */
+			const askInterpret = (0, react.useCallback)((run) => {
+				if (selected === null) return;
+				if (getAgentBridge() === null) {
+					setError("会话联动不可用（sessions/layout 服务缺席）");
+					return;
+				}
+				const num = (value) => typeof value === "number" && Number.isFinite(value) ? value : void 0;
+				setPendingInterpret(interpretStrategyPrompt({
+					strategyName: selected.name,
+					hypothesis: selected.hypothesis,
+					version: run.version,
+					range: run.data_start !== "" && run.data_end !== "" ? `${run.data_start} ~ ${run.data_end}` : "",
+					totalReturnPct: num(run.metrics?.total_return_pct),
+					annualReturnPct: num(run.metrics?.annual_return_pct),
+					sharpe: num(run.metrics?.sharpe_ratio),
+					maxDrawdownPct: num(run.metrics?.max_drawdown_pct),
+					winRatePct: num(run.metrics?.win_rate_pct),
+					tradeCount: num(run.metrics?.trade_count)
+				}));
+			}, [selected]);
 			const equitySeries = (0, react.useMemo)(() => equities.map((item, index) => ({
 				label: `v${item.version}`,
 				values: normalizeEquity(item.equity),
@@ -529,7 +905,7 @@ window.__ModuleLoader__.load({
 							className: "ksq-list",
 							children: strategies.length === 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
 								className: "ksq-hint",
-								children: "暂无策略。在对话里让 agent 做「策略研究回测」并入库版本后，这里会出现策略资产。"
+								children: "暂无策略。用右侧提示词把最近一次回测结果入库。"
 							}) : strategies.map((strategy) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
 								type: "button",
 								className: `ksq-list-item ${strategy.strategy_id === selectedId ? "active" : ""}`,
@@ -573,7 +949,23 @@ window.__ModuleLoader__.load({
 							}, strategy.strategy_id))
 						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("section", {
 							className: "ksq-detail",
-							children: !selected ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+							children: !selected ? strategies.length === 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+								className: "ksq-empty",
+								children: [
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "策略库还是空的" }),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", { children: "策略回测任务的产物目前只落在工作区文件（data/ 与 reports/）里。归档进策略库后，这里会出现可回看净值叠加、跨版本对比、重跑的策略资产。" }),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+										className: "ksq-linkbtn",
+										type: "button",
+										onClick: () => copy(INGEST_PROMPT),
+										children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconCopy, { size: 11 }), " 复制「把最近一次回测结果入库」提示词"]
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+										className: "ksq-item-meta",
+										children: "粘贴到对话发送即可；后续回测任务会按 strategy-backtest-theme 阶段五自动归档。"
+									})
+								]
+							}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
 								className: "ksq-hint",
 								children: "从左侧选择一个策略查看版本时间线与回测对比。"
 							}) : detailLoading ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(Loading, { text: "加载策略详情…" }) : /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
@@ -669,7 +1061,8 @@ window.__ModuleLoader__.load({
 										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "夏普" }),
 										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "回撤 %" }),
 										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "交易" }),
-										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "时间" })
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "时间" }),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("th", { children: "看板 / 解读" })
 									] }) }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("tbody", { children: runs.map((run) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("tr", {
 										className: compareIds.includes(run.run_id) ? "selected" : "",
 										children: [
@@ -706,7 +1099,22 @@ window.__ModuleLoader__.load({
 												className: "num",
 												children: metric(run, "trade_count")
 											}),
-											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: formatDateTime(run.created_at) })
+											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: formatDateTime(run.created_at) }),
+											/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("td", { children: [
+												runReportId(run) !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+													className: "ksq-linkbtn",
+													type: "button",
+													onClick: () => void showReport(run.run_id),
+													children: reportView?.runId === run.run_id ? "收起" : "看板"
+												}),
+												runReportId(run) !== null ? " " : "",
+												/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+													className: "ksq-linkbtn",
+													type: "button",
+													onClick: () => askInterpret(run),
+													children: "解读"
+												})
+											] })
 										]
 									}, run.run_id)) })]
 								})] }),
@@ -749,16 +1157,30 @@ window.__ModuleLoader__.load({
 							] })
 						})]
 					}),
+					reportView !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(PreviewDialog, {
+						title: "策略回测看板",
+						onClose: closeReportView,
+						children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("iframe", {
+							title: "策略回测看板",
+							src: reportView.htmlUrl,
+							sandbox: "allow-scripts"
+						})
+					}),
+					pendingInterpret !== null && getAgentBridge() !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(TaskTargetMenu, {
+						taskKind: "strategy",
+						title: "策略解读发送到…",
+						prompt: pendingInterpret,
+						bridge: getAgentBridge(),
+						useWorkspaces,
+						onClose: () => setPendingInterpret(null)
+					}),
 					/* @__PURE__ */ (0, react_jsx_runtime.jsx)(CopyToast, { text: toast })
 				]
 			});
 		}
 		//#endregion
 		//#region src/client/page.tsx
-		/**
-		* 策略库 主区面板：页头 + 库 Section。
-		*/
-		function StrategiesPage() {
+		function StrategiesPage({ useWorkspaces } = {}) {
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: "ksq-page",
 				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("header", {
@@ -767,7 +1189,7 @@ window.__ModuleLoader__.load({
 						className: "ksq-title",
 						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "策略库" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: "策略研究资产沉淀：版本时间线与回测对比" })]
 					})
-				}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(StrategiesSection, {})]
+				}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(StrategiesSection, { useWorkspaces })]
 			});
 		}
 		//#endregion
@@ -778,6 +1200,10 @@ window.__ModuleLoader__.load({
 		* 注册 `main` keyed 面板（键 kstock-quant-strategies）+ `sidebar.panellist` 导航入口
 		* （同 id，侧栏自动接线 ctx.layout.selectPanel）；ksq 样式经
 		* @kstock/quant-ui 幂等注入（四个量化库插件共用一份）。
+		*
+		* 研究联动（§28）：回测 run「解读」按钮先弹 TaskTargetMenu 选任务归属
+		* （跟随当前会话/已注册子工作区/浏览注册新目录），按 strategy 类型记忆；
+		* 路由桥为 quant-ui 共享实现 buildTaskRouterBridge。
 		*/
 		/** 面板键：main slot 与侧栏入口共用。 */
 		const PANEL_KEY = "kstock-quant-strategies";
@@ -785,12 +1211,19 @@ window.__ModuleLoader__.load({
 		function NavIcon({ size }) {
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconCandles, { size: size ?? 18 });
 		}
-		/** 必需服务：slot 注册表。 */
-		const inject = ["slots"];
+		/** 必需服务：slot 注册表 + 会话作用域 + 面板切换 + 工作区面。 */
+		const inject = [
+			"slots",
+			"sessions",
+			"layout",
+			"uiWorkspace",
+			"workspaces"
+		];
 		/** 客户端插件体。 */
 		function apply(ctx) {
 			ctx.effect(() => {
 				injectQuantStyles();
+				bindAgentBridge(buildTaskRouterBridge(ctx));
 				ctx.slots.inject("main", () => ctx.slots.register({
 					name: "main",
 					key: PANEL_KEY
