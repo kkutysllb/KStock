@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   backchiPriceRelation, dateIndexOf, evidenceChain, LEVEL_OPTIONS, latestSignals, matrixLevels, parseChart,
-  pointTypeKey, pointWhy, radarDims, radarSummary, resolveIndex, stampOf, typeCnDir, zhongshuForecast,
-  zhongshuPosition, zhongshuTypeLabel,
+  pointTypeKey, pointWhy, radarDims, radarSummary, resolveIndex, stampOf, trendTypeCn, typeCnDir,
+  zhongshuForecast, zhongshuPosition, zhongshuTypeLabel,
 } from '../src/client/derive.ts'
 
 test('matrixLevels: 中间级别取低一档+当前+高两档', () => {
@@ -88,8 +88,8 @@ test('radarDims: 七维齐全 + 缺维为 null 退出总分', () => {
     latest_signals: [{ type: '1buy', price: 10, timestamp: 't', reliability: 0.7 }],
   }
   const dims = radarDims(payload, [
-    { status: 'ok', data: { trend_analysis: { type_cn: '上涨' } } },
-    { status: 'ok', data: { trend_analysis: { type_cn: '上涨' } } },
+    { status: 'ok', data: { trend_analysis: { trend_type_cn: '上涨' } } },
+    { status: 'ok', data: { trend_analysis: { trend_type_cn: '上涨' } } },
     { status: 'error' },
   ])
   assert.equal(dims.length, 7)
@@ -103,7 +103,7 @@ test('radarDims: 七维齐全 + 缺维为 null 退出总分', () => {
 })
 
 test('radarDims: 级别共振 <2 ok 行为 null', () => {
-  const dims = radarDims({ chart_data: {} }, [{ status: 'ok', data: { trend_analysis: { type_cn: '上涨' } } }])
+  const dims = radarDims({ chart_data: {} }, [{ status: 'ok', data: { trend_analysis: { trend_type_cn: '上涨' } } }])
   assert.equal(dims.find(d => d.key === 'level-resonance')!.value, null)
 })
 
@@ -112,7 +112,7 @@ test('pointWhy/evidenceChain: 定义行与推理链拼装', () => {
   assert.match(pointWhy('1buy', true), /一类买点/)
   assert.match(pointWhy('1buy', true), /背驰/)
   const segs = evidenceChain({
-    trend_analysis: { type_cn: '下跌', trend_strength: 0.4 },
+    trend_analysis: { trend_type_cn: '下跌', trend_strength: 0.4 },
     morphology: { zhongshus_count: 2 },
     chart_data: { backchis: [{ backchi_type: 'bottom', valid: true }] },
     dynamics: { buy_points: [{ type: '1buy', price: 10, timestamp: 't', reliability: 0.7, strength: 0.5, confirmed_by_higher: false }] },
@@ -139,7 +139,7 @@ test('radarSummary: 三档方向阈值（≥55 看多 / ≤45 看空 / 区间中
 
 test('evidenceChain: 买卖点并存时按 timestamp 取最新', () => {
   const segs = evidenceChain({
-    trend_analysis: { type_cn: '震荡' },
+    trend_analysis: { trend_type_cn: '震荡' },
     chart_data: {},
     dynamics: {
       buy_points: [{ type: '2buy', price: 10, timestamp: '2026-01-02 10:00', reliability: 0.6, strength: 0.5, confirmed_by_higher: false }],
@@ -202,4 +202,15 @@ test('typeCnDir: 复合措辞 flat 单源（雷达级别共振与矩阵共享）
   assert.equal(typeCnDir('盘整走势'), 'flat')
   assert.equal(typeCnDir('多空分歧'), 'flat')
   assert.equal(typeCnDir(''), 'flat')
+})
+
+test('trendTypeCn: 真实 payload 键 trend_type_cn 优先（修复 type_cn 契约错配回归）', () => {
+  // 引擎 TrendAnalysisResult.to_dict() 实际输出 trend_type_cn，无 type_cn 键
+  assert.equal(trendTypeCn({ trend_type_cn: '上涨走势' }), '上涨走势')
+  assert.equal(trendTypeCn({ type_cn: '上涨' }), '上涨') // 旧/别名键兼容
+  assert.equal(trendTypeCn({ trend_type_cn: '上涨走势', type_cn: '旧值' }), '上涨走势') // 真实键优先
+  assert.equal(trendTypeCn({}), '')
+  // 真实键链路端到端：归一化 → 方向判定命中
+  assert.equal(typeCnDir(trendTypeCn({ trend_type_cn: '上涨走势' })), 'up')
+  assert.equal(typeCnDir(trendTypeCn({ trend_type_cn: '盘整走势' })), 'flat')
 })

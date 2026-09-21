@@ -4,7 +4,7 @@
  */
 import {
   asNum, asRec, asStr, backchiKind, backchiPriceRelation, dateIndexOf, latestSignals, resolveIndex,
-  pointTypeKey, pointWhy, zhongshuForecast, zhongshuPosition, zhongshuTypeLabel,
+  pointTypeKey, pointWhy, trendTypeCn, zhongshuForecast, zhongshuPosition, zhongshuTypeLabel,
   type ChartHighlight, type ChartSlice, type Rec,
 } from './derive.ts'
 
@@ -122,7 +122,7 @@ export function BSPointsCard({ payload, chart, onFocus }: { payload: Rec; chart:
         const rel = asNum(r.reliability)
         const type = asStr(r.type)
         const isBuy = type.includes('buy') || type.includes('买')
-        const idx = di !== null ? resolveIndex(di, time) : -1
+        const idx = di !== null ? resolveIndex(di, time.slice(0, 16)) : -1 // 引擎信号时间戳带秒，dates 为分钟粒度——截齐再精确匹配
         return (
           <button
             key={`${time}-${type}`}
@@ -166,7 +166,7 @@ export function ZhongshuCard({ chart, payload, onFocus }: { chart: ChartSlice | 
   const di = dateIndexOf(chart.dates)
   const zones = chart.zhongshus.slice(-2).reverse()
   const lastClose = chart.kline.length > 0 ? chart.kline[chart.kline.length - 1]![1] : null
-  const trendCn = asStr(asRec(payload.trend_analysis).type_cn)
+  const trendCn = trendTypeCn(asRec(payload.trend_analysis))
   return (
     <div className="ksq-chanx-card">
       <div className="ksq-chanx-card-hd"><strong>③ 中枢演化</strong><span className="ksq-item-meta">{trendCn || '形态学'}</span></div>

@@ -194,6 +194,11 @@ export function zhongshuForecast(price: number | null, zs: ZhongshuZone): string
 
 // ── 缠论原生雷达 ─────────────────────────────────────────────────────────
 
+/** 引擎走势中文名归一化：to_dict() 实际输出 trend_type_cn（'上涨走势'/'盘整走势'/'未判定'）；type_cn 为旧别名键，兼容读取（真实键优先）。 */
+export function trendTypeCn(trend: Rec): string {
+  return asStr(trend.trend_type_cn) || asStr(trend.type_cn)
+}
+
 /** 引擎 type_cn（中文走势名）→ 方向；「多」「空」并存的复合措辞（如「多空分歧」）视为 flat。雷达级别共振与矩阵共用此单源。 */
 export function typeCnDir(cn: string): 'up' | 'down' | 'flat' {
   const up = cn.includes('上涨') || cn.includes('多')
@@ -242,7 +247,7 @@ export function radarDims(payload: Rec, matrixRows: MatrixBrief[]): RadarDim[] {
 
   { // 走势强度
     const strength = asNum(trend.trend_strength)
-    dims.push({ key: 'trend-strength', label: '走势强度', value: strength !== null ? clamp100(strength * 100) : null, basis: `trend_strength=${strength ?? '—'}（${asStr(trend.type_cn) || '未判定'}）` })
+    dims.push({ key: 'trend-strength', label: '走势强度', value: strength !== null ? clamp100(strength * 100) : null, basis: `trend_strength=${strength ?? '—'}（${trendTypeCn(trend) || '未判定'}）` })
   }
 
   { // 背驰压力：顶背驰记空方压力、底背驰记多方承接（±每处最多 30 分，|macd_divergence|×200 线性换算）
@@ -266,7 +271,7 @@ export function radarDims(payload: Rec, matrixRows: MatrixBrief[]): RadarDim[] {
   }
 
   { // 级别共振：矩阵 ok 行方向多数一致率（<2 ok 行 → null；方向判定单源 typeCnDir）
-    const dirs = matrixRows.filter(r => r.status === 'ok' && r.data !== undefined).map(r => typeCnDir(asStr(asRec(r.data!.trend_analysis).type_cn)))
+    const dirs = matrixRows.filter(r => r.status === 'ok' && r.data !== undefined).map(r => typeCnDir(trendTypeCn(asRec(r.data!.trend_analysis))))
     const directional = dirs.filter(d => d !== 'flat')
     if (directional.length >= 2) {
       const up = directional.filter(d => d === 'up').length
@@ -365,7 +370,7 @@ export function evidenceChain(payload: Rec, chart: ChartSlice | null): string[] 
   const trend = asRec(payload.trend_analysis)
   const morph = asRec(payload.morphology)
   const advice = asRec(payload.trading_advice)
-  const typeCn = asStr(trend.type_cn)
+  const typeCn = trendTypeCn(trend)
   const zsCount = asNum(morph.zhongshus_count) ?? 0
   const segs: string[] = []
 

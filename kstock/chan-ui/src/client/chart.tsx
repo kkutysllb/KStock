@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import {
-  asRec, asStr, dateIndexOf, resolveIndex, zhongshuPosition,
+  asRec, asStr, dateIndexOf, resolveIndex, trendTypeCn, zhongshuPosition,
   type ChartHighlight, type ChartSlice, type Rec,
 } from './derive.ts'
 
@@ -158,7 +158,7 @@ export function ChanChart({ chart, payload, view, onViewChange, highlight }: {
             </span>
           </>
         )}
-        <span className="ksq-chanx-badge">{asStr(trend.type_cn) || '走势未判定'}</span>
+        <span className="ksq-chanx-badge">{trendTypeCn(trend) || '走势未判定'}</span>
         {zsPos !== null && <span className={`ksq-chanx-badge ${zsPos === 'above' ? 'up' : zsPos === 'below' ? 'down' : ''}`}>中枢{zsPos === 'above' ? '上方' : zsPos === 'below' ? '下方' : '震荡中'}</span>}
         <span className="ksq-item-meta">{asStr(payload.stock_name)} {asStr(payload.stock_code)} · {asStr(payload.time_level)}</span>
       </div>

@@ -3,7 +3,7 @@
  * 关键位/综合评估 + 折叠的信号明细 chips。
  */
 import {
-  asArr, asNum, asRec, asStr, latestSignals, typeCnDir,
+  asArr, asNum, asRec, asStr, latestSignals, trendTypeCn, typeCnDir,
   type MatrixBrief, type RadarDim, type Rec,
 } from './derive.ts'
 
@@ -43,14 +43,14 @@ export function ChanRadar({ dims, summary }: {
         })}
       </svg>
       <div className="ksq-chanx-radar-meta">
-        <strong className={summary.direction === 'bullish' ? 'ksq-up' : summary.direction === 'bearish' ? 'ksq-down' : ''}>
+        <strong className={summary.direction === 'bullish' ? 'ksq-chanx-up' : summary.direction === 'bearish' ? 'ksq-chanx-down' : ''}>
           {summary.score !== null ? summary.score.toFixed(1) : '—'} 分 · {summary.direction === 'bullish' ? '偏多' : summary.direction === 'bearish' ? '偏空' : '中性'}
         </strong>
         <ul className="ksq-chanx-dims">
           {dims.map(d => (
             <li key={d.key} title={d.basis}>
               <em>{d.label}</em>
-              <b className={d.value === null ? '' : d.value >= 55 ? 'ksq-up' : d.value <= 45 ? 'ksq-down' : ''}>
+              <b className={d.value === null ? '' : d.value >= 55 ? 'ksq-chanx-up' : d.value <= 45 ? 'ksq-chanx-down' : ''}>
                 {d.value !== null ? d.value.toFixed(0) : '—'}
               </b>
             </li>
@@ -65,7 +65,7 @@ export function ChanRadar({ dims, summary }: {
 export interface MatrixRowUI { level: string; status: 'ok' | 'loading' | 'error' | 'empty'; data?: Rec; current?: boolean }
 
 const dirCn = (data: Rec): { cn: string; dir: 'up' | 'down' | 'flat' } => {
-  const cn = asStr(asRec(data.trend_analysis).type_cn)
+  const cn = trendTypeCn(asRec(data.trend_analysis))
   // typeCnDir 命中关键词才返回非 flat，命中即 cn 非空——空串恒 flat → 「未判定」
   const dir = typeCnDir(cn)
   return { cn: cn !== '' ? cn : '未判定', dir }
@@ -116,7 +116,7 @@ export function LevelMatrix({ rows }: { rows: MatrixRowUI[] }): React.ReactEleme
             return (
               <tr key={row.level} className={`${current ? 'cur' : ''} ${resonant ? (majority === 'up' ? 'res-up' : 'res-down') : ''}`}>
                 <td>{row.level}{current ? ' *' : ''}</td>
-                <td className={dir === 'up' ? 'ksq-up' : dir === 'down' ? 'ksq-down' : ''}>{cn}</td>
+                <td className={dir === 'up' ? 'ksq-chanx-up' : dir === 'down' ? 'ksq-chanx-down' : ''}>{cn}</td>
                 <td>{latestPoint !== undefined ? asStr(latestPoint.type) || '—' : '—'}</td>
                 <td className="ksq-mono">{score !== null ? score.toFixed(0) : '—'}</td>
                 <td className="ksq-mono">{backchi !== null ? String(backchi) : '—'}</td>

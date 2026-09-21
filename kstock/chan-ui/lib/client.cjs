@@ -533,6 +533,10 @@ window.__ModuleLoader__.load({
 			if (price !== null && price < zs.low) return `中枢下沿区内：跌破 DD ${f(bottom)} → 防中枢下移`;
 			return `中枢震荡中：关注 GG ${f(top)} / DD ${f(bottom)} 的突破方向`;
 		}
+		/** 引擎走势中文名归一化：to_dict() 实际输出 trend_type_cn（'上涨走势'/'盘整走势'/'未判定'）；type_cn 为旧别名键，兼容读取（真实键优先）。 */
+		function trendTypeCn(trend) {
+			return asStr(trend.trend_type_cn) || asStr(trend.type_cn);
+		}
 		/** 引擎 type_cn（中文走势名）→ 方向；「多」「空」并存的复合措辞（如「多空分歧」）视为 flat。雷达级别共振与矩阵共用此单源。 */
 		function typeCnDir(cn) {
 			const up = cn.includes("上涨") || cn.includes("多");
@@ -583,7 +587,7 @@ window.__ModuleLoader__.load({
 					key: "trend-strength",
 					label: "走势强度",
 					value: strength !== null ? clamp100(strength * 100) : null,
-					basis: `trend_strength=${strength ?? "—"}（${asStr(trend.type_cn) || "未判定"}）`
+					basis: `trend_strength=${strength ?? "—"}（${trendTypeCn(trend) || "未判定"}）`
 				});
 			}
 			{
@@ -615,7 +619,7 @@ window.__ModuleLoader__.load({
 				});
 			}
 			{
-				const dirs = matrixRows.filter((r) => r.status === "ok" && r.data !== void 0).map((r) => typeCnDir(asStr(asRec(r.data.trend_analysis).type_cn)));
+				const dirs = matrixRows.filter((r) => r.status === "ok" && r.data !== void 0).map((r) => typeCnDir(trendTypeCn(asRec(r.data.trend_analysis))));
 				const directional = dirs.filter((d) => d !== "flat");
 				if (directional.length >= 2) {
 					const up = directional.filter((d) => d === "up").length;
@@ -719,7 +723,7 @@ window.__ModuleLoader__.load({
 			const trend = asRec(payload.trend_analysis);
 			const morph = asRec(payload.morphology);
 			const advice = asRec(payload.trading_advice);
-			const typeCn = asStr(trend.type_cn);
+			const typeCn = trendTypeCn(trend);
 			const zsCount = asNum(morph.zhongshus_count) ?? 0;
 			const segs = [];
 			segs.push(typeCn !== "" ? `${typeCn}${countCn(zsCount)}中枢` : "走势未判定");
@@ -878,7 +882,7 @@ window.__ModuleLoader__.load({
 						})] }),
 						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
 							className: "ksq-chanx-badge",
-							children: asStr(trend.type_cn) || "走势未判定"
+							children: trendTypeCn(trend) || "走势未判定"
 						}),
 						zsPos !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 							className: `ksq-chanx-badge ${zsPos === "above" ? "up" : zsPos === "below" ? "down" : ""}`,
@@ -1611,7 +1615,7 @@ window.__ModuleLoader__.load({
 						const rel = asNum(r.reliability);
 						const type = asStr(r.type);
 						const isBuy = type.includes("buy") || type.includes("买");
-						const idx = di !== null ? resolveIndex(di, time) : -1;
+						const idx = di !== null ? resolveIndex(di, time.slice(0, 16)) : -1;
 						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
 							type: "button",
 							className: "ksq-chanx-bsrow",
@@ -1703,7 +1707,7 @@ window.__ModuleLoader__.load({
 			const di = dateIndexOf(chart.dates);
 			const zones = chart.zhongshus.slice(-2).reverse();
 			const lastClose = chart.kline.length > 0 ? chart.kline[chart.kline.length - 1][1] : null;
-			const trendCn = asStr(asRec(payload.trend_analysis).type_cn);
+			const trendCn = trendTypeCn(asRec(payload.trend_analysis));
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: "ksq-chanx-card",
 				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
@@ -1855,7 +1859,7 @@ window.__ModuleLoader__.load({
 					className: "ksq-chanx-radar-meta",
 					children: [
 						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("strong", {
-							className: summary.direction === "bullish" ? "ksq-up" : summary.direction === "bearish" ? "ksq-down" : "",
+							className: summary.direction === "bullish" ? "ksq-chanx-up" : summary.direction === "bearish" ? "ksq-chanx-down" : "",
 							children: [
 								summary.score !== null ? summary.score.toFixed(1) : "—",
 								" 分 · ",
@@ -1867,7 +1871,7 @@ window.__ModuleLoader__.load({
 							children: dims.map((d) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("li", {
 								title: d.basis,
 								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("em", { children: d.label }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", {
-									className: d.value === null ? "" : d.value >= 55 ? "ksq-up" : d.value <= 45 ? "ksq-down" : "",
+									className: d.value === null ? "" : d.value >= 55 ? "ksq-chanx-up" : d.value <= 45 ? "ksq-chanx-down" : "",
 									children: d.value !== null ? d.value.toFixed(0) : "—"
 								})]
 							}, d.key))
@@ -1881,7 +1885,7 @@ window.__ModuleLoader__.load({
 			});
 		}
 		const dirCn = (data) => {
-			const cn = asStr(asRec(data.trend_analysis).type_cn);
+			const cn = trendTypeCn(asRec(data.trend_analysis));
 			const dir = typeCnDir(cn);
 			return {
 				cn: cn !== "" ? cn : "未判定",
@@ -1933,7 +1937,7 @@ window.__ModuleLoader__.load({
 								children: [
 									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("td", { children: [row.level, current ? " *" : ""] }),
 									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", {
-										className: dir === "up" ? "ksq-up" : dir === "down" ? "ksq-down" : "",
+										className: dir === "up" ? "ksq-chanx-up" : dir === "down" ? "ksq-chanx-down" : "",
 										children: cn
 									}),
 									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("td", { children: latestPoint !== void 0 ? asStr(latestPoint.type) || "—" : "—" }),
@@ -2090,7 +2094,7 @@ window.__ModuleLoader__.load({
 				const r = asRec(item);
 				return `${asNum(r.low)?.toFixed(2) ?? "?"}~${asNum(r.high)?.toFixed(2) ?? "?"}`;
 			});
-			return `缠论研究面板对 ${asStr(payload.stock_name) || stock}（${asStr(payload.stock_code)}，${level} 级）的结构分析：K线 ${asNum(morph.klines_count) ?? "?"} 根 → 分型 ${asNum(morph.fenxings_count) ?? "?"} / 笔 ${asNum(morph.bis_count) ?? "?"} / 段 ${asNum(morph.segs_count) ?? "?"} / 中枢 ${asNum(morph.zhongshus_count) ?? "?"}${zhongshus.length > 0 ? `（区间 ${zhongshus.join("、")}）` : ""}；走势 ${asStr(trend.type_cn) || asStr(trend.type)}（强度 ${asNum(trend.trend_strength) ?? "?"}），现价 ${asNum(trend.latest_price) ?? "?"}；买卖点 买 ${asNum(asRec(payload.dynamics).buy_points_count) ?? 0} / 卖 ${asNum(asRec(payload.dynamics).sell_points_count) ?? 0}，背驰 ${asNum(asRec(payload.dynamics).backchi_count) ?? 0} 处；操作参考 ${asStr(advice.recommended_action)}；信号评分 ${asNum(scores.final_score) ?? "?"}（${asStr(scores.direction)} / ${asStr(scores.strength)}），信号明细：${signals.length > 0 ? signals.join("；") : "无"}。请做缠论深度解读：当前级别在走势中的位置（趋势/盘整）、中枢演化方向、买卖点的级别联立确认（可再跑多级别）、背驰与动能结构、操作计划（入场/止损/目标位与级别匹配）与失效条件。可用 stock-analysis 技能的缠论引擎补充多级别分析；数据缺失诚实标注「无数据」，不构成投资建议。`;
+			return `缠论研究面板对 ${asStr(payload.stock_name) || stock}（${asStr(payload.stock_code)}，${level} 级）的结构分析：K线 ${asNum(morph.klines_count) ?? "?"} 根 → 分型 ${asNum(morph.fenxings_count) ?? "?"} / 笔 ${asNum(morph.bis_count) ?? "?"} / 段 ${asNum(morph.segs_count) ?? "?"} / 中枢 ${asNum(morph.zhongshus_count) ?? "?"}${zhongshus.length > 0 ? `（区间 ${zhongshus.join("、")}）` : ""}；走势 ${trendTypeCn(trend) || asStr(trend.type)}（强度 ${asNum(trend.trend_strength) ?? "?"}），现价 ${asNum(trend.latest_price) ?? "?"}；买卖点 买 ${asNum(asRec(payload.dynamics).buy_points_count) ?? 0} / 卖 ${asNum(asRec(payload.dynamics).sell_points_count) ?? 0}，背驰 ${asNum(asRec(payload.dynamics).backchi_count) ?? 0} 处；操作参考 ${asStr(advice.recommended_action)}；信号评分 ${asNum(scores.final_score) ?? "?"}（${asStr(scores.direction)} / ${asStr(scores.strength)}），信号明细：${signals.length > 0 ? signals.join("；") : "无"}。请做缠论深度解读：当前级别在走势中的位置（趋势/盘整）、中枢演化方向、买卖点的级别联立确认（可再跑多级别）、背驰与动能结构、操作计划（入场/止损/目标位与级别匹配）与失效条件。可用 stock-analysis 技能的缠论引擎补充多级别分析；数据缺失诚实标注「无数据」，不构成投资建议。`;
 		}
 		/** 窄屏检测（<1100px 中栏并入右栏 Tab 化）。 */
 		function useNarrow() {
@@ -2384,6 +2388,10 @@ window.__ModuleLoader__.load({
 						error !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
 							className: "ksq-note",
 							children: error
+						}),
+						!loading && error === null && payload === null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+							className: "ksq-note",
+							children: "本级别数据不足（引擎返回为空或有效 K 线过少），请切换级别或稍后再试。"
 						}),
 						payload !== null && chart !== null && !narrow && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 							className: "ksq-chanx-grid",

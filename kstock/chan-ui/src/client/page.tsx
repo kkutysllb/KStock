@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { TaskTargetMenu, type TaskRouterBridge, type UseWorkspaces } from '@kstock/quant-ui'
 import {
   asArr, asNum, asRec, asStr, evidenceChain, matrixLevels, parseChart,
-  radarDims, radarSummary, LEVEL_OPTIONS,
+  radarDims, radarSummary, trendTypeCn, LEVEL_OPTIONS,
   type ChartHighlight, type ChartSlice, type MatrixBrief, type Rec,
 } from './derive.ts'
 import { ChanChart } from './chart.tsx'
@@ -33,7 +33,7 @@ function interpretChanPrompt(payload: Rec, stock: string, level: string): string
   })
   return `缠论研究面板对 ${asStr(payload.stock_name) || stock}（${asStr(payload.stock_code)}，${level} 级）的结构分析：`
     + `K线 ${asNum(morph.klines_count) ?? '?'} 根 → 分型 ${asNum(morph.fenxings_count) ?? '?'} / 笔 ${asNum(morph.bis_count) ?? '?'} / 段 ${asNum(morph.segs_count) ?? '?'} / 中枢 ${asNum(morph.zhongshus_count) ?? '?'}${zhongshus.length > 0 ? `（区间 ${zhongshus.join('、')}）` : ''}；`
-    + `走势 ${asStr(trend.type_cn) || asStr(trend.type)}（强度 ${asNum(trend.trend_strength) ?? '?'}），现价 ${asNum(trend.latest_price) ?? '?'}；`
+    + `走势 ${trendTypeCn(trend) || asStr(trend.type)}（强度 ${asNum(trend.trend_strength) ?? '?'}），现价 ${asNum(trend.latest_price) ?? '?'}；`
     + `买卖点 买 ${asNum(asRec(payload.dynamics).buy_points_count) ?? 0} / 卖 ${asNum(asRec(payload.dynamics).sell_points_count) ?? 0}，背驰 ${asNum(asRec(payload.dynamics).backchi_count) ?? 0} 处；`
     + `操作参考 ${asStr(advice.recommended_action)}；信号评分 ${asNum(scores.final_score) ?? '?'}（${asStr(scores.direction)} / ${asStr(scores.strength)}），信号明细：${signals.length > 0 ? signals.join('；') : '无'}。`
     + `请做缠论深度解读：当前级别在走势中的位置（趋势/盘整）、中枢演化方向、买卖点的级别联立确认（可再跑多级别）、`
@@ -240,6 +240,9 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
           )}
         </div>
         {error !== null && <p className="ksq-note">{error}</p>}
+        {!loading && error === null && payload === null && (
+          <p className="ksq-note">本级别数据不足（引擎返回为空或有效 K 线过少），请切换级别或稍后再试。</p>
+        )}
 
         {payload !== null && chart !== null && !narrow && (
           <div className="ksq-chanx-grid">
