@@ -1374,6 +1374,135 @@ def _fix_tushare_client_token(text: str) -> str | None:
     return text.replace(_TUSHARE_SET_TOKEN_ANCHOR, _TUSHARE_SET_TOKEN_REPLACEMENT, 1)
 
 
+
+
+# ── 补丁 17：缠论引擎动力学全套输出（§29-8）────────────────────────
+# 面板动力学可视化的数据缺口：① MACD 序列未输出（KLine 模型无 macd_data，
+# 引擎只在内部分析背驰时算）——_build_chart_data 内现算 EMA12/26/9 并
+# 与 120 根窗口对齐；② 买卖点 markers 已有 label（BUY_1 等枚举）但缺
+# 高低级别确认位；③ 中枢只输出 high/low，缺 GG/DD 震荡区间（从
+# forming_segs 极值算）与 extend_count/类型/稳定性；④ 分型列表与背驰
+# 段详情（两段区间 + MACD 面积对比）完全没输出。四处锚点增强。
+_CHAN_SCRIPT_REL = "public/stock-analysis/scripts/analyze_stock_chan.py"
+_CHAN_PATCH_MARKER = "KStock patch: 动力学全套输出"
+_CHAN_MACD_ANCHOR = """        # 笔数据 — 连接分型端点的折线
+        bi_lines = []"""
+_CHAN_MACD_REPLACEMENT = """        # KStock patch: 动力学全套输出——MACD 序列现算（EMA12/26/9 基于全量
+        # processed K 线递推后切窗口，与 dates/kline 对齐；None 由面板跳过）。
+        all_klines = list(klines)
+        def _ema_series(values, period):
+            out = []
+            prev = None
+            alpha = 2.0 / (period + 1)
+            for v in values:
+                prev = v if prev is None else prev * (1 - alpha) + v * alpha
+                out.append(prev)
+            return out
+        closes_all = [k.close for k in all_klines]
+        dif_all = [f - s for f, s in zip(_ema_series(closes_all, 12), _ema_series(closes_all, 26))]
+        dea_all = _ema_series(dif_all, 9)
+        offset = len(all_klines) - len(recent_klines)
+        macd_dif = [round(v, 4) for v in dif_all[offset:]]
+        macd_dea = [round(v, 4) for v in dea_all[offset:]]
+        macd_hist = [round((d - e) * 2, 4) for d, e in zip(dif_all[offset:], dea_all[offset:])]
+
+        # 笔数据 — 连接分型端点的折线
+        bi_lines = []"""
+_CHAN_ZS_ANCHOR = """            zhongshu_zones.append({
+                'start_time': zs.start_time.strftime('%Y-%m-%d %H:%M'),
+                'end_time': zs.end_time.strftime('%Y-%m-%d %H:%M'),"""
+_CHAN_ZS_REPLACEMENT = """            gg = max((max(b.start_price, b.end_price) for sg in zs.forming_segs for b in sg.bis), default=zs.high)
+            dd = min((min(b.start_price, b.end_price) for sg in zs.forming_segs for b in sg.bis), default=zs.low)
+            zhongshu_zones.append({
+                'start_time': zs.start_time.strftime('%Y-%m-%d %H:%M'),
+                'end_time': zs.end_time.strftime('%Y-%m-%d %H:%M'),
+                'gg': round(gg, 2),
+                'dd': round(dd, 2),
+                'extend_count': zs.extend_count,
+                'zhongshu_type': str(zs.zhongshu_type),
+                'stability': round(zs.stability, 3),"""
+_CHAN_MARKER_ANCHOR = """                'label': str(point.point_type),
+                'reliability': round(point.reliability, 3),
+                'strength': round(point.strength, 3),
+            }"""
+_CHAN_MARKER_REPLACEMENT = """                'label': point.point_type.name,
+                'reliability': round(point.reliability, 3),
+                'strength': round(point.strength, 3),
+                'confirmed_by_higher': point.confirmed_by_higher_level,
+                'confirmed_by_lower': point.confirmed_by_lower_level,
+            }"""
+_CHAN_RETURN_ANCHOR = """        return {
+            'dates': dates,
+            'kline': kline_data,
+            'volumes': volumes,
+            'bi_lines': bi_lines,
+            'seg_lines': seg_lines,
+            'zhongshu_zones': zhongshu_zones,
+            'markers': markers,
+        }"""
+_CHAN_RETURN_REPLACEMENT = """        # KStock patch: 分型列表（窗口内）与背驰段详情输出。
+        window_start = recent_klines[0].timestamp if recent_klines else None
+        fenxing_marks = []
+        for fx in result.fenxings:
+            k = fx.kline
+            if window_start is not None and k.timestamp < window_start:
+                continue
+            fenxing_marks.append({
+                'time': k.timestamp.strftime('%Y-%m-%d %H:%M'),
+                'fenxing_type': 'top' if fx.fenxing_type.value in ('top', 1) or 'top' in str(fx.fenxing_type).lower() else 'bottom',
+                'price': round(k.high if 'top' in str(fx.fenxing_type).lower() else k.low, 2),
+                'strength': round(fx.strength, 3),
+            })
+        backchi_details = []
+        for bc in result.backchi_analyses:
+            try:
+                valid = bc.is_valid_backchi()
+            except Exception:
+                valid = False
+            backchi_details.append({
+                'backchi_type': str(bc.backchi_type),
+                'valid': valid,
+                'current_start': bc.current_seg.start_time.strftime('%Y-%m-%d %H:%M'),
+                'current_end': bc.current_seg.end_time.strftime('%Y-%m-%d %H:%M'),
+                'previous_start': bc.previous_seg.start_time.strftime('%Y-%m-%d %H:%M'),
+                'previous_end': bc.previous_seg.end_time.strftime('%Y-%m-%d %H:%M'),
+                'current_macd_area': round(bc.current_macd_area, 4),
+                'previous_macd_area': round(bc.previous_macd_area, 4),
+                'macd_divergence': round(bc.macd_divergence, 4),
+            })
+        return {
+            'dates': dates,
+            'kline': kline_data,
+            'volumes': volumes,
+            'bi_lines': bi_lines,
+            'seg_lines': seg_lines,
+            'zhongshu_zones': zhongshu_zones,
+            'markers': markers,
+            'macd': {'dif': macd_dif, 'dea': macd_dea, 'hist': macd_hist},
+            'fenxings': fenxing_marks,
+            'backchis': backchi_details,
+        }"""
+
+
+def _fix_chan_dynamics_output(text: str) -> str | None:
+    """缠论引擎 chart_data 动力学全套输出；已修/锚点失配返回 None。"""
+    if _CHAN_PATCH_MARKER in text:
+        return None
+    for anchor, replacement in (
+        (_CHAN_MACD_ANCHOR, _CHAN_MACD_REPLACEMENT),
+        (_CHAN_ZS_ANCHOR, _CHAN_ZS_REPLACEMENT),
+        (_CHAN_MARKER_ANCHOR, _CHAN_MARKER_REPLACEMENT),
+        (_CHAN_RETURN_ANCHOR, _CHAN_RETURN_REPLACEMENT),
+    ):
+        if anchor not in text:
+            return None
+    patched = text.replace(_CHAN_MACD_ANCHOR, _CHAN_MACD_REPLACEMENT, 1)
+    patched = patched.replace(_CHAN_ZS_ANCHOR, _CHAN_ZS_REPLACEMENT, 1)
+    patched = patched.replace(_CHAN_MARKER_ANCHOR, _CHAN_MARKER_REPLACEMENT, 1)
+    patched = patched.replace(_CHAN_RETURN_ANCHOR, _CHAN_RETURN_REPLACEMENT, 1)
+    return patched
+
+
 # ── KStock 自有技能 ensure（kstock/skills → vendor/skills/public）────────
 # 源码在 kstock/skills/<name>（上游同步整体覆盖 vendor 时不受影响），补丁器
 # 把它们 ensure 进 vendor 技能目录：html-report（自研渲染器）、market-linkage
@@ -1610,6 +1739,11 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
             continue
         if _patch_file(target, rel_path, _fix_tushare_client_token):
             changed.append(rel_path)
+    # 缠论引擎动力学全套输出（§29-8，补丁 17）。
+    chan_script = vendor_root / _CHAN_SCRIPT_REL
+    if chan_script.exists():
+        if _patch_file(chan_script, _CHAN_SCRIPT_REL, _fix_chan_dynamics_output):
+            changed.append(_CHAN_SCRIPT_REL)
     # preset 随行技能目录发布（技能随 preset 分发，cordis 模式）。
     if _publish_preset_skills(vendor_root):
         changed.append("kstock/presets/*/skills")

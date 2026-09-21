@@ -410,14 +410,47 @@ window.__ModuleLoader__.load({
 						end_time: asStr(r.end_time),
 						high: asNum(r.high) ?? 0,
 						low: asNum(r.low) ?? 0,
-						center: asNum(r.center) ?? 0
+						center: asNum(r.center) ?? 0,
+						gg: asNum(r.gg) ?? void 0,
+						dd: asNum(r.dd) ?? void 0,
+						extendCount: asNum(r.extend_count) ?? void 0
 					};
 				}),
-				markers: asArr(c.markers).map(asRec)
+				markers: asArr(c.markers).map(asRec),
+				macd: {
+					dif: asArr(asRec(c.macd).dif),
+					dea: asArr(asRec(c.macd).dea),
+					hist: asArr(asRec(c.macd).hist)
+				},
+				fenxings: asArr(c.fenxings).map((item) => {
+					const r = asRec(item);
+					return {
+						time: asStr(r.time),
+						fenxingType: asStr(r.fenxing_type),
+						price: asNum(r.price) ?? 0,
+						strength: asNum(r.strength) ?? 0
+					};
+				}),
+				backchis: asArr(c.backchis).map((item) => {
+					const r = asRec(item);
+					return {
+						backchiType: asStr(r.backchi_type),
+						valid: r.valid === true,
+						currentStart: asStr(r.current_start),
+						currentEnd: asStr(r.current_end),
+						previousStart: asStr(r.previous_start),
+						previousEnd: asStr(r.previous_end)
+					};
+				})
 			};
 		}
 		const LEVEL_OPTIONS = [
+			"5min",
+			"15min",
 			"30min",
+			"60min",
+			"90min",
+			"120min",
 			"daily",
 			"weekly",
 			"monthly"
@@ -427,7 +460,8 @@ window.__ModuleLoader__.load({
 		const H_VOL = 56;
 		const PAD_L = 54;
 		const PAD_R = 14;
-		const H_TOTAL = 382;
+		const H_MACD = 62;
+		const H_TOTAL = 450;
 		/**
 		* K 线缠论主图（含成交量副图）：滚轮缩放（鼠标为锚）+ 拖拽平移 +
 		* 双击复位 + hover 十字线逐根读值。价格轴按可视窗口自适应。
@@ -573,15 +607,48 @@ window.__ModuleLoader__.load({
 							children: price.toFixed(2)
 						})] }, `grid-${ratio}`);
 					}),
+					chart.backchis.filter((bc) => bc.valid).map((bc, i) => {
+						const x1 = indexOfTime(bc.previousStart);
+						const x2 = indexOfTime(bc.currentEnd);
+						if (x1 < 0 || x2 < x1 || x2 < view.start || x1 > winEnd) return null;
+						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+							x: x(x1) - slot / 2,
+							y: 10,
+							width: (x2 - x1 + 1) * slot,
+							height: H_MAIN - 20,
+							fill: "rgba(230,70,70,0.07)",
+							stroke: "#e64646",
+							strokeWidth: "0.8",
+							strokeDasharray: "3,4"
+						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+							x: Math.max(56, x(x1) + 3),
+							y: 22,
+							fontSize: "9.5",
+							fill: "#e64646",
+							children: "背驰段对比"
+						})] }, `bc-${i}`);
+					}),
 					chart.zhongshus.map((zone, i) => {
 						const x1 = indexOfTime(zone.start_time);
 						const x2 = indexOfTime(zone.end_time);
 						if (x1 < 0 || x2 < x1 || x2 < view.start || x1 > winEnd) return null;
+						const zoneW = (x2 - x1 + 1) * slot;
 						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [
+							zone.gg !== void 0 && zone.dd !== void 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+								x: x(x1) - slot / 2,
+								y: yMain(zone.gg),
+								width: zoneW,
+								height: Math.max(2, yMain(zone.dd) - yMain(zone.gg)),
+								fill: "none",
+								stroke: "#c792ea",
+								strokeWidth: "0.7",
+								strokeDasharray: "2,4",
+								opacity: "0.65"
+							}),
 							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
 								x: x(x1) - slot / 2,
 								y: yMain(zone.high),
-								width: (x2 - x1 + 1) * slot,
+								width: zoneW,
 								height: Math.max(2, yMain(zone.low) - yMain(zone.high)),
 								fill: "rgba(199,146,234,0.14)",
 								stroke: "#c792ea",
@@ -606,7 +673,9 @@ window.__ModuleLoader__.load({
 									"中枢 ",
 									zone.low.toFixed(2),
 									"~",
-									zone.high.toFixed(2)
+									zone.high.toFixed(2),
+									zone.extendCount !== void 0 && zone.extendCount > 0 ? ` ·延伸${zone.extendCount}` : "",
+									zone.gg !== void 0 && zone.dd !== void 0 ? ` ·震荡 ${zone.dd.toFixed(2)}~${zone.gg.toFixed(2)}` : ""
 								]
 							})
 						] }, `zs-${i}`);
@@ -662,27 +731,46 @@ window.__ModuleLoader__.load({
 							opacity: "0.9"
 						}, `seg-${i}`);
 					}),
+					chart.fenxings.map((fx, i) => {
+						const index = indexOfTime(fx.time);
+						if (index < 0 || index < view.start || index >= winEnd) return null;
+						const isTop = fx.fenxingType === "top";
+						const py = isTop ? yMain(chart.kline[index]?.[3] ?? fx.price) : yMain(chart.kline[index]?.[2] ?? fx.price);
+						const dir = isTop ? 1 : -1;
+						return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("g", {
+							opacity: view.count > 60 ? .45 : .9,
+							children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", {
+								d: `M${x(index)},${py - dir * 5} l-4,${dir * 6} l8,0 Z`,
+								fill: isTop ? "#e64646" : "#2f9e77"
+							})
+						}, `fx-${i}`);
+					}),
 					chart.markers.map((marker, i) => {
 						const time = asStr(marker.time ?? marker.date);
 						const index = indexOfTime(time);
 						const price = asNum(marker.price);
 						if (index < 0 || price === null || index < view.start || index >= winEnd) return null;
-						const label = asStr(marker.label ?? marker.type ?? "?");
-						const isBuy = label.toLowerCase().includes("b") || label.includes("买");
+						const raw = asStr(marker.label ?? marker.type ?? "?");
+						const isBuy = raw.toUpperCase().includes("BUY") || raw.includes("买");
+						const cls = raw.match(/[123]/)?.[0] ?? "?";
+						const label = `${isBuy ? "B" : "S"}${cls}`;
+						const color = isBuy ? cls === "3" ? "#22a06b" : "#31c7a2" : cls === "3" ? "#c74040" : "#e64646";
 						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("circle", {
 							cx: x(index),
 							cy: yMain(price),
-							r: "7",
-							fill: isBuy ? "#31c7a2" : "#e64646",
-							opacity: "0.92"
+							r: "8",
+							fill: color,
+							opacity: "0.95",
+							stroke: "#fff",
+							strokeWidth: "1"
 						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
 							x: x(index),
 							y: yMain(price) + 3,
 							fontSize: "8.5",
 							textAnchor: "middle",
 							fill: "#fff",
-							fontWeight: "600",
-							children: label.slice(0, 2)
+							fontWeight: "700",
+							children: label
 						})] }, `mk-${i}`);
 					}),
 					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
@@ -712,6 +800,95 @@ window.__ModuleLoader__.load({
 						fill: "var(--dsw-alias-label-tertiary)",
 						children: "量"
 					}),
+					(() => {
+						const yMacdTop = 362;
+						const hMacd = H_MACD - 12;
+						const windowHist = chart.macd.hist.slice(view.start, winEnd).map((v) => v ?? 0);
+						const windowDif = chart.macd.dif.slice(view.start, winEnd).map((v) => v ?? 0);
+						const windowDea = chart.macd.dea.slice(view.start, winEnd).map((v) => v ?? 0);
+						const mAbs = Math.max(...windowHist, ...windowDif, ...windowDea, 1e-4);
+						const yM = (value) => 387 - value / mAbs * (hMacd / 2 - 2);
+						const zeroY = yM(0);
+						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+								x1: PAD_L,
+								y1: yMacdTop - 2,
+								x2: W - PAD_R,
+								y2: yMacdTop - 2,
+								stroke: "var(--dsw-alias-border-l3)"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+								x1: PAD_L,
+								y1: zeroY,
+								x2: W - PAD_R,
+								y2: zeroY,
+								stroke: "var(--dsw-alias-border-l2)",
+								strokeDasharray: "2,3"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+								x: PAD_L - 6,
+								y: zeroY + 3,
+								fontSize: "9",
+								textAnchor: "end",
+								fill: "var(--dsw-alias-label-tertiary)",
+								children: "0"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+								x: PAD_L - 6,
+								y: 370,
+								fontSize: "9",
+								textAnchor: "end",
+								fill: "var(--dsw-alias-label-tertiary)",
+								children: mAbs.toFixed(2)
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+								x: PAD_L - 6,
+								y: 412,
+								fontSize: "9",
+								textAnchor: "end",
+								fill: "var(--dsw-alias-label-tertiary)",
+								children: ["-", mAbs.toFixed(2)]
+							}),
+							windowHist.map((value, offset) => {
+								const index = view.start + offset;
+								const h = Math.abs(yM(value) - zeroY);
+								return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+									x: x(index) - Math.max(.8, slot * .3),
+									y: value >= 0 ? zeroY - h : zeroY,
+									width: Math.max(1.6, slot * .6),
+									height: Math.max(.6, h),
+									fill: value >= 0 ? "#e05656" : "#2f9e77",
+									opacity: "0.6"
+								}, `mh-${index}`);
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("polyline", {
+								points: windowDif.map((value, offset) => `${x(view.start + offset)},${yM(value)}`).join(" "),
+								fill: "none",
+								stroke: "#e8a33d",
+								strokeWidth: "1.1"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("polyline", {
+								points: windowDea.map((value, offset) => `${x(view.start + offset)},${yM(value)}`).join(" "),
+								fill: "none",
+								stroke: "#5ab0ff",
+								strokeWidth: "1.1"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+								x: 56,
+								y: 372,
+								fontSize: "9",
+								fill: "#e8a33d",
+								children: "DIF"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+								x: 78,
+								y: 372,
+								fontSize: "9",
+								fill: "#5ab0ff",
+								children: "DEA"
+							})
+						] });
+					})(),
 					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", {
 						fontSize: "9.5",
 						children: [

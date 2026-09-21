@@ -27,8 +27,11 @@ interface ChartSlice {
   volumes: number[]
   biLines: Array<{ start_time: string; end_time: string; start_price: number; end_price: number; direction?: string }>
   segLines: Array<{ start_time: string; end_time: string; start_price: number; end_price: number }>
-  zhongshus: Array<{ start_time: string; end_time: string; high: number; low: number; center: number }>
+  zhongshus: Array<{ start_time: string; end_time: string; high: number; low: number; center: number; gg?: number; dd?: number; extendCount?: number }>
   markers: Array<Rec>
+  macd: { dif: Array<number | null>; dea: Array<number | null>; hist: Array<number | null> }
+  fenxings: Array<{ time: string; fenxingType: string; price: number; strength: number }>
+  backchis: Array<{ backchiType: string; valid: boolean; currentStart: string; currentEnd: string; previousStart: string; previousEnd: string }>
 }
 
 function parseChart(payload: Rec): ChartSlice | null {
@@ -53,19 +56,33 @@ function parseChart(payload: Rec): ChartSlice | null {
     }),
     zhongshus: asArr(c.zhongshu_zones).map(item => {
       const r = asRec(item)
-      return { start_time: asStr(r.start_time), end_time: asStr(r.end_time), high: asNum(r.high) ?? 0, low: asNum(r.low) ?? 0, center: asNum(r.center) ?? 0 }
+      return { start_time: asStr(r.start_time), end_time: asStr(r.end_time), high: asNum(r.high) ?? 0, low: asNum(r.low) ?? 0, center: asNum(r.center) ?? 0, gg: asNum(r.gg) ?? undefined, dd: asNum(r.dd) ?? undefined, extendCount: asNum(r.extend_count) ?? undefined }
     }),
     markers: asArr(c.markers).map(asRec),
+    macd: {
+      dif: asArr(asRec(c.macd).dif),
+      dea: asArr(asRec(c.macd).dea),
+      hist: asArr(asRec(c.macd).hist),
+    } as ChartSlice['macd'],
+    fenxings: asArr(c.fenxings).map(item => {
+      const r = asRec(item)
+      return { time: asStr(r.time), fenxingType: asStr(r.fenxing_type), price: asNum(r.price) ?? 0, strength: asNum(r.strength) ?? 0 }
+    }),
+    backchis: asArr(c.backchis).map(item => {
+      const r = asRec(item)
+      return { backchiType: asStr(r.backchi_type), valid: r.valid === true, currentStart: asStr(r.current_start), currentEnd: asStr(r.current_end), previousStart: asStr(r.previous_start), previousEnd: asStr(r.previous_end) }
+    }),
   }
 }
 
-const LEVEL_OPTIONS = ['30min', 'daily', 'weekly', 'monthly'] as const
+const LEVEL_OPTIONS = ['5min', '15min', '30min', '60min', '90min', '120min', 'daily', 'weekly', 'monthly'] as const
 const W = 720
 const H_MAIN = 300
 const H_VOL = 56
 const PAD_L = 54
 const PAD_R = 14
-const H_TOTAL = H_MAIN + H_VOL + 26
+const H_MACD = 62
+const H_TOTAL = H_MAIN + H_VOL + H_MACD + 32
 
 /**
  * K 线缠论主图（含成交量副图）：滚轮缩放（鼠标为锚）+ 拖拽平移 +
@@ -196,16 +213,34 @@ function ChanChart({ chart, view, onViewChange }: { chart: ChartSlice; view: { s
           </g>
         )
       })}
-      {/* 中枢矩形（垫底；与窗口相交即画，窗口外自动裁剪） */}
+      {/* 背驰罩（valid 背驰：previous_start→current_end 区间半透明罩） */}
+      {chart.backchis.filter(bc => bc.valid).map((bc, i) => {
+        const x1 = indexOfTime(bc.previousStart)
+        const x2 = indexOfTime(bc.currentEnd)
+        if (x1 < 0 || x2 < x1 || x2 < view.start || x1 > winEnd) return null
+        return (
+          <g key={`bc-${i}`}>
+            <rect x={x(x1) - slot / 2} y={10} width={(x2 - x1 + 1) * slot} height={H_MAIN - 20} fill="rgba(230,70,70,0.07)" stroke="#e64646" strokeWidth="0.8" strokeDasharray="3,4" />
+            <text x={Math.max(PAD_L + 2, x(x1) + 3)} y={22} fontSize="9.5" fill="#e64646">背驰段对比</text>
+          </g>
+        )
+      })}
+      {/* 中枢双层（GG/DD 震荡区间外虚线框 + ZG/ZD 中枢区间实框） */}
       {chart.zhongshus.map((zone, i) => {
         const x1 = indexOfTime(zone.start_time)
         const x2 = indexOfTime(zone.end_time)
         if (x1 < 0 || x2 < x1 || x2 < view.start || x1 > winEnd) return null
+        const zoneW = (x2 - x1 + 1) * slot
         return (
           <g key={`zs-${i}`}>
-            <rect x={x(x1) - slot / 2} y={yMain(zone.high)} width={(x2 - x1 + 1) * slot} height={Math.max(2, yMain(zone.low) - yMain(zone.high))} fill="rgba(199,146,234,0.14)" stroke="#c792ea" strokeDasharray="4,3" rx="2" />
+            {zone.gg !== undefined && zone.dd !== undefined && (
+              <rect x={x(x1) - slot / 2} y={yMain(zone.gg)} width={zoneW} height={Math.max(2, yMain(zone.dd) - yMain(zone.gg))} fill="none" stroke="#c792ea" strokeWidth="0.7" strokeDasharray="2,4" opacity="0.65" />
+            )}
+            <rect x={x(x1) - slot / 2} y={yMain(zone.high)} width={zoneW} height={Math.max(2, yMain(zone.low) - yMain(zone.high))} fill="rgba(199,146,234,0.14)" stroke="#c792ea" strokeDasharray="4,3" rx="2" />
             <line x1={x(x1) - slot / 2} y1={yMain(zone.center)} x2={x(x2) + slot / 2} y2={yMain(zone.center)} stroke="#c792ea" strokeWidth="1" strokeDasharray="2,3" />
-            <text x={Math.max(PAD_L + 2, x(x1) + 2)} y={yMain(zone.high) - 3} fontSize="9.5" fill="#c792ea">中枢 {zone.low.toFixed(2)}~{zone.high.toFixed(2)}</text>
+            <text x={Math.max(PAD_L + 2, x(x1) + 2)} y={yMain(zone.high) - 3} fontSize="9.5" fill="#c792ea">
+              中枢 {zone.low.toFixed(2)}~{zone.high.toFixed(2)}{zone.extendCount !== undefined && zone.extendCount > 0 ? ` ·延伸${zone.extendCount}` : ''}{zone.gg !== undefined && zone.dd !== undefined ? ` ·震荡 ${zone.dd.toFixed(2)}~${zone.gg.toFixed(2)}` : ''}
+            </text>
           </g>
         )
       })}
@@ -236,18 +271,34 @@ function ChanChart({ chart, view, onViewChange }: { chart: ChartSlice; view: { s
         if (x1 < 0 || x2 < 0 || x2 < view.start || x1 > winEnd) return null
         return <line key={`seg-${i}`} x1={x(x1)} y1={yMain(seg.start_price)} x2={x(x2)} y2={yMain(seg.end_price)} stroke="#5ab0ff" strokeWidth="2.2" strokeDasharray="7,4" opacity="0.9" />
       })}
-      {/* 买卖点徽章 */}
+      {/* 分型三角（顶▲底▼，窗口内；缩放后自动显现细节） */}
+      {chart.fenxings.map((fx, i) => {
+        const index = indexOfTime(fx.time)
+        if (index < 0 || index < view.start || index >= winEnd) return null
+        const isTop = fx.fenxingType === 'top'
+        const py = isTop ? yMain(chart.kline[index]?.[3] ?? fx.price) : yMain(chart.kline[index]?.[2] ?? fx.price)
+        const dir = isTop ? 1 : -1
+        return (
+          <g key={`fx-${i}`} opacity={view.count > 60 ? 0.45 : 0.9}>
+            <path d={`M${x(index)},${py - dir * 5} l-4,${dir * 6} l8,0 Z`} fill={isTop ? '#e64646' : '#2f9e77'} />
+          </g>
+        )
+      })}
+      {/* 买卖点徽章（一二三类分类：B1/B2/B3/S1/S2/S3） */}
       {chart.markers.map((marker, i) => {
         const time = asStr(marker.time ?? marker.date)
         const index = indexOfTime(time)
         const price = asNum(marker.price)
         if (index < 0 || price === null || index < view.start || index >= winEnd) return null
-        const label = asStr(marker.label ?? marker.type ?? '?')
-        const isBuy = label.toLowerCase().includes('b') || label.includes('买')
+        const raw = asStr(marker.label ?? marker.type ?? '?')
+        const isBuy = raw.toUpperCase().includes('BUY') || raw.includes('买')
+        const cls = raw.match(/[123]/)?.[0] ?? '?'
+        const label = `${isBuy ? 'B' : 'S'}${cls}`
+        const color = isBuy ? (cls === '3' ? '#22a06b' : '#31c7a2') : (cls === '3' ? '#c74040' : '#e64646')
         return (
           <g key={`mk-${i}`}>
-            <circle cx={x(index)} cy={yMain(price)} r="7" fill={isBuy ? '#31c7a2' : '#e64646'} opacity="0.92" />
-            <text x={x(index)} y={yMain(price) + 3} fontSize="8.5" textAnchor="middle" fill="#fff" fontWeight="600">{label.slice(0, 2)}</text>
+            <circle cx={x(index)} cy={yMain(price)} r="8" fill={color} opacity="0.95" stroke="#fff" strokeWidth="1" />
+            <text x={x(index)} y={yMain(price) + 3} fontSize="8.5" textAnchor="middle" fill="#fff" fontWeight="700">{label}</text>
           </g>
         )
       })}
@@ -261,6 +312,35 @@ function ChanChart({ chart, view, onViewChange }: { chart: ChartSlice; view: { s
         )
       })}
       <text x={PAD_L - 6} y={H_MAIN + 14} fontSize="9" textAnchor="end" fill="var(--dsw-alias-label-tertiary)">量</text>
+      {/* MACD 副图（窗口切片：hist 柱 + DIF/DEA 线 + 零轴；背驰判定的核心工具） */}
+      {(() => {
+        const yMacdTop = H_MAIN + H_VOL + 6
+        const hMacd = H_MACD - 12
+        const windowHist = chart.macd.hist.slice(view.start, winEnd).map(v => v ?? 0)
+        const windowDif = chart.macd.dif.slice(view.start, winEnd).map(v => v ?? 0)
+        const windowDea = chart.macd.dea.slice(view.start, winEnd).map(v => v ?? 0)
+        const mAbs = Math.max(...windowHist, ...windowDif, ...windowDea, 0.0001)
+        const yM = (value: number) => yMacdTop + hMacd / 2 - (value / mAbs) * (hMacd / 2 - 2)
+        const zeroY = yM(0)
+        return (
+          <g>
+            <line x1={PAD_L} y1={yMacdTop - 2} x2={W - PAD_R} y2={yMacdTop - 2} stroke="var(--dsw-alias-border-l3)" />
+            <line x1={PAD_L} y1={zeroY} x2={W - PAD_R} y2={zeroY} stroke="var(--dsw-alias-border-l2)" strokeDasharray="2,3" />
+            <text x={PAD_L - 6} y={zeroY + 3} fontSize="9" textAnchor="end" fill="var(--dsw-alias-label-tertiary)">0</text>
+            <text x={PAD_L - 6} y={yMacdTop + 8} fontSize="9" textAnchor="end" fill="var(--dsw-alias-label-tertiary)">{mAbs.toFixed(2)}</text>
+            <text x={PAD_L - 6} y={yMacdTop + hMacd} fontSize="9" textAnchor="end" fill="var(--dsw-alias-label-tertiary)">-{mAbs.toFixed(2)}</text>
+            {windowHist.map((value, offset) => {
+              const index = view.start + offset
+              const h = Math.abs(yM(value) - zeroY)
+              return <rect key={`mh-${index}`} x={x(index) - Math.max(0.8, slot * 0.3)} y={value >= 0 ? zeroY - h : zeroY} width={Math.max(1.6, slot * 0.6)} height={Math.max(0.6, h)} fill={value >= 0 ? '#e05656' : '#2f9e77'} opacity="0.6" />
+            })}
+            <polyline points={windowDif.map((value, offset) => `${x(view.start + offset)},${yM(value)}`).join(' ')} fill="none" stroke="#e8a33d" strokeWidth="1.1" />
+            <polyline points={windowDea.map((value, offset) => `${x(view.start + offset)},${yM(value)}`).join(' ')} fill="none" stroke="#5ab0ff" strokeWidth="1.1" />
+            <text x={PAD_L + 2} y={yMacdTop + 10} fontSize="9" fill="#e8a33d">DIF</text>
+            <text x={PAD_L + 24} y={yMacdTop + 10} fontSize="9" fill="#5ab0ff">DEA</text>
+          </g>
+        )
+      })()}
       {/* 图例 */}
       <g fontSize="9.5">
         <text x={PAD_L} y={H_TOTAL - 4} fill="var(--dsw-alias-label-tertiary)">红涨绿跌 ·</text>
