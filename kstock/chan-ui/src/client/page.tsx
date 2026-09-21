@@ -189,9 +189,10 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
       <div className="ksq-chanx-card"><ChanRadar dims={dims} summary={summary} /></div>
       <LevelMatrix rows={matrixRows} />
       <KeyLevelsCard advice={advice} lastZhongshu={lastZhongshu} assessment={assessment} />
-      <SignalDetailsCollapsible scores={scores} />
     </div>
   )
+  /** 信号明细挂在图表下方（宽列横排 chips + 高度封顶滚动），不再拖长右栏。 */
+  const signalDetails = <SignalDetailsCollapsible scores={scores} />
 
   return (
     <div className="ksq-page">
@@ -248,6 +249,7 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
           <div className="ksq-chanx-grid">
             <div className="ksq-chanx-chartcol-wrap">
               <ChanChart chart={chart} payload={payload} view={view} onViewChange={setView} highlight={highlight} />
+              {signalDetails}
             </div>
             {evidenceColumn}
             {statusColumn}
@@ -258,6 +260,7 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
           <div className="ksq-chanx-grid narrow">
             <div className="ksq-chanx-chartcol-wrap">
               <ChanChart chart={chart} payload={payload} view={view} onViewChange={setView} highlight={highlight} />
+              {signalDetails}
             </div>
             <div className="ksq-chanx-tabpanel">
               <div className="ksq-chanx-tabs" role="tablist">
