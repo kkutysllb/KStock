@@ -41,7 +41,7 @@ import {
   useCopyPrompt,
   type UseWorkspaces,
 } from '@kstock/quant-ui'
-import { getAgentBridge, interpretStrategyPrompt } from './agent.ts'
+import { getAgentBridge, interpretStrategyPrompt, buildIteratePrompt, STRATEGY_ITERATE_DIRECTIONS } from './agent.ts'
 
 /** 净值数据归一化：兼容 [{date,equity}] 与 {dates,values} 形态，统一为 1 起点。 */
 function normalizeEquity(raw: StrategyEquity['equity']): number[] {
@@ -235,6 +235,9 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
   const [reportView, setReportView] = useState<{ runId: string; htmlUrl: string } | null>(null)
   const [pendingInterpret, setPendingInterpret] = useState<string | null>(null)
   const [detailView, setDetailView] = useState<{ runId: string; equity: StrategyEquity | null; trades: StrategyRunTrades | null } | null>(null)
+  const [iterateOn, setIterateOn] = useState<number | null>(null)
+  const [iterDirection, setIterDirection] = useState<string>(STRATEGY_ITERATE_DIRECTIONS[0])
+  const [iterNote, setIterNote] = useState('')
   const { copy, toast } = useCopyPrompt()
 
   const reload = useCallback(async () => {
@@ -511,6 +514,66 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                           <button className="ksq-linkbtn" type="button" onClick={() => copy(rerunPrompt(version))}>
                             <IconPlay size={11} /> <IconCopy size={11} /> 复制重跑提示词
                           </button>
+                          {' '}
+                          <button
+                            className="ksq-linkbtn"
+                            type="button"
+                            onClick={() => { setIterateOn(iterateOn === version.version ? null : version.version); setIterDirection(STRATEGY_ITERATE_DIRECTIONS[0]); setIterNote('') }}
+                          >
+                            {iterateOn === version.version ? '收起改进' : '从此版本改进…'}
+                          </button>
+                          {iterateOn === version.version && (
+                            <div className="ksq-iter">
+                              <div className="ksq-chips">
+                                {STRATEGY_ITERATE_DIRECTIONS.map(direction => (
+                                  <button
+                                    key={direction}
+                                    type="button"
+                                    className={`ksq-chip ksq-iter-chip ${iterDirection === direction ? 'active' : ''}`}
+                                    onClick={() => setIterDirection(direction)}
+                                  >
+                                    {direction.split('（')[0]}
+                                  </button>
+                                ))}
+                              </div>
+                              <input
+                                className="ksq-iter-input"
+                                value={iterNote}
+                                onChange={event => setIterNote(event.target.value)}
+                                placeholder="补充要求（可选）：如夏普提到 1.5 以上、月度调仓改为双周…"
+                                spellCheck={false}
+                              />
+                              <div className="ksq-item-meta">方向：{iterDirection}</div>
+                              <button
+                                className="ksq-linkbtn"
+                                type="button"
+                                disabled={getAgentBridge() === null}
+                                onClick={() => {
+                                  if (selected === null || getAgentBridge() === null) return
+                                  const metrics = ['total_return_pct', 'annual_return_pct', 'sharpe_ratio', 'max_drawdown_pct', 'win_rate_pct', 'trade_count']
+                                    .map(key => {
+                                      const value = runs[0]?.metrics?.[key]
+                                      return value === undefined ? null : `${key}=${value}`
+                                    })
+                                    .filter((item): item is string => item !== null)
+                                    .join(' / ')
+                                  const range = runs[0] !== undefined && runs[0].data_start !== '' ? `（${runs[0].data_start} ~ ${runs[0].data_end}）` : ''
+                                  setPendingInterpret(buildIteratePrompt({
+                                    strategyName: selected.name,
+                                    strategyId: selected.strategy_id,
+                                    version: version.version,
+                                    params: version.params,
+                                    direction: iterDirection,
+                                    customNote: iterNote,
+                                    baseline: metrics !== '' ? `${metrics}${range}` : '',
+                                  }))
+                                  setIterateOn(null)
+                                }}
+                              >
+                                生成改进任务（选工作区发送）
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                   </div>

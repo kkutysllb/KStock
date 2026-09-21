@@ -48,3 +48,46 @@ export function interpretFactorPrompt(input: {
     + `当前会话若未挂载 factor-research 技能，用网页检索补充并标注来源，禁止编造数值；`
     + `数据缺失诚实标注「无数据」，不构成投资建议。`
 }
+
+
+/** 因子迭代改进的预设方向。 */
+export const FACTOR_ITERATE_DIRECTIONS = [
+  '变体扩展（窗口/频率/分组数敏感性网格）',
+  '中性化处理（行业/市值中性，剔除风格暴露）',
+  '因子组合（与库内其他因子正交化/加权合成）',
+  '择时与拥挤度（什么时候该用这个因子）',
+  '失效诊断（IC 衰减区间归因：风格切换/结构变化）',
+] as const
+
+/** 因子迭代改进提示词：基线代码获取 + 同口径复检 + 新版本入库。 */
+export function buildFactorIteratePrompt(input: {
+  factorName: string
+  factorId: string
+  version: number
+  params?: Record<string, unknown>
+  direction: string
+  customNote?: string
+  baseline?: string
+}): string {
+  const params = input.params !== undefined && Object.keys(input.params).length > 0
+    ? `（基线参数：${JSON.stringify(input.params)}）` : ''
+  const baseline = input.baseline !== undefined && input.baseline !== '' ? `
+基线检验：${input.baseline}——迭代以 IC/IR 不劣化为底线。` : ''
+  const custom = input.customNote !== undefined && input.customNote.trim() !== ''
+    ? `
+用户补充要求：${input.customNote.trim()}` : ''
+  return `请在因子库「${input.factorName}」（${input.factorId}）v${input.version} 的基础上做迭代研究：${input.direction}。${custom}
+`
+    + `1) 基线代码：优先用本工作区 scripts/ 下的既有因子代码；没有则取回库内版本：
+`
+    + `   curl -s http://127.0.0.1:18001/kstock-api/factors/${input.factorId}/versions/${input.version} `
+    + `| python3 -c 'import json,sys;print(json.load(sys.stdin)["code"])' > scripts/factor_v${input.version}.py${params}
+`
+    + `2) 迭代实现后，与基线**同口径**复检（同股票池/区间/分组）${baseline}
+`
+    + `3) 入库迭代结果：POST /kstock-api/factors/${input.factorId}/versions（code=迭代后代码全文，params 更新，`
+    + `change_note 写清相对 v${input.version} 的改动点）→ POST runs（同口径 metrics 五键/ic_series/layers，`
+    + `config 带 report_id 新看板链）；面板会自动做跨版本累计 IC 叠加对比。
+`
+    + `4) 若 IC/IR 劣化，诚实报告对比结果不粉饰——负结果也是研究资产。`
+}

@@ -1175,6 +1175,36 @@ a.ksq-news-title:hover {
 .ksq-rebalance-body { padding: 6px 10px 10px 22px; display: flex; flex-direction: column; gap: 6px; }
 
 .ksq-rebalance-dayhead { display: flex; justify-content: flex-end; }
+
+/* ── 版本迭代面板（§28-10「从此版本改进」）────────────────────── */
+
+.ksq-iter {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 4%, transparent);
+}
+
+.ksq-iter-chip { cursor: pointer; background: transparent; }
+.ksq-iter-chip.active {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-brand-primary);
+  font-weight: 500;
+}
+
+.ksq-iter-input {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  background: transparent;
+  color: inherit;
+  font-size: 12.5px;
+}
 .ksq-rebalance-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 720px) { .ksq-rebalance-cols { grid-template-columns: 1fr; } }
 .ksq-rebalance-side p { margin: 0 0 4px; font-size: 12px; font-weight: 500; }

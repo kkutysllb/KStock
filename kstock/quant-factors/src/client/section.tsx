@@ -38,7 +38,7 @@ import {
   useCopyPrompt,
   type UseWorkspaces,
 } from '@kstock/quant-ui'
-import { getAgentBridge, interpretFactorPrompt } from './agent.ts'
+import { getAgentBridge, interpretFactorPrompt, buildFactorIteratePrompt, FACTOR_ITERATE_DIRECTIONS } from './agent.ts'
 
 const CATEGORY_LABELS: Record<string, string> = {
   value: '价值',
@@ -263,6 +263,9 @@ export function FactorsSection({ useWorkspaces }: { useWorkspaces?: UseWorkspace
   const [detailView, setDetailView] = useState<{ runId: string; ic: FactorRunIcSeries | null; layers: FactorRunLayers | null } | null>(null)
   const [reportView, setReportView] = useState<{ runId: string; htmlUrl: string | null; text: string } | null>(null)
   const [pendingInterpret, setPendingInterpret] = useState<string | null>(null)
+  const [iterateOn, setIterateOn] = useState<number | null>(null)
+  const [iterDirection, setIterDirection] = useState<string>(FACTOR_ITERATE_DIRECTIONS[0])
+  const [iterNote, setIterNote] = useState('')
   const { copy, toast } = useCopyPrompt()
 
   const reload = useCallback(async () => {
@@ -540,6 +543,66 @@ export function FactorsSection({ useWorkspaces }: { useWorkspaces?: UseWorkspace
                           <button className="ksq-linkbtn" type="button" onClick={() => copy(rerunPrompt(version))}>
                             <IconPlay size={11} /> <IconCopy size={11} /> 复制重跑提示词
                           </button>
+                          {' '}
+                          <button
+                            className="ksq-linkbtn"
+                            type="button"
+                            onClick={() => { setIterateOn(iterateOn === version.version ? null : version.version); setIterDirection(FACTOR_ITERATE_DIRECTIONS[0]); setIterNote('') }}
+                          >
+                            {iterateOn === version.version ? '收起迭代' : '从此版本迭代…'}
+                          </button>
+                          {iterateOn === version.version && (
+                            <div className="ksq-iter">
+                              <div className="ksq-chips">
+                                {FACTOR_ITERATE_DIRECTIONS.map(direction => (
+                                  <button
+                                    key={direction}
+                                    type="button"
+                                    className={`ksq-chip ksq-iter-chip ${iterDirection === direction ? 'active' : ''}`}
+                                    onClick={() => setIterDirection(direction)}
+                                  >
+                                    {direction.split('（')[0]}
+                                  </button>
+                                ))}
+                              </div>
+                              <input
+                                className="ksq-iter-input"
+                                value={iterNote}
+                                onChange={event => setIterNote(event.target.value)}
+                                placeholder="补充要求（可选）：如只测 2024 后区间、行业中性用申万一级…"
+                                spellCheck={false}
+                              />
+                              <div className="ksq-item-meta">方向：{iterDirection}</div>
+                              <button
+                                className="ksq-linkbtn"
+                                type="button"
+                                disabled={getAgentBridge() === null}
+                                onClick={() => {
+                                  if (selected === null || getAgentBridge() === null) return
+                                  const latest = runs[0]
+                                  const metrics = ['ic_mean', 'ir', 'ic_positive_pct', 'long_short_spread_pct', 'n_periods']
+                                    .map(key => {
+                                      const value = latest?.metrics?.[key]
+                                      return value === undefined ? null : `${key}=${value}`
+                                    })
+                                    .filter((item): item is string => item !== null)
+                                    .join(' / ')
+                                  setPendingInterpret(buildFactorIteratePrompt({
+                                    factorName: selected.name,
+                                    factorId: selected.factor_id,
+                                    version: version.version,
+                                    params: version.params,
+                                    direction: iterDirection,
+                                    customNote: iterNote,
+                                    baseline: metrics !== '' ? `${metrics}${latest !== undefined && latest.universe !== '' ? `（${latest.universe}）` : ''}` : '',
+                                  }))
+                                  setIterateOn(null)
+                                }}
+                              >
+                                生成迭代任务（选工作区发送）
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                   </div>
