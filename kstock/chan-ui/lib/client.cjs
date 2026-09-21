@@ -529,7 +529,7 @@ window.__ModuleLoader__.load({
 				return () => {
 					el.removeEventListener("wheel", onWheel);
 				};
-			}, [total]);
+			}, [total, onViewChange]);
 			const slot = (W - PAD_L - PAD_R) / view.count;
 			const winEnd = view.start + view.count;
 			const x = (index) => PAD_L + (index - view.start + .5) * slot;
@@ -589,11 +589,10 @@ window.__ModuleLoader__.load({
 			const zsPos = lastZs !== null ? zhongshuPosition(lastClose, lastZs) : null;
 			const hoverContext = hover !== null ? (() => {
 				const parts = [];
-				const time = dates[hover]?.slice(0, 10) ?? "";
-				const fx = chart.fenxings.find((f) => f.time.slice(0, 10) === time);
+				const fx = chart.fenxings.find((f) => indexOfTime(f.time) === hover);
 				if (fx !== void 0) parts.push(fx.fenxingType === "top" ? "顶分型" : "底分型");
-				if (chart.biLines.some((b) => b.end_time.slice(0, 10) === time)) parts.push("笔端点");
-				const mk = chart.markers.find((m) => m.time.slice(0, 10) === time);
+				if (chart.biLines.some((b) => indexOfTime(b.end_time) === hover)) parts.push("笔端点");
+				const mk = chart.markers.find((m) => indexOfTime(m.time) === hover);
 				if (mk !== void 0) parts.push(`${mk.label ?? mk.type ?? "信号"}`);
 				if (chart.zhongshus.some((z) => {
 					const i1 = indexOfTime(z.start_time);
@@ -1173,8 +1172,9 @@ window.__ModuleLoader__.load({
 		* 缠论研究面板：交互式 K 线缠论图 + 形态/走势/信号摘要 + Agent 深度解读。
 		*
 		* 数据走宿主 `POST /kstock-api/chan-analyze`（{stock, level} → 引擎 JSON，
-		* 60s 服务端缓存）。图表自研 SVG：蜡烛（A 股红涨绿跌）+ 笔/段折线 +
-		* 中枢矩形 + 买卖点徽章 + 成交量副图，hover 十字线逐根读值。
+		* 60s 服务端缓存）。图表为自研 SVG，实现拆分在 chart.tsx：蜡烛（A 股红涨绿跌）+
+		* 笔/段折线 + 中枢矩形 + 买卖点徽章 + 成交量副图 + 信息条/可靠度环/结构上下文，
+		* hover 十字线逐根读值。
 		* 深度解读走 TaskTargetMenu（chan 类型独立记忆落点）。
 		*/
 		/** 桥（index.tsx 注入；页面为 slot 组件拿不到 ctx，模块级单例传递）。 */

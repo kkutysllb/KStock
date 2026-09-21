@@ -7,10 +7,11 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   asRec, asStr, dateIndexOf, resolveIndex, zhongshuPosition,
-  type ChartSlice, type Rec,
+  type ChartHighlight, type ChartSlice, type Rec,
 } from './derive.ts'
 
-export interface ChartHighlight { kind: 'backchi' | 'point' | 'zhongshu'; id: number }
+// 类型本体在 derive.ts（纯逻辑共享层，Task 5/7 按计划从此导入）；此处再导出保持组件公共面不变。
+export type { ChartHighlight }
 
 const W = 720
 const H_MAIN = 300
@@ -59,7 +60,7 @@ export function ChanChart({ chart, payload, view, onViewChange, highlight }: {
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => { el.removeEventListener('wheel', onWheel) }
-  }, [total])
+  }, [total, onViewChange])
 
   const plotW = W - PAD_L - PAD_R
   const slot = plotW / view.count
@@ -128,13 +129,13 @@ export function ChanChart({ chart, payload, view, onViewChange, highlight }: {
   const zsPos = lastZs !== null ? zhongshuPosition(lastClose, lastZs) : null
 
   // hover 结构上下文：该 K 线处的分型/笔端点/买卖点/中枢事件。
+  // 一律按 indexOfTime 索引比较（与绘制路径对齐）——分钟级时间戳同日共享日期前缀，前缀匹配会整日误吸附。
   const hoverContext = hover !== null ? (() => {
     const parts: string[] = []
-    const time = dates[hover]?.slice(0, 10) ?? ''
-    const fx = chart.fenxings.find(f => f.time.slice(0, 10) === time)
+    const fx = chart.fenxings.find(f => indexOfTime(f.time) === hover)
     if (fx !== undefined) parts.push(fx.fenxingType === 'top' ? '顶分型' : '底分型')
-    if (chart.biLines.some(b => b.end_time.slice(0, 10) === time)) parts.push('笔端点')
-    const mk = chart.markers.find(m => m.time.slice(0, 10) === time)
+    if (chart.biLines.some(b => indexOfTime(b.end_time) === hover)) parts.push('笔端点')
+    const mk = chart.markers.find(m => indexOfTime(m.time) === hover)
     if (mk !== undefined) parts.push(`${mk.label ?? mk.type ?? '信号'}`)
     if (chart.zhongshus.some(z => {
       const i1 = indexOfTime(z.start_time); const i2 = indexOfTime(z.end_time)

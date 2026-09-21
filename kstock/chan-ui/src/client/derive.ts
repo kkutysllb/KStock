@@ -194,6 +194,9 @@ export function zhongshuForecast(price: number | null, zs: ZhongshuZone): string
 
 // ── 缠论原生雷达 ─────────────────────────────────────────────────────────
 
+/** 卡片→主图联动高亮目标：id 为 kind 对应集合的数组下标——backchi→chart.backchis、point→chart.markers（买卖点）、zhongshu→chart.zhongshus。 */
+export interface ChartHighlight { kind: 'backchi' | 'point' | 'zhongshu'; id: number }
+
 export interface RadarDim { key: string; label: string; value: number | null; basis: string }
 export interface MatrixBrief { status: 'ok' | 'loading' | 'error'; data?: Rec }
 
