@@ -101,6 +101,9 @@
     - id: kstock-news-ui
       name: '@kstock/client-news'
 
+    - id: kstock-chan-ui
+      name: '@kstock/client-chan'
+
     # KStock 角色 preset 选择器（只列 6 个投研角色；standard 为隐形默认
     # 基座）。上游 ui-agent-preset 选择器被下面的 disabled 行下架。
     - id: kstock-presets-ui

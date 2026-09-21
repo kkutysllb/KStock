@@ -19,7 +19,7 @@ from pathlib import Path
 
 PLUGIN_PACKAGES = ("accounts", "client-brand", "web", "quant",
                    "quant-strategies", "quant-factors", "quant-selections", "quant-reports",
-                   "news-ui")
+                   "news-ui", "chan-ui")
 
 
 @dataclass
@@ -84,7 +84,7 @@ class Verifier:
         # client-brand、四个量化库界面包（quant-*）与财经新闻面板（news-ui）
         # 为客户端插件。
         CLIENT_PACKAGES = ("client-brand", "quant-strategies", "quant-factors",
-                           "quant-selections", "quant-reports", "news-ui")
+                           "quant-selections", "quant-reports", "news-ui", "chan-ui")
         self.require_path(root / "kstock" / "web" / "cordis.patch.yml", "source kstock/web bundle patch")
         for pkg in PLUGIN_PACKAGES:
             manifest = root / "kstock" / pkg / "package.json"

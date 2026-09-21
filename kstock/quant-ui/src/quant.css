@@ -1209,3 +1209,70 @@ a.ksq-news-title:hover {
 @media (max-width: 720px) { .ksq-rebalance-cols { grid-template-columns: 1fr; } }
 .ksq-rebalance-side p { margin: 0 0 4px; font-size: 12px; font-weight: 500; }
 .ksq-rebalance-side .ksq-table { font-size: 11.5px; }
+
+
+/* ── 缠论研究面板（§29-C1，@kstock/client-chan）────────────────── */
+
+.ksq-chan-input {
+  width: 260px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  background: transparent;
+  color: inherit;
+  font-size: 12.5px;
+}
+
+.ksq-chan-select {
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  background: transparent;
+  color: inherit;
+  font-size: 12.5px;
+}
+
+.ksq-chan-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.ksq-chan-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+
+.ksq-chan-card strong { font-size: 12px; color: var(--dsw-alias-label-tertiary); font-weight: 500; }
+.ksq-chan-card span { color: var(--dsw-alias-label-primary); }
+
+.ksq-chan-radar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 10px;
+}
+
+.ksq-chan-radar svg { width: 156px; flex: none; }
+.ksq-chan-radar-meta { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+
+.ksq-chan-signals {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 10px;
+}
+
+.ksq-chan-signals strong { font-size: 12px; color: var(--dsw-alias-label-tertiary); font-weight: 500; }

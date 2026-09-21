@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-	id: "@kstock/client-news",
+	id: "@kstock/client-chan",
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;
@@ -291,22 +291,27 @@ window.__ModuleLoader__.load({
 				children
 			});
 		}
-		function IconRefresh(props) {
-			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(Svg, {
-				...props,
-				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M21 12a9 9 0 1 1-2.64-6.36" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M21 3v6h-6" })]
-			});
-		}
-		/** 报纸（财经新闻入口）。 */
-		function IconNews(props) {
+		/** 侧栏入口：K 线蜡烛。 */
+		function IconCandles(props) {
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(Svg, {
 				...props,
 				children: [
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0V9" }),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M4 22a2 2 0 0 1-2-2v-9h2a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2Z" }),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M18 14h-8" }),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M15 18h-5" }),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M10 6h8v4h-8Z" })
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M7 6v12" }),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+						x: "5",
+						y: "9",
+						width: "4",
+						height: "6",
+						rx: "0.5"
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "M17 4v14" }),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+						x: "15",
+						y: "8",
+						width: "4",
+						height: "5",
+						rx: "0.5"
+					})
 				]
 			});
 		}
@@ -316,50 +321,6 @@ window.__ModuleLoader__.load({
 		* 量化面板共享小件：状态文案、通用折线叠加图、确认弹窗、复制提示。
 		* 视觉基调与 1.x 组件一致（语义着色/时间线/浮层），类名换 ksq- 前缀。
 		*/
-		function formatDateTime(iso) {
-			if (!iso) return "—";
-			const date = new Date(iso);
-			if (Number.isNaN(date.getTime())) return iso;
-			return date.toLocaleString("zh-CN", { hour12: false });
-		}
-		function ErrorLine({ message }) {
-			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
-				className: "ksq-error",
-				role: "alert",
-				children: message
-			});
-		}
-		function Loading({ text }) {
-			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
-				className: "ksq-loading",
-				children: text
-			});
-		}
-		function Empty({ icon, title, hint }) {
-			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-				className: "ksq-empty",
-				children: [
-					icon,
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: title }),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: hint })
-				]
-			});
-		}
-		/** 刷新按钮（title + 可旋转）。 */
-		function RefreshButton({ refreshing, onClick, label }) {
-			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
-				type: "button",
-				className: "ksq-iconbtn",
-				onClick,
-				disabled: refreshing,
-				"aria-label": label,
-				title: label,
-				children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconRefresh, {
-					size: 15,
-					className: refreshing ? "ksq-spin" : void 0
-				})
-			});
-		}
 		//#endregion
 		//#region ../quant-ui/src/index.ts
 		/**
@@ -394,464 +355,757 @@ window.__ModuleLoader__.load({
 		//#endregion
 		//#region src/client/page.tsx
 		/**
-		* 财经新闻 主区面板 2.0：实时流 + 标的联动 + 关注雷达 + 已读 + 统计。
+		* 缠论研究面板：交互式 K 线缠论图 + 形态/走势/信号摘要 + Agent 深度解读。
 		*
-		* - 实时流：`GET /kstock-api/workspace-news`（60s 服务端缓存 + 客户端
-		*   60s 自动刷新 + 手动刷新）；条目带标的识别徽章（服务端字典匹配）；
-		* - 标的联动 / 「让 Agent 解读」：经 bindAgentBridge 注入的
-		*   conversation.send() 把提示词送进当前会话并切回对话页；
-		* - 关注雷达：localStorage 关注词表，命中高亮 + 「只看命中」过滤；
-		* - 已读/未读：localStorage 已读标题哈希集（上限 300），已读淡化，
-		*   未读计数展示；
-		* - 统计侧栏：热词榜（6h 字典词频，点击即检索）+ 24h 逐小时频率条；
-		* - 检索：输入 ≥2 字切「历史模式」查 news-archive 留档库（含已滚出的
-		*   旧闻），清空回实时流。
+		* 数据走宿主 `POST /kstock-api/chan-analyze`（{stock, level} → 引擎 JSON，
+		* 60s 服务端缓存）。图表自研 SVG：蜡烛（A 股红涨绿跌）+ 笔/段折线 +
+		* 中枢矩形 + 买卖点徽章 + 成交量副图，hover 十字线逐根读值。
+		* 深度解读走 TaskTargetMenu（chan 类型独立记忆落点）。
 		*/
-		/** 与服务端缓存 TTL 对齐的自动刷新间隔。 */
-		const REFRESH_MS = 6e4;
-		const WATCH_KEY = "kstock-news-watch";
-		const READ_KEY = "kstock-news-read";
-		/** agent 桥（apply 时注入 §26-10 目标路由 + 原生目录选择 + 面板切换）。 */
-		let agentBridge = null;
-		function bindAgentBridge(bridge) {
-			agentBridge = bridge;
+		const asRec = (v) => typeof v === "object" && v !== null ? v : {};
+		const asArr = (v) => Array.isArray(v) ? v : [];
+		const asNum = (v) => typeof v === "number" && Number.isFinite(v) ? v : null;
+		const asStr = (v) => typeof v === "string" ? v : "";
+		/** 桥（index.tsx 注入；页面为 slot 组件拿不到 ctx，模块级单例传递）。 */
+		let chanBridge = null;
+		function parseChart(payload) {
+			const c = asRec(payload.chart_data);
+			const dates = asArr(c.dates).map(asStr);
+			const kline = asArr(c.kline).map((item) => {
+				const k = asArr(item);
+				return [
+					Number(k[0]),
+					Number(k[1]),
+					Number(k[2]),
+					Number(k[3])
+				];
+			});
+			if (dates.length < 2 || kline.length !== dates.length) return null;
+			return {
+				dates,
+				kline,
+				volumes: asArr(c.volumes).map((v) => asNum(v) ?? 0),
+				biLines: asArr(c.bi_lines).map((item) => {
+					const r = asRec(item);
+					return {
+						start_time: asStr(r.start_time),
+						end_time: asStr(r.end_time),
+						start_price: asNum(r.start_price) ?? 0,
+						end_price: asNum(r.end_price) ?? 0
+					};
+				}),
+				segLines: asArr(c.seg_lines).map((item) => {
+					const r = asRec(item);
+					return {
+						start_time: asStr(r.start_time),
+						end_time: asStr(r.end_time),
+						start_price: asNum(r.start_price) ?? 0,
+						end_price: asNum(r.end_price) ?? 0
+					};
+				}),
+				zhongshus: asArr(c.zhongshu_zones).map((item) => {
+					const r = asRec(item);
+					return {
+						start_time: asStr(r.start_time),
+						end_time: asStr(r.end_time),
+						high: asNum(r.high) ?? 0,
+						low: asNum(r.low) ?? 0,
+						center: asNum(r.center) ?? 0
+					};
+				}),
+				markers: asArr(c.markers).map(asRec)
+			};
 		}
-		/** 稳定字符串哈希（已读集键，djb2）。 */
-		function hash(text) {
-			let value = 5381;
-			for (let index = 0; index < text.length; index += 1) value = (value << 5) + value + text.charCodeAt(index) >>> 0;
-			return value.toString(36);
+		const LEVEL_OPTIONS = [
+			"30min",
+			"daily",
+			"weekly",
+			"monthly"
+		];
+		const W = 720;
+		const H_MAIN = 300;
+		const H_VOL = 56;
+		const PAD_L = 54;
+		const PAD_R = 14;
+		const H_TOTAL = 382;
+		/** K 线缠论主图（含成交量副图；hover 十字线逐根读值）。 */
+		function ChanChart({ chart }) {
+			const { dates, kline, volumes } = chart;
+			const svgRef = (0, react.useRef)(null);
+			const [hover, setHover] = (0, react.useState)(null);
+			const lows = kline.map((k) => k[2]).concat(chart.zhongshus.map((z) => z.low));
+			const highs = kline.map((k) => k[3]).concat(chart.zhongshus.map((z) => z.high));
+			const pMin = Math.min(...lows);
+			const pSpan = Math.max(...highs) - pMin || 1;
+			const vMax = Math.max(...volumes, 1);
+			const slot = (W - PAD_L - PAD_R) / dates.length;
+			const x = (index) => PAD_L + (index + .5) * slot;
+			const yMain = (price) => 12 + (1 - (price - pMin) / pSpan) * (H_MAIN - 26);
+			const yVol = (volume) => 304 + (1 - volume / vMax) * (H_VOL - 10);
+			const dateIndex = /* @__PURE__ */ new Map();
+			dates.forEach((date, index) => dateIndex.set(date.slice(0, 10), index));
+			const indexOfTime = (time) => dateIndex.get(time.slice(0, 10)) ?? -1;
+			const onMove = (event) => {
+				const rect = svgRef.current?.getBoundingClientRect();
+				if (rect === void 0 || rect.width === 0) return;
+				const vx = (event.clientX - rect.left) / rect.width * W;
+				const index = Math.floor((vx - PAD_L) / slot);
+				setHover(index >= 0 && index < dates.length ? index : null);
+			};
+			const hoverK = hover !== null ? kline[hover] ?? null : null;
+			const hoverOpen = hoverK?.[0];
+			const hoverClose = hoverK?.[1];
+			const hoverPct = hoverOpen !== void 0 && hoverOpen > 0 && hoverClose !== void 0 ? (hoverClose - hoverOpen) / hoverOpen * 100 : null;
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("svg", {
+				ref: svgRef,
+				viewBox: `0 0 ${W} ${H_TOTAL}`,
+				role: "img",
+				"aria-label": "缠论 K 线结构图",
+				onMouseMove: onMove,
+				onMouseLeave: () => setHover(null),
+				children: [
+					[
+						0,
+						.25,
+						.5,
+						.75,
+						1
+					].map((ratio) => {
+						const price = pMin + pSpan * (1 - ratio);
+						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+							x1: PAD_L,
+							y1: yMain(price),
+							x2: W - PAD_R,
+							y2: yMain(price),
+							stroke: "var(--dsw-alias-border-l3)",
+							strokeDasharray: "2,4"
+						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+							x: PAD_L - 6,
+							y: yMain(price) + 3,
+							fontSize: "10",
+							textAnchor: "end",
+							fill: "var(--dsw-alias-label-tertiary)",
+							children: price.toFixed(2)
+						})] }, `grid-${ratio}`);
+					}),
+					chart.zhongshus.map((zone, i) => {
+						const x1 = indexOfTime(zone.start_time);
+						const x2 = indexOfTime(zone.end_time);
+						if (x1 < 0 || x2 < x1) return null;
+						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+								x: x(x1) - slot / 2,
+								y: yMain(zone.high),
+								width: (x2 - x1 + 1) * slot,
+								height: Math.max(2, yMain(zone.low) - yMain(zone.high)),
+								fill: "rgba(199,146,234,0.14)",
+								stroke: "#c792ea",
+								strokeDasharray: "4,3",
+								rx: "2"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+								x1: x(x1) - slot / 2,
+								y1: yMain(zone.center),
+								x2: x(x2) + slot / 2,
+								y2: yMain(zone.center),
+								stroke: "#c792ea",
+								strokeWidth: "1",
+								strokeDasharray: "2,3"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+								x: x(x1) + 2,
+								y: yMain(zone.high) - 3,
+								fontSize: "9.5",
+								fill: "#c792ea",
+								children: [
+									"中枢 ",
+									zone.low.toFixed(2),
+									"~",
+									zone.high.toFixed(2)
+								]
+							})
+						] }, `zs-${i}`);
+					}),
+					kline.map((k, index) => {
+						const color = k[1] >= k[0] ? "#e05656" : "#2f9e77";
+						const cx = x(index);
+						const bodyTop = yMain(Math.max(k[0], k[1]));
+						const bodyBottom = yMain(Math.min(k[0], k[1]));
+						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+							x1: cx,
+							y1: yMain(k[3]),
+							x2: cx,
+							y2: yMain(k[2]),
+							stroke: color,
+							strokeWidth: Math.max(.6, slot * .12)
+						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+							x: cx - Math.max(.8, slot * .32),
+							y: bodyTop,
+							width: Math.max(1.6, slot * .64),
+							height: Math.max(1, bodyBottom - bodyTop),
+							fill: color,
+							opacity: hover === index ? 1 : .88
+						})] }, `k-${index}`);
+					}),
+					chart.biLines.map((bi, i) => {
+						const x1 = indexOfTime(bi.start_time);
+						const x2 = indexOfTime(bi.end_time);
+						if (x1 < 0 || x2 < 0) return null;
+						return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+							x1: x(x1),
+							y1: yMain(bi.start_price),
+							x2: x(x2),
+							y2: yMain(bi.end_price),
+							stroke: "#e8a33d",
+							strokeWidth: "1.6",
+							opacity: "0.85"
+						}, `bi-${i}`);
+					}),
+					chart.segLines.map((seg, i) => {
+						const x1 = indexOfTime(seg.start_time);
+						const x2 = indexOfTime(seg.end_time);
+						if (x1 < 0 || x2 < 0) return null;
+						return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+							x1: x(x1),
+							y1: yMain(seg.start_price),
+							x2: x(x2),
+							y2: yMain(seg.end_price),
+							stroke: "#5ab0ff",
+							strokeWidth: "2.2",
+							strokeDasharray: "7,4",
+							opacity: "0.9"
+						}, `seg-${i}`);
+					}),
+					chart.markers.map((marker, i) => {
+						const time = asStr(marker.time ?? marker.date);
+						const index = indexOfTime(time);
+						const price = asNum(marker.price);
+						if (index < 0 || price === null) return null;
+						const label = asStr(marker.label ?? marker.type ?? "?");
+						const isBuy = label.toLowerCase().includes("b") || label.includes("买");
+						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("circle", {
+							cx: x(index),
+							cy: yMain(price),
+							r: "7",
+							fill: isBuy ? "#31c7a2" : "#e64646",
+							opacity: "0.92"
+						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+							x: x(index),
+							y: yMain(price) + 3,
+							fontSize: "8.5",
+							textAnchor: "middle",
+							fill: "#fff",
+							fontWeight: "600",
+							children: label.slice(0, 2)
+						})] }, `mk-${i}`);
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+						x1: PAD_L,
+						y1: 304,
+						x2: W - PAD_R,
+						y2: 304,
+						stroke: "var(--dsw-alias-border-l3)"
+					}),
+					volumes.map((volume, index) => {
+						const k = kline[index];
+						const up = k !== void 0 && k[1] >= k[0];
+						return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+							x: x(index) - Math.max(.8, slot * .32),
+							y: yVol(volume),
+							width: Math.max(1.6, slot * .64),
+							height: 350 - yVol(volume),
+							fill: up ? "#e05656" : "#2f9e77",
+							opacity: "0.55"
+						}, `v-${index}`);
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+						x: PAD_L - 6,
+						y: 314,
+						fontSize: "9",
+						textAnchor: "end",
+						fill: "var(--dsw-alias-label-tertiary)",
+						children: "量"
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", {
+						fontSize: "9.5",
+						children: [
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+								x: PAD_L,
+								y: H_TOTAL - 4,
+								fill: "var(--dsw-alias-label-tertiary)",
+								children: "红涨绿跌 ·"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+								x1: 100,
+								y1: H_TOTAL - 7,
+								x2: 120,
+								y2: H_TOTAL - 7,
+								stroke: "#e8a33d",
+								strokeWidth: "1.6"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+								x: 124,
+								y: H_TOTAL - 4,
+								fill: "var(--dsw-alias-label-tertiary)",
+								children: "笔 ·"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+								x1: 144,
+								y1: H_TOTAL - 7,
+								x2: 164,
+								y2: H_TOTAL - 7,
+								stroke: "#5ab0ff",
+								strokeWidth: "2",
+								strokeDasharray: "6,3"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+								x: 168,
+								y: H_TOTAL - 4,
+								fill: "var(--dsw-alias-label-tertiary)",
+								children: "线段 ·"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+								x: 196,
+								y: H_TOTAL - 12,
+								width: "14",
+								height: "8",
+								fill: "rgba(199,146,234,0.2)",
+								stroke: "#c792ea",
+								strokeDasharray: "3,2"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+								x: 214,
+								y: H_TOTAL - 4,
+								fill: "var(--dsw-alias-label-tertiary)",
+								children: "中枢 · B/S 买卖点"
+							})
+						]
+					}),
+					hover !== null && hoverOpen !== void 0 && hoverClose !== void 0 && hoverK !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", {
+						pointerEvents: "none",
+						children: [
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+								x1: x(hover),
+								y1: 8,
+								x2: x(hover),
+								y2: 352,
+								stroke: "var(--dsw-alias-border-l2)"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("circle", {
+								cx: x(hover),
+								cy: yMain(hoverK[3] ?? hoverClose),
+								r: "2.5",
+								fill: "#e8edef"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("g", { children: [
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("rect", {
+									x: W - 218,
+									y: 8,
+									width: "204",
+									height: "58",
+									rx: "4",
+									fill: "rgba(3,13,11,0.84)"
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+									x: W - 210,
+									y: 22,
+									fontSize: "10.5",
+									fill: "#e8edef",
+									children: dates[hover]?.slice(0, 10) ?? ""
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+									x: W - 210,
+									y: 36,
+									fontSize: "10",
+									fill: "#e8edef",
+									children: [
+										"开 ",
+										hoverOpen.toFixed(2),
+										" 收 ",
+										hoverClose.toFixed(2)
+									]
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+									x: W - 210,
+									y: 49,
+									fontSize: "10",
+									fill: "#e8edef",
+									children: [
+										"低 ",
+										hoverK[2]?.toFixed(2) ?? "—",
+										" 高 ",
+										hoverK[3]?.toFixed(2) ?? "—"
+									]
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("text", {
+									x: W - 210,
+									y: 61,
+									fontSize: "10",
+									fill: hoverPct !== null && hoverPct >= 0 ? "#e05656" : "#2f9e77",
+									children: [
+										"涨跌 ",
+										hoverPct !== null ? `${hoverPct >= 0 ? "+" : ""}${hoverPct.toFixed(2)}%` : "—",
+										" · 量 ",
+										(volumes[hover] ?? 0) / 1e4 >= 100 ? `${((volumes[hover] ?? 0) / 1e4).toFixed(0)}万手` : `${((volumes[hover] ?? 0) / 1e4).toFixed(1)}万手`
+									]
+								})
+							] })
+						]
+					})
+				]
+			});
 		}
-		function loadWatchWords() {
-			try {
-				const raw = JSON.parse(localStorage.getItem(WATCH_KEY) ?? "[]");
-				return Array.isArray(raw) ? raw.filter((word) => typeof word === "string" && word !== "") : [];
-			} catch {
-				return [];
-			}
+		/** 七类信号雷达（SVG 七边形，czsc 式分类）。 */
+		function SignalRadar({ radar, score, direction, strength }) {
+			const categories = [
+				"cxt",
+				"tas",
+				"vol",
+				"bar",
+				"pos",
+				"jcc",
+				"sta"
+			];
+			const labels = {
+				cxt: "形态",
+				tas: "走势",
+				vol: "量能",
+				bar: "K线",
+				pos: "位置",
+				jcc: "交叉",
+				sta: "统计"
+			};
+			const cx = 78, cy = 72, r = 52;
+			const angle = (i) => Math.PI * 2 * i / categories.length - Math.PI / 2;
+			const point = (i, value) => [cx + Math.cos(angle(i)) * r * value, cy + Math.sin(angle(i)) * r * value];
+			const polygon = categories.map((c) => {
+				const v = asNum(radar[c]);
+				return v === null ? .5 : Math.max(0, Math.min(1, v / 100));
+			}).map((v, i) => point(i, v).join(",")).join(" ");
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: "ksq-chan-radar",
+				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("svg", {
+					viewBox: "0 0 156 144",
+					role: "img",
+					"aria-label": "信号雷达",
+					children: [
+						[
+							.25,
+							.5,
+							.75,
+							1
+						].map((ring) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("polygon", {
+							points: categories.map((_, i) => point(i, ring).join(",")).join(" "),
+							fill: "none",
+							stroke: "var(--dsw-alias-border-l3)",
+							strokeWidth: "0.6"
+						}, ring)),
+						categories.map((cat, i) => {
+							const [px, py] = point(i, 1);
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("line", {
+								x1: cx,
+								y1: cy,
+								x2: px,
+								y2: py,
+								stroke: "var(--dsw-alias-border-l3)",
+								strokeWidth: "0.6"
+							}, cat);
+						}),
+						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("polygon", {
+							points: polygon,
+							fill: "rgba(232,163,61,0.3)",
+							stroke: "#e8a33d",
+							strokeWidth: "1.4"
+						}),
+						categories.map((cat, i) => {
+							const [px, py] = point(i, 1.22);
+							return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("text", {
+								x: px,
+								y: py + 3,
+								fontSize: "9",
+								textAnchor: "middle",
+								fill: "var(--dsw-alias-label-tertiary)",
+								children: labels[cat] ?? cat
+							}, `l-${cat}`);
+						})
+					]
+				}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "ksq-chan-radar-meta",
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("strong", {
+						className: direction === "bullish" ? "ksq-up" : direction === "bearish" ? "ksq-down" : "",
+						children: [
+							score !== null ? score.toFixed(1) : "—",
+							" 分 · ",
+							direction === "bullish" ? "偏多" : direction === "bearish" ? "偏空" : direction
+						]
+					}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+						className: "ksq-item-meta",
+						children: ["强度：", strength === "weak" ? "弱" : strength === "strong" ? "强" : strength]
+					})]
+				})]
+			});
 		}
-		function loadReadSet() {
-			try {
-				const raw = JSON.parse(localStorage.getItem(READ_KEY) ?? "[]");
-				return new Set(Array.isArray(raw) ? raw.filter((item) => typeof item === "string") : []);
-			} catch {
-				return /* @__PURE__ */ new Set();
-			}
+		/** 深度解读提示词（结构摘要 + 信号明细 → czsc 式信号字典作解读输入）。 */
+		function interpretChanPrompt(payload, stock, level) {
+			const morph = asRec(payload.morphology);
+			const trend = asRec(payload.trend_analysis);
+			const advice = asRec(payload.trading_advice);
+			const scores = asRec(payload.signal_scores);
+			const signals = asArr(scores.signal_details).slice(0, 10).map((item) => {
+				const r = asRec(item);
+				return `${asStr(r.name)}=${asStr(r.value)}`;
+			});
+			const zhongshus = asArr(asRec(payload.chart_data).zhongshu_zones).map((item) => {
+				const r = asRec(item);
+				return `${asNum(r.low)?.toFixed(2) ?? "?"}~${asNum(r.high)?.toFixed(2) ?? "?"}`;
+			});
+			return `缠论研究面板对 ${asStr(payload.stock_name) || stock}（${asStr(payload.stock_code)}，${level} 级）的结构分析：K线 ${asNum(morph.klines_count) ?? "?"} 根 → 分型 ${asNum(morph.fenxings_count) ?? "?"} / 笔 ${asNum(morph.bis_count) ?? "?"} / 段 ${asNum(morph.segs_count) ?? "?"} / 中枢 ${asNum(morph.zhongshus_count) ?? "?"}${zhongshus.length > 0 ? `（区间 ${zhongshus.join("、")}）` : ""}；走势 ${asStr(trend.type_cn) || asStr(trend.type)}（强度 ${asNum(trend.trend_strength) ?? "?"}），现价 ${asNum(trend.latest_price) ?? "?"}；买卖点 买 ${asNum(asRec(payload.dynamics).buy_points_count) ?? 0} / 卖 ${asNum(asRec(payload.dynamics).sell_points_count) ?? 0}，背驰 ${asNum(asRec(payload.dynamics).backchi_count) ?? 0} 处；操作参考 ${asStr(advice.recommended_action)}；信号评分 ${asNum(scores.final_score) ?? "?"}（${asStr(scores.direction)} / ${asStr(scores.strength)}），信号明细：${signals.length > 0 ? signals.join("；") : "无"}。请做缠论深度解读：当前级别在走势中的位置（趋势/盘整）、中枢演化方向、买卖点的级别联立确认（可再跑多级别）、背驰与动能结构、操作计划（入场/止损/目标位与级别匹配）与失效条件。可用 stock-analysis 技能的缠论引擎补充多级别分析；数据缺失诚实标注「无数据」，不构成投资建议。`;
 		}
-		function saveReadSet(set) {
-			const list = [...set].slice(-300);
-			localStorage.setItem(READ_KEY, JSON.stringify(list));
-		}
-		/** 展示时间：可解析的「YYYY-MM-DD HH:mm[:ss]」转相对时间，否则原样。 */
-		function displayTime(raw) {
-			const match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(raw);
-			if (match === null) return raw;
-			const timestamp = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5])).getTime();
-			if (Number.isNaN(timestamp)) return raw;
-			const diff = Date.now() - timestamp;
-			if (diff < 6e4) return "刚刚";
-			if (diff < 36e5) return `${Math.floor(diff / 6e4)} 分钟前`;
-			if (diff < 864e5) return `${Math.floor(diff / 36e5)} 小时前`;
-			return raw.slice(5, 16);
-		}
-		/** 标的快析提示词（徽章点击）。 */
-		function stockPrompt(tag) {
-			return `对 ${tag.name}（${tag.code}）做快速分析：公司基本面要点 + 当前估值水平（含近一年历史分位）+ 近期催化与风险，最后一句话结论。当前会话若未挂载 stock-analysis/估值引擎技能，用网页检索补充并标注数据来源；禁止编造数值。`;
-		}
-		/** 新闻解读提示词（解读按钮）。 */
-		function interpretPrompt(item) {
-			const summary = item.summary !== "" ? `——${item.summary}` : "";
-			const related = (item.stocks ?? []).map((tag) => `${tag.name}(${tag.code})`).join("、");
-			return `请解读这条财经快讯的市场影响：【${item.source} ${item.published_at}】${item.title}${summary}。` + (related !== "" ? `标题涉及标的：${related}。` : "") + "要求：1) 检索交叉验证——当前会话挂载了 news-search 技能就优先用它；未挂载（如标准预设会话）改用网页检索工具；两者都不可用则基于新闻原文分析并明确标注「未交叉验证」，禁止反复尝试不存在的技能名；2) 分析受益/受损方向与相关 A 股标的；3) 给出关注信号与反证信号；数据缺失诚实标注「无数据」，不构成投资建议。";
-		}
-		function NewsPage({ useWorkspaces } = {}) {
+		/** 缠论研究页。 */
+		function ChanPage({ useWorkspaces } = {}) {
+			const [stock, setStock] = (0, react.useState)("");
+			const [level, setLevel] = (0, react.useState)("daily");
 			const [payload, setPayload] = (0, react.useState)(null);
-			const [loading, setLoading] = (0, react.useState)(true);
+			const [chart, setChart] = (0, react.useState)(null);
+			const [loading, setLoading] = (0, react.useState)(false);
 			const [error, setError] = (0, react.useState)(null);
-			const [query, setQuery] = (0, react.useState)("");
-			const [archive, setArchive] = (0, react.useState)(null);
-			const [archiveLoading, setArchiveLoading] = (0, react.useState)(false);
-			const [watchRaw, setWatchRaw] = (0, react.useState)(() => loadWatchWords().join(" "));
-			const [watchEditing, setWatchEditing] = (0, react.useState)(false);
-			const [onlyWatch, setOnlyWatch] = (0, react.useState)(false);
-			const [readSet, setReadSet] = (0, react.useState)(() => loadReadSet());
-			const [stats, setStats] = (0, react.useState)(null);
-			const alive = (0, react.useRef)(true);
-			const watchWords = (0, react.useMemo)(() => watchRaw.split(/[\s,，、;；]+/).filter((word) => word !== ""), [watchRaw]);
-			const load = (0, react.useCallback)(async () => {
-				setLoading(true);
-				try {
-					const response = await fetch("/kstock-api/workspace-news");
-					if (!response.ok) throw new Error(`请求失败（${response.status}）`);
-					const data = await response.json();
-					if (!alive.current) return;
-					setPayload(data);
-					setError(null);
-				} catch (err) {
-					if (!alive.current) return;
-					setError(err instanceof Error ? err.message : String(err));
-				} finally {
-					if (alive.current) setLoading(false);
-				}
-			}, []);
-			const loadStats = (0, react.useCallback)(async () => {
-				try {
-					const response = await fetch("/kstock-api/news-stats");
-					if (!response.ok) return;
-					const data = await response.json();
-					if (alive.current) setStats(data);
-				} catch {}
-			}, []);
-			(0, react.useEffect)(() => {
-				alive.current = true;
-				load();
-				loadStats();
-				const timer = window.setInterval(() => void load(), REFRESH_MS);
-				const statsTimer = window.setInterval(() => void loadStats(), 5 * REFRESH_MS);
-				return () => {
-					alive.current = false;
-					window.clearInterval(timer);
-					window.clearInterval(statsTimer);
-				};
-			}, [load, loadStats]);
-			(0, react.useEffect)(() => {
-				const trimmed = query.trim();
-				if (trimmed.length < 2) {
-					setArchive(null);
-					return;
-				}
-				setArchiveLoading(true);
-				const handle = window.setTimeout(() => {
-					(async () => {
-						try {
-							const response = await fetch(`/kstock-api/news-archive?q=${encodeURIComponent(trimmed)}&hours=168&limit=50`);
-							if (!response.ok) return;
-							const data = await response.json();
-							if (alive.current) setArchive(data);
-						} catch {} finally {
-							if (alive.current) setArchiveLoading(false);
-						}
-					})();
-				}, 300);
-				return () => window.clearTimeout(handle);
-			}, [query]);
-			const markRead = (0, react.useCallback)((title) => {
-				setReadSet((previous) => {
-					const next = new Set(previous);
-					next.add(hash(title));
-					saveReadSet(next);
-					return next;
-				});
-			}, []);
 			const [pendingAsk, setPendingAsk] = (0, react.useState)(null);
-			const askAgent = (0, react.useCallback)((prompt) => {
-				if (agentBridge === null) {
-					console.error("[kstock-news] bridge missing");
-					return;
+			const analyze = (0, react.useCallback)(async (targetStock, targetLevel) => {
+				if (targetStock.trim() === "") return;
+				setLoading(true);
+				setError(null);
+				try {
+					const response = await fetch("/kstock-api/chan-analyze", {
+						method: "POST",
+						headers: { "content-type": "application/json" },
+						body: JSON.stringify({
+							stock: targetStock.trim(),
+							level: targetLevel
+						})
+					});
+					if (!response.ok) {
+						const detail = await response.json().catch(() => null);
+						throw new Error(detail?.detail ?? `分析失败（${response.status}）`);
+					}
+					const data = await response.json();
+					setPayload(data);
+					setChart(parseChart(data));
+				} catch (err) {
+					setError(err instanceof Error ? err.message : "分析失败");
+					setPayload(null);
+					setChart(null);
+				} finally {
+					setLoading(false);
 				}
-				setPendingAsk(prompt);
 			}, []);
-			const items = payload?.items ?? [];
-			const hitWatch = (0, react.useCallback)((item) => {
-				if (watchWords.length === 0) return false;
-				const text = `${item.title} ${item.summary}`;
-				return watchWords.some((word) => text.includes(word));
-			}, [watchWords]);
-			const visibleItems = onlyWatch ? items.filter(hitWatch) : items;
-			const unreadCount = items.filter((item) => !readSet.has(hash(item.title))).length;
+			(0, react.useEffect)(() => {
+				analyze("000001", "daily");
+			}, [analyze]);
+			const morph = payload !== null ? asRec(payload.morphology) : {};
+			const trend = payload !== null ? asRec(payload.trend_analysis) : {};
+			const dynamics = payload !== null ? asRec(payload.dynamics) : {};
+			const advice = payload !== null ? asRec(payload.trading_advice) : {};
+			const scores = payload !== null ? asRec(payload.signal_scores) : {};
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: "ksq-page",
-				children: [
-					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("header", {
-						className: "ksq-topbar",
-						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-							className: "ksq-title",
-							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "财经新闻" }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
-								"实时快讯 · 每 60 秒自动刷新",
-								payload ? ` · 更新于 ${formatDateTime(payload.updated_at)}` : "",
-								unreadCount > 0 ? ` · 未读 ${unreadCount}` : ""
-							] })]
-						}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-							className: "ksq-topbar-actions",
-							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
-								className: "ksq-count",
-								children: archive !== null ? `${archive.items.length} 条命中` : `${items.length} 条`
-							}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(RefreshButton, {
-								refreshing: loading,
-								onClick: () => {
-									load();
-									loadStats();
-								},
-								label: "刷新"
-							})]
-						})]
-					}),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-						className: "ksq-news-toolbar",
-						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-							className: "ksq-tabs",
-							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
-								type: "button",
-								className: `ksq-tab ${onlyWatch ? "" : "active"}`,
-								onClick: () => setOnlyWatch(false),
-								children: "全部"
-							}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
-								type: "button",
-								className: `ksq-tab ${onlyWatch ? "active" : ""}`,
-								onClick: () => setOnlyWatch(true),
-								disabled: watchWords.length === 0,
-								title: watchWords.length === 0 ? "先配置关注词" : void 0,
-								children: ["关注命中 ", watchWords.length > 0 ? `(${watchWords.length})` : ""]
-							})]
-						}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-							className: "ksq-news-toolbar-right",
-							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
-								type: "button",
-								className: "ksq-linkbtn",
-								onClick: () => setWatchEditing((value) => !value),
-								children: "关注词"
-							}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-								className: "ksq-search",
-								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("input", {
-									value: query,
-									onChange: (event) => setQuery(event.target.value),
-									placeholder: query.trim().length >= 2 ? "历史检索中（近 7 天）…" : "搜索标题 / 摘要 / 标的（≥2 字查历史）"
-								})
-							})]
-						})]
-					}),
-					watchEditing && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-						className: "ksq-news-watchedit",
-						children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("input", {
-							value: watchRaw,
-							onChange: (event) => {
-								setWatchRaw(event.target.value);
-								localStorage.setItem(WATCH_KEY, JSON.stringify(event.target.value.split(/[\s,，、;；]+/).filter((word) => word !== "")));
-							},
-							placeholder: "关注词，空格或逗号分隔（如：锂矿 美联储 宁德时代）——命中的新闻会高亮",
-							autoFocus: true
-						})
-					}),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-						className: "ksq-body ksq-news-split",
-						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-							className: "ksq-news-main",
+				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("header", {
+					className: "ksq-topbar",
+					children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						className: "ksq-title",
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "缠论研究" }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: "笔段中枢 · 买卖点 · 背驰 · 信号雷达" })]
+					})
+				}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "ksq-body",
+					children: [
+						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+							className: "ksq-toolbar",
 							children: [
-								error !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ErrorLine, { message: error }),
-								loading && payload === null && error === null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(Loading, { text: "加载财经快讯…" }),
-								archiveLoading && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(Loading, { text: "检索历史留档…" }),
-								!loading && payload !== null && items.length === 0 && error === null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(Empty, {
-									icon: "📰",
-									title: "暂无快讯",
-									hint: "数据源（东方财富/央视）暂未返回内容——网络不可用或接口限流，稍后自动重试"
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("input", {
+									className: "ksq-chan-input",
+									value: stock,
+									onChange: (event) => setStock(event.target.value),
+									onKeyDown: (event) => {
+										if (event.key === "Enter") analyze(stock, level);
+									},
+									placeholder: "代码或名称（600519 / 茅台 / 000001.SH）",
+									spellCheck: false
 								}),
-								onlyWatch && visibleItems.length === 0 && items.length > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(Empty, {
-									icon: "🎯",
-									title: "暂无关注命中",
-									hint: `当前 ${watchWords.length} 个关注词在最近快讯中未命中`
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("select", {
+									className: "ksq-chan-select",
+									value: level,
+									onChange: (event) => {
+										setLevel(event.target.value);
+										if (payload !== null) analyze(stock || asStr(payload.stock_code), event.target.value);
+									},
+									children: LEVEL_OPTIONS.map((option) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("option", {
+										value: option,
+										children: option
+									}, option))
 								}),
-								archive !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-									className: "ksq-news-list",
-									children: [archive.items.map((item, index) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)(NewsCard, {
-										item,
-										watched: hitWatch(item),
-										read: true,
-										onRead: markRead,
-										onAsk: askAgent,
-										archived: true
-									}, `a-${item.title}-${index}`)), archive.items.length === 0 && !archiveLoading && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(Empty, {
-										icon: "🔍",
-										title: "历史无命中",
-										hint: "近 7 天留档中没有匹配「此关键词」的新闻"
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+									className: "ksq-linkbtn",
+									type: "button",
+									disabled: loading || stock.trim() === "",
+									onClick: () => void analyze(stock, level),
+									children: loading ? "分析中…" : "分析"
+								}),
+								payload !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+									className: "ksq-count",
+									children: [
+										asStr(payload.stock_name),
+										" ",
+										asStr(payload.stock_code),
+										" · ",
+										asStr(payload.time_level)
+									]
+								}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+									className: "ksq-linkbtn",
+									type: "button",
+									disabled: chanBridge === null,
+									onClick: () => {
+										if (chanBridge !== null && payload !== null) setPendingAsk(interpretChanPrompt(payload, stock, level));
+									},
+									children: "让 Agent 深度解读"
+								})] })
+							]
+						}),
+						error !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+							className: "ksq-note",
+							children: error
+						}),
+						chart !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ChanChart, { chart }),
+						payload !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+							className: "ksq-chan-summary",
+							children: [
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+									className: "ksq-chan-card",
+									children: [
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "形态" }),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
+											"K线 ",
+											asNum(morph.klines_count) ?? "—",
+											" · 分型 ",
+											asNum(morph.fenxings_count) ?? "—"
+										] }),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
+											"笔 ",
+											asNum(morph.bis_count) ?? "—",
+											" · 段 ",
+											asNum(morph.segs_count) ?? "—",
+											" · 中枢 ",
+											asNum(morph.zhongshus_count) ?? "—"
+										] })
+									]
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+									className: "ksq-chan-card",
+									children: [
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "走势" }),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
+											asStr(trend.type_cn) || asStr(trend.type) || "—",
+											" · 强度 ",
+											asNum(trend.trend_strength) ?? "—"
+										] }),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
+											"现价 ",
+											asNum(trend.latest_price) ?? "—",
+											" · 中枢 ",
+											asNum(trend.zhongshu_count) ?? "—",
+											" 个"
+										] })
+									]
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+									className: "ksq-chan-card",
+									children: [
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "买卖点 / 背驰" }),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
+											"买 ",
+											asNum(dynamics.buy_points_count) ?? 0,
+											" · 卖 ",
+											asNum(dynamics.sell_points_count) ?? 0
+										] }),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
+											"背驰 ",
+											asNum(dynamics.backchi_count) ?? 0,
+											" 处"
+										] })
+									]
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+									className: "ksq-chan-card",
+									children: [
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "操作参考" }),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: asStr(advice.recommended_action) || "—" }),
+										/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
+											"入场 ",
+											asNum(advice.entry_price)?.toFixed(2) ?? "—",
+											" · 止损 ",
+											asNum(advice.stop_loss)?.toFixed(2) ?? "—",
+											" · 目标 ",
+											asNum(advice.take_profit)?.toFixed(2) ?? "—"
+										] })
+									]
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsx)(SignalRadar, {
+									radar: asRec(scores.radar_data),
+									score: asNum(scores.final_score),
+									direction: asStr(scores.direction),
+									strength: asStr(scores.strength)
+								}),
+								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+									className: "ksq-chan-signals",
+									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: "信号明细" }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+										className: "ksq-chips",
+										children: [asArr(scores.signal_details).slice(0, 12).map((item, index) => {
+											const r = asRec(item);
+											return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+												className: "ksq-chip ksq-mono",
+												children: [
+													asStr(r.name),
+													" ",
+													asStr(r.value)
+												]
+											}, index);
+										}), asArr(scores.signal_details).length === 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+											className: "ksq-item-meta",
+											children: "无信号"
+										})]
 									})]
-								}),
-								archive === null && visibleItems.length > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-									className: "ksq-news-list",
-									children: visibleItems.map((item, index) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)(NewsCard, {
-										item,
-										watched: hitWatch(item),
-										read: readSet.has(hash(item.title)),
-										onRead: markRead,
-										onAsk: askAgent
-									}, `${item.title}-${index}`))
 								})
 							]
-						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)(StatsAside, {
-							stats,
-							onPickWord: (word) => setQuery(word)
-						})]
-					}),
-					pendingAsk !== null && agentBridge !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(TaskTargetMenu, {
-						taskKind: "news",
-						title: "新闻解读发送到…",
-						prompt: pendingAsk,
-						bridge: agentBridge,
-						useWorkspaces,
-						onClose: () => setPendingAsk(null)
-					})
-				]
-			});
-		}
-		function NewsCard({ item, watched, read, onRead, onAsk, archived = false }) {
-			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("article", {
-				className: `ksq-news-item${watched ? " watched" : ""}${read ? " read" : ""}`,
-				onClick: () => onRead(item.title),
-				children: [
-					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-						className: "ksq-news-meta",
-						children: [
-							watched && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
-								className: "ksq-news-watchflag",
-								children: "关注"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
-								className: "ksq-news-source",
-								children: item.source
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
-								className: "ksq-news-dot",
-								"aria-hidden": "true"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("time", {
-								className: "ksq-news-time",
-								title: item.published_at,
-								children: archived ? item.published_at.slice(0, 16) : displayTime(item.published_at)
-							})
-						]
-					}),
-					item.url !== "" ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("a", {
-						className: "ksq-news-title",
-						href: item.url,
-						target: "_blank",
-						rel: "noreferrer noopener",
-						onClick: (event) => event.stopPropagation(),
-						children: item.title
-					}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
-						className: "ksq-news-title",
-						children: item.title
-					}),
-					item.summary !== "" && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
-						className: "ksq-news-summary",
-						children: item.summary
-					}),
-					item.stocks !== void 0 && item.stocks.length > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-						className: "ksq-news-stocks",
-						children: item.stocks.map((tag) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
-							type: "button",
-							className: "ksq-news-stocktag",
-							title: `让 Agent 快析 ${tag.name}（${tag.code}）`,
-							onClick: (event) => {
-								event.stopPropagation();
-								onRead(item.title);
-								onAsk(stockPrompt(tag));
-							},
-							children: tag.name
-						}, tag.code))
-					}),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-						className: "ksq-news-actions",
-						children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
-							type: "button",
-							className: "ksq-linkbtn",
-							onClick: (event) => {
-								event.stopPropagation();
-								onRead(item.title);
-								onAsk(interpretPrompt(item));
-							},
-							children: "让 Agent 解读 →"
+						}),
+						pendingAsk !== null && chanBridge !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(TaskTargetMenu, {
+							taskKind: "chan",
+							title: "缠论深度解读发送到…",
+							prompt: pendingAsk,
+							bridge: chanBridge,
+							useWorkspaces,
+							onClose: () => setPendingAsk(null)
 						})
-					})
-				]
+					]
+				})]
 			});
 		}
-		function StatsAside({ stats, onPickWord }) {
-			const max = stats === null ? 1 : Math.max(1, ...stats.frequency.map((point) => point.count));
-			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("aside", {
-				className: "ksq-news-stats",
-				"aria-label": "新闻统计",
-				children: [
-					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-						className: "ksq-news-stats-block",
-						children: [
-							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-								className: "ksq-news-stats-head",
-								children: ["热点主题 ", /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: "近 6 小时" })]
-							}),
-							stats !== null && stats.themes.length === 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
-								className: "ksq-news-stats-empty",
-								children: "留档积累中——运行一段时间后出现"
-							}),
-							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-								className: "ksq-news-trending",
-								children: stats?.themes.map((entry) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
-									type: "button",
-									className: "ksq-news-trendword",
-									title: `检索「${entry.word}」`,
-									onClick: () => onPickWord(entry.word),
-									children: [entry.word, /* @__PURE__ */ (0, react_jsx_runtime.jsx)("em", { children: entry.count })]
-								}, `t-${entry.word}`))
-							})
-						]
-					}),
-					stats !== null && stats.stocks.length > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-						className: "ksq-news-stats-block",
-						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-							className: "ksq-news-stats-head",
-							children: ["提及标的 ", /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: "近 6 小时" })]
-						}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-							className: "ksq-news-trending",
-							children: stats.stocks.map((entry) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
-								type: "button",
-								className: "ksq-news-trendword",
-								title: `检索「${entry.word}」`,
-								onClick: () => onPickWord(entry.word),
-								children: [entry.word, /* @__PURE__ */ (0, react_jsx_runtime.jsx)("em", { children: entry.count })]
-							}, `s-${entry.word}`))
-						})]
-					}),
-					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-						className: "ksq-news-stats-block",
-						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-							className: "ksq-news-stats-head",
-							children: ["快讯频率 ", /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: "近 24 小时" })]
-						}), stats !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-							className: "ksq-news-freq",
-							title: "每小时留档条数（新闻密度≈市场情绪代理）",
-							children: stats.frequency.map((point) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-								className: "ksq-news-freq-bar",
-								style: { height: `${Math.max(4, Math.round(point.count / max * 46))}px` },
-								title: `${new Date(point.bucket).toLocaleTimeString("zh-CN", { hour: "2-digit" })}时 · ${point.count} 条`
-							}, point.bucket))
-						})]
-					})
-				]
-			});
-		}
+		/** index.tsx 注入共享路由桥（模块级单例传递给 slot 组件）。 */
+		ChanPage.bindBridge = (bridge) => {
+			chanBridge = bridge;
+		};
 		//#endregion
 		//#region src/client/index.tsx
 		/**
-		* ${pkg} — KStock 财经新闻客户端插件。
+		* ${pkg} — KStock 缠论研究客户端插件。
 		*
-		* 注册 `main` keyed 面板（键 kstock-client-news）+ `sidebar.panellist`
-		* 导航入口（同 id，侧栏自动接线 ctx.layout.selectPanel）。与四个量化库
-		* 插件同款注册形态（对照 @kstock/quant-factors）；ksq 样式经
-		* @kstock/quant-ui 幂等注入。
-		*
-		* 数据走 @kstock/quant 宿主三路：`GET /kstock-api/workspace-news`
-		* （东方财富主源 + 央视备源，60 秒缓存，带标的识别标注）、
-		* `news-archive`（历史检索）、`news-stats`（热词榜 + 24h 频率）。
-		*
-		* 研究联动（§26-10 目标选择菜单）：标的徽章与「解读」按钮先弹
-		* TaskTargetMenu 让用户选任务归属（跟随当前会话 / 已注册子工作区 /
-		* 浏览注册新目录），按任务类型记忆；路由桥为 quant-ui 共享实现
-		* buildTaskRouterBridge（workspace 目标经 uiWorkspace.connectWorkspace
-		* 落地，会话自动挂进工作区分组，不再「未分组」）。
+		* 注册 `main` keyed 面板（键 kstock-client-chan）+ `sidebar.panellist`
+		* 导航入口。面板直连宿主 `POST /kstock-api/chan-analyze`（秒级引擎），
+		* 交互式 K 线缠论图（笔/段/中枢/买卖点叠加）+ 形态/走势/信号摘要 +
+		* Agent 深度解读联动（quant-ui 共享路由桥）。
 		*/
 		/** 面板键：main slot 与侧栏入口共用。 */
-		const PANEL_KEY = "kstock-client-news";
+		const PANEL_KEY = "kstock-client-chan";
 		/** 侧栏图标（sidebar.panellist 的组件收到 {size, active} props）。 */
 		function NavIcon({ size }) {
-			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconNews, { size: size ?? 18 });
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconCandles, { size: size ?? 18 });
 		}
 		/** 必需服务：slot 注册表 + 会话作用域 + 面板切换 + 工作区面。 */
 		const inject = [
@@ -865,18 +1119,18 @@ window.__ModuleLoader__.load({
 		function apply(ctx) {
 			ctx.effect(() => {
 				injectQuantStyles();
-				bindAgentBridge(buildTaskRouterBridge(ctx));
+				ChanPage.bindBridge(buildTaskRouterBridge(ctx));
 				ctx.slots.inject("main", () => ctx.slots.register({
 					name: "main",
 					key: PANEL_KEY
-				}, NewsPage));
+				}, ChanPage));
 				ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({
 					name: "sidebar.panellist",
 					id: PANEL_KEY,
-					order: 140,
-					label: "财经新闻"
+					order: 150,
+					label: "缠论研究"
 				}, NavIcon));
-			}, "kstock-client-news: panel + nav");
+			}, "kstock-client-chan: panel + nav");
 		}
 		//#endregion
 		exports.apply = apply;

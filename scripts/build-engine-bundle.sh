@@ -35,7 +35,7 @@ UPSTREAM_EXE_BASE="deepseek-harness-sdk-runtime-$TARGET"
 
 # ── 1. KStock 插件包构建（宿主 + 四库界面 + 品牌 + 账户）──────────────
 echo "==> 构建 KStock 插件包"
-for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui; do
+for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui chan-ui; do
   # 前置：kstock/* 已并入根 workspace，一次根 pnpm install 全装。缺
   # node_modules 时 npx 静默失败 + set -e 无声中止（Windows 实机踩坑：
   # 脚本死在本步零报错，dev 侧只见「lib 未构建」无从定位），显式拦截。
@@ -82,7 +82,7 @@ done
 # KStock 插件包：清单 + lib 产物 + 静态资源（不含 node_modules / ts 源配置）。
 rm -rf "$OUT_DIR/plugins"
 mkdir -p "$OUT_DIR/plugins"
-for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui; do
+for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui chan-ui; do
   target="$OUT_DIR/plugins/$pkg"
   mkdir -p "$target"
   cp "$REPO_ROOT/kstock/$pkg/package.json" "$target/"

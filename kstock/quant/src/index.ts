@@ -17,6 +17,7 @@ import { NewsStore } from './news-store.ts'
 import { stockNames, stockUniverse, themeWords } from './stocks.ts'
 import { dataSourcesView, saveDataSources } from './datasources.ts'
 import { dependenciesView } from './deps.ts'
+import { analyzeChan } from './chan.ts'
 
 /** 非 JSON 响应的直通形态（报告 HTML 正文等）。 */
 class RawResponse {
@@ -185,6 +186,14 @@ async function dispatch(
     throwMethod(method)
   }
   if (libraryKey === 'data-source-status') return method === 'GET' ? dataSourceStatus() : throwMethod(method)
+  // 缠论研究面板（§29-C1）：面板直连引擎秒级分析（60s 缓存防连点）。
+  if (libraryKey === 'chan-analyze') {
+    if (method === 'POST') {
+      const body = await readJson(req)
+      return analyzeChan(body)
+    }
+    throwMethod(method)
+  }
   // 引擎 Python 依赖体检（设置页/诊断用）：逐依赖 import 探针与版本。
   if (libraryKey === 'dependencies') {
     if (method === 'GET') return dependenciesView(dataRoot)
