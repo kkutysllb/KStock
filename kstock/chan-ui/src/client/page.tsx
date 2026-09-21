@@ -440,7 +440,11 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
         </div>
         {error !== null && <p className="ksq-note">{error}</p>}
 
-        {chart !== null && <ChanChart chart={chart} />}
+        {chart !== null && (
+          <div className="ksq-chan-chart">
+            <ChanChart chart={chart} />
+          </div>
+        )}
 
         {payload !== null && (
           <div className="ksq-chan-summary">
