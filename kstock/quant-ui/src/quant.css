@@ -1347,7 +1347,7 @@ a.ksq-news-title:hover {
 
 /* ── 缠论研究改版（三栏证据台）：证据链卡 · 共享件 ───────────────────── */
 .ksq-chanx-card {
-  background: var(--dsw-alias-surface-1, #101a16);
+  background: var(--dsw-alias-bg-layer-1);
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   padding: 10px 10px 8px;
@@ -1374,12 +1374,12 @@ a.ksq-news-title:hover {
 .ksq-chanx-badge.zs { color: #c792ea; border-color: rgba(199,146,234,0.45); }
 .ksq-chanx-bar {
   flex: 1; height: 8px; border-radius: 4px; overflow: hidden;
-  background: var(--dsw-alias-surface-2, #0d1613); display: inline-block;
+  background: var(--dsw-alias-bg-layer-2); display: inline-block;
 }
 .ksq-chanx-bar i { display: block; height: 100%; border-radius: 4px; }
 .ksq-chanx-bcrow, .ksq-chanx-bsrow, .ksq-chanx-zsrow {
   text-align: left; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px;
-  background: var(--dsw-alias-surface-2, #0d1613); padding: 7px 8px;
+  background: var(--dsw-alias-bg-layer-2); padding: 7px 8px;
   display: flex; flex-direction: column; gap: 5px; cursor: pointer; color: inherit;
   font: inherit; width: 100%;
 }
