@@ -249,3 +249,29 @@ pnpm dev:desktop
   问题，建议改为存在的版本。
 - 桌面端真机逐屏冒烟（P4c 六项：登录/侧边栏分区/设置页插件管理/四库/报告/
   中文文案）需人工过一遍后合并分支。
+
+### 升级后修复：客户端运行时缝破坏（桌面冒烟发现，即风险 R2 兑现）
+
+**现象**：点击新闻/选股库「解读」菜单报 `sessions.open is not a function`。
+
+**根因**：3.0.2 引擎把会话导航从 `sessions` 服务移交视图拥有者——
+`ISessions.open(id)` 删除，`SessionListState.current` 移除；替身为
+`uiWorkspace.openSession(target)` 与 `uiWorkspace.selection`。该缝为
+运行时动态注入（kstock 插件不解析 @qilin 模块、只声明最小结构面），
+tsc 与 check-ci 均无法拦截——正是差异分析风险清单 R2 预判的
+「客户端运行时契约大改，类型检查覆盖不了」。
+
+**修复**（`kstock/quant-ui/src/task-target.tsx`）：
+- 打开会话改 `uiWorkspace.openSession(id)`（retain mainView + 切选择 +
+  selectPanel(null) 的完整旧语义）；
+- 「跟随当前会话」读 `uiWorkspace.selection.getSnapshot().sessionId`
+  （旧 `sessions.list.getSnapshot().current` 已不存在，若不改会静默
+  每次新建会话——第二个隐性破坏）；
+- `SessionsFace` 收敛为 `create`/`scope`。
+
+**防回归**：`verify_package_resources.py` 新增 `verify_engine_client_faces`
+——对引擎契约源码盯标记（sessions create/scope、uiWorkspace
+openSession/connectWorkspace/pickDirectory、workspaces create、layout
+selectPanel），并对 KStock 桥接做双向锚点（必须含新成员、禁止
+`sessions.open(`/`.list.getSnapshot().current` 残留）。红路径已验证
+（故意回退立即 FAIL）。随 check-ci.sh 每次运行。

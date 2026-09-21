@@ -176,6 +176,64 @@ class Verifier:
                 self.fail("source electron-builder extraResources",
                           "Expected from: ../../dist-exe -> to: engine")
 
+    def verify_engine_client_faces(self) -> None:
+        """引擎客户端面契约：KStock 插件运行时消费的引擎服务成员仍存在。
+
+        客户端插件的 ctx 由引擎 runner 在运行时注入，tsc 覆盖不到这条
+        缝（kstock 侧只声明最小结构面，不解析 @qilin 模块）。上游引擎
+        改名/删除成员时（如 3.0.2 删除 sessions.open、SessionListState
+        移除 current），唯一拦截点就是这里——对着引擎契约源码盯标记。
+        """
+        root = self.repo_root
+        qilin = root / "vendor" / "qilin" / "packages"
+
+        # sessions 面（task-target.tsx SessionsFace 消费 create/scope）
+        self.require_file_contains(
+            qilin / "api" / "session-controller" / "src" / "client" / "contract" / "sessions.ts",
+            "engine sessions face",
+            ["create(opts?:", "scope(id: SessionId)"],
+        )
+
+        # uiWorkspace 面（openSession=旧 sessions.open 替身；selection=旧
+        # sessions.list.current 归属；connectWorkspace/pickDirectory 原有）
+        self.require_file_contains(
+            qilin / "client" / "ui-workspace" / "src" / "client" / "navigation.ts",
+            "engine uiWorkspace face",
+            ["openSession(target: SessionTarget)",
+             "connectWorkspace(workspaceId: WorkspaceId)",
+             "pickDirectory(): Promise<string | null>",
+             "uiWorkspace: UiWorkspace"],
+        )
+
+        # workspaces / layout 面
+        self.require_file_contains(
+            qilin / "api" / "workspace-controller" / "src" / "client" / "service.ts",
+            "engine workspaces face",
+            ["create(input: { path: string })"],
+        )
+        self.require_file_contains(
+            qilin / "client" / "ui-layout" / "src" / "client" / "service.ts",
+            "engine layout face",
+            ["selectPanel(panelId"],
+        )
+
+        # KStock 侧反向锚点：桥接必须消费新 API，不得回退旧成员
+        task_target = root / "kstock" / "quant-ui" / "src" / "task-target.tsx"
+        self.require_file_contains(
+            task_target,
+            "kstock task-target bridge members",
+            ["uiWorkspace.openSession(id)", "selection.getSnapshot()"],
+        )
+        if task_target.exists():
+            text = task_target.read_text(encoding="utf-8")
+            stale = [marker for marker in ("sessions.open(", ".list.getSnapshot().current")
+                     if marker in text]
+            if stale:
+                self.fail("kstock task-target stale engine members",
+                          f"Removed engine APIs still referenced: {', '.join(stale)}")
+            else:
+                self.pass_("kstock task-target stale engine members")
+
     def verify_product_bundle(self) -> None:
         bundle = self.repo_root / "dist-exe"
 
@@ -219,6 +277,7 @@ class Verifier:
 
     def run(self) -> int:
         self.verify_source_contract()
+        self.verify_engine_client_faces()
         if not self.source_only:
             self.verify_product_bundle()
 

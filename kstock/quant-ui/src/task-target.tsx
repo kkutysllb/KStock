@@ -13,16 +13,13 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-/** sessions 服务的最小结构面（kylin-client-runner ISessions 的消费子集）。 */
+/**
+ * sessions 服务的最小结构面（引擎 ISessions 的消费子集，QiLin 3.0.2+ 口径）。
+ * 会话导航（open/select）已从 sessions 移交视图拥有者 uiWorkspace——
+ * 「打开会话」= uiWorkspace.openSession(id)，「当前会话」= uiWorkspace.selection。
+ */
 export interface SessionsFace {
-  list: {
-    getSnapshot(): {
-      current?: string
-      byId?: Record<string, { cwd?: string; blank?: boolean; running?: boolean; updatedAt?: number }>
-    }
-  }
   create(opts?: { workspaceId?: string; cwd?: string; sessionId?: string }): Promise<string>
-  open(id: string): void
   scope(id: string): { get(name: string): unknown } | undefined
 }
 
@@ -48,6 +45,10 @@ export interface TaskRouterDeps {
   sessions?: SessionsFace
   layout?: { selectPanel(panelId: string | null): void }
   uiWorkspace?: {
+    /** 主视图当前选中会话（3.0.2+ 引擎：current 从 sessions.list 移到此处）。 */
+    selection: { getSnapshot(): { sessionId?: string } }
+    /** 打开会话并切到对话页（旧 sessions.open 的替代，视图拥有者导航）。 */
+    openSession(target: string): void
     pickDirectory(): Promise<string | null>
     connectWorkspace(workspaceId: string): Promise<string>
   }
@@ -60,25 +61,23 @@ export interface TaskRouterDeps {
  * 标准路由桥实现（面板共用：新闻/选股库/因子库）。current=当前会话
  * （无则默认建）；workspace=connectWorkspace（复用/新建 blank 会话并挂
  * 进工作区分组——修复裸 create({cwd}) 的「未分组」与产物散落）。
+ * 打开/选中一律走 uiWorkspace.openSession（QiLin 3.0.2+ 引擎把会话
+ * 导航从 sessions 服务移交视图拥有者，sessions.open 已删除）。
  */
 export function buildTaskRouterBridge(deps: TaskRouterDeps): TaskRouterBridge {
   return {
     send: async (target: TaskTarget, text: string): Promise<void> => {
       const sessions = deps.sessions
       if (sessions === undefined) throw new Error('会话服务不可用')
-      let id: string | undefined
+      const uiWorkspace = deps.uiWorkspace
+      if (uiWorkspace === undefined) throw new Error('工作区导航服务不可用')
+      let id: string
       if (target.kind === 'workspace') {
-        const uiWorkspace = deps.uiWorkspace
-        if (uiWorkspace === undefined) throw new Error('工作区服务不可用')
         id = await uiWorkspace.connectWorkspace(target.workspaceId)
-        sessions.open(id)
       } else {
-        id = sessions.list.getSnapshot().current
-        if (id === undefined) {
-          id = await sessions.create()
-          sessions.open(id)
-        }
+        id = uiWorkspace.selection.getSnapshot().sessionId ?? await sessions.create()
       }
+      uiWorkspace.openSession(id)
       const scoped = sessions.scope(id)
       const conversation = scoped?.get('conversation') as
         | { send(prompt: string): Promise<void> }
