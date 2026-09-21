@@ -1173,3 +1173,8 @@ a.ksq-news-title:hover {
 .ksq-rebalance summary:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent); }
 
 .ksq-rebalance-body { padding: 6px 10px 10px 22px; display: flex; flex-direction: column; gap: 6px; }
+
+.ksq-rebalance-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 720px) { .ksq-rebalance-cols { grid-template-columns: 1fr; } }
+.ksq-rebalance-side p { margin: 0 0 4px; font-size: 12px; font-weight: 500; }
+.ksq-rebalance-side .ksq-table { font-size: 11.5px; }

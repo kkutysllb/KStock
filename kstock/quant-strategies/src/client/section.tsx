@@ -93,6 +93,7 @@ interface TradeRow {
   code: string
   action: string
   quantity: number
+  price: number | null
   pnl: number | null
 }
 
@@ -130,6 +131,7 @@ function tradesArtifact(raw: unknown): {
       code: typeof item.code === 'string' ? item.code : '',
       action: typeof item.action === 'string' ? item.action.toLowerCase() : '',
       quantity: typeof item.quantity === 'number' && Number.isFinite(item.quantity) ? item.quantity : 0,
+      price: typeof item.price === 'number' && Number.isFinite(item.price) ? item.price : null,
       pnl: typeof item.realized_pnl === 'number' && Number.isFinite(item.realized_pnl) ? item.realized_pnl : null,
     }))
     .filter(row => row.date !== '' && row.code !== '')
@@ -195,6 +197,18 @@ function tradesArtifact(raw: unknown): {
     rebalances,
     precise,
   }
+}
+
+/** 导出 CSV 到本地（BOM 头保证 Excel 中文不乱码；逗号转义）。 */
+function exportCsv(filename: string, header: string[], rows: string[][]): void {
+  const escape = (cell: string): string => (/[",\n]/.test(cell) ? `"${cell.replaceAll('"', '""')}"` : cell)
+  const content = '\ufeff' + [header, ...rows].map(row => row.map(escape).join(',')).join('\n')
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 /** equity 附件的日期轴（[{date, equity}] 形态时提供，纯数值形态为空）。 */
@@ -606,7 +620,20 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                       {digest.pnlSeries.length >= 2 ? (
                         <>
                           <div className="ksq-chart">
-                            <h4>每笔平仓盈亏（悬浮查看笔明细）</h4>
+                            <h4>
+                              每笔平仓盈亏（悬浮查看笔明细）
+                              <button
+                                className="ksq-linkbtn"
+                                type="button"
+                                onClick={() => exportCsv(
+                                  `交易流水-${selected?.name ?? 'strategy'}-${run.run_id.slice(5, 13)}.csv`,
+                                  ['日期', '代码', '方向', '价格', '数量', '已实现盈亏'],
+                                  digest.rows.map(row => [row.date, row.code, row.action, row.price !== null ? String(row.price) : '', String(row.quantity), row.pnl !== null ? String(row.pnl) : '']),
+                                )}
+                              >
+                                导出流水 CSV
+                              </button>
+                            </h4>
                             <PnlBars values={digest.pnlSeries} title="每笔平仓盈亏柱" labels={digest.pnlLabels} />
                           </div>
                           <p className="ksq-item-meta">
@@ -619,7 +646,22 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                       {digest.rebalances.length > 0 && (
                         <div className="ksq-chart">
                           <h4>
-                            调仓记录（{digest.rebalances.length} 个交易日{digest.precise ? ' · 快照精确口径' : ' · 流水推导口径'} · 点开看换仓与持仓）
+                            调仓记录（{digest.rebalances.length} 个交易日{digest.precise ? ' · 快照精确口径' : ' · 流水推导口径'}）
+                            <button
+                              className="ksq-linkbtn"
+                              type="button"
+                              onClick={() => exportCsv(
+                                `调仓记录-${selected?.name ?? 'strategy'}-${run.run_id.slice(5, 13)}.csv`,
+                                ['日期', '类型', '代码', '数量'],
+                                digest.rebalances.flatMap(day => [
+                                  ...day.buys.map(item => [day.date, '换入', item.code, String(item.quantity)]),
+                                  ...day.sells.map(item => [day.date, '换出', item.code, String(item.quantity)]),
+                                  ...day.holdings.map(item => [day.date, '持仓', item.code, String(item.quantity)]),
+                                ]),
+                              )}
+                            >
+                              导出 CSV
+                            </button>
                           </h4>
                           <div className="ksq-rebalances">
                             {digest.rebalances.slice().reverse().map(day => (
@@ -631,21 +673,46 @@ export function StrategiesSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                                   <span className="ksq-item-meta">持仓 {day.holdings.length}</span>
                                 </summary>
                                 <div className="ksq-rebalance-body">
-                                  {day.buys.length > 0 && (
-                                    <p className="ksq-item-meta">换入：{day.buys.map(item => `${item.code}×${item.quantity}`).join('、')}</p>
-                                  )}
-                                  {day.sells.length > 0 && (
-                                    <p className="ksq-item-meta">换出：{day.sells.map(item => `${item.code}×${item.quantity}`).join('、')}</p>
-                                  )}
-                                  <div className="ksq-table-wrap">
-                                    <table className="ksq-table">
-                                      <thead><tr><th>持仓代码</th><th>数量</th></tr></thead>
-                                      <tbody>
-                                        {day.holdings.map(item => (
-                                          <tr key={item.code}><td className="ksq-mono">{item.code}</td><td className="num">{item.quantity.toLocaleString()}</td></tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
+                                  <div className="ksq-rebalance-cols">
+                                    {day.buys.length > 0 && (
+                                      <div className="ksq-rebalance-side">
+                                        <p className="ksq-up">换入 {day.buys.length} 只</p>
+                                        <table className="ksq-table">
+                                          <thead><tr><th>代码</th><th>数量</th></tr></thead>
+                                          <tbody>
+                                            {day.buys.map(item => (
+                                              <tr key={`b-${item.code}`}><td className="ksq-mono">{item.code}</td><td className="num">{item.quantity.toLocaleString()}</td></tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+                                    {day.sells.length > 0 && (
+                                      <div className="ksq-rebalance-side">
+                                        <p className="ksq-down">换出 {day.sells.length} 只</p>
+                                        <table className="ksq-table">
+                                          <thead><tr><th>代码</th><th>数量</th></tr></thead>
+                                          <tbody>
+                                            {day.sells.map(item => (
+                                              <tr key={`s-${item.code}`}><td className="ksq-mono">{item.code}</td><td className="num">{item.quantity.toLocaleString()}</td></tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <p className="ksq-item-meta">日终持仓 {day.holdings.length} 只</p>
+                                    <div className="ksq-table-wrap">
+                                      <table className="ksq-table">
+                                        <thead><tr><th>持仓代码</th><th>数量</th></tr></thead>
+                                        <tbody>
+                                          {day.holdings.map(item => (
+                                            <tr key={item.code}><td className="ksq-mono">{item.code}</td><td className="num">{item.quantity.toLocaleString()}</td></tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
                                   </div>
                                 </div>
                               </details>
