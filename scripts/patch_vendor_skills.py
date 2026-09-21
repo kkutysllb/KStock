@@ -1669,11 +1669,11 @@ def _fix_chan_zhongshu_guard(text: str) -> str | None:
 
 
 
-# ── 补丁 22：缠论评分器信号类别显式映射 ────────────────────────────────
-# generate_signal_library 的键大多不带类别前缀（bi_base/macd_cross/…），
-# _get_category 前缀猜测把 30+ 信号全落入默认 cxt；tas/pos/sta 全库无
-# 前缀信号恒空 → radar 五轴钉死 50（用户实测三级别形状相同）。显式表
-# 优先，前缀兜底（bar_*/vol_*/jcc_* 本就带前缀）。
+# ── 补丁 22：缠论评分器信号类别显式覆盖（8 指标键→tas）─────────────────
+# generate_signal_library 的 8 个技术指标裸键（macd_cross 等）源自
+# self._tas.tas_*，评分表键为 tas_* 前缀；前缀猜测把它们全落入默认
+# cxt。仅覆盖这 8 键，其余裸键默认 cxt 已正确（trend_type 源自
+# cxt_trend_type_signal）。sta/pos 信号库无来源，恒空。
 _CHAN_SCORER_REL = "public/stock-analysis/chan_theory_v2/core/signal_scorer.py"
 _CHAN_SCORER_MARKER = "KStock patch: 信号类别显式映射"
 _CHAN_SCORER_ANCHOR = (
@@ -1685,24 +1685,24 @@ _CHAN_SCORER_ANCHOR = (
     + '        return "cxt"  # 默认归入缠论形态'
 )
 _CHAN_SCORER_REPLACEMENT = (
-    "    # KStock patch: 信号类别显式映射——generate_signal_library 的键大多" + chr(10)
-    + "    # 不带类别前缀，前缀猜测把 30+ 信号全落入默认 cxt，tas/pos/sta 恒空" + chr(10)
-    + "    # （radar 多轴钉死 50）。显式表优先，前缀兜底（bar_*/vol_*/jcc_*）。" + chr(10)
-    + "    _SIGNAL_CATEGORY_MAP = {" + chr(10)
-    + '        "trend_type": "tas",' + chr(10)
-    + '        "macd_cross": "jcc", "double_ma": "jcc", "kdj_cross": "jcc",' + chr(10)
-    + '        "dif_zero": "jcc", "ma_system": "jcc", "boll_status": "jcc",' + chr(10)
-    + '        "rsi_status": "jcc", "atr": "sta",' + chr(10)
+    "    # KStock patch: 信号类别显式映射——generate_signal_library 的 8 个" + chr(10)
+    + "    # 技术指标裸键（macd_cross 等）源自 self._tas.tas_*，评分表键为 tas_* 前缀；" + chr(10)
+    + "    # 前缀猜测把它们全落入默认 cxt。仅覆盖这 8 键，其余裸键默认 cxt 已正确" + chr(10)
+    + "    # （trend_type 源自 cxt_trend_type_signal）。sta/pos 信号库无来源，恒空。" + chr(10)
+    + "    _SIGNAL_CATEGORY_OVERRIDE = {" + chr(10)
+    + '        "macd_cross": "tas", "dif_zero": "tas", "double_ma": "tas",' + chr(10)
+    + '        "ma_system": "tas", "boll_status": "tas", "kdj_cross": "tas",' + chr(10)
+    + '        "rsi_status": "tas", "atr": "tas",' + chr(10)
     + "    }" + chr(10)
     + chr(10)
     + "    def _get_category(self, signal_name: str) -> str:" + chr(10)
-    + '        """根据信号函数名确定类别（KStock patch: 显式映射优先）"""' + chr(10)
-    + "        if signal_name in self._SIGNAL_CATEGORY_MAP:" + chr(10)
-    + "            return self._SIGNAL_CATEGORY_MAP[signal_name]" + chr(10)
+    + '        """根据信号函数名确定类别（KStock patch: 显式覆盖优先）"""' + chr(10)
+    + "        if signal_name in self._SIGNAL_CATEGORY_OVERRIDE:" + chr(10)
+    + "            return self._SIGNAL_CATEGORY_OVERRIDE[signal_name]" + chr(10)
     + '        for prefix in ["cxt", "tas", "bar", "vol", "jcc", "pos", "sta"]:' + chr(10)
     + "            if signal_name.startswith(prefix):" + chr(10)
     + "                return prefix" + chr(10)
-    + '        return "cxt"  # 默认归入缠论形态（bi_/zs_/fx_/backchi/decision 等）'
+    + '        return "cxt"  # 默认归入缠论形态（bi_/zs_/fx_/trend_type/backchi/decision 等）'
 )
 
 
@@ -1713,6 +1713,42 @@ def _fix_chan_scorer_categories(text: str) -> str | None:
     if _CHAN_SCORER_ANCHOR not in text:
         return None
     return text.replace(_CHAN_SCORER_ANCHOR, _CHAN_SCORER_REPLACEMENT, 1)
+
+
+# ── 补丁 23：评分器裸键查分前缀重试 ────────────────────────────────────
+# 评分表 157 键全带类别前缀（tas_macd_cross/cxt_bi_base…），信号库产出
+# 裸键（macd_cross/bi_base…）→ 查分 miss 恒 0，各类均分被拉回 0、radar
+# 钉死 50（与补丁 22 同根因的另一半）。miss 时按类别前缀补齐重试。
+_CHAN_SCORELOOKUP_REL = "public/stock-analysis/chan_theory_v2/core/signal_scorer.py"
+_CHAN_SCORELOOKUP_MARKER = "KStock patch: 裸键失配重试"
+_CHAN_SCORELOOKUP_ANCHOR = (
+    "        # 获取该信号函数的评分映射" + chr(10)
+    + "        signal_map = self.score_map.get(signal_name, {})" + chr(10)
+    + "        if not signal_map:" + chr(10)
+    + "            return 0.0"
+)
+_CHAN_SCORELOOKUP_REPLACEMENT = (
+    "        # 获取该信号函数的评分映射" + chr(10)
+    + "        # KStock patch: 裸键失配重试——评分表键带类别前缀（tas_macd_cross），" + chr(10)
+    + "        # 信号库产出裸键（macd_cross），逐前缀补齐再查，命中即用。" + chr(10)
+    + "        signal_map = self.score_map.get(signal_name)" + chr(10)
+    + "        if signal_map is None:" + chr(10)
+    + '            for prefix in ("cxt", "tas", "bar", "vol", "jcc", "pos", "sta"):' + chr(10)
+    + '                signal_map = self.score_map.get(f"{prefix}_{signal_name}")' + chr(10)
+    + "                if signal_map:" + chr(10)
+    + "                    break" + chr(10)
+    + "        if not signal_map:" + chr(10)
+    + "            return 0.0"
+)
+
+
+def _fix_chan_scorelookup_retry(text: str) -> str | None:
+    """评分器裸键查分前缀重试（signal_scorer.py）；已修/失配返回 None。"""
+    if _CHAN_SCORELOOKUP_MARKER in text:
+        return None
+    if _CHAN_SCORELOOKUP_ANCHOR not in text:
+        return None
+    return text.replace(_CHAN_SCORELOOKUP_ANCHOR, _CHAN_SCORELOOKUP_REPLACEMENT, 1)
 
 
 # ── KStock 自有技能 ensure（kstock/skills → vendor/skills/public）────────
@@ -1982,6 +2018,10 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     if chan_scorer.exists():
         if _patch_file(chan_scorer, _CHAN_SCORER_REL, _fix_chan_scorer_categories):
             changed.append(_CHAN_SCORER_REL)
+    # 缠论评分器裸键查分前缀重试（radar 钉死 50 的另一半根因，补丁 23）。
+    if chan_scorer.exists():
+        if _patch_file(chan_scorer, _CHAN_SCORELOOKUP_REL, _fix_chan_scorelookup_retry):
+            changed.append(_CHAN_SCORELOOKUP_REL)
     # preset 随行技能目录发布（技能随 preset 分发，cordis 模式）。
     if _publish_preset_skills(vendor_root):
         changed.append("kstock/presets/*/skills")
