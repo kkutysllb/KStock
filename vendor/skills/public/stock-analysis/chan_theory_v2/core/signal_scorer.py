@@ -735,12 +735,24 @@ class SignalScorer:
 
         return result
 
+    # KStock patch: 信号类别显式映射——generate_signal_library 的键大多
+    # 不带类别前缀，前缀猜测把 30+ 信号全落入默认 cxt，tas/pos/sta 恒空
+    # （radar 多轴钉死 50）。显式表优先，前缀兜底（bar_*/vol_*/jcc_*）。
+    _SIGNAL_CATEGORY_MAP = {
+        "trend_type": "tas",
+        "macd_cross": "jcc", "double_ma": "jcc", "kdj_cross": "jcc",
+        "dif_zero": "jcc", "ma_system": "jcc", "boll_status": "jcc",
+        "rsi_status": "jcc", "atr": "sta",
+    }
+
     def _get_category(self, signal_name: str) -> str:
-        """根据信号函数名确定类别"""
+        """根据信号函数名确定类别（KStock patch: 显式映射优先）"""
+        if signal_name in self._SIGNAL_CATEGORY_MAP:
+            return self._SIGNAL_CATEGORY_MAP[signal_name]
         for prefix in ["cxt", "tas", "bar", "vol", "jcc", "pos", "sta"]:
             if signal_name.startswith(prefix):
                 return prefix
-        return "cxt"  # 默认归入缠论形态
+        return "cxt"  # 默认归入缠论形态（bi_/zs_/fx_/backchi/decision 等）
 
     def _calc_consistency_bonus(self, category_raw: Dict[str, List[float]]) -> float:
         """

@@ -1668,6 +1668,53 @@ def _fix_chan_zhongshu_guard(text: str) -> str | None:
     return text.replace(_CHAN_ZSGUARD_ANCHOR, _CHAN_ZSGUARD_REPLACEMENT, 1)
 
 
+
+# ── 补丁 22：缠论评分器信号类别显式映射 ────────────────────────────────
+# generate_signal_library 的键大多不带类别前缀（bi_base/macd_cross/…），
+# _get_category 前缀猜测把 30+ 信号全落入默认 cxt；tas/pos/sta 全库无
+# 前缀信号恒空 → radar 五轴钉死 50（用户实测三级别形状相同）。显式表
+# 优先，前缀兜底（bar_*/vol_*/jcc_* 本就带前缀）。
+_CHAN_SCORER_REL = "public/stock-analysis/chan_theory_v2/core/signal_scorer.py"
+_CHAN_SCORER_MARKER = "KStock patch: 信号类别显式映射"
+_CHAN_SCORER_ANCHOR = (
+    "    def _get_category(self, signal_name: str) -> str:" + chr(10)
+    + '        """根据信号函数名确定类别"""' + chr(10)
+    + '        for prefix in ["cxt", "tas", "bar", "vol", "jcc", "pos", "sta"]:' + chr(10)
+    + "            if signal_name.startswith(prefix):" + chr(10)
+    + "                return prefix" + chr(10)
+    + '        return "cxt"  # 默认归入缠论形态'
+)
+_CHAN_SCORER_REPLACEMENT = (
+    "    # KStock patch: 信号类别显式映射——generate_signal_library 的键大多" + chr(10)
+    + "    # 不带类别前缀，前缀猜测把 30+ 信号全落入默认 cxt，tas/pos/sta 恒空" + chr(10)
+    + "    # （radar 多轴钉死 50）。显式表优先，前缀兜底（bar_*/vol_*/jcc_*）。" + chr(10)
+    + "    _SIGNAL_CATEGORY_MAP = {" + chr(10)
+    + '        "trend_type": "tas",' + chr(10)
+    + '        "macd_cross": "jcc", "double_ma": "jcc", "kdj_cross": "jcc",' + chr(10)
+    + '        "dif_zero": "jcc", "ma_system": "jcc", "boll_status": "jcc",' + chr(10)
+    + '        "rsi_status": "jcc", "atr": "sta",' + chr(10)
+    + "    }" + chr(10)
+    + chr(10)
+    + "    def _get_category(self, signal_name: str) -> str:" + chr(10)
+    + '        """根据信号函数名确定类别（KStock patch: 显式映射优先）"""' + chr(10)
+    + "        if signal_name in self._SIGNAL_CATEGORY_MAP:" + chr(10)
+    + "            return self._SIGNAL_CATEGORY_MAP[signal_name]" + chr(10)
+    + '        for prefix in ["cxt", "tas", "bar", "vol", "jcc", "pos", "sta"]:' + chr(10)
+    + "            if signal_name.startswith(prefix):" + chr(10)
+    + "                return prefix" + chr(10)
+    + '        return "cxt"  # 默认归入缠论形态（bi_/zs_/fx_/backchi/decision 等）'
+)
+
+
+def _fix_chan_scorer_categories(text: str) -> str | None:
+    """评分器信号类别显式映射（signal_scorer.py）；已修/失配返回 None。"""
+    if _CHAN_SCORER_MARKER in text:
+        return None
+    if _CHAN_SCORER_ANCHOR not in text:
+        return None
+    return text.replace(_CHAN_SCORER_ANCHOR, _CHAN_SCORER_REPLACEMENT, 1)
+
+
 # ── KStock 自有技能 ensure（kstock/skills → vendor/skills/public）────────
 # 源码在 kstock/skills/<name>（上游同步整体覆盖 vendor 时不受影响），补丁器
 # 把它们 ensure 进 vendor 技能目录：html-report（自研渲染器）、market-linkage
@@ -1930,6 +1977,11 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     if chan_script.exists():
         if _patch_file(chan_script, _CHAN_SCRIPT_REL, _fix_chan_zhongshu_guard):
             changed.append(_CHAN_SCRIPT_REL)
+    # 缠论评分器信号类别显式映射（radar 钉死 50 修复，补丁 22）。
+    chan_scorer = vendor_root / _CHAN_SCORER_REL
+    if chan_scorer.exists():
+        if _patch_file(chan_scorer, _CHAN_SCORER_REL, _fix_chan_scorer_categories):
+            changed.append(_CHAN_SCORER_REL)
     # preset 随行技能目录发布（技能随 preset 分发，cordis 模式）。
     if _publish_preset_skills(vendor_root):
         changed.append("kstock/presets/*/skills")
