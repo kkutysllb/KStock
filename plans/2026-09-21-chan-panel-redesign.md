@@ -384,10 +384,10 @@ git commit --no-verify -m "refactor: chan-ui 纯逻辑抽 derive.ts + node:test 
 在 `kstock/chan-ui/tests/derive.test.ts` 末尾追加：
 
 ```ts
-import {
-  backchiPriceRelation, dateIndexOf, evidenceChain, parseChart,
-  pointWhy, radarDims, radarSummary, zhongshuForecast, zhongshuPosition,
-} from '../src/client/derive.ts'
+// 注意：不要新增第二条 derive.ts import——把新符号并入文件顶部的单条 import：
+// import { LEVEL_OPTIONS, backchiPriceRelation, dateIndexOf, evidenceChain, matrixLevels,
+//   parseChart, pointWhy, radarDims, radarSummary, resolveIndex, zhongshuForecast,
+//   zhongshuPosition } from '../src/client/derive.ts'
 
 const chart: ReturnType<typeof parseChart> = parseChart({
   chart_data: {
@@ -453,7 +453,7 @@ test('radarDims: 级别共振 <2 ok 行为 null', () => {
 })
 
 test('pointWhy/evidenceChain: 定义行与推理链拼装', () => {
-  assert.match(pointWhy('1buy', true), /一买/)
+  assert.match(pointWhy('1buy', true), /一类买点/)
   assert.match(pointWhy('1buy', true), /背驰/)
   const segs = evidenceChain({
     trend_analysis: { type_cn: '下跌', trend_strength: 0.4 },
@@ -478,7 +478,7 @@ test('radarSummary: 空维度集返回 null 分', () => {
 pnpm -C kstock/chan-ui test
 ```
 
-预期：新增用例 FAIL（函数未定义），原 3 例仍 PASS。
+预期：**整文件链接失败**——ESM 具名 import 缺失时是链接期 SyntaxError（`does not provide an export named 'backchiPriceRelation'`），全部用例无法运行（而非逐例 FAIL）；实现落地后 12 例全绿。
 
 - [ ] **Step 3.3: 在 derive.ts 末尾实现**
 
