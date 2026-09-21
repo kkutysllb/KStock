@@ -161,7 +161,7 @@ git commit --no-verify -m "fix: 缠论评分器信号类别显式映射（补丁
 pnpm -C kstock --filter @kstock/client-chan add -D tsx@4.22.4
 ```
 
-预期：kstock/chan-ui/package.json devDependencies 出现 tsx；kstock/pnpm-lock.yaml 更新。
+预期：kstock/chan-ui/package.json devDependencies 出现 tsx；**根 `pnpm-lock.yaml`** 更新（chan-ui 属根 workspace——根 pnpm-workspace.yaml 含 `kstock/*`，而 kstock/pnpm-workspace.yaml 未列 chan-ui）。
 然后在 package.json 的 scripts 中加入（与 quant 同款）：
 
 ```json
@@ -184,7 +184,7 @@ test('matrixLevels: 中间级别取低一档+当前+高两档', () => {
 
 test('matrixLevels: 边界向另一侧顺延补足四行', () => {
   assert.deepEqual(matrixLevels('5min'), ['5min', '15min', '30min', '60min'])
-  assert.deepEqual(matrixLevels('monthly'), ['60min', 'daily', 'weekly', 'monthly'])
+  assert.deepEqual(matrixLevels('monthly'), ['120min', 'daily', 'weekly', 'monthly'])
 })
 
 test('matrixLevels: 未知级别回退 daily 窗口', () => {
@@ -359,7 +359,7 @@ pnpm -C kstock/chan-ui build && pnpm -C kstock/chan-ui exec tsc --noEmit -p tsco
 - [ ] **Step 2.7: Commit**
 
 ```bash
-git add kstock/chan-ui kstock/pnpm-lock.yaml
+git add kstock/chan-ui pnpm-lock.yaml
 git commit --no-verify -m "refactor: chan-ui 纯逻辑抽 derive.ts + node:test 基建（matrixLevels）"
 ```
 

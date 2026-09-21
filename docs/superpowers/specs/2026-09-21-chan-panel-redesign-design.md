@@ -65,7 +65,7 @@
   6. 级别共振：联立矩阵方向一致率；
   7. 量能配合：前端按 kline+volumes 算量价配合度（涨放量/跌缩量=配合）。
   总分=各维等权平均，偏多/偏空判定；维度数据缺失时该维退出总分并标注（不设隐性权重）。
-- **多级别联立矩阵**：现 levelsBrief（仅高两档）扩展为四行：当前级别 + 低一档（若有）+ 高两档；到边界时向另一侧顺延补足四行（如 5min 无低档 → 5min/15min/30min/60min；monthly 无高档 → daily/weekly/monthly + 60min 顺延）。分钟级配额不足显示「数据不足」占位。每行：级别、走势方向、最新买卖点、得分、背驰数；同向行高亮共振（多绿/空红）。
+- **多级别联立矩阵**：现 levelsBrief（仅高两档）扩展为四行，语义 = LEVEL_OPTIONS 序列上的**连续四档窗口**且包含当前级别（实现：`start = clamp(cur-1, 0, len-4)` 后 `slice(start, start+4)`）：如 5min→5min/15min/30min/60min，daily→120min/daily/weekly/monthly，monthly→120min/daily/weekly/monthly（顶部窗口含低两档）。分钟级配额不足显示「数据不足」占位。每行：级别、走势方向、最新买卖点、得分、背驰数；同向行高亮共振（多绿/空红）。
 - **关键位**（保留现有）+ 新增 `assessment.risk_level/confidence_score` 评估小条。
 - **信号明细**：修复后的 czsc chips 收纳为折叠区（默认收起）。
 
