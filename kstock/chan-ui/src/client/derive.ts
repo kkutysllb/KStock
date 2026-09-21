@@ -320,8 +320,8 @@ export function zhongshuTypeLabel(raw?: string): string {
   if (raw !== undefined) {
     if (raw.includes('扩展') || raw === 'extended') return '扩展'
     if (raw.includes('复杂') || raw === 'complex') return '复杂'
-    if (raw.includes('趋势')) return '趋势'
-    if (raw.includes('盘整')) return '盘整'
+    if (raw.includes('趋势') || raw === 'trend') return '趋势'
+    if (raw.includes('盘整') || raw === 'consolidation') return '盘整'
   }
   return '普通'
 }

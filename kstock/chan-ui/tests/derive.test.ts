@@ -166,6 +166,8 @@ test('zhongshuTypeLabel: 中文 zhongshu_type 子串匹配 + 英文枚举兼容'
   assert.equal(zhongshuTypeLabel('盘整中枢'), '盘整')
   assert.equal(zhongshuTypeLabel('普通中枢'), '普通')
   assert.equal(zhongshuTypeLabel('extended'), '扩展')
+  assert.equal(zhongshuTypeLabel('trend'), '趋势')
+  assert.equal(zhongshuTypeLabel('consolidation'), '盘整')
   assert.equal(zhongshuTypeLabel(undefined), '普通')
 })
 
