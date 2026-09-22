@@ -104,6 +104,18 @@
     - id: kstock-chan-ui
       name: '@kstock/client-chan'
 
+    # 定时任务插件（内置收编自 dsh-kylin-automation 0.1.2，MIT）：durable
+    # 自动化定义 + 调度钟 + 全新会话执行器 + 运行历史持久化；侧边栏
+    # 「定时任务」管理页 + agent automation_* 六工具。产品默认：并发 2 /
+    # 单次超时 60min / 停机补跑宽限 15min / 历史 200 条。
+    - id: kstock-automation
+      name: '@kstock/automation'
+      config:
+        maxConcurrentRuns: 2
+        runTimeoutMinutes: 60
+        misfireGraceMinutes: 15
+        historyLimit: 200
+
     # KStock 角色 preset 选择器（只列 6 个投研角色；standard 为隐形默认
     # 基座）。上游 ui-agent-preset 选择器被下面的 disabled 行下架。
     - id: kstock-presets-ui
