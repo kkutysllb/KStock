@@ -34,7 +34,7 @@ import {
   useCopyPrompt,
   type UseWorkspaces,
 } from '@kstock/quant-ui'
-import { getAgentBridge, interpretPickPrompt } from './agent.ts'
+import { getAgentBridge, buildSelectionIteratePrompt, interpretPickPrompt, SELECTION_ITERATE_DIRECTIONS } from './agent.ts'
 
 /** picks 行（agent 按报告总表约定写入：rank/code/name/industry/score/
  * dv_ttm/pe_ttm/pb/roe/div_years_3y/trap_flags 等，宽松读取）。 */
@@ -202,6 +202,9 @@ export function SelectionsSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
   const [reportView, setReportView] = useState<ReportView | null>(null)
   const [picksView, setPicksView] = useState<SelectionRunPicks | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [iterateOn, setIterateOn] = useState<number | null>(null)
+  const [iterDirection, setIterDirection] = useState<string>(SELECTION_ITERATE_DIRECTIONS[0])
+  const [iterNote, setIterNote] = useState('')
   const { copy, toast } = useCopyPrompt()
 
   const reload = useCallback(async () => {
@@ -505,6 +508,65 @@ export function SelectionsSection({ useWorkspaces }: { useWorkspaces?: UseWorksp
                           <button className="ksq-linkbtn" type="button" onClick={() => copy(rerunPrompt(version))}>
                             <IconPlay size={11} /> <IconCopy size={11} /> 复制重跑提示词
                           </button>
+                          {' '}
+                          <button
+                            className="ksq-linkbtn"
+                            type="button"
+                            onClick={() => { setIterateOn(iterateOn === version.version ? null : version.version); setIterDirection(SELECTION_ITERATE_DIRECTIONS[0]); setIterNote('') }}
+                          >
+                            {iterateOn === version.version ? '收起改进' : '从此口径改进…'}
+                          </button>
+                          {iterateOn === version.version && (
+                            <div className="ksq-iter">
+                              <div className="ksq-chips">
+                                {SELECTION_ITERATE_DIRECTIONS.map(direction => (
+                                  <button
+                                    key={direction}
+                                    type="button"
+                                    className={`ksq-chip ksq-iter-chip ${iterDirection === direction ? 'active' : ''}`}
+                                    onClick={() => setIterDirection(direction)}
+                                  >
+                                    {direction.split('（')[0]}
+                                  </button>
+                                ))}
+                              </div>
+                              <input
+                                className="ksq-iter-input"
+                                value={iterNote}
+                                onChange={event => setIterNote(event.target.value)}
+                                placeholder="补充要求（可选）：如股息率门槛提到 5%、加入 ROE 闸门…"
+                                spellCheck={false}
+                              />
+                              <div className="ksq-item-meta">方向：{iterDirection}</div>
+                              <button
+                                className="ksq-linkbtn"
+                                type="button"
+                                disabled={getAgentBridge() === null}
+                                onClick={() => {
+                                  if (selected === null || getAgentBridge() === null) return
+                                  const baselineRun = [...runs].reverse().find(item => item.version === version.version)
+                                  const lastRun = baselineRun !== undefined ? {
+                                    tradeDate: baselineRun.trade_date,
+                                    universe: baselineRun.universe,
+                                    hitCount: typeof baselineRun.metrics?.hit_count === 'number' ? baselineRun.metrics.hit_count : null,
+                                    consensusCount: typeof baselineRun.metrics?.consensus_count === 'number' ? baselineRun.metrics.consensus_count : null,
+                                  } : undefined
+                                  setPendingInterpret(buildSelectionIteratePrompt({
+                                    selectionName: selected.name,
+                                    selectionId: selected.selection_id,
+                                    version: version.version,
+                                    criteria: record,
+                                    direction: iterDirection,
+                                    customNote: iterNote,
+                                    lastRun,
+                                  }))
+                                  setIterateOn(null)
+                                }}
+                              >
+                                生成迭代任务（选工作区发送）
+                              </button>
+                            </div>
+                          )}
                         </div>
                         )
                       })}
