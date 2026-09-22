@@ -76,7 +76,9 @@ ICONS_DIR = [
 ]
 
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]      # 7 档（旧的只有 6 档，缺 24）
-TRAY_COLOR = [16, 20, 24, 32]                   # 三端统一彩色托盘（macOS 也用彩色，不随深浅色反色）
+TRAY_COLOR = [16, 20, 24, 32]                   # 彩色托盘各档
+# macOS：16px 底图 + 32px @2x（Electron 自动合并，菜单栏按 16pt 显示）
+# Windows/Linux：tray.ico（16/20/24/32）按 DPI 取档
 
 
 def render(tier: str, size: int) -> pathlib.Path:
@@ -165,9 +167,14 @@ def build_icons_dir() -> str:
 
 
 def build_tray() -> str:
+    # macOS：tray.png(16) + tray@2x.png(32) —— Electron 按 16pt 显示且 Retina 有原生 2x；
+    # 上一版直接给 32px 单图，被当 1x 用，菜单栏图标大了一倍（用户实测截图）。
+    copy_png(ROOT / "qilin-tray" / "color-16.png", BUILD / "tray.png")
+    copy_png(ROOT / "qilin-tray" / "color-32.png", BUILD / "tray@2x.png")
+    # Windows/Linux：逐档彩色 png + 多档 ico（按 DPI 取档）
     for size in TRAY_COLOR:
         copy_png(ROOT / "qilin-tray" / f"color-{size}.png", BUILD / f"tray-{size}.png")
-    return f"✓ 麒麟彩印托盘 {TRAY_COLOR}（三端统一彩色）"
+    return "✓ 麒麟彩印托盘：tray.png(16)+tray@2x.png(32)（macOS）、tray-16/20/24/32.png + tray.ico（Win/Linux）"
 
 
 def png_size(path: pathlib.Path) -> tuple[int, int]:
@@ -212,8 +219,11 @@ def verify_structure() -> list[str]:
     # a) 每个应有资产的像素边长
     expected = {name: size for name, _tier, size in ICONS_DIR}
     expected["icon.png"] = 512
+    expected["tray.png"] = 16
+    expected["tray@2x.png"] = 32
+    in_root = ("icon.png", "tray.png", "tray@2x.png")   # 这三个放 BUILD 根，其余在 icons/
     for name, size in expected.items():
-        path = (BUILD / "icons" / name) if name.endswith(".png") and name != "icon.png" else BUILD / name
+        path = BUILD / name if name in in_root else BUILD / "icons" / name
         if not path.exists():
             problems.append(f"缺资产 {path.relative_to(REPO)}")
             continue
@@ -255,7 +265,7 @@ def verify_structure() -> list[str]:
     if seal_svg.count("<path") != 2:
         problems.append(f"麒麟彩印源 SVG 字形数量异常（{seal_svg.count('<path')} 个 path，应为 2：麒/麟）")
 
-    # d) 彩色托盘的像素尺寸
+    # d) 彩色托盘的像素尺寸（tray.png/tray@2x 已在 expected 表里；这里查 Win/Linux 逐档）
     for size in TRAY_COLOR:
         path = BUILD / f"tray-{size}.png"
         if not path.exists():
@@ -291,12 +301,12 @@ def verify_pixels() -> tuple[list[str], bool]:
 
     # 彩色托盘：必须真的是「彩色」（存在朱砂红系像素），
     # 防止有人误把黑白模板图当彩印发上去（三端统一彩印后这是最容易犯的错）。
-    for size in TRAY_COLOR:
-        im = Image.open(BUILD / f"tray-{size}.png").convert("RGBA")
+    for name in ("tray.png", "tray@2x.png", "tray-16.png", "tray-32.png"):
+        im = Image.open(BUILD / name).convert("RGBA")
         red = sum(1 for r, g, b, a in im.getdata()
                   if a > 200 and r > 120 and r > g + 40 and r > b + 40)
         if red < im.width * im.height * 0.10:
-            problems.append(f"tray-{size}.png 朱砂红像素占比过低（{red} 个）——疑似误用了黑白图")
+            problems.append(f"{name} 朱砂红像素占比过低（{red} 个）——疑似误用了黑白图")
 
     # 字标分档：256 的 Tier 1 字标区必须非空
     im = Image.open(ICONS / "256x256.png").convert("RGBA")

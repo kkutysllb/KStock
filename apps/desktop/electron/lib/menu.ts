@@ -222,11 +222,16 @@ function buildFullTrayMenu(engine: EngineProcess): MenuItemConstructorOptions[] 
  * 资产由 `scripts/build-icons.sh` 生成（设计源在 `docs/design/icon-refresh/`）。
  */
 function createTrayImage(): Electron.NativeImage | null {
-  const candidates = [
-    join(app.getAppPath(), "build", "tray-32.png"),
-    join(app.getAppPath(), "build", "tray-16.png"),
-    join(app.getAppPath(), "build", "tray.ico"),
-  ];
+  // macOS：tray.png(16) + tray@2x.png(32) —— Electron 自动合并，菜单栏按 16pt 显示且
+  // Retina 有原生 2x。上一版直接给 32px 单图，被按 1x 用，菜单栏图标大了一倍（用户实测）。
+  // Windows/Linux：多档 tray.ico（按 DPI 取档），回退逐档 png。
+  const candidates = process.platform === "darwin"
+    ? [join(app.getAppPath(), "build", "tray.png")]
+    : [
+        join(app.getAppPath(), "build", "tray.ico"),
+        join(app.getAppPath(), "build", "tray-32.png"),
+        join(app.getAppPath(), "build", "tray-16.png"),
+      ];
   const iconPath = candidates.find((p) => existsSync(p));
   if (!iconPath) {
     const found = candidates.filter((p) => existsSync(p));

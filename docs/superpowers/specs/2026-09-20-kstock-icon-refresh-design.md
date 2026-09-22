@@ -292,6 +292,15 @@ CI 矩阵（ubuntu/macos/windows）不装第三方依赖，因此第一层必须
 - Electron 运行时探针（直接读 asar）：`trayTemplate.png` → 16×16 且 `reps=[1,2]`
   （**`@2x` 已被自动合并**）、彩色托盘 32/16、窗口图标 256、Dock 用 512。
 
+**修复记录（2026-09-22，用户实测反馈）**
+
+第一版彩印托盘把 32px 单图直接给 macOS，被 Electron 当 1x 用 → **菜单栏图标大了一倍**
+（用户截图反馈「系统托盘图标太大」）。修复：macOS 改为
+`tray.png`(16) + `tray@2x.png`(32)，Electron 自动合并（实测 `reps=[1,2]`，菜单栏按 16pt 显示）；
+`menu.ts` 相应改读 `tray.png`。Windows/Linux 不变（`tray.ico` 多档按 DPI 取）。
+`build_assets.py` 断言同步：`tray.png`/`tray@2x.png` 尺寸与彩印红占比纳入校验。
+重打包后实测：打包 asar 内 tray/icons 全部资产与 `apps/desktop/build/` **逐字节一致**。
+
 **未完成项（明确记录，不含糊）**
 
 - 第 10 条的**真实屏幕视觉验收**只完成了一半：打包产物、asar 内容、运行时加载均已验证；

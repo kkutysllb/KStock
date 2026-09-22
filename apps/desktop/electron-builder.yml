@@ -21,6 +21,8 @@ files:
   # 逐档形制由 scripts/build-icons.sh 生成（设计源 docs/design/icon-refresh/）：
   #   托盘三端统一为「上游麒麟彩色印章」（tray-16/20/24/32.png + tray.ico）
   #   icons/ 16→1024 全档
+  - build/tray.png
+  - build/tray@2x.png
   - build/tray-*.png
   - build/tray.ico
   - build/icon.png
