@@ -161,7 +161,7 @@ function sortRunsDesc(runs) {
 var import_jsx_runtime = require("react/jsx-runtime");
 var POLL_MS = 3e3;
 function AutomationsView(props) {
-  const { t, runtime, lang, openSession, backToConversation, loadModelCatalog } = props;
+  const { t, runtime, lang, openSession, backToConversation, loadModelCatalog, pickDirectory } = props;
   const state = (0, import_react.useSyncExternalStore)(runtime.source.subscribe, runtime.source.getSnapshot);
   const [editor, setEditor] = (0, import_react.useState)({ open: false, mode: "create", form: emptyForm((/* @__PURE__ */ new Date()).toISOString()) });
   const [workspaceFilter, setWorkspaceFilter] = (0, import_react.useState)("");
@@ -363,6 +363,7 @@ function AutomationsView(props) {
             workspaces: snapshot?.workspaces,
             currentCwd: workspace?.cwd,
             loadModelCatalog,
+            pickDirectory,
             onRegisterWorkspace: (path) => runtime.registerWorkspace(path),
             onChange: (form) => setEditor((current) => ({ ...current, form })),
             onSubmit: () => {
@@ -464,7 +465,7 @@ function RunRow(props) {
   ] });
 }
 function AutomationEditor(props) {
-  const { t, form, onChange } = props;
+  const { t, form, onChange, pickDirectory } = props;
   const [catalog, setCatalog] = (0, import_react.useState)(void 0);
   const [catalogNote, setCatalogNote] = (0, import_react.useState)("idle");
   const [registerOpen, setRegisterOpen] = (0, import_react.useState)(false);
@@ -530,6 +531,28 @@ function AutomationEditor(props) {
             }
           ),
           registerOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-iter", children: [
+            props.pickDirectory !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "button",
+              {
+                type: "button",
+                className: "kyl-btn",
+                disabled: registering,
+                onClick: () => {
+                  setRegistering(true);
+                  props.pickDirectory().then((picked) => {
+                    if (picked === null || picked === "") return void 0;
+                    return props.onRegisterWorkspace(picked).then((created) => {
+                      onChange({ ...form, workspaceId: created.id });
+                      setRegisterOpen(false);
+                      setNewPath("");
+                    });
+                  }).catch((error) => {
+                    setRegisterError(error instanceof Error ? error.message : String(error));
+                  }).finally(() => setRegistering(false));
+                },
+                children: registering ? t("newWorkspacePicking") : t("newWorkspacePick")
+              }
+            ),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "kyl-field-label", children: t("newWorkspacePathLabel") }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
               "input",
@@ -830,6 +853,8 @@ var zh = {
   policyHint: "\u5355\u6B21\u8FD0\u884C\u4E0A\u9650 {timeout} \u5206\u949F \xB7 \u8865\u8DD1\u5BBD\u9650 {grace} \u5206\u949F",
   standaloneHint: "\u672A\u6302\u63A5\u4F1A\u8BDD\uFF1A\u65B0\u5EFA\u4EFB\u52A1\u65F6\u8BF7\u6307\u5B9A\u843D\u5730\u5DE5\u4F5C\u533A",
   newWorkspaceAction: "\u65B0\u5EFA\u5DE5\u4F5C\u533A\u2026",
+  newWorkspacePick: "\u9009\u62E9\u76EE\u5F55\u2026",
+  newWorkspacePicking: "\u9009\u62E9\u4E2D\u2026",
   newWorkspaceHide: "\u6536\u8D77\u65B0\u5EFA\u5DE5\u4F5C\u533A",
   newWorkspacePathLabel: "\u670D\u52A1\u5668\u4E0A\u7684\u76EE\u5F55\u8DEF\u5F84\uFF08\u7EDD\u5BF9\u8DEF\u5F84\uFF09",
   newWorkspaceRegister: "\u6CE8\u518C\u5E76\u9009\u62E9",
@@ -927,6 +952,8 @@ var en = {
   policyHint: "Run timeout {timeout} min \xB7 catch-up grace {grace} min",
   standaloneHint: "No session attached: pick a target workspace when creating a task",
   newWorkspaceAction: "New workspace\u2026",
+  newWorkspacePick: "Choose directory\u2026",
+  newWorkspacePicking: "Choosing\u2026",
   newWorkspaceHide: "Hide new workspace",
   newWorkspacePathLabel: "Directory path on this machine (absolute)",
   newWorkspaceRegister: "Register and select",

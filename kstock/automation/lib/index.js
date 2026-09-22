@@ -27186,6 +27186,7 @@ var AutomationService = class _AutomationService {
       updatedAt: now2
     };
     await this.store.putAutomation(definition);
+    await this.store.advanceCursor(definition.id, this.clock());
     this.requestTick();
     return definition;
   }

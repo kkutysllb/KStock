@@ -381,6 +381,9 @@ export class AutomationService {
       updatedAt: now,
     }
     await this.store.putAutomation(definition)
+    // 新任务游标从创建时刻起算：否则首次补跑扫描会从纪元(1970)起把历史
+    // 触发点逐个记为 skipped（现象即 1970-01-xx 的已跳过记录）。
+    await this.store.advanceCursor(definition.id, this.clock())
     this.requestTick()
     return definition
   }

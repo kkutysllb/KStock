@@ -37,6 +37,9 @@ export interface AutomationsViewProps {
   readonly backToConversation: () => void
   /** Optional model catalog loader for the pinned-model editor. */
   readonly loadModelCatalog?: (() => Promise<ModelCatalog>) | undefined
+  /** Optional desktop directory picker (Electron shell global). Absent on
+   * plain web hosts — the manual path input remains the fallback. */
+  readonly pickDirectory?: (() => Promise<string | null>) | undefined
 }
 
 interface EditorState {
@@ -52,7 +55,7 @@ const WEEKDAY_KEYS: readonly string[] = ['weekdayMo', 'weekdayTu', 'weekdayWe', 
 
 /** The full panel. */
 export function AutomationsView(props: AutomationsViewProps): React.ReactElement {
-  const { t, runtime, lang, openSession, backToConversation, loadModelCatalog } = props
+  const { t, runtime, lang, openSession, backToConversation, loadModelCatalog, pickDirectory } = props
   const state = useSyncExternalStore(runtime.source.subscribe, runtime.source.getSnapshot)
   const [editor, setEditor] = useState<EditorState>({ open: false, mode: 'create', form: emptyForm(new Date().toISOString()) })
   // Workspace filter across the whole registry ('' = 全部工作区).
@@ -272,6 +275,7 @@ export function AutomationsView(props: AutomationsViewProps): React.ReactElement
           workspaces={snapshot?.workspaces}
           currentCwd={workspace?.cwd}
           loadModelCatalog={loadModelCatalog}
+          pickDirectory={pickDirectory}
           onRegisterWorkspace={path => runtime.registerWorkspace(path)}
           onChange={form => setEditor(current => ({ ...current, form }))}
           onSubmit={() => { void submitEditor() }}
@@ -391,12 +395,13 @@ function AutomationEditor(props: {
   readonly workspaces?: readonly { readonly id: string; readonly title: string; readonly cwd: string }[] | undefined
   readonly currentCwd?: string | undefined
   readonly loadModelCatalog?: (() => Promise<ModelCatalog>) | undefined
+  readonly pickDirectory?: (() => Promise<string | null>) | undefined
   readonly onRegisterWorkspace: (path: string) => Promise<{ readonly id: string; readonly title: string }>
   readonly onChange: (form: EditorForm) => void
   readonly onSubmit: () => void
   readonly onCancel: () => void
 }): React.ReactElement {
-  const { t, form, onChange } = props
+  const { t, form, onChange, pickDirectory } = props
   const [catalog, setCatalog] = useState<readonly ModelCatalogProviderGroup[] | undefined>(undefined)
   const [catalogNote, setCatalogNote] = useState<string>('idle')
   const [registerOpen, setRegisterOpen] = useState(false)
@@ -455,6 +460,31 @@ function AutomationEditor(props: {
             </button>
             {registerOpen && (
               <div className='kyl-iter'>
+                {props.pickDirectory !== undefined && (
+                  <button
+                    type='button'
+                    className='kyl-btn'
+                    disabled={registering}
+                    onClick={() => {
+                      setRegistering(true)
+                      props.pickDirectory!()
+                        .then(picked => {
+                          if (picked === null || picked === '') return undefined
+                          return props.onRegisterWorkspace(picked).then(created => {
+                            onChange({ ...form, workspaceId: created.id })
+                            setRegisterOpen(false)
+                            setNewPath('')
+                          })
+                        })
+                        .catch((error: unknown) => {
+                          setRegisterError(error instanceof Error ? error.message : String(error))
+                        })
+                        .finally(() => setRegistering(false))
+                    }}
+                  >
+                    {registering ? t('newWorkspacePicking') : t('newWorkspacePick')}
+                  </button>
+                )}
                 <span className='kyl-field-label'>{t('newWorkspacePathLabel')}</span>
                 <input
                   className='kyl-input'
