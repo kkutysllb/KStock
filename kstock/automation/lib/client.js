@@ -275,90 +275,105 @@ function AutomationsView(props) {
   }
   const workspace = snapshot?.workspace;
   const policy = snapshot?.policy;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-panel", "data-panel": "automations", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PanelHeader, { t, onBack: backToConversation }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-toolbar", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-scope", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-          "select",
-          {
-            className: "kyl-input kyl-select-inline",
-            value: workspaceFilter,
-            title: workspace?.cwd,
-            onChange: (event) => setWorkspaceFilter(event.target.value),
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: t("allWorkspaces") }),
-              (snapshot?.workspaces ?? []).map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: item.id, children: item.title }, item.id))
-            ]
-          }
-        ),
-        workspaceFilter === "" && workspace !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "kyl-chip", children: [
-          t("workspace"),
-          ": ",
-          workspace.title
+  const shieldHostShortcuts = (event) => {
+    if ((event.metaKey || event.ctrlKey) && ["a", "c", "v", "x"].includes(event.key.toLowerCase())) {
+      event.stopPropagation();
+    }
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+    "div",
+    {
+      className: "kyl-panel",
+      "data-panel": "automations",
+      onKeyDown: shieldHostShortcuts,
+      onKeyDownCapture: shieldHostShortcuts,
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PanelHeader, { t, onBack: backToConversation }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-toolbar", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-scope", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+              "select",
+              {
+                className: "kyl-input kyl-select-inline",
+                value: workspaceFilter,
+                title: workspace?.cwd,
+                onChange: (event) => setWorkspaceFilter(event.target.value),
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: t("allWorkspaces") }),
+                  (snapshot?.workspaces ?? []).map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: item.id, children: item.title }, item.id))
+                ]
+              }
+            ),
+            workspaceFilter === "" && workspace !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "kyl-chip", children: [
+              t("workspace"),
+              ": ",
+              workspace.title
+            ] }),
+            workspace === void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "kyl-chip kyl-chip-muted", children: t("standaloneHint") }),
+            policy !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "kyl-chip kyl-chip-muted", children: t("policyHint", { timeout: policy.runTimeoutMinutes, grace: policy.misfireGraceMinutes }) })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-actions", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "kyl-btn", onClick: () => {
+              void runtime.refresh();
+            }, children: t("refresh") }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "kyl-btn kyl-btn-primary", onClick: openCreate, children: t("newTask") })
+          ] })
         ] }),
-        workspace === void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "kyl-chip kyl-chip-muted", children: t("standaloneHint") }),
-        policy !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "kyl-chip kyl-chip-muted", children: t("policyHint", { timeout: policy.runTimeoutMinutes, grace: policy.misfireGraceMinutes }) })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-actions", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "kyl-btn", onClick: () => {
-          void runtime.refresh();
-        }, children: t("refresh") }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "kyl-btn kyl-btn-primary", onClick: openCreate, children: t("newTask") })
-      ] })
-    ] }),
-    notice !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-notice", role: "status", onClick: () => setNotice(void 0), children: notice }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-body", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "kyl-section", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", { className: "kyl-section-title", children: [
-          t("listTitle"),
-          " ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "kyl-count", children: automations.length })
+        notice !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-notice", role: "status", onClick: () => setNotice(void 0), children: notice }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-body", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "kyl-section", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", { className: "kyl-section-title", children: [
+              t("listTitle"),
+              " ",
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "kyl-count", children: automations.length })
+            ] }),
+            automations.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-empty", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-empty-title", children: t("emptyTitle") }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-empty-hint", children: t("emptyHint") })
+            ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "kyl-cards", children: automations.map((automation) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              AutomationCard,
+              {
+                automation,
+                t,
+                onRunNow: () => {
+                  void runNow(automation.id);
+                },
+                onToggle: () => {
+                  void mutate(automation.id, automation.status === "active" ? "pause" : "resume");
+                },
+                onEdit: () => openEdit(automation),
+                onDelete: () => {
+                  void mutate(automation.id, "delete");
+                }
+              },
+              automation.id
+            )) })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "kyl-section", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { className: "kyl-section-title", children: t("runsTitle") }),
+            runs.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-empty-hint", children: t("runsEmpty") }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "kyl-runs", children: runs.map((run) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RunRow, { run, t, lang, onOpenSession: openSession }, run.id)) })
+          ] })
         ] }),
-        automations.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-empty", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-empty-title", children: t("emptyTitle") }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-empty-hint", children: t("emptyHint") })
-        ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "kyl-cards", children: automations.map((automation) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          AutomationCard,
+        editor.open && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          AutomationEditor,
           {
-            automation,
             t,
-            onRunNow: () => {
-              void runNow(automation.id);
+            mode: editor.mode,
+            form: editor.form,
+            workspaces: snapshot?.workspaces,
+            currentCwd: workspace?.cwd,
+            loadModelCatalog,
+            onRegisterWorkspace: (path) => runtime.registerWorkspace(path),
+            onChange: (form) => setEditor((current) => ({ ...current, form })),
+            onSubmit: () => {
+              void submitEditor();
             },
-            onToggle: () => {
-              void mutate(automation.id, automation.status === "active" ? "pause" : "resume");
-            },
-            onEdit: () => openEdit(automation),
-            onDelete: () => {
-              void mutate(automation.id, "delete");
-            }
-          },
-          automation.id
-        )) })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "kyl-section", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { className: "kyl-section-title", children: t("runsTitle") }),
-        runs.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-empty-hint", children: t("runsEmpty") }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "kyl-runs", children: runs.map((run) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RunRow, { run, t, lang, onOpenSession: openSession }, run.id)) })
-      ] })
-    ] }),
-    editor.open && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-      AutomationEditor,
-      {
-        t,
-        mode: editor.mode,
-        form: editor.form,
-        workspaces: snapshot?.workspaces,
-        currentCwd: workspace?.cwd,
-        loadModelCatalog,
-        onChange: (form) => setEditor((current) => ({ ...current, form })),
-        onSubmit: () => {
-          void submitEditor();
-        },
-        onCancel: closeEditor
-      }
-    )
-  ] });
+            onCancel: closeEditor
+          }
+        )
+      ]
+    }
+  );
 }
 function PanelHeader(props) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "kyl-header", children: [
@@ -452,6 +467,10 @@ function AutomationEditor(props) {
   const { t, form, onChange } = props;
   const [catalog, setCatalog] = (0, import_react.useState)(void 0);
   const [catalogNote, setCatalogNote] = (0, import_react.useState)("idle");
+  const [registerOpen, setRegisterOpen] = (0, import_react.useState)(false);
+  const [newPath, setNewPath] = (0, import_react.useState)("");
+  const [registerError, setRegisterError] = (0, import_react.useState)(void 0);
+  const [registering, setRegistering] = (0, import_react.useState)(false);
   (0, import_react.useEffect)(() => {
     if (form.followModel || catalog !== void 0) return;
     if (props.loadModelCatalog === void 0) {
@@ -468,7 +487,7 @@ function AutomationEditor(props) {
   }, [form.followModel, catalog, props.loadModelCatalog]);
   const providerModels = catalog?.find((group) => group.id === form.provider)?.models ?? [];
   const modelMeta = providerModels.find((model) => model.id === form.model);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-editor-scrim", role: "presentation", onClick: props.onCancel, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-editor-scrim", role: "presentation", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
     "div",
     {
       className: "kyl-editor",
@@ -497,7 +516,55 @@ function AutomationEditor(props) {
                 ] }, item.id))
               ]
             }
-          )
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "kyl-linkbtn",
+              onClick: () => {
+                setRegisterOpen((open) => !open);
+                setRegisterError(void 0);
+              },
+              children: registerOpen ? t("newWorkspaceHide") : t("newWorkspaceAction")
+            }
+          ),
+          registerOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-iter", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "kyl-field-label", children: t("newWorkspacePathLabel") }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                className: "kyl-input",
+                value: newPath,
+                placeholder: "/Users/you/workspace-name",
+                spellCheck: false,
+                onChange: (event) => {
+                  setNewPath(event.target.value);
+                  setRegisterError(void 0);
+                }
+              }
+            ),
+            registerError !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "kyl-error", children: registerError }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "button",
+              {
+                type: "button",
+                className: "kyl-btn",
+                disabled: newPath.trim() === "" || registering,
+                onClick: () => {
+                  setRegistering(true);
+                  props.onRegisterWorkspace(newPath.trim()).then((created) => {
+                    onChange({ ...form, workspaceId: created.id });
+                    setRegisterOpen(false);
+                    setNewPath("");
+                  }).catch((error) => {
+                    setRegisterError(error instanceof Error ? error.message : String(error));
+                  }).finally(() => setRegistering(false));
+                },
+                children: registering ? t("newWorkspaceRegistering") : t("newWorkspaceRegister")
+              }
+            )
+          ] })
         ] }),
         props.mode === "edit" && props.workspaces !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-field", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "kyl-field-label", children: t("workspaceLabel") }),
@@ -762,6 +829,11 @@ var zh = {
   scopeHint: "\u4EFB\u52A1\u4E0E\u8FD0\u884C\u5386\u53F2\u6309\u5DE5\u4F5C\u533A\u9694\u79BB",
   policyHint: "\u5355\u6B21\u8FD0\u884C\u4E0A\u9650 {timeout} \u5206\u949F \xB7 \u8865\u8DD1\u5BBD\u9650 {grace} \u5206\u949F",
   standaloneHint: "\u672A\u6302\u63A5\u4F1A\u8BDD\uFF1A\u65B0\u5EFA\u4EFB\u52A1\u65F6\u8BF7\u6307\u5B9A\u843D\u5730\u5DE5\u4F5C\u533A",
+  newWorkspaceAction: "\u65B0\u5EFA\u5DE5\u4F5C\u533A\u2026",
+  newWorkspaceHide: "\u6536\u8D77\u65B0\u5EFA\u5DE5\u4F5C\u533A",
+  newWorkspacePathLabel: "\u670D\u52A1\u5668\u4E0A\u7684\u76EE\u5F55\u8DEF\u5F84\uFF08\u7EDD\u5BF9\u8DEF\u5F84\uFF09",
+  newWorkspaceRegister: "\u6CE8\u518C\u5E76\u9009\u62E9",
+  newWorkspaceRegistering: "\u6CE8\u518C\u4E2D\u2026",
   unavailable: "\u5B9A\u65F6\u4EFB\u52A1\u5BBF\u4E3B\u4E0D\u53EF\u7528",
   loading: "\u52A0\u8F7D\u4E2D\u2026",
   emptyTitle: "\u8FD8\u6CA1\u6709\u5B9A\u65F6\u4EFB\u52A1",
@@ -854,6 +926,11 @@ var en = {
   scopeHint: "Rules and history are scoped to one workspace",
   policyHint: "Run timeout {timeout} min \xB7 catch-up grace {grace} min",
   standaloneHint: "No session attached: pick a target workspace when creating a task",
+  newWorkspaceAction: "New workspace\u2026",
+  newWorkspaceHide: "Hide new workspace",
+  newWorkspacePathLabel: "Directory path on this machine (absolute)",
+  newWorkspaceRegister: "Register and select",
+  newWorkspaceRegistering: "Registering\u2026",
   unavailable: "Automation host is unavailable",
   loading: "Loading\u2026",
   emptyTitle: "No automations yet",
@@ -1007,10 +1084,22 @@ function createAutomationsRuntime(deps) {
     source,
     refresh,
     currentSessionId: deps.sessionId,
+    async registerWorkspace(path) {
+      const value = unwrapRpcResult(
+        await deps.rpc.call(RPC_CHANNEL, "register-workspace", { path })
+      );
+      await refresh();
+      return value;
+    },
     async create(input) {
       const sessionId = deps.sessionId();
+      const { workspaceId, ...rest } = input;
       const value = unwrapRpcResult(
-        await deps.rpc.call(RPC_CHANNEL, "create", { sessionId, input })
+        await deps.rpc.call(RPC_CHANNEL, "create", {
+          sessionId,
+          ...workspaceId !== void 0 && workspaceId !== "" ? { workspaceId } : {},
+          input: rest
+        })
       );
       await refresh();
       return value.id;

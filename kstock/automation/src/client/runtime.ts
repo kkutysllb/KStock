@@ -37,6 +37,8 @@ export interface AutomationsRuntime {
   update(automationId: string, expectedRevision: number, input: UpdateAutomationInput): Promise<void>
   mutate(automationId: string, mutation: 'pause' | 'resume' | 'delete'): Promise<void>
   runNow(automationId: string): Promise<string>
+  /** 注册服务器上已存在的目录为新工作区（管理页「新建工作区」）。 */
+  registerWorkspace(path: string): Promise<{ readonly id: string; readonly title: string }>
 }
 
 export interface AutomationsRuntimeDeps {
@@ -108,10 +110,24 @@ export function createAutomationsRuntime(deps: AutomationsRuntimeDeps): Automati
     source,
     refresh,
     currentSessionId: deps.sessionId,
+    async registerWorkspace(path: string): Promise<{ readonly id: string; readonly title: string }> {
+      const value = unwrapRpcResult<{ id: string; title: string }>(
+        await deps.rpc.call(RPC_CHANNEL, 'register-workspace', { path }),
+      )
+      await refresh()
+      return value
+    },
     async create(input) {
       const sessionId = deps.sessionId()
+      // workspaceId 必须位于 payload 顶层（宿主 create 从 body.workspaceId
+      // 解析落地工作区，优先于会话回退），其余字段留在 input。
+      const { workspaceId, ...rest } = input
       const value = unwrapRpcResult<{ id: string; revision: number }>(
-        await deps.rpc.call(RPC_CHANNEL, 'create', { sessionId, input }),
+        await deps.rpc.call(RPC_CHANNEL, 'create', {
+          sessionId,
+          ...(workspaceId !== undefined && workspaceId !== '' ? { workspaceId } : {}),
+          input: rest,
+        }),
       )
       await refresh()
       return value.id

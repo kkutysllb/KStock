@@ -5,6 +5,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { statSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
 import { nextOccurrence, isValidTimeZone } from './recurrence.ts'
 import { planTick } from './scheduler.ts'
@@ -326,6 +327,21 @@ export class AutomationService {
     const workspace = this.ctx.workspaceRegistry.get(id as never)
     if (workspace === undefined) return undefined
     return { path: workspace.path, title: workspace.title }
+  }
+
+  /** Register a server-side directory as a workspace (管理页「新建工作区」).
+   * The path must be an absolute, existing directory on the engine host —
+   * never client-invented write targets; the registry derives id/title. */
+  async registerWorkspace(path: string): Promise<{ readonly id: string; readonly title: string; readonly path: string }> {
+    if (!path.startsWith('/') ) throw new ServiceError('invalid', '工作区路径必须是绝对路径')
+    let stats
+    try {
+      stats = statSync(path)
+    } catch {
+      throw new ServiceError('not-found', `目录不存在：${path}`)
+    }
+    if (!stats.isDirectory()) throw new ServiceError('invalid', `路径不是目录：${path}`)
+    return this.resolveWorkspace(path)
   }
 
   /** Resolve (registering if needed) the workspace bound to a session cwd. */

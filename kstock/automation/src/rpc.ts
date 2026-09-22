@@ -230,6 +230,12 @@ export async function handleAutomationRpc(
         await service.mutate(automationId, mutation)
         return ok({ id: automationId, mutation })
       }
+      case 'register-workspace': {
+        const path = string(body.path, 'path', 1024)
+        if (!path.startsWith('/')) return fail('invalid', '工作区路径必须是绝对路径')
+        const workspace = await service.registerWorkspace(path)
+        return ok(workspace)
+      }
       case 'run-now': {
         const automationId = string(body.automationId, 'automationId', MAX_ID)
         const run = await service.runNow(automationId)

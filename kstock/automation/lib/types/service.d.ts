@@ -75,6 +75,14 @@ export declare class AutomationService {
         readonly path: string;
         readonly title: string;
     } | undefined;
+    /** Register a server-side directory as a workspace (管理页「新建工作区」).
+     * The path must be an absolute, existing directory on the engine host —
+     * never client-invented write targets; the registry derives id/title. */
+    registerWorkspace(path: string): Promise<{
+        readonly id: string;
+        readonly title: string;
+        readonly path: string;
+    }>;
     /** Resolve (registering if needed) the workspace bound to a session cwd. */
     resolveWorkspace(cwd: string): Promise<{
         readonly id: string;

@@ -14,6 +14,11 @@ export declare const zh: {
     readonly scopeHint: "任务与运行历史按工作区隔离";
     readonly policyHint: "单次运行上限 {timeout} 分钟 · 补跑宽限 {grace} 分钟";
     readonly standaloneHint: "未挂接会话：新建任务时请指定落地工作区";
+    readonly newWorkspaceAction: "新建工作区…";
+    readonly newWorkspaceHide: "收起新建工作区";
+    readonly newWorkspacePathLabel: "服务器上的目录路径（绝对路径）";
+    readonly newWorkspaceRegister: "注册并选择";
+    readonly newWorkspaceRegistering: "注册中…";
     readonly unavailable: "定时任务宿主不可用";
     readonly loading: "加载中…";
     readonly emptyTitle: "还没有定时任务";
@@ -109,6 +114,11 @@ export declare const dictionaries: {
         readonly scopeHint: "任务与运行历史按工作区隔离";
         readonly policyHint: "单次运行上限 {timeout} 分钟 · 补跑宽限 {grace} 分钟";
         readonly standaloneHint: "未挂接会话：新建任务时请指定落地工作区";
+        readonly newWorkspaceAction: "新建工作区…";
+        readonly newWorkspaceHide: "收起新建工作区";
+        readonly newWorkspacePathLabel: "服务器上的目录路径（绝对路径）";
+        readonly newWorkspaceRegister: "注册并选择";
+        readonly newWorkspaceRegistering: "注册中…";
         readonly unavailable: "定时任务宿主不可用";
         readonly loading: "加载中…";
         readonly emptyTitle: "还没有定时任务";
@@ -187,5 +197,5 @@ export declare const dictionaries: {
         readonly createdHint: "已创建。建议先「立即运行」验证一次。";
         readonly charCount: "{count} 字";
     };
-    en: Record<"active" | "paused" | "everyMinutes" | "weekdays" | "title" | "revision" | "pause" | "resume" | "delete" | "workspace" | "lastRun" | "statusQueued" | "statusRunning" | "statusSucceeded" | "statusFailed" | "statusSkipped" | "statusCancelled" | "loading" | "weekdayMo" | "weekdayTu" | "weekdayWe" | "weekdayTh" | "weekdayFr" | "weekdaySa" | "weekdaySu" | "openSession" | "cancel" | "createdHint" | "deleteConfirm" | "updateFailed" | "runQueued" | "backToList" | "skipOverlap" | "skipMisfire" | "createTitle" | "editTitle" | "unavailable" | "refresh" | "subtitle" | "permissionReadOnly" | "permissionWorkspaceWrite" | "modelGlobal" | "nextRun" | "runNow" | "editTask" | "triggerManual" | "triggerSchedule" | "duration" | "standaloneHint" | "policyHint" | "newTask" | "listTitle" | "runsTitle" | "runsEmpty" | "workspaceLabel" | "workspaceRequired" | "nameLabel" | "namePlaceholder" | "promptLabel" | "promptPlaceholder" | "timeZoneLabel" | "permissionLabel" | "modelLabel" | "save" | "allWorkspaces" | "emptyTitle" | "emptyHint" | "scheduleLabel" | "onceAt" | "dailyTime" | "weeklyTime" | "modelFollow" | "modelPin" | "scheduleOnce" | "scheduleInterval" | "scheduleDaily" | "scheduleWeekly" | "permissionReadOnlyHint" | "permissionWorkspaceWriteHint" | "providerLabel" | "modelIdLabel" | "effortLabel" | "effortDefault" | "nav" | "scopeHint" | "presetLabel" | "noActive" | "createFailed" | "revisionConflict" | "charCount", string>;
+    en: Record<"active" | "paused" | "everyMinutes" | "weekdays" | "title" | "revision" | "pause" | "resume" | "delete" | "workspace" | "lastRun" | "statusQueued" | "statusRunning" | "statusSucceeded" | "statusFailed" | "statusSkipped" | "statusCancelled" | "loading" | "weekdayMo" | "weekdayTu" | "weekdayWe" | "weekdayTh" | "weekdayFr" | "weekdaySa" | "weekdaySu" | "openSession" | "cancel" | "createdHint" | "deleteConfirm" | "updateFailed" | "runQueued" | "backToList" | "skipOverlap" | "skipMisfire" | "createTitle" | "editTitle" | "unavailable" | "refresh" | "subtitle" | "permissionReadOnly" | "permissionWorkspaceWrite" | "modelGlobal" | "nextRun" | "runNow" | "editTask" | "triggerManual" | "triggerSchedule" | "duration" | "standaloneHint" | "policyHint" | "newTask" | "listTitle" | "runsTitle" | "runsEmpty" | "workspaceLabel" | "newWorkspaceHide" | "newWorkspaceAction" | "workspaceRequired" | "nameLabel" | "namePlaceholder" | "promptLabel" | "promptPlaceholder" | "timeZoneLabel" | "permissionLabel" | "modelLabel" | "save" | "allWorkspaces" | "emptyTitle" | "emptyHint" | "newWorkspacePathLabel" | "newWorkspaceRegistering" | "newWorkspaceRegister" | "scheduleLabel" | "onceAt" | "dailyTime" | "weeklyTime" | "modelFollow" | "modelPin" | "scheduleOnce" | "scheduleInterval" | "scheduleDaily" | "scheduleWeekly" | "permissionReadOnlyHint" | "permissionWorkspaceWriteHint" | "providerLabel" | "modelIdLabel" | "effortLabel" | "effortDefault" | "nav" | "scopeHint" | "presetLabel" | "noActive" | "createFailed" | "revisionConflict" | "charCount", string>;
 };

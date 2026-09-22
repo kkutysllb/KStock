@@ -6792,6 +6792,7 @@ function toAutomationView(definition, options) {
 
 // src/service.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
+import { statSync } from "node:fs";
 
 // src/scheduler.ts
 function planTick(options) {
@@ -27135,6 +27136,20 @@ var AutomationService = class _AutomationService {
     if (workspace === void 0) return void 0;
     return { path: workspace.path, title: workspace.title };
   }
+  /** Register a server-side directory as a workspace (管理页「新建工作区」).
+   * The path must be an absolute, existing directory on the engine host —
+   * never client-invented write targets; the registry derives id/title. */
+  async registerWorkspace(path) {
+    if (!path.startsWith("/")) throw new ServiceError("invalid", "\u5DE5\u4F5C\u533A\u8DEF\u5F84\u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84");
+    let stats;
+    try {
+      stats = statSync(path);
+    } catch {
+      throw new ServiceError("not-found", `\u76EE\u5F55\u4E0D\u5B58\u5728\uFF1A${path}`);
+    }
+    if (!stats.isDirectory()) throw new ServiceError("invalid", `\u8DEF\u5F84\u4E0D\u662F\u76EE\u5F55\uFF1A${path}`);
+    return this.resolveWorkspace(path);
+  }
   /** Resolve (registering if needed) the workspace bound to a session cwd. */
   async resolveWorkspace(cwd) {
     const existing = this.ctx.workspaceRegistry.list().find((workspace) => workspace.path === cwd);
@@ -27583,6 +27598,12 @@ async function handleAutomationRpc(service, endpoint, payload, signal) {
         }
         await service.mutate(automationId, mutation);
         return ok({ id: automationId, mutation });
+      }
+      case "register-workspace": {
+        const path = string4(body.path, "path", 1024);
+        if (!path.startsWith("/")) return fail("invalid", "\u5DE5\u4F5C\u533A\u8DEF\u5F84\u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84");
+        const workspace = await service.registerWorkspace(path);
+        return ok(workspace);
       }
       case "run-now": {
         const automationId = string4(body.automationId, "automationId", MAX_ID);
