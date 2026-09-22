@@ -30,6 +30,10 @@ export interface AutomationsRuntime {
         readonly id: string;
         readonly title: string;
     }>;
+    /** 历史管理：删除一条终态运行记录。 */
+    deleteRun(automationId: string, runId: string): Promise<void>;
+    /** 历史管理：清空某任务的全部终态运行记录，返回清除条数。 */
+    clearRuns(automationId: string): Promise<number>;
 }
 export interface AutomationsRuntimeDeps {
     readonly rpc: ClientRpc;

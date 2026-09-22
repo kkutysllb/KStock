@@ -5,7 +5,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import { validateUpdateInput, type AutomationView, type RunView, type ValidCreateInput } from './domain.ts';
-import { type AutomationConfig, type AutomationDefinition, type AutomationId, type AutomationRun } from './types.ts';
+import { type AutomationConfig, type AutomationDefinition, type AutomationId, type AutomationRun, type RunId } from './types.ts';
 export declare class ServiceError extends Error {
     readonly code: string;
     constructor(code: string, message: string);
@@ -97,6 +97,10 @@ export declare class AutomationService {
     mutate(id: AutomationId, mutation: 'pause' | 'resume' | 'delete'): Promise<void>;
     /** Queue one manual occurrence with the same boundary. */
     runNow(id: AutomationId): Promise<AutomationRun>;
+    /** 历史管理：删除一条终态运行记录（queued/running 拒绝删除）。 */
+    deleteRun(automationId: AutomationId, runId: RunId): Promise<void>;
+    /** 历史管理：清空某任务的全部终态运行记录，返回清除条数。 */
+    clearRuns(automationId: AutomationId): Promise<number>;
     private queueRun;
     /** Pinned triple or the live global selection, never a mix of the two. */
     private resolveSelection;

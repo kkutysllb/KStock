@@ -215,6 +215,24 @@ export class AutomationStore {
     }
   }
 
+  /** Delete one terminal run record (历史管理). Active runs are refused. */
+  async deleteRun(id: RunId): Promise<boolean> {
+    const run = this.runTable().get(id)
+    if (run === undefined) return false
+    if (run.status === 'queued' || run.status === 'running') return false
+    return this.runTable().delete(id)
+  }
+
+  /** Delete every terminal run of one automation; returns the cleared count. */
+  async clearRuns(automationId: AutomationId): Promise<number> {
+    const terminal = this.runsOf(automationId).filter(run =>
+      run.status !== 'queued' && run.status !== 'running')
+    for (const run of terminal) {
+      await this.runTable().delete(run.id)
+    }
+    return terminal.length
+  }
+
   private runTable() {
     return this.domain.table('runs') as import('@deepseek-ai/dsh-storage-domain').KvTable<string, AutomationRun>
   }

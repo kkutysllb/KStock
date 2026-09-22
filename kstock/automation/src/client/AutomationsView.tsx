@@ -249,6 +249,15 @@ export function AutomationsView(props: AutomationsViewProps): React.ReactElement
                     onToggle={() => { void mutate(automation.id, automation.status === 'active' ? 'pause' : 'resume') }}
                     onEdit={() => openEdit(automation)}
                     onDelete={() => { void mutate(automation.id, 'delete') }}
+                    onClearHistory={() => {
+                      if (window.confirm(t('clearRunsConfirm'))) {
+                        void runtime.clearRuns(automation.id).then(count => {
+                          setNotice(t('runsCleared', { count }))
+                        }).catch(error => {
+                          setNotice(error instanceof Error ? error.message : String(error))
+                        })
+                      }
+                    }}
                   />
                 ))}
               </ul>
@@ -261,7 +270,20 @@ export function AutomationsView(props: AutomationsViewProps): React.ReactElement
             : (
               <ul className='kyl-runs'>
                 {runs.map(run => (
-                  <RunRow key={run.id} run={run} t={t} lang={lang} onOpenSession={openSession} />
+                  <RunRow
+                    key={run.id}
+                    run={run}
+                    t={t}
+                    lang={lang}
+                    onOpenSession={openSession}
+                    onDelete={() => {
+                      if (window.confirm(t('deleteRunConfirm'))) {
+                        void runtime.deleteRun(run.automationId, run.id).catch(error => {
+                          setNotice(error instanceof Error ? error.message : String(error))
+                        })
+                      }
+                    }}
+                  />
                 ))}
               </ul>
             )}
@@ -305,6 +327,7 @@ function AutomationCard(props: {
   readonly onToggle: () => void
   readonly onEdit: () => void
   readonly onDelete: () => void
+  readonly onClearHistory: () => void
 }): React.ReactElement {
   const { automation, t } = props
   const active = automation.status === 'active'
@@ -340,6 +363,7 @@ function AutomationCard(props: {
           {active ? t('pause') : t('resume')}
         </button>
         <button type='button' className='kyl-btn' onClick={props.onEdit}>{t('editTask')}</button>
+        <button type='button' className='kyl-btn kyl-btn-ghost' onClick={props.onClearHistory}>{t('clearRunsLabel')}</button>
         <button type='button' className='kyl-btn kyl-btn-danger' onClick={props.onDelete}>{t('delete')}</button>
       </div>
     </li>
@@ -351,6 +375,7 @@ function RunRow(props: {
   readonly t: Translate
   readonly lang: 'zh' | 'en'
   readonly onOpenSession: (sessionId: string) => void
+  readonly onDelete: () => void
 }): React.ReactElement {
   const { run, t, lang } = props
   return (
@@ -374,6 +399,15 @@ function RunRow(props: {
             onClick={() => { if (run.sessionId !== undefined) props.onOpenSession(run.sessionId) }}
           >
             {t('openSession')}
+          </button>
+        )}
+        {run.status !== 'queued' && run.status !== 'running' && (
+          <button
+            type='button'
+            className='kyl-btn kyl-btn-ghost'
+            onClick={props.onDelete}
+          >
+            {t('runDelete')}
           </button>
         )}
       </div>

@@ -344,6 +344,15 @@ function AutomationsView(props) {
                 onEdit: () => openEdit(automation),
                 onDelete: () => {
                   void mutate(automation.id, "delete");
+                },
+                onClearHistory: () => {
+                  if (window.confirm(t("clearRunsConfirm"))) {
+                    void runtime.clearRuns(automation.id).then((count) => {
+                      setNotice(t("runsCleared", { count }));
+                    }).catch((error) => {
+                      setNotice(error instanceof Error ? error.message : String(error));
+                    });
+                  }
                 }
               },
               automation.id
@@ -351,7 +360,23 @@ function AutomationsView(props) {
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "kyl-section", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { className: "kyl-section-title", children: t("runsTitle") }),
-            runs.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-empty-hint", children: t("runsEmpty") }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "kyl-runs", children: runs.map((run) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RunRow, { run, t, lang, onOpenSession: openSession }, run.id)) })
+            runs.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-empty-hint", children: t("runsEmpty") }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "kyl-runs", children: runs.map((run) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              RunRow,
+              {
+                run,
+                t,
+                lang,
+                onOpenSession: openSession,
+                onDelete: () => {
+                  if (window.confirm(t("deleteRunConfirm"))) {
+                    void runtime.deleteRun(run.automationId, run.id).catch((error) => {
+                      setNotice(error instanceof Error ? error.message : String(error));
+                    });
+                  }
+                }
+              },
+              run.id
+            )) })
           ] })
         ] }),
         editor.open && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -422,6 +447,7 @@ function AutomationCard(props) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "kyl-btn", onClick: props.onRunNow, children: t("runNow") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "kyl-btn", onClick: props.onToggle, children: active ? t("pause") : t("resume") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "kyl-btn", onClick: props.onEdit, children: t("editTask") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "kyl-btn kyl-btn-ghost", onClick: props.onClearHistory, children: t("clearRunsLabel") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "kyl-btn kyl-btn-danger", onClick: props.onDelete, children: t("delete") })
     ] })
   ] });
@@ -448,6 +474,15 @@ function RunRow(props) {
             if (run.sessionId !== void 0) props.onOpenSession(run.sessionId);
           },
           children: t("openSession")
+        }
+      ),
+      run.status !== "queued" && run.status !== "running" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "button",
+        {
+          type: "button",
+          className: "kyl-btn kyl-btn-ghost",
+          onClick: props.onDelete,
+          children: t("runDelete")
         }
       )
     ] }),
@@ -851,6 +886,11 @@ var zh = {
   workspaceRequired: "\u8BF7\u9009\u62E9\u5DE5\u4F5C\u533A",
   scopeHint: "\u4EFB\u52A1\u4E0E\u8FD0\u884C\u5386\u53F2\u6309\u5DE5\u4F5C\u533A\u9694\u79BB",
   policyHint: "\u5355\u6B21\u8FD0\u884C\u4E0A\u9650 {timeout} \u5206\u949F \xB7 \u8865\u8DD1\u5BBD\u9650 {grace} \u5206\u949F",
+  runDelete: "\u5220\u9664\u8BB0\u5F55",
+  deleteRunConfirm: "\u5220\u9664\u8FD9\u6761\u8FD0\u884C\u8BB0\u5F55\uFF1F",
+  clearRunsLabel: "\u6E05\u7A7A\u5386\u53F2",
+  clearRunsConfirm: "\u6E05\u7A7A\u8BE5\u4EFB\u52A1\u7684\u5168\u90E8\u8FD0\u884C\u5386\u53F2\uFF1F",
+  runsCleared: "\u5DF2\u6E05\u9664 {count} \u6761\u8FD0\u884C\u8BB0\u5F55",
   standaloneHint: "\u672A\u6302\u63A5\u4F1A\u8BDD\uFF1A\u65B0\u5EFA\u4EFB\u52A1\u65F6\u8BF7\u6307\u5B9A\u843D\u5730\u5DE5\u4F5C\u533A",
   newWorkspaceAction: "\u65B0\u5EFA\u5DE5\u4F5C\u533A\u2026",
   newWorkspacePick: "\u9009\u62E9\u76EE\u5F55\u2026",
@@ -950,6 +990,11 @@ var en = {
   workspaceRequired: "Pick a workspace",
   scopeHint: "Rules and history are scoped to one workspace",
   policyHint: "Run timeout {timeout} min \xB7 catch-up grace {grace} min",
+  runDelete: "Delete record",
+  deleteRunConfirm: "Delete this run record?",
+  clearRunsLabel: "Clear history",
+  clearRunsConfirm: "Clear all run history of this automation?",
+  runsCleared: "Cleared {count} run records",
   standaloneHint: "No session attached: pick a target workspace when creating a task",
   newWorkspaceAction: "New workspace\u2026",
   newWorkspacePick: "Choose directory\u2026",
@@ -1146,6 +1191,17 @@ function createAutomationsRuntime(deps) {
       );
       await refresh();
       return value.runId;
+    },
+    async deleteRun(automationId, runId) {
+      await mutateThenRefresh("delete-run", { automationId, runId });
+    },
+    async clearRuns(automationId) {
+      const sessionId = deps.sessionId();
+      const value = unwrapRpcResult(
+        await deps.rpc.call(RPC_CHANNEL, "clear-runs", { sessionId, automationId })
+      );
+      await refresh();
+      return value.cleared;
     }
   };
 }
@@ -1375,6 +1431,16 @@ function apply(ctx) {
       backToConversation();
     })();
   };
+  const pickDirectory = async () => {
+    const global = globalThis;
+    try {
+      if (typeof global.__QILIN_DIRECTORY_PICKER__?.pick === "function") {
+        return await global.__QILIN_DIRECTORY_PICKER__.pick();
+      }
+    } catch {
+    }
+    return null;
+  };
   const loadModelCatalog = async () => {
     const remoteSession = ctx.remote?.session;
     if (remoteSession?.modelCatalog === void 0) {
@@ -1410,7 +1476,8 @@ function apply(ctx) {
               lang,
               openSession,
               backToConversation,
-              loadModelCatalog
+              loadModelCatalog,
+              pickDirectory
             }
           );
         });

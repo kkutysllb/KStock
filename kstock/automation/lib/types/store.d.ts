@@ -59,6 +59,10 @@ export declare class AutomationStore {
     updateRun(id: RunId, patch: (current: AutomationRun) => AutomationRun): Promise<AutomationRun>;
     /** Enforce per-automation terminal-run retention. Active records are never pruned. */
     pruneRetention(automationId: AutomationId, historyLimit: number): Promise<void>;
+    /** Delete one terminal run record (历史管理). Active runs are refused. */
+    deleteRun(id: RunId): Promise<boolean>;
+    /** Delete every terminal run of one automation; returns the cleared count. */
+    clearRuns(automationId: AutomationId): Promise<number>;
     private runTable;
     cursor(id: AutomationId): number | undefined;
     /** Monotonic cursor advance; concurrent advances never regress. */

@@ -236,6 +236,17 @@ export async function handleAutomationRpc(
         const workspace = await service.registerWorkspace(path)
         return ok(workspace)
       }
+      case 'delete-run': {
+        const automationId = string(body.automationId, 'automationId', MAX_ID)
+        const runId = string(body.runId, 'runId', MAX_ID)
+        await service.deleteRun(automationId, runId)
+        return ok({ id: runId })
+      }
+      case 'clear-runs': {
+        const automationId = string(body.automationId, 'automationId', MAX_ID)
+        const cleared = await service.clearRuns(automationId)
+        return ok({ cleared })
+      }
       case 'run-now': {
         const automationId = string(body.automationId, 'automationId', MAX_ID)
         const run = await service.runNow(automationId)

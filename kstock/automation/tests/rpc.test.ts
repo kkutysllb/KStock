@@ -33,6 +33,9 @@ function fakeService() {
       lang,
     }),
     registerWorkspace: async (path: string) => ({ id: 'ws-new', title: 'new', path }),
+    deleteRun: async (automationId: string, runId: string) => undefined,
+    clearRuns: async (automationId: string) => 3,
+
     create: async (input: unknown) => {
       await validateShape(input)
       return { id: 'kauto-2', revision: 1 }
@@ -104,6 +107,19 @@ test('register-workspace requires a path', async () => {
   const result = await handleAutomationRpc(fakeService(), 'register-workspace', {}, signal)
   assert.equal(result.ok, false)
   if (!result.ok) assert.equal(result.error.code, 'invalid')
+})
+
+
+test('delete-run relays ids to the service', async () => {
+  const result = await handleAutomationRpc(fakeService(), 'delete-run', { automationId: 'kauto-1', runId: 'krun-1' }, signal)
+  assert.equal(result.ok, true)
+  if (result.ok) assert.equal((result.value as { id: string }).id, 'krun-1')
+})
+
+test('clear-runs returns the cleared count', async () => {
+  const result = await handleAutomationRpc(fakeService(), 'clear-runs', { automationId: 'kauto-1' }, signal)
+  assert.equal(result.ok, true)
+  if (result.ok) assert.equal((result.value as { cleared: number }).cleared, 3)
 })
 
 test('non-object payloads fail with an invalid envelope', async () => {

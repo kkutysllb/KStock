@@ -447,6 +447,26 @@ export class AutomationService {
     return await this.queueRun(definition, this.clock(), 'manual')
   }
 
+  /** 历史管理：删除一条终态运行记录（queued/running 拒绝删除）。 */
+  async deleteRun(automationId: AutomationId, runId: RunId): Promise<void> {
+    this.requireDefinition(automationId)
+    const run = this.store.run(runId)
+    if (run === undefined || run.automationId !== automationId) {
+      throw new ServiceError('not-found', `未找到运行记录 ${runId}`)
+    }
+    if (run.status === 'queued' || run.status === 'running') {
+      throw new ServiceError('invalid', '运行中的记录不能删除')
+    }
+    const removed = await this.store.deleteRun(runId)
+    if (!removed) throw new ServiceError('not-found', `未找到运行记录 ${runId}`)
+  }
+
+  /** 历史管理：清空某任务的全部终态运行记录，返回清除条数。 */
+  async clearRuns(automationId: AutomationId): Promise<number> {
+    this.requireDefinition(automationId)
+    return this.store.clearRuns(automationId)
+  }
+
   private async queueRun(
     definition: AutomationDefinition,
     scheduledForMs: number,

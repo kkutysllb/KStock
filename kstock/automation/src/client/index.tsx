@@ -157,6 +157,20 @@ export function apply(ctx: ClientContext): void {
     })()
   }
 
+  /** Desktop shell directory picker (Electron global). Null on plain web —
+   * the editor falls back to the manual path input. */
+  const pickDirectory = async (): Promise<string | null> => {
+    const global = globalThis as { __QILIN_DIRECTORY_PICKER__?: { pick: () => Promise<string | null> } }
+    try {
+      if (typeof global.__QILIN_DIRECTORY_PICKER__?.pick === 'function') {
+        return await global.__QILIN_DIRECTORY_PICKER__.pick()
+      }
+    } catch {
+      /* picker unavailable — caller decides the fallback */
+    }
+    return null
+  }
+
   const loadModelCatalog = async (): Promise<ModelCatalog> => {
     const remoteSession = ctx.remote?.session
     if (remoteSession?.modelCatalog === undefined) {
@@ -195,6 +209,7 @@ export function apply(ctx: ClientContext): void {
               openSession={openSession}
               backToConversation={backToConversation}
               loadModelCatalog={loadModelCatalog}
+              pickDirectory={pickDirectory}
             />
           )
         })
