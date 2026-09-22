@@ -161,17 +161,6 @@ export function AutomationsView(props: AutomationsViewProps): React.ReactElement
     }
   }
 
-  if (snapshot?.unavailable !== undefined) {
-    return (
-      <div className='kyl-panel' data-panel='automations'>
-        <PanelHeader t={t} onBack={backToConversation} />
-        <div className='kyl-empty'>
-          <div className='kyl-empty-title'>{t('noSession')}</div>
-          <div className='kyl-empty-hint'>{t('subtitle')}</div>
-        </div>
-      </div>
-    )
-  }
   if (state.phase === 'error' && snapshot === undefined) {
     return (
       <div className='kyl-panel' data-panel='automations'>
@@ -205,6 +194,9 @@ export function AutomationsView(props: AutomationsViewProps): React.ReactElement
           </select>
           {workspaceFilter === '' && workspace !== undefined && (
             <span className='kyl-chip'>{t('workspace')}: {workspace.title}</span>
+          )}
+          {workspace === undefined && (
+            <span className='kyl-chip kyl-chip-muted'>{t('standaloneHint')}</span>
           )}
           {policy !== undefined && (
             <span className='kyl-chip kyl-chip-muted'>

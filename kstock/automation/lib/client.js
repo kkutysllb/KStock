@@ -262,15 +262,6 @@ function AutomationsView(props) {
       setNotice(`${t("updateFailed")}: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
-  if (snapshot?.unavailable !== void 0) {
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-panel", "data-panel": "automations", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PanelHeader, { t, onBack: backToConversation }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-empty", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-empty-title", children: t("noSession") }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-empty-hint", children: t("subtitle") })
-      ] })
-    ] });
-  }
   if (state.phase === "error" && snapshot === void 0) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-panel", "data-panel": "automations", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PanelHeader, { t, onBack: backToConversation }),
@@ -306,6 +297,7 @@ function AutomationsView(props) {
           ": ",
           workspace.title
         ] }),
+        workspace === void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "kyl-chip kyl-chip-muted", children: t("standaloneHint") }),
         policy !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "kyl-chip kyl-chip-muted", children: t("policyHint", { timeout: policy.runTimeoutMinutes, grace: policy.misfireGraceMinutes }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-actions", children: [
@@ -769,7 +761,7 @@ var zh = {
   workspaceRequired: "\u8BF7\u9009\u62E9\u5DE5\u4F5C\u533A",
   scopeHint: "\u4EFB\u52A1\u4E0E\u8FD0\u884C\u5386\u53F2\u6309\u5DE5\u4F5C\u533A\u9694\u79BB",
   policyHint: "\u5355\u6B21\u8FD0\u884C\u4E0A\u9650 {timeout} \u5206\u949F \xB7 \u8865\u8DD1\u5BBD\u9650 {grace} \u5206\u949F",
-  noSession: "\u8FD8\u6CA1\u6709\u6D3B\u8DC3\u4F1A\u8BDD\uFF1A\u5148\u5F00\u59CB\u4E00\u6BB5\u5BF9\u8BDD\uFF0C\u9762\u677F\u4F1A\u8DDF\u968F\u5F53\u524D\u4F1A\u8BDD\u7684\u5DE5\u4F5C\u533A\u3002",
+  standaloneHint: "\u672A\u6302\u63A5\u4F1A\u8BDD\uFF1A\u65B0\u5EFA\u4EFB\u52A1\u65F6\u8BF7\u6307\u5B9A\u843D\u5730\u5DE5\u4F5C\u533A",
   unavailable: "\u5B9A\u65F6\u4EFB\u52A1\u5BBF\u4E3B\u4E0D\u53EF\u7528",
   loading: "\u52A0\u8F7D\u4E2D\u2026",
   emptyTitle: "\u8FD8\u6CA1\u6709\u5B9A\u65F6\u4EFB\u52A1",
@@ -861,7 +853,7 @@ var en = {
   workspaceRequired: "Pick a workspace",
   scopeHint: "Rules and history are scoped to one workspace",
   policyHint: "Run timeout {timeout} min \xB7 catch-up grace {grace} min",
-  noSession: "No live session yet: start a conversation first and the panel follows its workspace.",
+  standaloneHint: "No session attached: pick a target workspace when creating a task",
   unavailable: "Automation host is unavailable",
   loading: "Loading\u2026",
   emptyTitle: "No automations yet",
@@ -988,7 +980,7 @@ function createAutomationsRuntime(deps) {
         });
         const snapshot = unwrapRpcResult(response);
         publish({
-          phase: snapshot.unavailable !== void 0 ? "unavailable" : "ready",
+          phase: "ready",
           snapshot,
           refreshedAt: Date.now()
         });

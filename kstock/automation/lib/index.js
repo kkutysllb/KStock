@@ -27278,24 +27278,26 @@ var AutomationService = class _AutomationService {
     return definition;
   }
   // ── reads ──────────────────────────────────────────────────────────────────
-  /** Full panel snapshot scoped to the caller session's workspace cwd. */
+  /** Full panel snapshot. With a live source session, `workspace` carries the
+   * session's own workspace (and the create form defaults to it); without
+   * one the panel runs standalone — automations list across all workspaces
+   * and the create form requires an explicit 工作区 selection. */
   async snapshot(params) {
     const cwd = this.cwdForSession(params.sessionId);
-    if (cwd === void 0) {
-      return { unavailable: "requires a live source session" };
-    }
     let workspace;
-    try {
-      const resolved = await this.resolveWorkspace(cwd);
-      workspace = { id: resolved.id, title: resolved.title, cwd: resolved.path, registered: true };
-    } catch {
-      const segments = cwd.split("/").filter(Boolean);
-      workspace = {
-        id: "",
-        title: segments[segments.length - 1] ?? cwd,
-        cwd,
-        registered: false
-      };
+    if (cwd !== void 0) {
+      try {
+        const resolved = await this.resolveWorkspace(cwd);
+        workspace = { id: resolved.id, title: resolved.title, cwd: resolved.path, registered: true };
+      } catch {
+        const segments = cwd.split("/").filter(Boolean);
+        workspace = {
+          id: "",
+          title: segments[segments.length - 1] ?? cwd,
+          cwd,
+          registered: false
+        };
+      }
     }
     const workspaces = this.ctx.workspaceRegistry.list().map((registryWorkspace) => ({
       id: String(registryWorkspace.id),
@@ -27306,7 +27308,7 @@ var AutomationService = class _AutomationService {
     const byId = new Map(views.map((view) => [view.id, view]));
     const runs = this.store.allRuns().filter((run) => byId.has(run.automationId)).sort((a, b) => Date.parse(b.scheduledFor) - Date.parse(a.scheduledFor) || Date.parse(b.queuedAt) - Date.parse(a.queuedAt)).slice(0, SNAPSHOT_RUNS_LIMIT).map((run) => toRunView(run));
     return {
-      workspace,
+      ...workspace !== void 0 ? { workspace } : {},
       workspaces,
       automations: views,
       runs,

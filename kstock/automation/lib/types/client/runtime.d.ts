@@ -4,7 +4,7 @@
  */
 import { type AutomationSnapshot, type ClientRpc, type CreateAutomationInput, type UpdateAutomationInput } from './protocol.ts';
 export declare const RPC_CHANNEL = "/dsh-kylin-automation";
-export type PanelPhase = 'idle' | 'loading' | 'ready' | 'error' | 'unavailable';
+export type PanelPhase = 'idle' | 'loading' | 'ready' | 'error';
 export interface PanelState {
     readonly phase: PanelPhase;
     readonly snapshot?: AutomationSnapshot;

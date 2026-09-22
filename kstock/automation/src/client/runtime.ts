@@ -13,7 +13,7 @@ import {
 
 export const RPC_CHANNEL = '/dsh-kylin-automation'
 
-export type PanelPhase = 'idle' | 'loading' | 'ready' | 'error' | 'unavailable'
+export type PanelPhase = 'idle' | 'loading' | 'ready' | 'error'
 
 export interface PanelState {
   readonly phase: PanelPhase
@@ -77,7 +77,7 @@ export function createAutomationsRuntime(deps: AutomationsRuntimeDeps): Automati
         })
         const snapshot = unwrapRpcResult<AutomationSnapshot>(response)
         publish({
-          phase: snapshot.unavailable !== undefined ? 'unavailable' : 'ready',
+          phase: 'ready',
           snapshot,
           refreshedAt: Date.now(),
         })

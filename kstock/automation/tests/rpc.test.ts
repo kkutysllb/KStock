@@ -71,11 +71,22 @@ test('snapshot returns the envelope with value', async () => {
   }
 })
 
-test('snapshot without a live session reports unavailable', async () => {
-  const service = { snapshot: async () => ({ unavailable: 'requires a live source session' }) } as never
+test('snapshot without a live session relays the standalone snapshot (no unavailable flag)', async () => {
+  const service = {
+    snapshot: async () => ({
+      workspaces: [{ id: 'ws-1', title: '研究', cwd: '/repo/a' }],
+      automations: [],
+      runs: [],
+    }),
+  } as never
   const result = await handleAutomationRpc(service, 'snapshot', {}, signal)
   assert.equal(result.ok, true)
-  if (result.ok) assert.match((result.value as { unavailable?: string }).unavailable ?? '', /live source session/)
+  if (result.ok) {
+    const value = result.value as { unavailable?: string; workspaces?: unknown[]; automations?: unknown[] }
+    assert.equal(value.unavailable, undefined)
+    assert.equal(value.workspaces?.length, 1)
+    assert.equal(value.automations?.length, 0)
+  }
 })
 
 test('non-object payloads fail with an invalid envelope', async () => {

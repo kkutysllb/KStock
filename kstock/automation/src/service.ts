@@ -46,7 +46,6 @@ export class ServiceError extends Error {
 }
 
 export interface SnapshotResult {
-  readonly unavailable?: string
   readonly workspace?: {
     readonly id: string
     readonly title: string
@@ -493,26 +492,28 @@ export class AutomationService {
 
   // ── reads ──────────────────────────────────────────────────────────────────
 
-  /** Full panel snapshot scoped to the caller session's workspace cwd. */
+  /** Full panel snapshot. With a live source session, `workspace` carries the
+   * session's own workspace (and the create form defaults to it); without
+   * one the panel runs standalone — automations list across all workspaces
+   * and the create form requires an explicit 工作区 selection. */
   async snapshot(params: {
     readonly sessionId?: string
     readonly lang: 'zh' | 'en'
   }): Promise<SnapshotResult> {
     const cwd = this.cwdForSession(params.sessionId)
-    if (cwd === undefined) {
-      return { unavailable: 'requires a live source session' }
-    }
-    let workspace: { id: string; title: string; cwd: string; registered: boolean }
-    try {
-      const resolved = await this.resolveWorkspace(cwd)
-      workspace = { id: resolved.id, title: resolved.title, cwd: resolved.path, registered: true }
-    } catch {
-      const segments = cwd.split('/').filter(Boolean)
-      workspace = {
-        id: '',
-        title: segments[segments.length - 1] ?? cwd,
-        cwd,
-        registered: false,
+    let workspace: SnapshotResult['workspace']
+    if (cwd !== undefined) {
+      try {
+        const resolved = await this.resolveWorkspace(cwd)
+        workspace = { id: resolved.id, title: resolved.title, cwd: resolved.path, registered: true }
+      } catch {
+        const segments = cwd.split('/').filter(Boolean)
+        workspace = {
+          id: '',
+          title: segments[segments.length - 1] ?? cwd,
+          cwd,
+          registered: false,
+        }
       }
     }
     const workspaces = this.ctx.workspaceRegistry.list().map(registryWorkspace => ({
@@ -529,7 +530,7 @@ export class AutomationService {
       .slice(0, SNAPSHOT_RUNS_LIMIT)
       .map(run => toRunView(run))
     return {
-      workspace,
+      ...(workspace !== undefined ? { workspace } : {}),
       workspaces,
       automations: views,
       runs,
