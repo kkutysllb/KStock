@@ -152,8 +152,8 @@ export function apply(ctx: Context): void {
           },
           openExternalLink: (url) => {
             if (ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
-              // KStock patch: an X-Frame-Options / frame-ancestors refusal still
-              // fires the iframe load event, so the embedded Browser renders a
+              // KStock patch: X-Frame-Options / frame-ancestors refusals still
+              // fire the iframe load event, so the embedded Browser renders a
               // blank frame with no failure notice. Ask the KStock host route
               // whether the URL is embeddable and open externally when it is
               // not; preflight failure falls back to the embedded attempt.
