@@ -1214,8 +1214,9 @@ a.ksq-news-title:hover {
 /* ── 图表视觉比例锚定（viewBox 拉伸陷阱修复）──────────────────────
    图表 SVG viewBox 固定宽（560/720），宽面板被拉伸 1.5-2x，字号视觉
    翻倍显巨大。统一锚定 max-width：560 系 ≤660px（放大上限 1.18x）、
-   720 系（缠论 K 线）≤880px；height:auto 保持宽高比。 */
-.ksq-chart svg { max-width: 660px; height: auto; }
+   720 系（缠论 K 线）≤880px；height:auto 保持宽高比。
+   居中显示：宽屏详情卡片内不左沉、两侧留白对称。 */
+.ksq-chart svg { max-width: 660px; height: auto; display: block; margin-inline: auto; }
 .ksq-chan-chart svg { max-width: 880px; height: auto; display: block; }
 
 /* ── 缠论研究面板（§29-C1，@kstock/client-chan）────────────────── */
