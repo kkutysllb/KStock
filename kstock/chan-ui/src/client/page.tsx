@@ -53,6 +53,15 @@ function useNarrow(): boolean {
   return narrow
 }
 
+/** 热门示例标的（点击填入输入框，不自动分析）。 */
+const SAMPLE_STOCKS: readonly (readonly [code: string, name: string])[] = [
+  ['600519', '贵州茅台'],
+  ['300750', '宁德时代'],
+  ['000858', '五粮液'],
+  ['601318', '中国平安'],
+  ['000001', '平安银行'],
+]
+
 /** 缠论研究页：三栏证据台（宽屏）/ 图上 + Tab 面板（窄屏）。 */
 export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = {}) {
   const [stock, setStock] = useState('')
@@ -62,6 +71,8 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
   const [view, setView] = useState({ start: 0, count: 1 })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** 是否已发起过分析：区分「欢迎页」（未开始）与「分析过但本级别无数据」。 */
+  const [started, setStarted] = useState(false)
   const [pendingAsk, setPendingAsk] = useState<string | null>(null)
   const [matrix, setMatrix] = useState<Record<string, Rec | 'loading' | 'error' | 'empty'>>({})
   const [highlight, setHighlight] = useState<ChartHighlight | null>(null)
@@ -75,6 +86,7 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
   const analyze = useCallback(async (targetStock: string, targetLevel: string) => {
     if (targetStock.trim() === '') return
     const my = ++analyzeSeq.current
+    setStarted(true)
     setLoading(true)
     setError(null)
     try {
@@ -104,7 +116,7 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
     }
   }, [])
 
-  useEffect(() => { void analyze('000001', 'daily') }, [analyze])
+  // 不再挂载即分析默认标的——首屏为欢迎页，由用户选标的/周期后点「分析」。
 
   // 联立矩阵：当前级别的其余 3 档并行拉取（含低一档；分钟级可能配额不足 → empty 行；硬失败 → error 行）。
   const stockCode = payload !== null ? asStr(payload.stock_code) : ''
@@ -203,6 +215,7 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
         </div>
       </header>
       <div className="ksq-body">
+        {started && (
         <div className="ksq-toolbar">
           <input
             className="ksq-chan-input"
@@ -240,9 +253,63 @@ export function ChanPage({ useWorkspaces }: { useWorkspaces?: UseWorkspaces } = 
             </>
           )}
         </div>
+        )}
         {error !== null && <p className="ksq-note">{error}</p>}
-        {!loading && error === null && payload === null && (
+        {started && !loading && error === null && payload === null && (
           <p className="ksq-note">本级别数据不足（引擎返回为空或有效 K 线过少），请切换级别或稍后再试。</p>
+        )}
+
+        {!started && !loading && error === null && (
+          <div className="ksq-chan-welcome">
+            <div className="ksq-chan-welcome-card">
+              <h2 className="ksq-chan-welcome-title">缠论研究</h2>
+              <p className="ksq-chan-welcome-sub">
+                选择标的与周期开始分析——分型 / 笔 / 段 / 中枢、MACD 背驰、三类买卖点与多级别联立，一次呈现完整证据链。
+              </p>
+              <div className="ksq-chan-welcome-form">
+                <input
+                  className="ksq-chan-input"
+                  value={stock}
+                  onChange={event => setStock(event.target.value)}
+                  onKeyDown={event => { if (event.key === 'Enter') void analyze(stock, level) }}
+                  placeholder="代码或名称（600519 / 茅台 / 000001.SH）"
+                  spellCheck={false}
+                  aria-label="标的代码或名称"
+                />
+                <select
+                  className="ksq-chan-select"
+                  value={level}
+                  onChange={event => setLevel(event.target.value)}
+                  aria-label="分析周期"
+                >
+                  {LEVEL_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                </select>
+                <button
+                  className="ksq-chan-welcome-go"
+                  type="button"
+                  disabled={loading || stock.trim() === ''}
+                  onClick={() => void analyze(stock, level)}
+                >
+                  {loading ? '分析中…' : '开始分析'}
+                </button>
+              </div>
+              <div className="ksq-chan-welcome-chips">
+                <span className="ksq-chan-welcome-chips-label">热门：</span>
+                {SAMPLE_STOCKS.map(([code, name]) => (
+                  <button key={code} type="button" className="ksq-btn" onClick={() => setStock(code)}>
+                    {name} {code}
+                  </button>
+                ))}
+              </div>
+              <p className="ksq-chan-welcome-tips">
+                分析由服务端缠论引擎执行，通常秒级返回；分钟级（60/90/120min）依赖 tushare
+                分钟线配额，数据量可能不足而降级。
+              </p>
+            </div>
+          </div>
+        )}
+        {loading && payload === null && (
+          <p className="ksq-note">缠论引擎分析中，通常秒级返回…</p>
         )}
 
         {payload !== null && chart !== null && !narrow && (

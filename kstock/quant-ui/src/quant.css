@@ -1450,3 +1450,29 @@ a.ksq-news-title:hover {
 .ksq-chanx-tab.on {
   color: #0b120f; background: var(--dsw-alias-brand-primary); border-color: var(--dsw-alias-brand-primary); font-weight: 600;
 }
+
+/* ── 缠论研究欢迎页（未分析前的引导页；分析后由工具栏接管） ────────── */
+.ksq-chan-welcome { display: flex; justify-content: center; padding: 48px 16px 24px; }
+.ksq-chan-welcome-card {
+  width: min(560px, 100%);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  padding: 28px 28px 20px;
+  text-align: center;
+}
+.ksq-chan-welcome-title { margin: 0 0 6px; font-size: 20px; }
+.ksq-chan-welcome-sub { margin: 0 0 18px; color: var(--dsw-alias-label-tertiary); font-size: 12.5px; line-height: 1.6; }
+.ksq-chan-welcome-form { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.ksq-chan-welcome-form .ksq-chan-input { flex: 1 1 220px; width: auto; height: 32px; }
+.ksq-chan-welcome-form .ksq-chan-select { height: 32px; }
+.ksq-chan-welcome-go {
+  appearance: none; border: 1px solid var(--dsw-alias-brand-primary);
+  background: var(--dsw-alias-brand-primary); color: #0b120f;
+  font-size: 12.5px; font-weight: 600; padding: 0 18px; height: 32px;
+  border-radius: 8px; cursor: pointer;
+}
+.ksq-chan-welcome-go:disabled { opacity: 0.55; cursor: default; }
+.ksq-chan-welcome-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; margin-top: 14px; }
+.ksq-chan-welcome-chips-label { font-size: 12px; color: var(--dsw-alias-label-tertiary); }
+.ksq-chan-welcome-tips { margin: 14px 0 0; color: var(--dsw-alias-label-tertiary); font-size: 11.5px; line-height: 1.6; }
