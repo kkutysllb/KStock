@@ -211,26 +211,22 @@ function buildFullTrayMenu(engine: EngineProcess): MenuItemConstructorOptions[] 
 /**
  * 构建托盘图标 ``nativeImage``。
  *
- * macOS 菜单栏必须用**模板图**（纯黑 + alpha）并标记 template image，系统才能自动
- * 适配深色/浅色外观；Windows/Linux 用彩色图标。三处与旧实现的差异（图标重构）：
+ * 三端统一使用**上游麒麟彩色印章**（`build/tray-32.png`；设计源
+ * `docs/design/icon-refresh/qilin-tray/favicon.svg`，即 QiLin 品牌印章）。
+ * 这是用户的明确决定（2026-09-20）：三端都用彩色、**不标记 template image**——
+ * 彩色图不随菜单栏深浅色自动反色；朱砂红在浅色与深色菜单栏上均可见（已实测）。
  *
- * 1. macOS 读 `trayTemplate.png`，Electron 自动合并同目录的 `trayTemplate@2x.png`，
- *    因此 Retina 菜单栏拿到的是**原生 32px 素材**；
- * 2. 不再运行时 `resize()`——旧实现把单张 128px 缩到 22pt，二次重采样让笔画发灰；
- * 3. Windows/Linux 读逐档出好的彩色 `tray-32.png`（Tier 2 加重版 K），
- *    不再回落到全出血的应用图标。
+ * 与旧实现的差异：不再读黑色模板图（`tray.png` / `trayTemplate.png`）、
+ * 不再运行时 `resize()`（旧实现把 128px 缩到 22pt，二次重采样让笔画发灰）。
  *
  * 资产由 `scripts/build-icons.sh` 生成（设计源在 `docs/design/icon-refresh/`）。
  */
 function createTrayImage(): Electron.NativeImage | null {
-  const darwin = process.platform === "darwin";
-  const candidates = darwin
-    ? [join(app.getAppPath(), "build", "trayTemplate.png")]
-    : [
-        join(app.getAppPath(), "build", "tray-32.png"),
-        join(app.getAppPath(), "build", "tray-16.png"),
-        join(app.getAppPath(), "build", "tray.ico"),
-      ];
+  const candidates = [
+    join(app.getAppPath(), "build", "tray-32.png"),
+    join(app.getAppPath(), "build", "tray-16.png"),
+    join(app.getAppPath(), "build", "tray.ico"),
+  ];
   const iconPath = candidates.find((p) => existsSync(p));
   if (!iconPath) {
     const found = candidates.filter((p) => existsSync(p));
@@ -241,9 +237,8 @@ function createTrayImage(): Electron.NativeImage | null {
     return null;
   }
 
-  // 不做 resize：尺寸已在资产生成阶段按档出好（macOS 16/@2x，Win/Linux 32/16）。
+  // 不做 resize：尺寸已在资产生成阶段按档出好（16/20/24/32）。
   const icon = nativeImage.createFromPath(iconPath);
-  if (darwin) icon.setTemplateImage(true);
   logMain(
     `托盘图标加载：${iconPath} size=${JSON.stringify(icon.getSize())} isEmpty=${icon.isEmpty()}`,
   );

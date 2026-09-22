@@ -34,6 +34,7 @@ python3 docs/design/icon-refresh/contact_sheets.py     # A–D 的小尺寸/托�
 python3 docs/design/icon-refresh/seal_sheets.py        # 印章对照
 python3 docs/design/icon-refresh/gen_client_marks.py   # ★ 客户端商标几何常量 + 镜像校验图
 python3 docs/design/icon-refresh/generate_uimarks.py   # UI 小尺寸商标候选（B0/B1/B2 选型用）
+python3 docs/design/icon-refresh/gen_client_marks.py   # ★ 客户端商标几何常量 + 镜像校验图
 ```
 
 ## 校验（已进 CI 门禁）

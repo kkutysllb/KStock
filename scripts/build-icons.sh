@@ -16,9 +16,10 @@ echo "== 1/2 生成设计源 SVG（逐方向渲染脚本）"
 $PY "$DESIGN/generate.py" > /dev/null
 $PY "$DESIGN/generate_seal.py" > /dev/null
 $PY "$DESIGN/generate_zhuan.py" > /dev/null
+$PY "$DESIGN/gen_qilin_tray.py" > /dev/null
 
 echo "== 2/2 按逐尺寸形制出生产资产（含验收断言）"
 $PY "$DESIGN/build_assets.py"
 
 echo
-echo "产物：apps/desktop/build/{icon.icns,icon.ico,tray.ico,icon.png,icons/,trayTemplate.png,trayTemplate@2x.png,tray-16/20/24/32.png}"
+echo "产物：apps/desktop/build/{icon.icns,icon.ico,tray.ico,icon.png,icons/,tray-16/20/24/32.png（麒麟彩印，三端统一）}"

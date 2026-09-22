@@ -11,8 +11,8 @@
 | ≥256 | Tier 1：朱印（篆书「麒麟」横排）+ KSTOCK 字标 | `zhuan-src/db1-zhuan.svg` |
 | 64 / 128 | Tier 1b：同款朱印**去字标**、居中放大 | `zhuan-src/e1-side-zhuan.svg` |
 | 48 | Tier 2：品牌绿实色场 K | `src/c2-field-deep.svg` |
-| 16 / 20 / 24 / 32 | Tier 2 加重版（笔画 +17%） | `src/c2-field-deep-bold.svg` |
-| 托盘（模板图） | Tier 3：印章外框 + K，纯黑 + alpha | `seal-src/e1-vermilion-tray.svg` |
+| 16 / 20 / 24 / 32 | Tier 2 加重版（笔画 +17%）；同尺寸亦是麒麟彩印托盘 | `src/c2-field-deep-bold.svg` |
+| 托盘（三端彩色） | 上游麒麟彩色印章 | `qilin-tray/color-*.png`（由 `gen_qilin_tray.py` 生成） |
 
 为什么每个尺寸都从矢量重渲染、而不是拿一张大图缩：拿大图缩会把 Tier 1 的字标
 一起缩成噪点（见 spec §3.1 实测：字标在 128px 只剩 68×13px）。
@@ -41,7 +41,7 @@ SRC = {
     "tier1b": ROOT / "zhuan-src" / "e1-side-zhuan.svg",
     "tier2": ROOT / "src" / "c2-field-deep.svg",
     "tier2bold": ROOT / "src" / "c2-field-deep-bold.svg",
-    "tray": ROOT / "seal-src" / "e1-vermilion-tray.svg",
+    "tray": ROOT / "qilin-tray",   # 由 gen_qilin_tray.py 生成（color-<size>.png）
 }
 BUILD = REPO / "apps/desktop/build"
 STAGE = ROOT / "assets-tmp"          # 中间渲染，不入版本库
@@ -76,8 +76,7 @@ ICONS_DIR = [
 ]
 
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]      # 7 档（旧的只有 6 档，缺 24）
-TRAY_TEMPLATE = [16, 32]                        # trayTemplate.png / @2x
-TRAY_COLOR = [16, 20, 24, 32]                   # Windows/Linux 彩色托盘
+TRAY_COLOR = [16, 20, 24, 32]                   # 三端统一彩色托盘（macOS 也用彩色，不随深浅色反色）
 
 
 def render(tier: str, size: int) -> pathlib.Path:
@@ -95,6 +94,11 @@ def render(tier: str, size: int) -> pathlib.Path:
 def write_png(tier: str, size: int, dest: pathlib.Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(render(tier, size), dest)
+
+
+def copy_png(src: pathlib.Path, dest: pathlib.Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, dest)
 
 
 def build_icns() -> str:
@@ -127,7 +131,8 @@ def write_ico(dest: pathlib.Path, entries: list[tuple[str, int]]) -> None:
     payloads: list[tuple[int, bytes]] = []
     for tier, size in entries:
         buf = io.BytesIO()
-        Image.open(render(tier, size)).convert("RGBA").save(buf, format="PNG", optimize=True)
+        src = (ROOT / "qilin-tray" / f"color-{size}.png") if tier == "trayfile" else render(tier, size)
+        Image.open(src).convert("RGBA").save(buf, format="PNG", optimize=True)
         payloads.append((size, buf.getvalue()))
 
     header = struct.pack("<HHH", 0, 1, len(payloads))
@@ -147,7 +152,7 @@ def build_ico() -> str:
         BUILD / "icon.ico",
         [("tier2bold" if s <= 32 else "tier1", s) for s in ICO_SIZES],
     )
-    write_ico(BUILD / "tray.ico", [("tier2bold", s) for s in TRAY_COLOR])
+    write_ico(BUILD / "tray.ico", [("trayfile", s) for s in TRAY_COLOR])
     return f"✓ icon.ico / tray.ico（各 {len(ICO_SIZES)} / {len(TRAY_COLOR)} 档，逐档取形制）"
 
 
@@ -160,12 +165,9 @@ def build_icons_dir() -> str:
 
 
 def build_tray() -> str:
-    for size in TRAY_TEMPLATE:
-        dest = BUILD / ("trayTemplate.png" if size == 16 else f"trayTemplate@{size // 16}x.png")
-        write_png("tray", size, dest)
     for size in TRAY_COLOR:
-        write_png("tier2bold", size, BUILD / f"tray-{size}.png")
-    return "✓ trayTemplate.png + @2x，彩色托盘 16/20/24/32"
+        copy_png(ROOT / "qilin-tray" / f"color-{size}.png", BUILD / f"tray-{size}.png")
+    return f"✓ 麒麟彩印托盘 {TRAY_COLOR}（三端统一彩色）"
 
 
 def png_size(path: pathlib.Path) -> tuple[int, int]:
@@ -242,23 +244,24 @@ def verify_structure() -> list[str]:
                 f"icon.icns 缺 1024 档（ic10）；实测 {[t.decode('latin1') for t in types]}"
             )
 
-    # c) 模板图源不变量：只能纯黑 + alpha（用源 SVG 判断，零依赖）
-    tray_svg = SRC["tray"].read_text(encoding="utf-8")
-    if "Gradient" in tray_svg:
-        problems.append("托盘模板图源含渐变（模板图只能是纯色 + alpha）")
-    strokes = {m.group(1).lower() for m in re.finditer(r'stroke="([^"]+)"', tray_svg)}
-    strokes |= {m.group(1).lower() for m in re.finditer(r'fill="([^"]+)"', tray_svg)}
-    illegal = {c for c in strokes if c not in ("#000000", "none")}
-    if illegal:
-        problems.append(f"托盘模板图源含非纯黑颜色 {sorted(illegal)}")
+    # c) 麒麟彩印源不变量：源 SVG 必须仍是「彩色印章」——
+    #    含朱砂渐变与暖白印文；若被人改成黑白/模板化，托盘三端就不统一了。
+    seal_svg = (ROOT / "qilin-tray" / "favicon.svg").read_text(encoding="utf-8")
+    if "Gradient" not in seal_svg:
+        problems.append("麒麟彩印源 SVG 丢失朱砂渐变（可能被误改成单色）")
+    for token in ("#d4503d", "#f3dc9e", "#fff5eb"):
+        if token not in seal_svg:
+            problems.append(f"麒麟彩印源 SVG 缺品牌色 {token}")
+    if seal_svg.count("<path") != 2:
+        problems.append(f"麒麟彩印源 SVG 字形数量异常（{seal_svg.count('<path')} 个 path，应为 2：麒/麟）")
 
-    # d) 托盘模板图的像素尺寸
-    for name, size in (("trayTemplate.png", 16), ("trayTemplate@2x.png", 32)):
-        path = BUILD / name
+    # d) 彩色托盘的像素尺寸
+    for size in TRAY_COLOR:
+        path = BUILD / f"tray-{size}.png"
         if not path.exists():
-            problems.append(f"缺 {name}")
+            problems.append(f"缺 tray-{size}.png")
         elif png_size(path) != (size, size):
-            problems.append(f"{name} 尺寸 {png_size(path)}（期望 {size}x{size}）")
+            problems.append(f"tray-{size}.png 尺寸 {png_size(path)}（期望 {size}x{size}）")
 
     return problems
 
@@ -286,14 +289,14 @@ def verify_pixels() -> tuple[list[str], bool]:
         if not 0.78 <= c <= upper:
             problems.append(f"留白异常 {name}: 内容占比 {c:.1%}（期望 78–{upper:.0%}）")
 
-    # 模板图：非透明像素必须纯黑（抗锯齿 alpha 合法），且要有不透明实心核
-    for name in ("trayTemplate.png", "trayTemplate@2x.png"):
-        px_list = list(Image.open(BUILD / name).convert("RGBA").getdata())
-        bad = next((p for p in px_list if p[3] > 0 and (p[0] or p[1] or p[2])), None)
-        if bad is not None:
-            problems.append(f"{name} 含非纯黑像素 {bad}")
-        if max(p[3] for p in px_list) != 255:
-            problems.append(f"{name} 无实心核（最大 alpha={max(p[3] for p in px_list)}）")
+    # 彩色托盘：必须真的是「彩色」（存在朱砂红系像素），
+    # 防止有人误把黑白模板图当彩印发上去（三端统一彩印后这是最容易犯的错）。
+    for size in TRAY_COLOR:
+        im = Image.open(BUILD / f"tray-{size}.png").convert("RGBA")
+        red = sum(1 for r, g, b, a in im.getdata()
+                  if a > 200 and r > 120 and r > g + 40 and r > b + 40)
+        if red < im.width * im.height * 0.10:
+            problems.append(f"tray-{size}.png 朱砂红像素占比过低（{red} 个）——疑似误用了黑白图")
 
     # 字标分档：256 的 Tier 1 字标区必须非空
     im = Image.open(ICONS / "256x256.png").convert("RGBA")
@@ -367,7 +370,7 @@ def main() -> int:
         for p in problems:
             print("  ✗", p)
         return 1
-    print("\n验证通过：资产齐全且尺寸正确 / icns 含 1024 / ico 7 档 / 模板图源纯黑 / 字标分档正确")
+    print("\n验证通过：资产齐全且尺寸正确 / icns 含 1024 / ico 7 档 / 麒麟彩印托盘就位 / 字标分档正确")
     if STAGE.exists():
         shutil.rmtree(STAGE)
     return 0
