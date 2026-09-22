@@ -36,7 +36,7 @@ metadata:
 本技能是**场景编排层**：以 stock-analysis 技能的缠论双引擎为主轴，完成
 单股缠论全息分析或全池背驰选股并交付 HTML 看板。**产物分区纪律**见
 sandbox-path-guide——引擎输出一律落 `data/`、报告落 `reports/`，从
-工作区根执行。
+工作区根执行；三分区内的**子布局**见下文「工作区子布局（缠论场景）」。
 
 ## 触发条件
 
@@ -56,15 +56,19 @@ all/hs300/zz500/zz1000/gz2000/zza500。
 
 ## 阶段一：数据采集（必做）
 
-先在工作区根 `mkdir -p data reports`；基目录 = stock-analysis 技能加载
-结果给出的 Base directory。
+先在工作区根逐级建目录：`mkdir -p scripts "data/chan/<代码>"
+"data/chan/select" reports`（选股场景再加 `data/chan/compare`）；基目录 =
+stock-analysis 技能加载结果给出的 Base directory。
 
 1. **单股**（实测 242 根日 K → 31 分型/笔/中枢/MACD 背驰全结构）：
 
    ```bash
    python3 "<stock-analysis 基目录>/scripts/analyze_stock_chan.py" \
-     --stock 000001 --level daily --json > data/chan-<代码>.json
+     --stock 000001 --level daily --json > "data/chan/<代码>/daily.json"
    ```
+
+   多级别研究逐级别落盘：`--levels 30min,daily,weekly` 拆成多条命令，
+   每级别一文件（`30min.json` / `daily.json` / `weekly.json`）。
 
 2. **全池选股**（hs300 = 300 只逐只拉 K 线 × Tushare 限速，实测 10 分钟
    级——**必须 run_in_background 后台化**，期间先搭报告骨架；收齐后
@@ -72,18 +76,38 @@ all/hs300/zz500/zz1000/gz2000/zza500。
 
    ```bash
    python3 "<stock-analysis 基目录>/scripts/run_chan_stock_selector.py" \
-     --pool hs300 --top 20 --json > data/chan-select.json
+     --pool hs300 --top 20 --json > "data/chan/select/hs300-$(date +%Y%m%d).json"
    ```
 
 依赖：TUSHARE_TOKEN + pandas/dotenv（壳已注入/引导安装；缺则按「无数据」
 口径处理，禁止编造）。
+
+## 工作区子布局（缠论场景）
+
+多标的 × 多级别 × 关联数据全部平铺在 `data/` 根，会把目录堆成上百个
+`.json` / `.err` 混杂文件。在三分区（scripts / data / reports，见
+sandbox-path-guide）内按下表再分区：
+
+| 路径 | 放什么 |
+|------|--------|
+| `data/chan/<代码>/<级别>.json` | 单股缠论引擎输出（一级别一文件：`5min`…`monthly`） |
+| `data/chan/<代码>/<名称>.json` | 同标的关联数据（moneyflow / chips / daily / margin_detail 等） |
+| `data/chan/select/<池名>-<YYYYMMDD>.json` | 全池选股结果（一池一日一文件） |
+| `data/chan/compare/<主题>.json` | 对比类中间产物（compare-raw 等，**不放 reports/**） |
+
+- stderr 重定向到同名 `.err`（`> <file> 2> <file>.err`），**解析成功后
+  即删**；禁止 `.err` 与最终数据长期混放；
+- 一切自建脚本（含 `build_*.py` 报告构造脚本）只落 `scripts/`，**禁止
+  堆在工作区根**；
+- `reports/` 只放 `report.json` + 渲染 HTML（`chan-<代码或池名>-<主题>-
+  <YYYYMMDD>.html`）；对比数据等中间 json 一律归 `data/chan/`。
 
 ## 阶段二：解读
 
 - 单股：morphology（K 线/分型/笔计数）→ 中枢区间 → 动力学（MACD 背驰
   信号）→ 买卖点分级，按引擎 JSON 结构逐层转述；
 - 选股：信号表按 买/卖 分组，结合 `--signal buy` 收窄；头部标的可对
-  top 5 逐只补单股全息分析（并行采集落 data/）。
+  top 5 逐只补单股全息分析（并行采集按子布局落 `data/chan/<代码>/`）。
 
 ## 阶段三：报告交付（必做）
 
@@ -93,7 +117,8 @@ all/hs300/zz500/zz1000/gz2000/zza500。
      MACD 背驰对照（line/bar）；选股场景为信号强度 TOP20（bar）；
    - 分节正文：形态结构 / 中枢与买卖点 / 背驰信号 / 操作参考位；
    - 风险提示与参考来源（Tushare + 数据日期）；
-2. 渲染 `-o reports/chan-<代码或池名>.html`，归档报告库，present 呈现。
+2. 渲染 `-o "reports/chan-<代码或池名>-<主题>-<YYYYMMDD>.html"`，归档
+   报告库，present 呈现。
 
 ## 输出纪律（强约束）
 

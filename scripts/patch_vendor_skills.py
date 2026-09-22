@@ -951,6 +951,45 @@ def _fix_pywencai_hint(text: str) -> str | None:
     return pattern.sub("", text)
 
 
+# ── news-search 工作区子布局注入（补丁 24）────────────────────────────
+# 上游 news-search 只讲搜索接口不讲落盘组织；热点采集/解读任务经它编排时
+# 把批次 json、解读 md、探针脚本平铺在工作区根与 data/ 根（新闻分析工作区
+# 实测几十个混杂文件）。在「技能概述」之后注入「工作区子布局（新闻场景）」
+# 小节，与 sandbox-path-guide 三分区 + 场景子布局纪律对齐。幂等锚点：
+# 小节标题存在即跳过。
+_NEWS_LAYOUT_ANCHOR = "## 首次使用 - 获取 API Key"
+_NEWS_LAYOUT_SECTION = """## 工作区子布局（新闻场景）
+
+采集批次、解读稿、简报看板混落会把工作区堆乱。产物在三分区
+（scripts / data / reports，见 sandbox-path-guide）内按下表归位：
+
+| 路径 | 放什么 |
+|------|--------|
+| `data/news/<YYYYMMDD>/<主题>/` | 当日采集批次原始 JSON（news_cN.json、原始快照、探针输出） |
+| `data/news/<YYYYMMDD>/digest.json` | 热点简报聚合产物（多批次收齐后的汇总） |
+| `reports/news/<YYYYMMDD>_<事件>.md` | 单事件解读稿（解读属报告产物，禁止散落工作区根） |
+| `reports/hot-<YYYYMMDD>.html` | 热点简报 HTML 看板（经 html-report 渲染，可归档报告库） |
+
+- 一切脚本（含临时搜索/探针脚本）只落 `scripts/`；禁止把脚本、`.txt`
+  杂物落 `data/` 根；
+- 采集命令一律从工作区根执行，输出重定向进对应批次目录；
+- 定时任务的多批次采集并行后台化，收齐后汇总进 `digest.json` 再渲染。
+
+"""
+
+
+def _fix_news_workspace_layout(text: str) -> str | None:
+    """给 news-search SKILL.md 注入新闻场景工作区子布局；已注入返回 None。"""
+    if "工作区子布局（新闻场景）" in text:
+        return None
+    if _NEWS_LAYOUT_ANCHOR not in text:
+        return None
+    return text.replace(_NEWS_LAYOUT_ANCHOR, _NEWS_LAYOUT_SECTION + _NEWS_LAYOUT_ANCHOR, 1)
+
+
+_NEWS_LAYOUT_SKILL = "public/news-search/SKILL.md"
+
+
 def _fix_render_html_report_refs(text: str) -> str | None:
     """把旧内置工具 render_html_report 的引用改写为 2.0 html-report 技能流程。"""
     # 已打旧版补丁的文件不含 render_html_report，但残留旧相对路径命令——
@@ -1927,6 +1966,11 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
             continue
         if _patch_file(target, rel_path, _fix_render_html_report_refs):
             changed.append(rel_path)
+    # news-search 工作区子布局注入（新闻场景落盘组织，补丁 24）。
+    news_layout = vendor_root / _NEWS_LAYOUT_SKILL
+    if news_layout.exists():
+        if _patch_file(news_layout, _NEWS_LAYOUT_SKILL, _fix_news_workspace_layout):
+            changed.append(_NEWS_LAYOUT_SKILL)
     # etf-analysis kk_common 同级解析（2.0 preset 镜像无 pip 安装层）。
     for rel_path in _ETF_KK_COMMON_SCRIPTS:
         target = vendor_root / rel_path
