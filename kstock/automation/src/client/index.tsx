@@ -131,6 +131,10 @@ export function apply(ctx: ClientContext): void {
     },
     sessionId: () => {
       try {
+        // 会话视图选择的权威源是 uiWorkspace 的 main-selection（SessionListState
+        // 没有 current 字段）；旧读取恒为 undefined，仅作兼容回退。
+        const selected = ctx.uiWorkspace?.selection.getSnapshot().sessionId
+        if (selected !== undefined) return selected
         return ctx.sessions?.list.getSnapshot().current
       } catch {
         return undefined

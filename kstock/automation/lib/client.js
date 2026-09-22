@@ -1431,6 +1431,8 @@ function apply(ctx) {
     },
     sessionId: () => {
       try {
+        const selected = ctx.uiWorkspace?.selection.getSnapshot().sessionId;
+        if (selected !== void 0) return selected;
         return ctx.sessions?.list.getSnapshot().current;
       } catch {
         return void 0;

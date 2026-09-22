@@ -5,7 +5,7 @@
  * 「通用·默认基座」占位）。会话启动后芯片禁用（host 拒绝换预设）。
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { SnapshotStore } from '@qilin/client-store'
 import {
   IconChevronDownOutline14, IconAgentPresetOutline16, Menu, Toast, IconWarningOutline16,
@@ -60,7 +60,8 @@ function ensureStyle(): void {
 export function KStockPresetsSeat({ load, select, usePresetsSeat }: KStockPresetsSeatProps) {
   const state = usePresetsSeat((snapshot: SeatState) => snapshot)
   const [open, setOpen] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ seq: number; text: string } | null>(null)
+  const toastSeq = useRef(0)
 
   useEffect(() => {
     ensureStyle()
@@ -89,7 +90,7 @@ export function KStockPresetsSeat({ load, select, usePresetsSeat }: KStockPreset
         onSelect={(id: string) => {
           setOpen(false)
           void select(id).then((refusal) => {
-            if (refusal !== undefined) setToast(refusal)
+            if (refusal !== undefined) setToast({ seq: ++toastSeq.current, text: refusal })
           })
         }}
         align="start"
@@ -112,7 +113,8 @@ export function KStockPresetsSeat({ load, select, usePresetsSeat }: KStockPreset
       />
       {toast !== null && (
         <Toast
-          text={toast}
+          key={toast.seq}
+          text={toast.text}
           icon={<IconWarningOutline16 />}
           holdMs={6000}
           anchor={document.querySelector<HTMLElement>('[data-composer-card]')}

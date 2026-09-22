@@ -68,6 +68,12 @@ interface SnapshotStoreFace<T> {
 interface SeatScope {
   readonly sessions: { list: SessionsListFace }
   readonly remote: { agentPresets: AgentPresetsRemoteFace }
+  /** ui-workspace 服务的 main-selection 面：会话「当前显示哪个」的权威源。
+   * 注意 SessionListState 没有 current 字段——视图选择归 uiWorkspace 所有。 */
+  readonly selection: {
+    getSnapshot(): { sessionId?: string }
+    subscribe(listener: () => void): () => void
+  }
 }
 
 function createLocalStore<T>(initial: T): SnapshotStoreFace<T> & SnapshotStore<T> {
@@ -121,14 +127,17 @@ export class PresetsSeatController {
   }
 
   private currentSession(): SeatSessionFace | undefined {
+    const sessionId = this.scope.selection.getSnapshot().sessionId
+    if (sessionId === undefined) return undefined
     const state = this.scope.sessions.list.getSnapshot()
-    return state.current === undefined ? undefined : state.byId[state.current]
+    return state.byId[sessionId]
   }
 
   private refreshCurrent(): void {
     const session = this.currentSession()
     this.set({
-      current: presetOf(session) ?? BASE_PRESET_ID,
+      // 有暂存时标签保持用户的选择（乐观显示），直到应用成功或被拒。
+      current: this.staged ?? presetOf(session) ?? BASE_PRESET_ID,
       locked: session !== undefined && !session.blank,
     })
   }
@@ -159,12 +168,19 @@ export class PresetsSeatController {
 
   /** 暂存一个角色选择并立即尝试应用。返回拒绝原因（成功为 undefined）。 */
   async select(id: string): Promise<string | undefined> {
+    if (this.store.getSnapshot().busy) return undefined
     this.staged = id
+    // 乐观显示（上游 stage 同款）：标签立即跟随用户的选择；apply 失败时
+    // 再回落到会话实际 preset 并经 toast 报原因。没有这一步，hero 上
+    // （尚无会话或 RPC 未决）点击角色后标签原地不动，看起来像「选不上」。
+    this.set({ current: id, error: null })
     return await this.apply('pick')
   }
 
   /**
    * 把暂存选择交给当前 blank 会话；无暂存时仅刷新展示状态。
+   * 当前会话非 blank（hero 之下往往仍选中旧会话）时**保留暂存**，等下一个
+   * blank 会话出现再应用——选择语义即「新会话生效」。
    * @param trigger - 'pick'（用户刚选，拒绝要回报）或其他（跟随会话变化）。
    */
   async apply(trigger?: 'pick'): Promise<string | undefined> {
@@ -176,11 +192,13 @@ export class PresetsSeatController {
       return undefined
     }
     if (session === undefined) return undefined
-    if (!session.blank || presetOf(session) === staged) {
+    if (presetOf(session) === staged) {
+      // 会话已经是该角色（host 应用成功的回声）：消费暂存。
       this.staged = undefined
       this.refreshCurrent()
       return undefined
     }
+    if (!session.blank) return undefined
     this.set({ busy: true })
     const result = await this.scope.remote.agentPresets.select(session.id, staged)
     if (this.disposed) return undefined

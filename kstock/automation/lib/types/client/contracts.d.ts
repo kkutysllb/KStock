@@ -37,6 +37,13 @@ export interface ClientContext {
         openSession(target: string): void;
         /** Host-side OS directory chooser (works on web and desktop windows). */
         pickDirectory(): Promise<string | null>;
+        /** Main-pane selection: the authoritative "which session is shown". */
+        readonly selection: {
+            getSnapshot(): {
+                sessionId?: string;
+            };
+            subscribe(listener: () => void): () => void;
+        };
     };
     layout?: {
         selectPanel(panelId: string | null): void;

@@ -75,13 +75,14 @@ window.__ModuleLoader__.load({
 				});
 			}
 			currentSession() {
-				const state = this.scope.sessions.list.getSnapshot();
-				return state.current === void 0 ? void 0 : state.byId[state.current];
+				const sessionId = this.scope.selection.getSnapshot().sessionId;
+				if (sessionId === void 0) return void 0;
+				return this.scope.sessions.list.getSnapshot().byId[sessionId];
 			}
 			refreshCurrent() {
 				const session = this.currentSession();
 				this.set({
-					current: presetOf(session) ?? "standard",
+					current: this.staged ?? presetOf(session) ?? "standard",
 					locked: session !== void 0 && !session.blank
 				});
 			}
@@ -111,11 +112,18 @@ window.__ModuleLoader__.load({
 			}
 			/** 暂存一个角色选择并立即尝试应用。返回拒绝原因（成功为 undefined）。 */
 			async select(id) {
+				if (this.store.getSnapshot().busy) return void 0;
 				this.staged = id;
+				this.set({
+					current: id,
+					error: null
+				});
 				return await this.apply("pick");
 			}
 			/**
 			* 把暂存选择交给当前 blank 会话；无暂存时仅刷新展示状态。
+			* 当前会话非 blank（hero 之下往往仍选中旧会话）时**保留暂存**，等下一个
+			* blank 会话出现再应用——选择语义即「新会话生效」。
 			* @param trigger - 'pick'（用户刚选，拒绝要回报）或其他（跟随会话变化）。
 			*/
 			async apply(trigger) {
@@ -127,11 +135,12 @@ window.__ModuleLoader__.load({
 					return;
 				}
 				if (session === void 0) return void 0;
-				if (!session.blank || presetOf(session) === staged) {
+				if (presetOf(session) === staged) {
 					this.staged = void 0;
 					this.refreshCurrent();
 					return;
 				}
+				if (!session.blank) return void 0;
 				this.set({ busy: true });
 				const result = await this.scope.remote.agentPresets.select(session.id, staged);
 				if (this.disposed) return void 0;
@@ -194,6 +203,7 @@ window.__ModuleLoader__.load({
 			const state = usePresetsSeat((snapshot) => snapshot);
 			const [open, setOpen] = (0, react.useState)(false);
 			const [toast, setToast] = (0, react.useState)(null);
+			const toastSeq = (0, react.useRef)(0);
 			(0, react.useEffect)(() => {
 				ensureStyle();
 				load();
@@ -222,7 +232,10 @@ window.__ModuleLoader__.load({
 				onSelect: (id) => {
 					setOpen(false);
 					select(id).then((refusal) => {
-						if (refusal !== void 0) setToast(refusal);
+						if (refusal !== void 0) setToast({
+							seq: ++toastSeq.current,
+							text: refusal
+						});
 					});
 				},
 				align: "start",
@@ -247,14 +260,14 @@ window.__ModuleLoader__.load({
 					]
 				})
 			}), toast !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_qilin_client_ui_primitives.Toast, {
-				text: toast,
+				text: toast.text,
 				icon: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_qilin_client_ui_primitives.IconWarningOutline16, {}),
 				holdMs: 6e3,
 				anchor: document.querySelector("[data-composer-card]"),
 				onDone: () => {
 					setToast(null);
 				}
-			})] });
+			}, toast.seq)] });
 		}
 		//#endregion
 		//#region src/client/index.ts
@@ -263,6 +276,8 @@ window.__ModuleLoader__.load({
 		/**
 		* 挂载角色选择器：注册进新会话 hero 槽位（与上游 seat 同名槽位，上游行
 		* 已在 patch 层禁用，不会重复渲染）。
+		* 语义与上游 seat 相同：选择只在会话启动前生效（host 拒绝对已启动会话
+		* 换预设）；blank 会话出现即应用暂存选择。
 		* @param ctx - 浏览器插件根上下文。
 		*/
 		function apply(ctx) {
@@ -271,16 +286,26 @@ window.__ModuleLoader__.load({
 				"conversation",
 				"sessions",
 				"remote",
-				"remote.agentPresets"
+				"remote.agentPresets",
+				"uiWorkspace"
 			], (scope) => {
-				const controller = new PresetsSeatController(scope);
+				const workspace = scope;
+				const controller = new PresetsSeatController({
+					sessions: scope.sessions,
+					remote: scope.remote,
+					selection: workspace.uiWorkspace.selection
+				});
 				scope.effect(() => {
-					const stop = scope.sessions.list.subscribe(() => {
+					const stopList = scope.sessions.list.subscribe(() => {
+						controller.apply();
+					});
+					const stopSelection = workspace.uiWorkspace.selection.subscribe(() => {
 						controller.apply();
 					});
 					controller.load();
 					return () => {
-						stop();
+						stopList();
+						stopSelection();
 						controller.dispose();
 					};
 				}, "kstock-presets: seat wiring");
