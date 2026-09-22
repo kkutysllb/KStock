@@ -16,8 +16,8 @@ export interface AutomationsViewProps {
     readonly backToConversation: () => void;
     /** Optional model catalog loader for the pinned-model editor. */
     readonly loadModelCatalog?: (() => Promise<ModelCatalog>) | undefined;
-    /** Optional desktop directory picker (Electron shell global). Absent on
-     * plain web hosts — the manual path input remains the fallback. */
+    /** Directory picker chain (desktop bridge, then host OS chooser). Throws
+     * when neither exists — the editor surfaces the message inline. */
     readonly pickDirectory?: (() => Promise<string | null>) | undefined;
 }
 /** The full panel. */

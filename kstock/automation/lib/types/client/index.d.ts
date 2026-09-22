@@ -12,7 +12,7 @@ import type { ClientContext } from './contracts.ts';
 export declare const name = "dsh-kylin-automation";
 /** Services this client plugin composes against; each is provided by a
  * dsh.client.inject package row in the roster. */
-export declare const inject: readonly ["slots", "locale", "sessions", "layout", "connection", "remote", "remote.session"];
+export declare const inject: readonly ["slots", "locale", "sessions", "uiWorkspace", "layout", "connection", "remote", "remote.session"];
 /** Client plugin entry. */
 export declare function apply(ctx: ClientContext): void;
 export { createAutomationsRuntime } from './runtime.ts';

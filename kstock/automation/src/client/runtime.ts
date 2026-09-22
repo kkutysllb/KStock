@@ -31,6 +31,14 @@ export interface AutomationsRuntime {
     getSnapshot(): PanelState
     subscribe(listener: () => void): () => void
   }
+  /** Transient user-facing notice line (bridge failures, destructive results).
+   * Panel chrome — not panel data — so it lives outside the main snapshot. */
+  readonly notice: {
+    getSnapshot(): string | undefined
+    subscribe(listener: () => void): () => void
+  }
+  pushNotice(text: string): void
+  dismissNotice(): void
   refresh(): Promise<void>
   currentSessionId(): string | undefined
   create(input: CreateAutomationInput): Promise<string>
@@ -66,6 +74,24 @@ export function createAutomationsRuntime(deps: AutomationsRuntimeDeps): Automati
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
+  }
+
+  let noticeText: string | undefined
+  const noticeListeners = new Set<() => void>()
+  const notice = {
+    getSnapshot: (): string | undefined => noticeText,
+    subscribe: (listener: () => void): (() => void) => {
+      noticeListeners.add(listener)
+      return () => { noticeListeners.delete(listener) }
+    },
+  }
+  const pushNotice = (text: string): void => {
+    noticeText = text
+    for (const listener of [...noticeListeners]) listener()
+  }
+  const dismissNotice = (): void => {
+    noticeText = undefined
+    for (const listener of [...noticeListeners]) listener()
   }
 
   const refresh = async (): Promise<void> => {
@@ -112,6 +138,9 @@ export function createAutomationsRuntime(deps: AutomationsRuntimeDeps): Automati
 
   return {
     source,
+    notice,
+    pushNotice,
+    dismissNotice,
     refresh,
     currentSessionId: deps.sessionId,
     async registerWorkspace(path: string): Promise<{ readonly id: string; readonly title: string }> {

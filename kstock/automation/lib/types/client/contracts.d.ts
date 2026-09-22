@@ -28,7 +28,15 @@ export interface ClientContext {
             subscribe(listener: () => void): () => void;
         };
         refresh(): Promise<void>;
-        open(sessionId: string): void;
+    };
+    /** Workspace navigation + directory services provided by the host's
+     * ui-workspace client plugin (cordis Service registered as 'uiWorkspace').
+     * Soft-probed: hosts without it degrade to inline error notices. */
+    uiWorkspace?: {
+        /** Select a Session and show its Conversation (official navigation path). */
+        openSession(target: string): void;
+        /** Host-side OS directory chooser (works on web and desktop windows). */
+        pickDirectory(): Promise<string | null>;
     };
     layout?: {
         selectPanel(panelId: string | null): void;

@@ -165,7 +165,7 @@ function AutomationsView(props) {
   const state = (0, import_react.useSyncExternalStore)(runtime.source.subscribe, runtime.source.getSnapshot);
   const [editor, setEditor] = (0, import_react.useState)({ open: false, mode: "create", form: emptyForm((/* @__PURE__ */ new Date()).toISOString()) });
   const [workspaceFilter, setWorkspaceFilter] = (0, import_react.useState)("");
-  const [notice, setNotice] = (0, import_react.useState)(void 0);
+  const notice = (0, import_react.useSyncExternalStore)(runtime.notice.subscribe, runtime.notice.getSnapshot);
   (0, import_react.useEffect)(() => {
     let stopped = false;
     const poll = () => {
@@ -226,7 +226,7 @@ function AutomationsView(props) {
           permission: editor.form.permission,
           modelTarget: formToModelTarget(editor.form)
         });
-        setNotice(t("createdHint"));
+        runtime.pushNotice(t("createdHint"));
       } else if (editor.automationId !== void 0) {
         const current = automations.find((item) => item.id === editor.automationId);
         await runtime.update(editor.automationId, current?.revision ?? 1, {
@@ -251,15 +251,15 @@ function AutomationsView(props) {
       if (editor.open && editor.automationId === id && mutation === "delete") closeEditor();
       await runtime.refresh();
     } catch (error) {
-      setNotice(`${t("updateFailed")}: ${error instanceof Error ? error.message : String(error)}`);
+      runtime.pushNotice(`${t("updateFailed")}: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
   const runNow = async (id) => {
     try {
       await runtime.runNow(id);
-      setNotice(t("runQueued"));
+      runtime.pushNotice(t("runQueued"));
     } catch (error) {
-      setNotice(`${t("updateFailed")}: ${error instanceof Error ? error.message : String(error)}`);
+      runtime.pushNotice(`${t("updateFailed")}: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
   if (state.phase === "error" && snapshot === void 0) {
@@ -319,7 +319,7 @@ function AutomationsView(props) {
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "kyl-btn kyl-btn-primary", onClick: openCreate, children: t("newTask") })
           ] })
         ] }),
-        notice !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-notice", role: "status", onClick: () => setNotice(void 0), children: notice }),
+        notice !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "kyl-notice", role: "status", onClick: runtime.dismissNotice, children: notice }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "kyl-body", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "kyl-section", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", { className: "kyl-section-title", children: [
@@ -348,9 +348,9 @@ function AutomationsView(props) {
                 onClearHistory: () => {
                   if (window.confirm(t("clearRunsConfirm"))) {
                     void runtime.clearRuns(automation.id).then((count) => {
-                      setNotice(t("runsCleared", { count }));
+                      runtime.pushNotice(t("runsCleared", { count }));
                     }).catch((error) => {
-                      setNotice(error instanceof Error ? error.message : String(error));
+                      runtime.pushNotice(error instanceof Error ? error.message : String(error));
                     });
                   }
                 }
@@ -370,7 +370,7 @@ function AutomationsView(props) {
                 onDelete: () => {
                   if (window.confirm(t("deleteRunConfirm"))) {
                     void runtime.deleteRun(run.automationId, run.id).catch((error) => {
-                      setNotice(error instanceof Error ? error.message : String(error));
+                      runtime.pushNotice(error instanceof Error ? error.message : String(error));
                     });
                   }
                 }
@@ -899,6 +899,8 @@ var zh = {
   newWorkspacePathLabel: "\u670D\u52A1\u5668\u4E0A\u7684\u76EE\u5F55\u8DEF\u5F84\uFF08\u7EDD\u5BF9\u8DEF\u5F84\uFF09",
   newWorkspaceRegister: "\u6CE8\u518C\u5E76\u9009\u62E9",
   newWorkspaceRegistering: "\u6CE8\u518C\u4E2D\u2026",
+  openSessionUnavailable: "\u65E0\u6CD5\u6253\u5F00\u4F1A\u8BDD\uFF1A\u5F53\u524D\u73AF\u5883\u672A\u63D0\u4F9B\u4F1A\u8BDD\u5BFC\u822A\u670D\u52A1",
+  pickerUnavailable: "\u6CA1\u6709\u53EF\u7528\u7684\u76EE\u5F55\u9009\u62E9\u5668\uFF0C\u8BF7\u5728\u4E0B\u65B9\u624B\u52A8\u8F93\u5165\u7EDD\u5BF9\u8DEF\u5F84",
   unavailable: "\u5B9A\u65F6\u4EFB\u52A1\u5BBF\u4E3B\u4E0D\u53EF\u7528",
   loading: "\u52A0\u8F7D\u4E2D\u2026",
   emptyTitle: "\u8FD8\u6CA1\u6709\u5B9A\u65F6\u4EFB\u52A1",
@@ -1003,6 +1005,8 @@ var en = {
   newWorkspacePathLabel: "Directory path on this machine (absolute)",
   newWorkspaceRegister: "Register and select",
   newWorkspaceRegistering: "Registering\u2026",
+  openSessionUnavailable: "Cannot open the session: this host does not provide session navigation",
+  pickerUnavailable: "No directory picker available \u2014 enter the absolute path manually below",
   unavailable: "Automation host is unavailable",
   loading: "Loading\u2026",
   emptyTitle: "No automations yet",
@@ -1116,6 +1120,25 @@ function createAutomationsRuntime(deps) {
       };
     }
   };
+  let noticeText;
+  const noticeListeners = /* @__PURE__ */ new Set();
+  const notice = {
+    getSnapshot: () => noticeText,
+    subscribe: (listener) => {
+      noticeListeners.add(listener);
+      return () => {
+        noticeListeners.delete(listener);
+      };
+    }
+  };
+  const pushNotice = (text) => {
+    noticeText = text;
+    for (const listener of [...noticeListeners]) listener();
+  };
+  const dismissNotice = () => {
+    noticeText = void 0;
+    for (const listener of [...noticeListeners]) listener();
+  };
   const refresh = async () => {
     if (refreshPromise !== void 0) return refreshPromise;
     const previous = state.snapshot;
@@ -1154,6 +1177,9 @@ function createAutomationsRuntime(deps) {
   };
   return {
     source,
+    notice,
+    pushNotice,
+    dismissNotice,
     refresh,
     currentSessionId: deps.sessionId,
     async registerWorkspace(path) {
@@ -1319,6 +1345,10 @@ var inject = [
   "slots",
   "locale",
   "sessions",
+  /** ui-workspace client plugin: openSession navigation + host directory
+   * chooser (cordis Service 'uiWorkspace'). Load-order hint only — the service
+   * itself is soft-probed at call time. */
+  "uiWorkspace",
   "layout",
   "connection",
   "remote",
@@ -1422,10 +1452,16 @@ function apply(ctx) {
         await ctx.sessions?.refresh();
       } catch {
       }
+      const workspace = ctx.uiWorkspace;
+      if (workspace?.openSession === void 0) {
+        runtimeRef?.pushNotice(t("openSessionUnavailable"));
+        return;
+      }
       try {
-        ctx.sessions?.open(sessionId);
+        workspace.openSession(sessionId);
       } catch (error) {
-        console.warn("[dsh-kylin-automation] open result session failed:", error);
+        const detail = error instanceof Error ? error.message : String(error);
+        runtimeRef?.pushNotice(`${t("openSessionUnavailable")} (${detail})`);
         return;
       }
       backToConversation();
@@ -1433,13 +1469,18 @@ function apply(ctx) {
   };
   const pickDirectory = async () => {
     const global = globalThis;
-    try {
-      if (typeof global.__QILIN_DIRECTORY_PICKER__?.pick === "function") {
-        return await global.__QILIN_DIRECTORY_PICKER__.pick();
+    if (typeof global.__QILIN_DIRECTORY_PICKER__?.pick === "function") {
+      try {
+        const picked = await global.__QILIN_DIRECTORY_PICKER__.pick();
+        return picked !== null && picked !== "" ? picked : null;
+      } catch (error) {
+        if (ctx.uiWorkspace?.pickDirectory === void 0) throw error;
       }
-    } catch {
     }
-    return null;
+    if (ctx.uiWorkspace?.pickDirectory !== void 0) {
+      return await ctx.uiWorkspace.pickDirectory();
+    }
+    throw new Error(t("pickerUnavailable"));
   };
   const loadModelCatalog = async () => {
     const remoteSession = ctx.remote?.session;

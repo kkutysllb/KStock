@@ -37,8 +37,8 @@ export interface AutomationsViewProps {
   readonly backToConversation: () => void
   /** Optional model catalog loader for the pinned-model editor. */
   readonly loadModelCatalog?: (() => Promise<ModelCatalog>) | undefined
-  /** Optional desktop directory picker (Electron shell global). Absent on
-   * plain web hosts — the manual path input remains the fallback. */
+  /** Directory picker chain (desktop bridge, then host OS chooser). Throws
+   * when neither exists — the editor surfaces the message inline. */
   readonly pickDirectory?: (() => Promise<string | null>) | undefined
 }
 
@@ -60,7 +60,9 @@ export function AutomationsView(props: AutomationsViewProps): React.ReactElement
   const [editor, setEditor] = useState<EditorState>({ open: false, mode: 'create', form: emptyForm(new Date().toISOString()) })
   // Workspace filter across the whole registry ('' = 全部工作区).
   const [workspaceFilter, setWorkspaceFilter] = useState<string>('')
-  const [notice, setNotice] = useState<string | undefined>(undefined)
+  // Transient notice line lives on the runtime so non-React bridges (index.tsx
+  // navigation/picker failures) can surface messages in the panel too.
+  const notice = useSyncExternalStore(runtime.notice.subscribe, runtime.notice.getSnapshot)
 
   // Visibility-gated poll: hidden tabs pause reads; returning refreshes at once.
   useEffect(() => {
@@ -124,7 +126,7 @@ export function AutomationsView(props: AutomationsViewProps): React.ReactElement
           permission: editor.form.permission,
           modelTarget: formToModelTarget(editor.form),
         })
-        setNotice(t('createdHint'))
+        runtime.pushNotice(t('createdHint'))
       } else if (editor.automationId !== undefined) {
         const current = automations.find(item => item.id === editor.automationId)
         await runtime.update(editor.automationId, current?.revision ?? 1, {
@@ -151,16 +153,16 @@ export function AutomationsView(props: AutomationsViewProps): React.ReactElement
       if (editor.open && editor.automationId === id && mutation === 'delete') closeEditor()
       await runtime.refresh()
     } catch (error: unknown) {
-      setNotice(`${t('updateFailed')}: ${error instanceof Error ? error.message : String(error)}`)
+      runtime.pushNotice(`${t('updateFailed')}: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
   const runNow = async (id: string): Promise<void> => {
     try {
       await runtime.runNow(id)
-      setNotice(t('runQueued'))
+      runtime.pushNotice(t('runQueued'))
     } catch (error: unknown) {
-      setNotice(`${t('updateFailed')}: ${error instanceof Error ? error.message : String(error)}`)
+      runtime.pushNotice(`${t('updateFailed')}: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -226,7 +228,7 @@ export function AutomationsView(props: AutomationsViewProps): React.ReactElement
         </div>
       </div>
       {notice !== undefined && (
-        <div className='kyl-notice' role='status' onClick={() => setNotice(undefined)}>{notice}</div>
+        <div className='kyl-notice' role='status' onClick={runtime.dismissNotice}>{notice}</div>
       )}
       <div className='kyl-body'>
         <section className='kyl-section'>
@@ -252,9 +254,9 @@ export function AutomationsView(props: AutomationsViewProps): React.ReactElement
                     onClearHistory={() => {
                       if (window.confirm(t('clearRunsConfirm'))) {
                         void runtime.clearRuns(automation.id).then(count => {
-                          setNotice(t('runsCleared', { count }))
+                          runtime.pushNotice(t('runsCleared', { count }))
                         }).catch(error => {
-                          setNotice(error instanceof Error ? error.message : String(error))
+                          runtime.pushNotice(error instanceof Error ? error.message : String(error))
                         })
                       }
                     }}
@@ -279,7 +281,7 @@ export function AutomationsView(props: AutomationsViewProps): React.ReactElement
                     onDelete={() => {
                       if (window.confirm(t('deleteRunConfirm'))) {
                         void runtime.deleteRun(run.automationId, run.id).catch(error => {
-                          setNotice(error instanceof Error ? error.message : String(error))
+                          runtime.pushNotice(error instanceof Error ? error.message : String(error))
                         })
                       }
                     }}

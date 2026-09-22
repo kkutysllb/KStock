@@ -19,6 +19,14 @@ export interface AutomationsRuntime {
         getSnapshot(): PanelState;
         subscribe(listener: () => void): () => void;
     };
+    /** Transient user-facing notice line (bridge failures, destructive results).
+     * Panel chrome — not panel data — so it lives outside the main snapshot. */
+    readonly notice: {
+        getSnapshot(): string | undefined;
+        subscribe(listener: () => void): () => void;
+    };
+    pushNotice(text: string): void;
+    dismissNotice(): void;
     refresh(): Promise<void>;
     currentSessionId(): string | undefined;
     create(input: CreateAutomationInput): Promise<string>;

@@ -24,6 +24,10 @@ export const inject = [
   'slots',
   'locale',
   'sessions',
+  /** ui-workspace client plugin: openSession navigation + host directory
+   * chooser (cordis Service 'uiWorkspace'). Load-order hint only — the service
+   * itself is soft-probed at call time. */
+  'uiWorkspace',
   'layout',
   'connection',
   'remote',
@@ -147,28 +151,46 @@ export function apply(ctx: ClientContext): void {
       try {
         await ctx.sessions?.refresh()
       } catch { /* keep opening regardless */ }
+      // Official navigation path: the ui-workspace Service owns view selection
+      // (ISessions deliberately has no open — "navigation belongs to the view
+      // owner"). Failures surface as a panel notice, never as console silence.
+      const workspace = ctx.uiWorkspace
+      if (workspace?.openSession === undefined) {
+        runtimeRef?.pushNotice(t('openSessionUnavailable'))
+        return
+      }
       try {
-        ctx.sessions?.open(sessionId as never)
+        workspace.openSession(sessionId)
       } catch (error) {
-        console.warn('[dsh-kylin-automation] open result session failed:', error)
+        const detail = error instanceof Error ? error.message : String(error)
+        runtimeRef?.pushNotice(`${t('openSessionUnavailable')} (${detail})`)
         return
       }
       backToConversation()
     })()
   }
 
-  /** Desktop shell directory picker (Electron global). Null on plain web —
-   * the editor falls back to the manual path input. */
+  /** Directory picker chain: the desktop bridge global (qilin:// windows) is
+   * preferred exactly like the host's own picker flow; every other window —
+   * including http-loaded desktop shells — falls back to the host-side OS
+   * chooser via uiWorkspace. When neither exists the error THROWS so the
+   * editor shows it inline instead of the click doing nothing. */
   const pickDirectory = async (): Promise<string | null> => {
     const global = globalThis as { __QILIN_DIRECTORY_PICKER__?: { pick: () => Promise<string | null> } }
-    try {
-      if (typeof global.__QILIN_DIRECTORY_PICKER__?.pick === 'function') {
-        return await global.__QILIN_DIRECTORY_PICKER__.pick()
+    if (typeof global.__QILIN_DIRECTORY_PICKER__?.pick === 'function') {
+      try {
+        const picked = await global.__QILIN_DIRECTORY_PICKER__.pick()
+        // Desktop bridge present: null/empty means the user cancelled.
+        return picked !== null && picked !== '' ? picked : null
+      } catch (error) {
+        if (ctx.uiWorkspace?.pickDirectory === undefined) throw error
+        // Desktop bridge broke — fall through to the host chooser.
       }
-    } catch {
-      /* picker unavailable — caller decides the fallback */
     }
-    return null
+    if (ctx.uiWorkspace?.pickDirectory !== undefined) {
+      return await ctx.uiWorkspace.pickDirectory()
+    }
+    throw new Error(t('pickerUnavailable'))
   }
 
   const loadModelCatalog = async (): Promise<ModelCatalog> => {
