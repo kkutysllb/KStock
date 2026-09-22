@@ -38,6 +38,9 @@ esac
 UPSTREAM_EXE_BASE="deepseek-harness-sdk-runtime-$TARGET"
 
 # ── 1. KStock 插件包构建（宿主 + 四库界面 + 品牌 + 账户 + 定时任务）──────
+echo "==> 重放引擎本地补丁（patch_vendor_engine，幂等）"
+"$REPO_ROOT/scripts/python.sh" "$REPO_ROOT/scripts/patch_vendor_engine.py"
+
 echo "==> 构建 KStock 插件包"
 for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui chan-ui automation; do
   # 前置：kstock/* 已并入根 workspace，一次根 pnpm install 全装。缺

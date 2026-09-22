@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -260,6 +261,14 @@ def main() -> None:
             vendor_root=args.qilin_vendor_root,
         )
         print(f"已同步 QiLin 引擎到：{args.qilin_vendor_root}")
+        # 快照整树重建会冲掉引擎源码上的本地定制，这里立即幂等重放
+        # （引擎束构建 build-engine-bundle.sh 步骤 0 也会再兜底一次）。
+        rc = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / "patch_vendor_engine.py")],
+            check=False,
+        ).returncode
+        if rc != 0:
+            raise SystemExit(rc)
 
     if args.sync_skills:
         sync_skill_pack(
