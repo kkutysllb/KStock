@@ -40,5 +40,8 @@ else
 fi
 
 export CSC_KEYCHAIN="$KSTOCK_KC"
-export CSC_NAME="${APPLE_SIGNING_IDENTITY:-}"
+# CSC_NAME 要短名（electron-builder 实测：带 "Developer ID Application:" 前缀
+# 直接报「Please remove prefix … appropriate certificate will be chosen
+# automatically」）；codesign 侧继续用完整 APPLE_SIGNING_IDENTITY。
+export CSC_NAME="${APPLE_SIGNING_IDENTITY#Developer ID Application: }"
 unset CSC_LINK CSC_KEY_PASSWORD

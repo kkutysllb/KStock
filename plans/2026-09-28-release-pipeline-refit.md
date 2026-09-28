@@ -1129,3 +1129,9 @@ electron-builder 且其临时钥匙串分支有坑 3）→ 新增 `scripts/ensur
 验收：quant 测试 4/4（含 close 回归）、tsc 0 错、product verify exit 0、keychain 脚本
 source 冒烟（本地身份可见走跳过分支、CSC_LINK 保持 unset）、YAML 解析过、
 `$VAR`+多字节残留 0、技能发布步幂等绿。
+
+**第 3 轮**（tag `18979453`，run 36423374348）：**ubuntu 10m31s 全绿、windows 11m56s 全绿**
+（引擎引导 / 打包 / V1–V8 产物门禁 / 收集全部通过）；mac 只剩一处——钥匙串导入与闭包预签
+均已通过，electron-builder 三连败于 `Please remove prefix "Developer ID Application:" from
+the specified name`——`CSC_NAME` 要短名（`build-signed-macos.sh` 的 `CSC_NAME=KS_SIGN_IDENTITY`
+即短名口径，本次直接取 APPLE_SIGNING_IDENTITY 踩了前缀坑）→ 导出前剥前缀。
