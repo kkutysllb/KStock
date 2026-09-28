@@ -104,7 +104,8 @@ run_shell() {
   fi
   # 用非登录 bash：登录 shell（-l）会经 path_helper 重建 PATH，把
   # prefer_homebrew_node 的对齐结果洗掉，重新命中 /usr/local 旧 node。
-  # 脚本依赖的工具（node/pnpm/uv/python3/gh）均已在父进程 PATH 验证。
+  # 脚本依赖的工具（node/pnpm/gh）均已在父进程 PATH 验证；python 统一走
+  # scripts/python.sh（Windows Store 桩问题，见该包装器）。
   bash -c "$command"
 }
 
@@ -361,7 +362,7 @@ run_checks() {
   fi
   ensure_pnpm_compatible
   log "Running release checks"
-  run_shell "python scripts/verify_package_resources.py --source-only"
+  run_shell "scripts/python.sh scripts/verify_package_resources.py --source-only"
   run_shell "bash scripts/check-ci.sh"
 }
 
