@@ -37,6 +37,7 @@ import { apply as registerImage } from './image/index.ts'
 import { apply as registerPdf } from './pdf/index.ts'
 import { apply as registerCode } from './code/index.ts'
 import { apply as registerOffice } from './office/index.ts'
+import { apply as registerExcel } from './excel/index.ts'
 import { Config } from '../config.ts'
 
 // Values stay package-private unless another package needs them; the plugin
@@ -75,10 +76,11 @@ declare module '@qilin/client-ui-slots' {
 }
 
 /**
- * Required browser services: the tab registry, the slot registry, copy, and the
- * Remote carrier with its `workspaceFiles` namespace.
+ * Required browser services: the tab registry, the slot registry, copy, the
+ * shared resource model, the developer-tools preference that selects the HTML
+ * preview policy, and the Remote carrier with its `workspaceFiles` namespace.
  */
-export const inject = ['slots', 'locale', 'sidebarRightTabs', 'remote', 'remote.workspaceFiles']
+export const inject = ['slots', 'locale', 'sidebarRightTabs', 'remote', 'remote.workspaceFiles', 'configForms', 'resources']
 
 /**
  * Client plugin body: register the type, its dictionaries, its body, and its chip title.
@@ -100,6 +102,7 @@ export function apply(ctx: ClientContext): void {
       const result = await ctx.remote.workspaceFiles.readAll(file.sessionId, file.path, signal)
       return result.ok ? { ok: true, value: documentFileBytes(result.value) } : result
     },
+    ctx.resources,
   )
   const source = { getSnapshot: previews.getSnapshot, subscribe: previews.subscribe }
   ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
@@ -107,6 +110,9 @@ export function apply(ctx: ClientContext): void {
       name: 'sidebar.right.pane.tab', key: TEXTPREVIEW_ID, locale: NS, store,
       children: {
         'sidebar.right.tab.document': { kind: 'keyed', scope: 'session', inject: { hooks: { tabInfo: documentTabInfoFactory } } },
+        'sidebar.right.tab.document.actions': { kind: 'list', scope: 'session' },
+        'sidebar.right.tab.document.unpreviewable': { kind: 'list', scope: 'session' },
+        'sidebar.right.tab.document.action': { kind: 'keyed', scope: 'session', inject: { hooks: { tabInfo: documentTabInfoFactory } } },
       },
       inject: (sessionId, actions): TextPreviewInjected => ({
         ...face(sessionId, actions), hooks: { documentPreviews: source },
@@ -125,4 +131,5 @@ export function apply(ctx: ClientContext): void {
   registerPdf(ctx)
   registerCode(ctx)
   registerOffice(ctx, config.office)
+  registerExcel(ctx, config.excel)
 }

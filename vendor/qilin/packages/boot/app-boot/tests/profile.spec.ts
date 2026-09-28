@@ -10,24 +10,28 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { withFileLock } from '@qilin/atomic-write'
 import { afterAll, describe, expect, it } from 'vitest'
 import {
+  ANIMATIONS_BUNDLE,
   assertNoEngineNameCollisions,
   composeEntries,
   EngineNameCollisionError,
   engineNameCollisions,
+  getQilinRuntimeVersion,
   healProfilesModuleFallback,
   healIsolatedProfileModuleFallback,
   initProfile,
   unlinkProfileModuleFallback,
   loadProfile,
   loadProfileDirectory,
+  PROFILE_COMPATIBILITY_FILENAME,
   PROFILE_OWNED_BUNDLES,
   PROFILE_PATCH_FILENAME,
   PROFILE_TEMPLATES,
   readProfileManifest,
+  readProfilePluginRows,
   reconcileProfileBundles,
   readProfilePatches,
   resolveBundleDir,
@@ -76,6 +80,20 @@ function stageInstallation(
   }))
   writeFileSync(join(appDir, 'index.js'), `export const packageName = ${JSON.stringify(appName)}\n`)
   return join(appDir, 'package.json')
+}
+
+/** Rewrite one staged package manifest's version, ordering two copies of a name. */
+function writeVersion(dir: string, version: string): void {
+  const path = join(dir, 'package.json')
+  const manifest = JSON.parse(readFileSync(path, 'utf8')) as { version?: string }
+  manifest.version = version
+  writeFileSync(path, JSON.stringify(manifest))
+}
+
+/** Stage one profile-local bundle copy at the given version. */
+function stageProfileCopy(dir: string, version: string): void {
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: basename(dir), version }))
 }
 
 /** Represent one resolved external bundle as a loaded profile layer. */
@@ -351,9 +369,7 @@ describe('resolveBundleDir', () => {
     expect(() => resolveBundleDir('t', 'absent', anchor, profileDir)).toThrow('cannot resolve profile bundle')
   })
 
-  it('seeds a shipped bundle from the installation while no bundle is profile-owned', () => {
-    // The built-in plugin channel is retired, so PROFILE_OWNED_BUNDLES names nothing
-    // and the installation seed resolves for every shipped bundle.
+  it('keeps the installation seed for a bundle the profile does not own', () => {
     const anchor = stageInstallation({ 'shipped-bundle': { patch: '[]\n' } })
     const fresh = tmp()
     writeFileSync(join(fresh, 'package.json'), '{}')
@@ -362,8 +378,37 @@ describe('resolveBundleDir', () => {
     mkdirSync(join(shadowed, 'node_modules', 'shipped-bundle'), { recursive: true })
     writeFileSync(join(shadowed, 'package.json'), '{}')
     writeFileSync(join(shadowed, 'node_modules', 'shipped-bundle', 'package.json'), JSON.stringify({ name: 'shipped-bundle', version: '9.9.9' }))
-    expect(resolveBundleDir('t', 'shipped-bundle', anchor, shadowed)).toContain('node_modules')
-    expect(PROFILE_OWNED_BUNDLES).toEqual([])
+    // Installation-first stays the contract for every bundle outside the list,
+    // even when the profile holds a newer copy of the same name.
+    expect(resolveBundleDir('t', 'shipped-bundle', anchor, shadowed))
+      .toBe(join(dirname(anchor), 'node_modules', 'shipped-bundle'))
+    expect(PROFILE_OWNED_BUNDLES).toEqual(['dsh-animations'])
+  })
+
+  it('loads a profile-owned bundle from the profile copy, whatever its version', () => {
+    const anchor = stageInstallation({ [ANIMATIONS_BUNDLE]: { patch: '[]\n' } })
+    const seed = join(dirname(anchor), 'node_modules', ANIMATIONS_BUNDLE)
+    // Inside the staged installation, so a profile without its own copy falls
+    // through to the staged seed rather than to any package an ancestor holds.
+    const profileDir = join(dirname(anchor), 'profile')
+    mkdirSync(profileDir, { recursive: true })
+    writeFileSync(join(profileDir, 'package.json'), '{}')
+    const profileCopy = join(profileDir, 'node_modules', ANIMATIONS_BUNDLE)
+
+    // A fresh profile resolves the installation's seed with no profile install.
+    writeVersion(seed, '9.9.9')
+    expect(resolveBundleDir('t', ANIMATIONS_BUNDLE, anchor, profileDir)).toBe(seed)
+
+    // A copy installed through the plugin channel serves, so an upgrade made
+    // there is never rolled back by the shipped seed.
+    stageProfileCopy(profileCopy, '9.9.10')
+    expect(resolveBundleDir('t', ANIMATIONS_BUNDLE, anchor, profileDir)).toBe(profileCopy)
+
+    // The profile keeps owning the name even when the seed is newer: one copy
+    // supplies the patch layer and the code alike, and the Loader's own module
+    // resolution prefers the profile-local entry in both cases.
+    stageProfileCopy(profileCopy, '0.0.1')
+    expect(resolveBundleDir('t', ANIMATIONS_BUNDLE, anchor, profileDir)).toBe(profileCopy)
   })
 
   it('resolves a package whose exports map omits ./package.json', () => {
@@ -452,6 +497,28 @@ describe('loadProfile', () => {
     expect(bare.layers).toEqual([])
   })
 
+  it('refuses a bundle whose own qilin peers are incompatible until the profile exempts that exact pair', () => {
+    const anchor = stageInstallation({
+      guarded: { patch: '- insert: [{ id: a, name: pkg-a }]\n' },
+      kept: { patch: '- insert: [{ id: b, name: pkg-b }]\n' },
+    })
+    const manifestPath = join(anchor, '..', 'node_modules', 'guarded', 'package.json')
+    writeFileSync(manifestPath, JSON.stringify({
+      ...JSON.parse(readFileSync(manifestPath, 'utf8')) as object, peerDependencies: { '@qilin/session': '999.0.0' },
+    }))
+    const dir = resolveProfileDir('demo', tmp())
+    initProfile(dir, ['guarded', 'kept'])
+
+    // A bundle is not a plugin row, so row admission never reads its own peers: the profile loader is
+    // the only gate that can refuse it, and it fails the whole startup rather than loading a rejected
+    // bundle beside its siblings.
+    expect(() => loadProfileDirectory('qilin', dir, anchor)).toThrow(
+      `Plugin guarded@0.0.0 is incompatible with QiLin ${getQilinRuntimeVersion()}`,
+    )
+    writeFileSync(join(dir, PROFILE_COMPATIBILITY_FILENAME), JSON.stringify({ 'guarded@0.0.0': [getQilinRuntimeVersion()] }))
+    expect(loadProfileDirectory('qilin', dir, anchor).layers.map(layer => layer.packageName)).toEqual(['guarded', 'kept'])
+  })
+
   it('auto-initializes only shipped templates and fails loud otherwise', () => {
     const anchor = stageInstallation({})
     const home = tmp()
@@ -460,7 +527,12 @@ describe('loadProfile', () => {
     // The web template auto-initializes on first load. Bundle resolution
     // cannot be asserted to fail here: the source-plane test runner resolves
     // @deepseek-ai/* through tsconfig paths regardless of the staged anchor.
-    expect(PROFILE_TEMPLATES.web?.bundles).toContain('@qilin/base')
+    // The template lists stay string literals (verify-default-product-isolation
+    // reads them statically), so the package identity is pinned here instead.
+    expect(ANIMATIONS_BUNDLE).toBe('dsh-animations')
+    expect(PROFILE_TEMPLATES.web?.bundles).toEqual(['@qilin/base', '@qilin/web-app', 'dsh-animations'])
+    expect(PROFILE_TEMPLATES.qilin?.bundles)
+      .toEqual(['@qilin/base', '@qilin/web-app', '@qilin/web-brand', 'dsh-animations'])
     expect(PROFILE_TEMPLATES.acp).toEqual({
       bundles: ['@qilin/base', '@qilin/acp-app'],
     })
@@ -479,7 +551,7 @@ describe('loadProfile', () => {
       .toEqual([...PROFILE_TEMPLATES.web?.bundles ?? []])
   })
 
-  it('normalizes only the exact installation-owned headless bundle tuple', () => {
+  it('restores the shipped template layers of a headless profile and keeps added ones', () => {
     const anchor = stageInstallation({
       '@qilin/base': { patch: '[]\n' },
       '@qilin/web-app': { patch: '[]\n' },
@@ -498,6 +570,8 @@ describe('loadProfile', () => {
       bundles: ['@qilin/base', '@qilin/headless'],
     })
 
+    // A layer the template never supplied belongs to the profile's owner and
+    // stays; the leftover installation-owned web-app layer does not.
     const customHome = tmp()
     const custom = resolveProfileDir('headless', customHome)
     initProfile(custom, [
@@ -505,7 +579,78 @@ describe('loadProfile', () => {
     ])
     loadProfile('t', 'headless', anchor, customHome)
     expect(readProfileManifest('t', custom).qilin?.profile?.bundles).toEqual([
-      '@qilin/base', '@qilin/web-app', '@qilin/headless', 'custom-bundle',
+      '@qilin/base', '@qilin/headless', 'custom-bundle',
+    ])
+  })
+
+  it('normalizes the pre-animations browser tuples onto the built-in plugin layer', () => {
+    const anchor = stageInstallation({
+      '@qilin/base': { patch: '[]\n' },
+      '@qilin/web-app': { patch: '[]\n' },
+      '@qilin/web-brand': { patch: '[]\n' },
+      [ANIMATIONS_BUNDLE]: { patch: '[]\n' },
+      'custom-bundle': { patch: '[]\n' },
+    })
+    const home = tmp()
+    const web = resolveProfileDir('web', home)
+    initProfile(web, ['@qilin/base', '@qilin/web-app'])
+    loadProfile('t', 'web', anchor, home)
+    expect(readProfileManifest('t', web).qilin?.profile?.bundles)
+      .toEqual(['@qilin/base', '@qilin/web-app', ANIMATIONS_BUNDLE])
+
+    const qilinHome = tmp()
+    const qilin = resolveProfileDir('qilin', qilinHome)
+    initProfile(qilin, ['@qilin/base', '@qilin/web-app', '@qilin/web-brand'])
+    loadProfile('t', 'qilin', anchor, qilinHome)
+    expect(readProfileManifest('t', qilin).qilin?.profile?.bundles)
+      .toEqual(['@qilin/base', '@qilin/web-app', '@qilin/web-brand', ANIMATIONS_BUNDLE])
+
+    // A list its owner already extended, which is how an installed plugin
+    // arrives, gains the shipped layer too and keeps the added entry after it.
+    const customHome = tmp()
+    const custom = resolveProfileDir('web', customHome)
+    initProfile(custom, ['@qilin/base', '@qilin/web-app', 'custom-bundle'])
+    loadProfile('t', 'web', anchor, customHome)
+    expect(readProfileManifest('t', custom).qilin?.profile?.bundles)
+      .toEqual(['@qilin/base', '@qilin/web-app', ANIMATIONS_BUNDLE, 'custom-bundle'])
+    // Loading again writes nothing: the restored list converges.
+    const settled = readProfileManifest('t', custom)
+    loadProfile('t', 'web', anchor, customHome)
+    expect(readProfileManifest('t', custom)).toEqual(settled)
+  })
+
+  it('restores a lost template layer for a template with no recorded retired tuple', () => {
+    // Only the browser surfaces carry a pre-animations tuple; every other
+    // template still restores a layer its profile lost.
+    const anchor = stageInstallation({
+      '@qilin/base': { patch: '[]\n' },
+      '@qilin/acp-app': { patch: '[]\n' },
+      'custom-bundle': { patch: '[]\n' },
+    })
+    const home = tmp()
+    const dir = resolveProfileDir('acp', home)
+    initProfile(dir, ['@qilin/base', 'custom-bundle'])
+    loadProfile('t', 'acp', anchor, home)
+    expect(readProfileManifest('t', dir).qilin?.profile?.bundles)
+      .toEqual(['@qilin/base', '@qilin/acp-app', 'custom-bundle'])
+  })
+
+  it('marks the shipped animations layer updatable and every other shipped layer fixed', () => {
+    const anchor = stageInstallation({
+      '@qilin/base': { patch: '[]\n' },
+      [ANIMATIONS_BUNDLE]: { patch: '[]\n' },
+    })
+    // Inside the staged installation, so the shipped seed is the resolved copy.
+    const dir = join(dirname(anchor), 'profile')
+    initProfile(dir, ['@qilin/base', ANIMATIONS_BUNDLE])
+    writeVersion(join(dirname(anchor), 'node_modules', ANIMATIONS_BUNDLE), '9.9.9')
+    const rows = readProfilePluginRows('t', dir, anchor, ['@qilin/base', ANIMATIONS_BUNDLE])
+    // A shipped layer moves with the running installation unless the profile
+    // owns its resolution; the animations bundle is the one that does, which is
+    // what the plugin page's update action moves.
+    expect(rows).toEqual([
+      { name: '@qilin/base', layer: 0, version: '0.0.0', source: 'builtin', updatable: false, removable: false },
+      { name: ANIMATIONS_BUNDLE, layer: 1, version: '9.9.9', source: 'builtin', updatable: true, removable: false },
     ])
   })
 

@@ -49,19 +49,23 @@ describe('release families', () => {
       .filter(member => member.directory.startsWith('packages/experimental/'))
       .map(member => member.name)).toEqual([
       '@qilin/experimental-agent-team-profile',
-      '@qilin/experimental-agent-team-web-profile',
       '@qilin/experimental-agent-team',
+      '@qilin/experimental-api-speech-to-text',
       '@qilin/experimental-auto-review',
       '@qilin/experimental-browser-use-chrome-devtools-mcp',
       '@qilin/experimental-browser-use-playwright-mcp',
       '@qilin/experimental-browser-use-runtime',
       '@qilin/experimental-browser-use-stagehand-native',
       '@qilin/experimental-client-ui-agent-team',
+      '@qilin/experimental-client-ui-voice-input',
       '@qilin/experimental-computer-use-cua-driver-mcp',
       '@qilin/experimental-computer-use-cua-driver-native',
       '@qilin/experimental-inspector',
       '@qilin/experimental-ptc-runtime-python',
+      '@qilin/experimental-speech-to-text-sensevoice',
+      '@qilin/experimental-speech-to-text',
       '@qilin/experimental-tool-agent-team',
+      '@qilin/experimental-voice-input-bundle',
       '@qilin/experimental-webworker-packer',
       '@qilin/experimental-webworker-runtime',
     ])
@@ -126,7 +130,7 @@ describe('release families', () => {
     const root = mkdtempSync(join(tmpdir(), 'qilin-release-version-'))
     roots.push(root)
     write(join(root, 'package.json'), '{"version":"0.0.1"}\n')
-    write(join(root, 'apps/desktop/package.json'), '{"version":"0.0.1","private":true}\n')
+    write(join(root, 'apps/web/package.json'), '{"version":"0.0.1","private":true}\n')
     write(join(root, 'packages/experimental/prototype/package.json'), '{"version":"0.0.1","private":true}\n')
     write(join(root, 'packages/core/unselected/package.json'), '{"version":"0.0.1"}\n')
 
@@ -137,7 +141,7 @@ describe('release families', () => {
     expect(planned.map(entry => ({ path: entry.manifestPath, tag: entry.tag }))).toEqual([
       { path: 'package.json', tag: undefined },
       { path: 'packages/core/published/package.json', tag: 'v0.0.2' },
-      { path: 'apps/desktop/package.json', tag: undefined },
+      { path: 'apps/web/package.json', tag: undefined },
       { path: 'packages/experimental/prototype/package.json', tag: undefined },
     ])
   })

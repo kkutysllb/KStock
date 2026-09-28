@@ -1,7 +1,7 @@
 {
   "name": "@qilin/sandbox-ssh",
   "description": "Remote POSIX sandbox argv provider over the shared SSH helper",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -30,17 +30,17 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/ssh": "workspace:^",
-    "@qilin/sandbox": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/ssh": "workspace:*",
+    "@qilin/sandbox": "workspace:*"
   },
   "dependencies": {
-    "@qilin/schemastery": "workspace:^",
+    "@qilin/schemastery": "workspace:~",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/ssh": "workspace:^",
-    "@qilin/sandbox": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/ssh": "workspace:*",
+    "@qilin/sandbox": "workspace:*"
   }
 }

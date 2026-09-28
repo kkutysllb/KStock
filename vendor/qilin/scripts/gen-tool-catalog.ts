@@ -75,6 +75,7 @@ import WorkflowEngine from '@qilin/workflow'
 import type { WorkflowRun, WorkflowStartRequest } from '@qilin/workflow'
 import * as ToolRalph from '@qilin/tool-ralph'
 import * as ToolWorkflow from '@qilin/tool-workflow'
+import * as ToolWorkspaceDependencies from '@qilin/tool-workspace-dependencies'
 import { githubSlug } from './verify-md-links.ts'
 
 /** Attachment seam marker that makes the attachments-conditional `read_image` schema harvestable. */
@@ -444,22 +445,22 @@ const TOOL_PACKAGES: ToolPackage[] = [
     pkg: '@qilin/schedule',
     dir: 'schedule',
     source: 'packages/schedule/schedule/src/tools.ts',
-    requires: ['ctx.tools', 'ctx.sessions', 'Session persistence', 'a future live root Agent'],
-    writes: ['tool/call', 'schedule/change create or delete', 'tool/result'],
+    requires: ['ctx.tools', 'ctx.schedule', 'a live root Agent'],
+    writes: ['tool/call', 'Schedule storage domain create, update, or delete', 'tool/result'],
     async mount(ctx) {
       await ctx.plugin(SessionStore)
       const session = ctx.sessions.create(SessionId('tool-catalog-schedule'))
       const agent = { id: session.id, session } as Agent
       await mountCatalogChildScope(ctx, (childCtx) => {
-        ToolSchedule.registerScheduleTools(ctx, childCtx, agent, () => {})
+        ToolSchedule.registerScheduleTools(ctx, childCtx, agent)
       }, agent, ['tools', 'systemPrompt'])
     },
     scope: ctx => catalogChildScopes.get(ctx) as Agent,
     note:
-      'Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. '
-      + 'Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, '
-      + 'and discloses session-local delivery; '
-      + 'management reads and mutations require the shared Session persistence barrier.',
+      'Registered in live root Agent scopes while the opt-in Schedule service is loaded. '
+      + 'Accepts after_seconds, explicit absolute at, bounded fixed-rate every_seconds, daily and weekly '
+      + 'local times in an explicit IANA zone, and cron as a five-field expression. '
+      + 'Management uses the Host storage domain; due messages resume the original Session.',
   },
   {
     pkg: '@qilin/tool-lsp',
@@ -635,6 +636,17 @@ const TOOL_PACKAGES: ToolPackage[] = [
       registerCatalogSubagentProvider(ctx, 'mock')
       await ctx.plugin(CatalogWorkflowEngine)
       await ctx.plugin(ToolWorkflow)
+    },
+  },
+  {
+    pkg: '@qilin/tool-workspace-dependencies',
+    dir: 'tool-workspace-dependencies',
+    source: 'packages/skill/tool-workspace-dependencies/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      // Schema harvest never prepares a payload; the directory need not exist.
+      await ctx.plugin(ToolWorkspaceDependencies, { source: resolve(root, '.tmp/tool-catalog/primary-runtime') })
     },
   },
   {

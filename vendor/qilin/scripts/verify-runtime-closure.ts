@@ -8,7 +8,7 @@ import { globSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { isCordisGroupEntry, loadCordisYaml } from './cordis-yaml.ts'
+import { isCordisGroupEntry, loadCordisYaml, presetDefinitions } from './cordis-yaml.ts'
 
 interface PackageManifest {
   name?: string
@@ -30,7 +30,9 @@ interface RuntimePlatform {
 
 type RuntimePlatformManifest = Record<string, RuntimePlatform>
 
-const AGENT_PRESET_GLOB = 'packages/preset/agent-presets/presets/*/agent.cordis.yml'
+// KStock patch: preset glob 回退 + 覆盖 KStock 自有预设——上游指向的 bundle presets
+// 目录不存在，会让本门禁以 exit 1 空转失败；kstock/presets 是产品态真正随包发的那批。
+const AGENT_PRESET_GLOB = '{packages/preset/agent-presets/presets/*/agent.cordis.yml,../../kstock/presets/*/agent.cordis.yml}'
 
 export interface RuntimeClosureResult {
   failures: string[]
@@ -93,7 +95,11 @@ export async function verifyRuntimeClosure(
 
   return {
     failures,
-    presetCount: presetPaths.length,
+    presetCount: (await Promise.all(presetPaths.map(async path => {
+      const document = loadCordisYaml(await readFile(resolve(root, path), 'utf8'))
+      const definitions = presetDefinitions(document)
+      return definitions.length > 0 ? definitions.length : (Array.isArray(document) ? 1 : 0)
+    }))).reduce((a, b) => a + b, 0),
     workspacePackageCount: queue.length,
   }
 }
@@ -130,19 +136,27 @@ async function missingPresetPlugins(
       failures.push(`${presetPath}: preset root must be a Loader entry array`)
       continue
     }
-    for (const target of targets) {
-      const processPlatform = processPlatformForTarget(target)
-      for (const plugin of activeBarePluginPackages(document, processPlatform)) {
-        const version = runtimeDependencies[plugin]
-        if (version?.startsWith('workspace:') === true) continue
-        const preset = basename(dirname(presetPath))
-        const declaration = version === undefined
-          ? ''
-          : ` [runtime dependency is ${JSON.stringify(version)}; expected workspace:]`
-        const key = `${preset} preset -> ${plugin}${declaration}`
-        const targets = missing.get(key) ?? new Set<string>()
-        targets.add(target)
-        missing.set(key, targets)
+    // KStock patch: 3.0.5 起「组合文件本身即 preset」——presetDefinitions 提不出
+    // @qilin/agent-preset 包装行时，回退为整文件 = 单 preset 定义（id=目录名），
+    // 否则定义数为 0，本门禁对产品预设空转假绿。
+    const definitions = presetDefinitions(document).length > 0
+      ? presetDefinitions(document)
+      : (Array.isArray(document) ? [{ id: basename(dirname(presetPath)), plugins: document }] : [])
+    for (const definition of definitions) {
+      for (const target of targets) {
+        const processPlatform = processPlatformForTarget(target)
+        for (const plugin of activeBarePluginPackages(definition.plugins, processPlatform)) {
+          const version = runtimeDependencies[plugin]
+          if (version?.startsWith('workspace:') === true) continue
+          const preset = definition.id
+          const declaration = version === undefined
+            ? ''
+            : ` [runtime dependency is ${JSON.stringify(version)}; expected workspace:]`
+          const key = `${preset} preset -> ${plugin}${declaration}`
+          const targets = missing.get(key) ?? new Set<string>()
+          targets.add(target)
+          missing.set(key, targets)
+        }
       }
     }
   }

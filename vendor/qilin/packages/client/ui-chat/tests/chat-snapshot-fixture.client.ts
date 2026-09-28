@@ -8,7 +8,6 @@ import type {
   ConversationLocationDataSource, ConversationLocationDataStore, ConversationTurnDataMap, TurnLocation,
 } from '@qilin/client-ui-conversation/client'
 import type { TurnTokenUsage } from '../src/client/contract/chat-nodes.ts'
-import { deriveTurnMetrics } from '../src/client/contract/turn-metrics.ts'
 import {
   sameTurnNavigationItem, turnNavigationItem,
 } from '../src/client/conversation-nodes/turn-navigation.ts'
@@ -305,7 +304,10 @@ export function chatSnapshotFixture(input: {
         type: 'turn/start', seq: Math.max(0, (endSeq ?? 1) - 1), time: timing.startTime, turn,
       } as never,
       end: timing?.endTime === undefined || endSeq === undefined ? undefined : {
-        type: 'turn/end', seq: endSeq, time: timing.endTime, turn, reason: 'completed',
+        type: 'turn/end',
+        seq: endSeq,
+        time: timing.endTime,
+        data: { turn, reason: { kind: 'completed' } },
       } as never,
       status: endSeq === undefined ? 'open' : 'closed',
       steps: EMPTY,
@@ -461,7 +463,6 @@ export function chatSnapshotFixture(input: {
       return (location.kind === 'turn' || location.kind === 'step')
         && location.turn.turn === turnNumber
     })
-    const metrics = deriveTurnMetrics(legacy.nodes).get(turnNumber)
     const tokenUsage = input.turnUsages?.get(turnNumber)
     const tailData = {
       turn: turnNumber,
@@ -471,8 +472,6 @@ export function chatSnapshotFixture(input: {
       branchUnavailable: closing === null
         || preceding?.kind !== 'assistant-step'
         || (preceding.data as ReturnType<typeof assistantData>).finalNode.seq !== closing.finalNode.seq,
-      ...metrics?.ttftMs === undefined ? {} : { ttftMs: metrics.ttftMs },
-      ...metrics?.tokensPerSecond === undefined ? {} : { tokensPerSecond: metrics.tokensPerSecond },
       ...tokenUsage === undefined ? {} : { tokenUsage },
     }
     dataStore.set('turn-tail', tailData)

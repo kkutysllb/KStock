@@ -64,7 +64,7 @@
 .banner {
   margin: 0;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-md);
   font-size: 12px;
   line-height: 18px;
   background: color-mix(in srgb, var(--dsw-alias-state-warning-primary, var(--dsw-alias-state-business-primary)) 12%, transparent);
@@ -140,7 +140,7 @@
 }
 
 .iconButton:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 1px;
 }
 
@@ -161,7 +161,7 @@
   /* The hover surface reaches 8px past the content on both sides while the
      row's content stays aligned with the page header. */
   margin: 0 -8px;
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-xl);
   /* The page itself scrolls on the base surface. Anything that scrolls inside
      a card draws the l2 thumb (ui-theme styles/scrollbar.css rebinding contract). */
   --qilin-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
@@ -184,7 +184,7 @@
   height: 48px;
   /* The same hairline frame as the component rows below. */
   border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-lg);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -242,7 +242,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 12px;
+  border-radius: inherit;
 }
 
 .cardOpen:focus-visible {
@@ -250,7 +250,7 @@
 }
 
 .cardOpen:focus-visible::after {
-  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
 
@@ -281,7 +281,7 @@
   width: 28px;
   height: 28px;
   border: 0;
-  border-radius: 28px;
+  border-radius: var(--dsw-radius-sm);
   background: transparent;
   color: var(--dsw-alias-label-caption);
   cursor: pointer;
@@ -331,7 +331,7 @@
   width: 28px;
   height: 28px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   background: transparent;
   color: var(--dsw-alias-state-error-primary);
   cursor: pointer;
@@ -347,7 +347,7 @@
 }
 
 .deleteButton:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 1px;
 }
 
@@ -371,7 +371,7 @@
 }
 
 .partsFilter:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 1px;
 }
 
@@ -409,11 +409,16 @@
   height: 36px;
   padding: 0 12px;
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-bg-layer-3);
   font: inherit;
   font-size: 13px;
   color: var(--dsw-alias-label-primary);
+}
+
+.installField input[type='text']:focus {
+  border-color: var(--dsw-alias-state-business-primary);
+  box-shadow: inset 0 0 0 0.5px var(--dsw-alias-state-business-primary);
 }
 
 .installField input[aria-invalid='true'] {
@@ -453,7 +458,7 @@
   gap: 10px;
   padding: 12px 14px;
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-1);
 }
 
@@ -472,7 +477,7 @@
   gap: 6px;
   margin: 0;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-md);
   background: color-mix(in srgb, var(--dsw-alias-state-warning-primary, var(--dsw-alias-state-business-primary)) 12%, transparent);
   font-size: 12px;
   line-height: 18px;
@@ -616,7 +621,7 @@
   height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--dsw-radius-sm);
   background: none;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
@@ -675,7 +680,7 @@
   gap: 6px;
   padding: 16px;
   border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-lg);
   text-align: center;
 }
 
@@ -773,7 +778,7 @@
 .resultWarn {
   margin: 0;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-md);
   font-size: 13px;
   line-height: 20px;
   background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 10%, transparent);
@@ -791,7 +796,7 @@
   gap: 8px;
   padding: 12px 14px;
   border: 0.5px solid color-mix(in srgb, var(--dsw-alias-state-warning-primary, var(--dsw-alias-state-business-primary)) 40%, transparent);
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-lg);
   background: color-mix(in srgb, var(--dsw-alias-state-warning-primary, var(--dsw-alias-state-business-primary)) 8%, transparent);
 }
 
@@ -829,7 +834,7 @@
 .approvalList code {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-bg-layer-3);
   font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 12px;
@@ -864,6 +869,15 @@
   flex-direction: column;
 }
 
+/* The head row every detail view shares: the crumb over the icon/actions row.
+   It carries the drag ownership (the mark in PluginManagerPage), so this row's
+   own box is the window's draggable geometry. The detail container below stays
+   content: marking it would drag the window over its text and form labels. */
+.detailTop {
+  display: flex;
+  flex-direction: column;
+}
+
 .crumb {
   display: inline-flex;
   align-items: center;
@@ -882,7 +896,7 @@
 }
 
 .crumb:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
 
@@ -1017,7 +1031,7 @@
   width: 40px;
   height: 40px;
   border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-md);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -1201,4 +1215,165 @@
 .catalogName:hover,
 .catalogName:focus-visible {
   color: var(--dsw-alias-brand-primary);
+}
+
+/* The spec field's row of small controls: the registry picker and the guide toggle. */
+.optionsRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.registryToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px 0 10px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-2);
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.registryToggle:hover:not(:disabled) {
+  color: var(--dsw-alias-label-primary);
+}
+
+.registryToggle:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.registryToggle[aria-expanded='true'] {
+  border-color: var(--dsw-alias-border-l3);
+  background: var(--dsw-alias-bg-layer-3);
+}
+
+.registryToggle[aria-expanded='true'] .guideChevron {
+  transform: rotate(180deg);
+}
+
+.registryChosen {
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+/* The registry options unfold under the spec, inside the dialog's own scroll area. */
+.registry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 8px 10px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-bg-layer-2);
+  min-width: 0;
+}
+
+.registryOption {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 0.5px solid transparent;
+  border-radius: var(--dsw-radius-lg);
+  cursor: pointer;
+}
+
+.registryOption[data-checked='true'] {
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 40%, transparent);
+  background: var(--dsw-alias-bg-layer-3);
+}
+
+.registryOption input[type='radio'] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--dsw-alias-brand-primary);
+}
+
+.registryOption > .inputError,
+.registryOption > .registryHint {
+  margin-left: 26px;
+}
+
+.registryTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.registryCustomPick {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.registryCustomField {
+  height: 32px;
+  margin-left: 26px;
+  padding: 0 10px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-3);
+  font: inherit;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.registryCustomField[aria-invalid='true'] {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.registryHint {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+
+/* The registry the running install is retrying through, above the subject card. */
+.attemptLine {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* One pnpm attempt: its badge, then its terminal. */
+.run {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.attemptBadge {
+  align-self: flex-start;
+  margin: 0;
+  padding: 0 6px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-layer-3);
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.footAction {
+  height: 32px;
+  border-radius: var(--dsw-radius-md);
 }

@@ -15,6 +15,8 @@ import type {
 } from '@qilin/api-workspace-controller/client'
 import type { SessionId } from '@qilin/session/types'
 import type {} from '@qilin/client-ui-layout/client'
+import { pinOrderAccounts, pinOrderSource } from './pin-order.ts'
+import type { WorkspaceViewStoreActions } from './stores.ts'
 
 /** The main-pane selection a navigation action publishes: one Session, or one direct-parent subagent address. */
 export interface MainSelection {
@@ -38,7 +40,8 @@ export interface UiWorkspace {
   /**
    * Connect a Workspace and open its Session unless a later navigation supersedes it.
    * @param workspaceId - target Workspace.
-   * @param beforeOpen - optional synchronous preparation for the selected Session, skipped after supersession.
+   * @param beforeOpen - optional synchronous preparation for the selected Session,
+   * skipped after supersession; a throw aborts the open and releases the retained reference.
    * @returns completion; a superseded request may create a Session but does not open it.
    */
   openWorkspace(workspaceId: WorkspaceId, beforeOpen?: (sessionId: SessionId) => void): Promise<void>
@@ -69,6 +72,16 @@ export interface UiWorkspace {
    * @param sessionId - Session to unarchive.
    */
   unarchiveSession(sessionId: SessionId): Promise<void>
+  /**
+   * Pin a Session on the Host and front its saved position in every account that owns it.
+   * @param sessionId - Session to pin.
+   */
+  pinSession(sessionId: SessionId): Promise<void>
+  /**
+   * Unpin a Session on the Host; saved positions stay as they are.
+   * @param sessionId - Session to unpin.
+   */
+  unpinSession(sessionId: SessionId): Promise<void>
   /**
    * Open the Host-native directory picker.
    * @returns the selected directory, or null when cancelled.
@@ -126,12 +139,14 @@ class UiWorkspaceService extends Service implements UiWorkspace {
    * @param directoryPicker - the directory-picking Remote namespace.
    * @param workspaces - pure Workspace Controller.
    * @param sessions - pure Session Controller.
+   * @param view - the browser's viewing-store write set, which owns saved Session order.
    */
   constructor(
     ctx: Context,
     private readonly directoryPicker: ClientRemote['directoryPicker'],
     private readonly workspaces: IWorkspaces,
     private readonly sessions: ISessions,
+    private readonly view: Pick<WorkspaceViewStoreActions, 'pinSessionOrder'>,
   ) {
     super(ctx, 'uiWorkspace')
     ctx.effect(() => {
@@ -216,6 +231,20 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     await this.workspaces.unarchiveSession(sessionId)
   }
 
+  async pinSession(sessionId: SessionId): Promise<void> {
+    await this.workspaces.pinSession(sessionId)
+    const { items } = this.workspaces.list.getSnapshot()
+    this.view.pinSessionOrder(
+      sessionId,
+      pinOrderAccounts(items, sessionId),
+      pinOrderSource(items, this.sessions.list.getSnapshot()),
+    )
+  }
+
+  async unpinSession(sessionId: SessionId): Promise<void> {
+    await this.workspaces.unpinSession(sessionId)
+  }
+
   async pickDirectory(): Promise<string | null> {
     const result = await this.directoryPicker.pick()
     if (!result.ok) throw new Error(`directory picker failed: ${result.error.message}`)
@@ -256,7 +285,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
         initial = 'connecting'
         try {
           if (saved.subagentAddress !== undefined) {
-            void this.sessions.refreshSubagents(saved.subagentAddress.parentSessionId)
+            void this.sessions.refreshProjections(saved.subagentAddress.parentSessionId)
           }
           this.openSession(savedTarget)
           initial = 'done'
@@ -340,7 +369,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     const previous = this.mainReference
     this.mainReference = reference
     previous?.release()
-    void this.sessions.refreshSubagents(reference.sessionId)
+    void this.sessions.refreshProjections(reference.sessionId)
     this.ctx.layout.selectPanel(null)
   }
 

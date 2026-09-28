@@ -1,7 +1,7 @@
 {
   "name": "@qilin/app-boot",
   "description": "Shared boot glue for the app bins: .env loading, fail-loud Loader guards, snapshot-aware config resolution, and the Loader boot sequence",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -35,31 +35,36 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@qilin/atomic-write": "workspace:^",
-    "@qilin/dsh-compat": "workspace:^",
-    "@qilin/package-manifest": "workspace:^",
+    "@eslint-community/regexpp": "^4.12.2",
+    "@qilin/atomic-write": "workspace:*",
+    "@qilin/dsh-compat": "workspace:*",
+    "@qilin/package-manifest": "workspace:*",
+    "ajv": "^8.20.0",
     "js-yaml": "^4.2.0",
     "node-addon-require-builtin": "^0.1.6",
-    "resolve.exports": "^2.0.3"
+    "resolve.exports": "^2.0.3",
+    "semver": "^7.8.5"
   },
   "peerDependencies": {
-    "@qilin/kylin-plugin-group": "workspace:^",
-    "@qilin/kylin-plugin-include": "workspace:^",
-    "@qilin/kylin-plugin-loader": "workspace:^",
-    "@qilin/launch-environment": "workspace:^",
-    "@qilin/home-paths": "workspace:^",
-    "@qilin/system-prompt": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin-plugin-group": "workspace:~",
+    "@qilin/kylin-plugin-include": "workspace:~",
+    "@qilin/kylin-plugin-loader": "workspace:~",
+    "@qilin/launch-environment": "workspace:*",
+    "@qilin/home-paths": "workspace:*",
+    "@qilin/system-prompt": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/kylin-plugin-group": "workspace:^",
-    "@qilin/kylin-plugin-include": "workspace:^",
-    "@qilin/kylin-plugin-loader": "workspace:^",
-    "@qilin/kylin-plugin-timer": "workspace:^",
-    "@qilin/launch-environment": "workspace:^",
-    "@qilin/home-paths": "workspace:^",
-    "@qilin/system-prompt": "workspace:^",
+    "@qilin/kylin-plugin-group": "workspace:~",
+    "@qilin/kylin-plugin-include": "workspace:~",
+    "@qilin/kylin-plugin-loader": "workspace:~",
+    "@qilin/kylin-plugin-timer": "workspace:~",
+    "@qilin/schemastery": "workspace:~",
+    "@qilin/launch-environment": "workspace:*",
+    "@qilin/home-paths": "workspace:*",
+    "@qilin/system-prompt": "workspace:*",
     "@types/js-yaml": "^4.0.9",
-    "@qilin/kylin": "workspace:^"
+    "@types/semver": "^7.8.0",
+    "@qilin/kylin": "workspace:~"
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "@qilin/client-ui-sidebar-right",
   "description": "Right Sidebar: the docking surface's session-bound state, its panel and header expand control, and the navigation service over it",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -33,6 +33,7 @@
       "inject": [
         "@qilin/api-session-controller",
         "@qilin/client-resources",
+        "@qilin/client-shortcuts",
         "@qilin/client-ui-conversation",
         "@qilin/client-ui-layout",
         "@qilin/client-ui-session"
@@ -46,33 +47,35 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/api-session-controller": "workspace:^",
-    "@qilin/client-locale": "workspace:^",
-    "@qilin/client-resources": "workspace:^",
-    "@qilin/client-store": "workspace:^",
-    "@qilin/client-test-runtime": "workspace:^",
-    "@qilin/client-ui-conversation": "workspace:^",
-    "@qilin/client-ui-dockkit": "workspace:^",
-    "@qilin/client-ui-layout": "workspace:^",
-    "@qilin/client-ui-primitives": "workspace:^",
-    "@qilin/client-ui-renderer": "workspace:^",
-    "@qilin/client-ui-session": "workspace:^",
-    "@qilin/client-ui-slots": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/util-workspace-path": "workspace:^",
+    "@qilin/api-session-controller": "workspace:*",
+    "@qilin/client-locale": "workspace:*",
+    "@qilin/client-resources": "workspace:*",
+    "@qilin/client-shortcuts": "workspace:*",
+    "@qilin/client-store": "workspace:*",
+    "@qilin/client-test-runtime": "workspace:*",
+    "@qilin/client-ui-conversation": "workspace:*",
+    "@qilin/client-ui-dockkit": "workspace:*",
+    "@qilin/client-ui-layout": "workspace:*",
+    "@qilin/client-ui-primitives": "workspace:*",
+    "@qilin/client-ui-renderer": "workspace:*",
+    "@qilin/client-ui-session": "workspace:*",
+    "@qilin/client-ui-slots": "workspace:*",
+    "@qilin/client-ui-workspace": "workspace:*",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/session": "workspace:*",
+    "@qilin/util-crypto": "workspace:*",
+    "@qilin/util-workspace-path": "workspace:*",
     "@testing-library/react": "^16.1.0",
     "@types/picomatch": "^4.0.2",
     "@types/react": "~18.3.1",
     "@types/react-dom": "~18.3.0",
+    "clsx": "^2.0.0",
+    "picomatch": "^4.0.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "picomatch": "^4.0.4",
-    "clsx": "^2.0.0",
-    "@qilin/util-crypto": "workspace:^",
     "zod": "^4.4.3"
   },
   "files": [

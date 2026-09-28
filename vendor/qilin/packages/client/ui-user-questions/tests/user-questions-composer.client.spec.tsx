@@ -50,19 +50,19 @@ const sessionList = {
   ids: [SID],
   byId: { [SID]: { id: SID, displayTitle: 'Session', running: false, retainedBy: {}, blank: false, updatedAt: 0 } },
   phase: 'ready' as const,
-  subagentsByParent: {},
-  jobsBySession: {},
+  projectionsBySession: {},
 }
 const attentionState: AttentionState = new Map()
 const workspaceState = {
   items: [],
   archivedSessionIds: [],
+  pinnedSessionIds: [],
   state: 'idle' as const,
   phase: 'ready' as const,
   error: null,
 }
 const conversationState: ConversationState = {
-  views: { get: () => undefined },
+  views: { get: () => undefined, grouped: () => undefined },
   activeTargets: new Set(),
 }
 const emptyKeys: readonly string[] = []
@@ -124,6 +124,8 @@ const kitBase: Omit<QuestionComposerProps, 'matched' | 'useStore' | 'actions'> =
   useProjection: (() => undefined),
   useInput: selector => selector(inputState),
   inputActions: {
+    captureInsertion: () => { throw new Error('unused') },
+    insertText: () => { throw new Error('unused') },
     setDraft: () => { throw new Error('unused') },
     addAttachments: () => { throw new Error('unused') },
     removeAttachment: () => { throw new Error('unused') },

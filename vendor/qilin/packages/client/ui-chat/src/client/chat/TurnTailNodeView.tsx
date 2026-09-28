@@ -1,18 +1,22 @@
 import { memo } from 'react'
-import type { PropsRenderSlots } from '@qilin/client-ui-slots'
-import type { ChatNodeViewProps, TurnTailOwnerProps } from '../contract/slots.ts'
+import type { InjectFace, PropsRenderSlots } from '@qilin/client-ui-slots'
+import type { ChatNodeViewProps, PerformanceUsageInjected, TurnTailOwnerProps } from '../contract/slots.ts'
 import { MessageIconActions } from './MessageIconActions.tsx'
-import { TurnTimePanel, TurnUsagePanel } from './TurnUsagePanel.tsx'
+import { TurnUsagePanel } from './TurnUsagePanel.tsx'
 import { assistantText } from './turn-assistant.ts'
 import css from './TurnTailNodeView.module.css'
 
 type TurnTailNodeViewProps = ChatNodeViewProps<'turn-tail'>
   & PropsRenderSlots<'conversation.chat.turnTail' | 'conversation.chat.assistant-actions'>
+  & InjectFace<PerformanceUsageInjected>
 
 /** Turn-local actions and feature tail over the Location index, independent of Assistant placement. */
 export const TurnTailNodeView = memo(function TurnTailNodeView({
-  node, openFile, forkAt, renderSlot, t, useChat,
+  node, openFile, forkAt, renderSlot, t, useChat, usePerformanceUsage,
 }: TurnTailNodeViewProps) {
+  // The per-Turn usage pill rides the accepted detail level: compact renders
+  // the bare action row, detailed appends the accounting pill.
+  const detailed = usePerformanceUsage(mode => mode) === 'detailed'
   const data = node.data
   const hasLaterChatNode = useChat(snapshot =>
     snapshot.locations.getTurn(data.turn).at(-1) !== node.key)
@@ -25,9 +29,6 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
   const owner: TurnTailOwnerProps = { turn, seq: closing?.finalNode.seq ?? data.seq, openFile }
   const tail = renderSlot('conversation.chat.turnTail', owner)
   if (closing === null) return tail === null ? null : <div className={css.root} data-turn-tail={data.turn}>{tail}</div>
-  const runMs = turn.start === undefined || turn.end === undefined
-    ? undefined
-    : Math.max(0, turn.end.time - turn.start.time)
   // Interruption-frozen partials carry no messageId, so they address no
   // durable message and contribute no per-message actions.
   const messageId = closing.finalNode.messageId
@@ -45,23 +46,13 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
         text={assistantText(closing.blocks)}
         time={closing.time}
         clock="end"
-        onBranch={() => { forkAt(closing.finalNode.seq) }}
+        onBranch={() => { forkAt(data.seq) }}
         branchUnavailable={data.branchUnavailable || hasLaterChatNode}
         className={css.actions}
         extraActions={assistantActions}
-        usageAction={(
-          <>
-            {data.tokenUsage !== undefined && <TurnUsagePanel usage={data.tokenUsage} t={t} />}
-            {runMs !== undefined && (
-              <TurnTimePanel
-                runMs={runMs}
-                tokensPerSecond={data.tokensPerSecond}
-                ttftMs={data.ttftMs}
-                t={t}
-              />
-            )}
-          </>
-        )}
+        usageAction={detailed && data.tokenUsage !== undefined
+          ? <TurnUsagePanel usage={data.tokenUsage} t={t} />
+          : null}
         t={t}
       />
     </div>

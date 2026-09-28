@@ -1,7 +1,7 @@
 {
   "name": "@qilin/host-open-in-app",
   "description": "Host half of open-in-app: resolved application catalog, icons, and the launch endpoint as three webServer routes",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -39,17 +39,17 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@qilin/launch-environment": "workspace:^",
-    "@qilin/native-command": "workspace:^",
-    "@qilin/subprocess": "workspace:^",
-    "@qilin/schemastery": "workspace:^"
+    "@qilin/launch-environment": "workspace:*",
+    "@qilin/native-command": "workspace:*",
+    "@qilin/subprocess": "workspace:*",
+    "@qilin/schemastery": "workspace:~"
   },
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/kylin-plugin-loader": "workspace:^",
-    "@qilin/host-webserver": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/kylin-plugin-loader": "workspace:~",
+    "@qilin/host-webserver": "workspace:*"
   }
 }

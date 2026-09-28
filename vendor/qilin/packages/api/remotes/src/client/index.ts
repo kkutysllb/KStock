@@ -6,10 +6,12 @@ import commandsRemote from '@qilin/commands/remote'
 import settingsControllerRemote from '@qilin/api-settings-controller/remote'
 import officeToPdfRemote from '@qilin/office-to-pdf/remote'
 import goalsRemote from '@qilin/goal/remote'
+import scheduleRemote from '@qilin/schedule/remote'
 import llmRemote from '@qilin/llm/remote'
 import dynamicRemote from '@qilin/kylin-host-runner/remote'
 import pluginInventoryRemote from '@qilin/host-plugin-inventory/remote'
 import pluginManagerRemote from '@qilin/plugin-manager/remote'
+import pluginRegistryProbeRemote from '@qilin/client-ui-plugin-manager/remote'
 import mcpServersRemote from '@qilin/mcp-servers/remote'
 import messageFeedbackRemote from '@qilin/message-feedback/remote'
 import permissionPresetsRemote from '@qilin/permission-presets/remote'
@@ -19,23 +21,27 @@ import sessionReferencesRemote from '@qilin/session-reference/remote'
 import subagentsRemote from '@qilin/subagent/remote'
 import sessionRemote from '@qilin/api-session-controller/remote'
 import workspaceRemote from '@qilin/api-workspace-controller/remote'
+import jobRemote from '@qilin/api-job-controller/remote'
 import terminalRemote from '@qilin/api-terminal-controller/remote'
 import workspaceFilesRemote from '@qilin/api-workspace-files/remote'
 import type { ClientRemote } from '@qilin/api-gateway/client'
 
 export type { ClientRemote } from '@qilin/api-gateway/client'
 export type {
-  BundleInfo, BundleRowInfo, ChangeResult, CommunityPluginEntry, CommunityPluginSnapshot, InstallBundleOptions, InstallSpecKind,
+  BundleInfo, BundleRowInfo, ChangeResult, CommunityPluginEntry, CommunityPluginSnapshot, IncompatiblePlugin,
+  InstallBundleOptions, InstallSpecKind,
   ManagementError, PackageResult, PluginChange, PluginEntryId, PluginInfo, PluginInspectProblem, PluginInstallCancellation,
-  PluginInstallFailureKind, PluginInstallLogChunk, PluginInstallProgress, PluginInstallRequestId, PluginSpecInspection,
-  PluginUpdateEntry, PluginUpdateSnapshot, ReadOnlyReason,
+  PluginInstallFailureKind, PluginInstallLogChunk, PluginInstallProgress, PluginInstallRequestId, PluginRegistries, PluginSpecInspection,
+  PluginUpdateEntry, PluginUpdateSnapshot, ReadOnlyReason, Registry,
 } from '@qilin/plugin-manager/types'
 export type {} from '@qilin/plugin-manager/remote'
+export type {} from '@qilin/client-ui-plugin-manager/remote'
 export type { PluginInventorySnapshot } from '@qilin/host-plugin-inventory/types'
 export type {} from '@qilin/agent-presets/remote'
 export type {} from '@qilin/commands/remote'
 export type {} from '@qilin/api-settings-controller/remote'
 export type {} from '@qilin/goal/remote'
+export type {} from '@qilin/schedule/remote'
 export type {} from '@qilin/office-to-pdf/remote'
 export type {} from '@qilin/llm/remote'
 export type {} from '@qilin/host-plugin-inventory/remote'
@@ -55,7 +61,8 @@ export type {} from '@qilin/api-workspace-files/remote'
 export type * from '@qilin/api-workspace-files/types'
 export type {} from '@qilin/api-terminal-controller/remote'
 export type * from '@qilin/api-terminal-controller/types'
-export type { SessionJob as JobView } from '@qilin/api-session-controller/types'
+export type {} from '@qilin/api-job-controller/remote'
+export type * from '@qilin/api-job-controller/types'
 // The forwarded-event allowlist's selection seat: without it in the consumer's
 // compilation face `TypertRemoteEvent` is `never` and every `$on` call fails.
 export type { ApiRemoteForwardedEvent } from '../types.ts'
@@ -169,10 +176,10 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   const disposers: Array<() => Promise<void>> = []
   try {
     for (const contribution of [
-      agentPresetsRemote, commandsRemote, settingsControllerRemote, goalsRemote, llmRemote, dynamicRemote,
-      pluginInventoryRemote, pluginManagerRemote, mcpServersRemote, messageFeedbackRemote, sessionFeedbackRemote,
+      agentPresetsRemote, commandsRemote, settingsControllerRemote, goalsRemote, llmRemote, dynamicRemote, scheduleRemote,
+      pluginInventoryRemote, pluginManagerRemote, pluginRegistryProbeRemote, mcpServersRemote, messageFeedbackRemote, sessionFeedbackRemote,
       fileUploadsRemote, sessionReferencesRemote,
-      permissionPresetsRemote, subagentsRemote, sessionRemote, workspaceRemote, workspaceFilesRemote, terminalRemote,
+      permissionPresetsRemote, subagentsRemote, sessionRemote, jobRemote, workspaceRemote, workspaceFilesRemote, terminalRemote,
       officeToPdfRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))

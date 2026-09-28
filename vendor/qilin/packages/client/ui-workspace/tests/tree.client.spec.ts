@@ -4,11 +4,11 @@ import type { WorkspaceId, WorkspaceView } from '@qilin/api-workspace-controller
 import type {
   SessionPendingInteraction, SessionStatus, SessionStatusSnapshot,
 } from '@qilin/client-ui-session/client'
-import type { ScheduleId, ScheduleRecord } from '@qilin/schedule/client'
 import type { SessionId } from '@qilin/session/types'
 import {
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
-  pinCurrentBlank, reconcileManualOrder, visibleSessionIds, workspaceLabel, UNGROUPED_KEY,
+  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel, UNGROUPED_KEY,
+  type SessionRowState,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
 
@@ -21,7 +21,7 @@ const summary = (id: string, updatedAt: number, cwd?: string): SessionSummary =>
 const list = (...items: SessionSummary[]): SessionListState => ({
   ids: items.map(item => item.id),
   byId: Object.fromEntries(items.map(item => [item.id, item])),
-  phase: 'ready', subagentsByParent: {}, jobsBySession: {},
+  phase: 'ready', projectionsBySession: {},
 })
 const withMain = (state: SessionListState, id: SessionId): SessionListState => ({
   ...state,
@@ -38,19 +38,16 @@ const view = (expandedGroups: readonly string[] = [], ungroupedOrder?: readonly 
   expandedGroups,
   ...(ungroupedOrder === undefined ? {} : { ungroupedOrder }),
 })
-const noArchive: readonly SessionId[] = []
+const noPinned: readonly SessionId[] = []
+const noArchive: SessionRowState = { pinnedSessionIds: [], archivedSessionIds: [] }
 const noAttention: SessionStatusSnapshot = new Map()
 const status = (
   pendingInteraction: SessionPendingInteraction | undefined,
   overrides: Partial<SessionStatus> = {},
 ): SessionStatus => ({ running: undefined, pendingInteraction, completionUnread: false, ...overrides })
-const archived = (...ids: string[]): readonly SessionId[] => ids.map(sid)
-const schedule = (id: string, scheduledAt: string): ScheduleRecord => ({
-  id: id as ScheduleId,
-  kind: 'at',
-  prompt: id,
-  scheduledAt,
-})
+const archived = (...ids: string[]): SessionRowState => ({ pinnedSessionIds: [], archivedSessionIds: ids.map(sid) })
+const pinned = (...ids: string[]): SessionRowState => ({ pinnedSessionIds: pinnedIds(...ids), archivedSessionIds: [] })
+const pinnedIds = (...ids: string[]): readonly SessionId[] => ids.map(sid)
 
 describe('owningGroupKey', () => {
   it('returns the owning Workspace id or the Ungrouped key', () => {
@@ -108,7 +105,7 @@ describe('deriveGroups', () => {
       sessions, [workspace('project', ['awaiting'])], noArchive, attention, view(['project']),
     )
     expect(grouped[0]!.sessions[0]).toMatchObject({ pendingInteraction: 'plan-review', running: true })
-    expect(deriveFlat(sessions, visibleSessionIds(sessions, noArchive), attention)[0])
+    expect(deriveFlat(sessions, visibleSessionIds(sessions, noArchive), noPinned, attention)[0])
       .toMatchObject({ pendingInteraction: 'plan-review', running: true })
   })
 
@@ -121,7 +118,7 @@ describe('deriveGroups', () => {
         status({ key: `${kind}:1`, kind, sessionId: awaiting.id } as SessionPendingInteraction),
       ]])
 
-      expect(deriveFlat(list(awaiting), [awaiting.id], attention)[0]?.pendingInteraction).toBe(kind)
+      expect(deriveFlat(list(awaiting), [awaiting.id], noPinned, attention)[0]?.pendingInteraction).toBe(kind)
     },
   )
 
@@ -185,43 +182,13 @@ describe('deriveGroups', () => {
     const plainNode = groups[0]!.sessions.find(session => session.id === plain.id)!
     expect(doneNode.completed).toBe(true)
     expect(plainNode.completed).toBe(false)
-    expect(deriveFlat(sessions, visibleSessionIds(sessions, noArchive), statuses)
+    expect(deriveFlat(sessions, visibleSessionIds(sessions, noArchive), noPinned, statuses)
       .find(node => node.id === done.id)!.completed).toBe(true)
     const search = deriveSearchResults(
       sessions, [workspace('first', ['done', 'plain'])], 'done', noArchive,
       statuses, { items: [], hasMore: false }, 10,
     )
     expect(search.items[0]?.completed).toBe(true)
-  })
-
-  it('derives one active-Schedule fact for grouped, flat, and search rows', () => {
-    const absent = summary('absent', 4)
-    const empty = { ...summary('empty', 3), projectionValues: { schedule: [] } }
-    const future = {
-      ...summary('future', 2),
-      projectionValues: { schedule: [schedule('future', '2099-01-01T00:00:00.000Z')] },
-    }
-    const overdue = {
-      ...summary('overdue', 1),
-      projectionValues: { schedule: [schedule('overdue', '2000-01-01T00:00:00.000Z')] },
-    }
-    const sessions = list(absent, empty, future, overdue)
-    const workspaces = [workspace('project', ['absent', 'empty', 'future', 'overdue'], 'Project')]
-    const expected = [
-      [sid('absent'), false],
-      [sid('empty'), false],
-      [sid('future'), true],
-      [sid('overdue'), true],
-    ]
-
-    expect(deriveGroups(
-      sessions, workspaces, noArchive, noAttention, view(['project']),
-    )[0]!.sessions.map(node => [node.id, node.hasActiveSchedule])).toEqual(expected)
-    expect(deriveFlat(sessions, visibleSessionIds(sessions, noArchive), noAttention)
-      .map(node => [node.id, node.hasActiveSchedule])).toEqual(expected)
-    expect(deriveSearchResults(
-      sessions, workspaces, 'project', noArchive, noAttention, { items: [], hasMore: false }, 10,
-    ).items.map(node => [node.id, node.hasActiveSchedule])).toEqual(expected)
   })
 
   it('hides subagent-origin sessions without hiding ordinary forks', () => {
@@ -249,7 +216,7 @@ describe('deriveGroups', () => {
     expect(groups[0]!.sessionCount).toBe(2)
     expect(groups[0]!.sessions[0]).toMatchObject({ running: false, runningSubagentCount: 2 })
     expect(groups[0]!.sessions[1]).toMatchObject({ running: false, runningSubagentCount: 1 })
-    expect(deriveFlat(sessions, visibleSessionIds(sessions, noArchive), noAttention)
+    expect(deriveFlat(sessions, visibleSessionIds(sessions, noArchive), noPinned, noAttention)
       .map(node => [node.id, node.runningSubagentCount])).toEqual([
       [parent.id, 2], [fork.id, 1],
     ])
@@ -339,7 +306,7 @@ describe('deriveFlat', () => {
     const child = { ...summary('child', 30), parentId: parent.id }
     const tieB = summary('tie-b', 20)
     const tieA = summary('tie-a', 20)
-    const rows = deriveFlat(list(parent, child, tieB, tieA), [parent.id, tieA.id, child.id, tieB.id], noAttention)
+    const rows = deriveFlat(list(parent, child, tieB, tieA), [parent.id, tieA.id, child.id, tieB.id], noPinned, noAttention)
     expect(rows.map(row => row.id)).toEqual([parent.id, tieA.id, child.id, tieB.id])
   })
 
@@ -360,7 +327,7 @@ describe('deriveFlat', () => {
     const currentBlank = { ...summary('current-blank', 9), blank: true, retainedBy: { mainView: 1 } }
     const staleBlank = { ...summary('stale-blank', 8), blank: true }
     const sessions = list(currentBlank, summary('real', 1), staleBlank)
-    const rows = deriveFlat(sessions, visibleSessionIds(sessions, noArchive), noAttention)
+    const rows = deriveFlat(sessions, visibleSessionIds(sessions, noArchive), noPinned, noAttention)
     expect(rows.map(row => row.id)).toEqual([currentBlank.id, sid('real')])
     expect(rows.map(row => row.title)).toEqual(['', 'real'])
     expect(rows.map(row => row.blank)).toEqual([true, false])
@@ -434,7 +401,6 @@ describe('deriveSearchResults', () => {
           runningSubagentCount: 0,
           pendingInteraction: 'plan-review',
           completed: false,
-          hasActiveSchedule: false,
           snippet: 'title session body excerpt',
         },
         {
@@ -444,7 +410,6 @@ describe('deriveSearchResults', () => {
           running: false,
           runningSubagentCount: 0,
           completed: false,
-          hasActiveSchedule: false,
         },
         {
           id: contentHit.id,
@@ -453,7 +418,6 @@ describe('deriveSearchResults', () => {
           running: false,
           runningSubagentCount: 0,
           completed: false,
-          hasActiveSchedule: false,
           snippet: 'body needle excerpt',
         },
       ],
@@ -606,5 +570,33 @@ describe('parent folder membership', () => {
     ['/Git/app', ['/git'], undefined],
   ])('groups %s under its nearest registered ancestor', (path, parents, expected) => {
     expect(owningParentFolder(path, parents)).toBe(expected)
+  })
+})
+
+describe('pin ordering', () => {
+  it('fronts a pinned row in its group and marks it pinned', () => {
+    const sessions = list(summary('newer', 20), summary('older', 10))
+    const groups = deriveGroups(
+      sessions,
+      [workspace('first', ['newer', 'older'])],
+      pinned('older'),
+      noAttention,
+      view(['first']),
+    )
+    expect(groups[0]!.sessions.map(session => session.id)).toEqual([sid('older'), sid('newer')])
+    expect(groups[0]!.sessions.map(session => session.pinned)).toEqual([true, false])
+  })
+
+  it('fronts pinned rows in the flat list without changing the other partition', () => {
+    const sessions = list(summary('first', 30), summary('second', 20), summary('third', 10))
+    const rows = deriveFlat(sessions, [sid('first'), sid('second'), sid('third')], pinnedIds('third'), noAttention)
+    expect(rows.map(row => row.id)).toEqual([sid('third'), sid('first'), sid('second')])
+  })
+
+  it('keeps pinned rows out of an archive-visible account only where they are archived', () => {
+    const listState = list(summary('kept', 2), summary('gone', 1))
+    expect(sessionMemberIds(listState)).toEqual([sid('kept'), sid('gone')])
+    expect(visibleSessionIds(listState, archived('gone'))).toEqual([sid('kept')])
+    expect(visibleSessionIds(listState, pinned('gone'))).toEqual([sid('kept'), sid('gone')])
   })
 })

@@ -278,11 +278,10 @@ describe('web e2e: resident question composer round trip', () => {
     answeredSession = sessionId
     // World state: the tool result carries the chosen answer, and DONE lands.
     const results = sessionEvents.filter(e => e.type === 'tool/result')
-    const answerText = results.flatMap(event => event.data.message.content.flatMap(block =>
-      block.type === 'tool-result'
-        ? block.content.filter(item => item.type === 'text').map(item => item.text)
-        : [],
-    )).at(-1)
+    const answerText = results.flatMap(event => event.data.message.content
+      .filter(item => item.type === 'text')
+      .map(item => item.text),
+    ).at(-1)
     expect(JSON.parse(answerText ?? '')).toEqual({
       answers: [{ id: 'color', selected: ['Blue'], custom: 'Include accessibility notes' }],
     })
@@ -386,6 +385,10 @@ describe.skipIf(MODE === 'record')('web e2e: cancelled question transcript', () 
 
   it('expands to the cancellation verdict and original questions', async () => {
     onTestFailed(() => saveFailureShot(cancelledPage, 'web-e2e-question-cancelled-row'))
+    // The tool round trip is a process row, which Compact presentation seats
+    // inside the Turn's collapsed process group; open that group before
+    // addressing the cancelled card.
+    await expandTurnProcesses(cancelledPage)
     const row = cancelledPage.getByRole('button', { name: 'Ask question cancelled', exact: true })
     await row.waitFor({ timeout: 15_000 })
     await row.click()

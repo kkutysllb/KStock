@@ -2,11 +2,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { act, render } from '@testing-library/react'
 import {
-  SlotTestRuntime, stubSettingsScope, usePinnedBrowserLanguages,
+  SlotTestRuntime, stubConfigForm, usePinnedBrowserLanguages,
 } from '@qilin/client-test-runtime'
 import { LocaleRuntime } from '@qilin/client-locale/client'
 import { resolveSlotLabel } from '@qilin/client-ui-slots'
-import type { ObservableSnapshot } from '@qilin/client-store'
+import { createSnapshotStore, type ObservableSnapshot } from '@qilin/client-store'
 import type { SessionBinding } from '@qilin/api-session-controller/client'
 import type { SessionId } from '@qilin/session/types'
 import type { WorkspaceId } from '@qilin/workspace/types'
@@ -20,7 +20,7 @@ import {
   apply as applyChat, EMPTY_CHAT_SNAPSHOT, inject as injectChat,
 } from '@qilin/client-ui-chat/client'
 import type {
-  ChatNodeTurnDataInjected, ChatSnapshot, TranscriptViewRowInjected, UseChatNodeTurnData,
+  ChatNodeInjected, ChatSnapshot, TranscriptViewRowInjected, UseChatNodeTurnData,
 } from '@qilin/client-ui-chat/client'
 import { CHAT_SETTINGS_NAMESPACE, type ChatSettings } from '../src/chat-settings.ts'
 
@@ -36,11 +36,12 @@ const SID = 'session-1' as SessionId
 
 async function bench() {
   const runtime = await SlotTestRuntime.create()
-  const chatSettings = stubSettingsScope<ChatSettings>()
-  runtime.ctx.provide('settingsScope', {
-    bind: ({ namespace }: { namespace: string }) => namespace === CHAT_SETTINGS_NAMESPACE
+  const chatSettings = stubConfigForm<ChatSettings>()
+  runtime.ctx.provide('configForms', {
+    developerTools: { enabled: createSnapshotStore(true) },
+    get: (namespace: string) => namespace === CHAT_SETTINGS_NAMESPACE
       ? chatSettings.scope
-      : stubSettingsScope().scope,
+      : stubConfigForm().scope,
   } as never)
   runtime.ctx.provide('layout', { openRightbar: vi.fn(), closeRightbar: vi.fn() } as never)
   runtime.ctx.provide('sidebarRight', { openResource: vi.fn(), openTab: vi.fn() } as never)
@@ -91,7 +92,7 @@ describe('Chat apply wiring', () => {
     expect(b.runtime.slots.entries('conversation.composer.dock').map(row => row.options.id))
       .toEqual(['stats'])
     expect(b.runtime.slots.entries('settings.general.item').map(row => row.options.id))
-      .toEqual(['transcript-view', 'content-width', 'composer-enter'])
+      .toEqual(['transcript-view', 'performance-usage', 'content-width', 'link-opening', 'composer-enter'])
     await b.runtime.dispose()
   })
 
@@ -101,13 +102,15 @@ describe('Chat apply wiring', () => {
       .find(entry => entry.options.id === 'transcript-view')!
     const face = (row.inject as unknown as () => TranscriptViewRowInjected)()
 
-    expect(face.hooks.transcriptView.getSnapshot()).toBe('compact')
-    face.setTranscriptView('normal')
-    expect(face.hooks.transcriptView.getSnapshot()).toBe('normal')
-    expect(b.chatSettings.set).toHaveBeenCalledWith('transcriptView', 'normal')
+    expect(face.hooks.transcriptView.getSnapshot()).toBe('standard')
+    face.setTranscriptView('verbose')
+    expect(face.hooks.transcriptView.getSnapshot()).toBe('verbose')
+    expect(b.chatSettings.set).toHaveBeenCalledWith('transcriptView', 'verbose')
 
     b.chatSettings.publish({
-      status: 'ready', value: { transcriptView: 'compact' }, revision: 1, writable: true,
+      status: 'ready',
+      value: { transcriptView: 'compact', performanceUsage: 'detailed', linkOpening: 'sidebar' },
+      revision: 1, writable: true,
     })
     expect(face.hooks.transcriptView.getSnapshot()).toBe('compact')
     await b.runtime.dispose()
@@ -163,7 +166,7 @@ describe('Chat apply wiring', () => {
   it('binds Turn data directly to its keyed Location source', async () => {
     const b = await bench()
     const spec = b.runtime.slots.spec('conversation.chat.node') as unknown as {
-      inject: ChatNodeTurnDataInjected
+      inject: ChatNodeInjected
     }
     let value: number | undefined = 42
     const listeners = new Set<() => void>()
@@ -181,7 +184,7 @@ describe('Chat apply wiring', () => {
     const useChat = vi.fn(() => { throw new Error('Turn data must not read the Chat snapshot') })
     const useTurnData = spec.inject.hooks.turnData(
       { useChat } as unknown as Parameters<typeof spec.inject.hooks.turnData>[0],
-      data,
+      { turnData: data, disclosureReset: createSnapshotStore(0) },
     )
     const Probe = ({ useData }: { useData: UseChatNodeTurnData }) => (
       <output>{useData('metric') ?? 'missing'}</output>
@@ -199,7 +202,7 @@ describe('Chat apply wiring', () => {
 
     view.rerender(<Probe useData={spec.inject.hooks.turnData(
       { useChat } as unknown as Parameters<typeof spec.inject.hooks.turnData>[0],
-      undefined,
+      { turnData: undefined, disclosureReset: createSnapshotStore(0) },
     )} />)
     expect(view.getByText('missing')).toBeTruthy()
     expect(useChat).not.toHaveBeenCalled()

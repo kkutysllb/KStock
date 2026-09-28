@@ -72,7 +72,10 @@ export function OfficeBody(props: OfficeBodyProps): ReactNode {
     return () => { controller.abort() }
   }, [revision, resourceAddress, tab.id, tab.signal, read, actions, describeFailure, settled])
   const file = view?.file
+  const failure = view?.failure
   useEffect(() => { if (file !== undefined) request?.loaded(file.version) }, [file, request?.loaded])
+  // A settled failure ends the shared load, so a later file change can start another revision.
+  useEffect(() => { if (failure !== undefined) request?.failed() }, [failure, request?.failed])
   if (request === undefined) return null
   if (view?.failure !== undefined) {
     const { name } = pathPartsOf(resourceAddress)
@@ -85,10 +88,9 @@ export function OfficeBody(props: OfficeBodyProps): ReactNode {
   if (file === undefined) return <LoadingIndicator className={common.statusLine} label={t('loading')} />
   return <div className={css.body}>
     <FontNotice resourceAddress={resourceAddress} sourceVersion={file.version} fonts={file.missingFonts} t={t} />
-    <div className={css.scrollport} ref={props.scrollportRef}>
-      {props.renderSlot('sidebar.right.tab.document.office.pdf', {
-        resourceAddress, content: { kind: 'bytes', data: file.data }, wrap: props.wrap, scrollportRef: props.scrollportRef,
-      }, { entryKey: '@qilin/client-ui-sidebar-documentpreview/office', hookContext: props.useTabInfo })}
-    </div>
+    {props.renderSlot('sidebar.right.tab.document.office.pdf', {
+      resourceAddress, content: { kind: 'bytes', data: file.data }, wrap: props.wrap, scrollportRef: props.scrollportRef,
+      addResource: props.addResource, setResources: props.setResources,
+    }, { entryKey: '@qilin/client-ui-sidebar-documentpreview/office', hookContext: props.useTabInfo })}
   </div>
 }

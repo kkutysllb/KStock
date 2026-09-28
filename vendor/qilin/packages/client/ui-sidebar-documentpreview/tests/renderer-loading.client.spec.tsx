@@ -4,7 +4,6 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest'
 import { makeTranslate, RemoteError } from '@qilin/client-test-runtime'
-import type { OwnerOf } from '@qilin/client-ui-slots'
 import type { OfficeToPdfGeneration } from '@qilin/office-to-pdf/types'
 import type { DocumentPreviewDefinition } from '../src/client/document/registry.ts'
 import type { DocumentContent } from '../src/client/document/contract.ts'
@@ -13,7 +12,7 @@ import { OfficeBody, type OfficeBodyProps } from '../src/client/office/OfficeBod
 import { createOfficeStore, type OfficeState } from '../src/client/office/store.ts'
 import type { ReadOfficeDocument } from '../src/client/office/cache.ts'
 import { en } from '../src/client/office/locales.ts'
-import { harness, ABSOLUTE_PATH, TAB_ID, settle } from './fixtures.client.ts'
+import { documentSlots, harness, ABSOLUTE_PATH, TAB_ID, settle } from './fixtures.client.ts'
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
@@ -45,15 +44,14 @@ it('lets a non-Office renderer load content, report its version, and reload thro
     useEffect(() => { if (displayed !== undefined) request?.loaded(displayed.version) }, [displayed, request?.loaded])
     return <p>{displayed?.text ?? 'Loading custom content'}</p>
   }
-  const renderSlot: TextPreviewProps['renderSlot'] = (_name, input) => {
-    const owner = input as unknown as OwnerOf<'sidebar.right.tab.document'>
-    return <CustomBody content={owner.content} />
-  }
+  const renderSlot: TextPreviewProps['renderSlot'] = documentSlots((_key, owner) =>
+    <CustomBody content={owner.content} />)
   const useDocumentPreviews: TextPreviewProps['useDocumentPreviews'] = selector => selector([custom])
   const view = render(<TextPreview {...h.props()} renderSlot={renderSlot} useDocumentPreviews={useDocumentPreviews} />)
   expect(read).toHaveBeenCalledTimes(1)
   expect(await screen.findByText('Custom content v1')).toBeTruthy()
   expect(h.instance.getSnapshot().byTab[TAB_ID]?.version).toBe('v1')
+  act(() => { h.instance.actions.toggledAutoRefresh(TAB_ID) })
   h.setVersion('v2')
   view.rerender(<TextPreview {...h.props()} renderSlot={renderSlot} useDocumentPreviews={useDocumentPreviews} />)
   expect(screen.getByText('changed')).toBeTruthy()
@@ -99,8 +97,7 @@ function setup() {
   }
   const describeFailure: OfficeBodyProps['describeFailure'] = error => error.message
   let request: Extract<DocumentContent, { kind: 'renderer' }> | undefined
-  const slots: TextPreviewProps['renderSlot'] = (_key, input, options) => {
-    const owner = input as unknown as OwnerOf<'sidebar.right.tab.document'>
+  const slots: TextPreviewProps['renderSlot'] = documentSlots((_key, owner, options) => {
     if (owner.content.kind !== 'renderer') return <p>Raw bytes</p>
     request = owner.content
     // The component fixture supplies the standard seats used by Office; the real slot binding is exercised by the browser scenario.
@@ -111,7 +108,7 @@ function setup() {
       ),
     } as unknown as OfficeBodyProps
     return <OfficeBody {...props} />
-  }
+  })
   function View({ renderer = true }: { renderer?: boolean }) {
     return <TextPreview {...h.props()} renderSlot={slots}
       useDocumentPreviews={selector => selector([renderer ? definition : { ...definition, id: 'raw', loading: 'bytes-complete' }])} />
@@ -124,7 +121,7 @@ function setup() {
   return { h, office, pending, read, View, request: () => request! }
 }
 
-it('loads without reading raw bytes, retains content across remounts, and reloads only after a source-change action', async () => {
+it('retains renderer content across remounts and waits for reload when automatic refresh is paused', async () => {
   const h = setup()
   let mounted = render(<h.View />)
   expect(screen.getByRole('status').getAttribute('aria-label')).toBe(en.loading)
@@ -137,6 +134,7 @@ it('loads without reading raw bytes, retains content across remounts, and reload
   mounted = render(<h.View />)
   expect(screen.getByText('PDF v1')).toBeTruthy()
   expect(h.read).toHaveBeenCalledTimes(1)
+  act(() => { h.h.instance.actions.toggledAutoRefresh(TAB_ID) })
   h.h.setVersion('v2')
   mounted.rerender(<h.View />)
   expect(screen.getByText('changed')).toBeTruthy()
@@ -154,19 +152,45 @@ it('aborts a superseded load and rejects its late bytes and version report', asy
   const previous = h.request()
   fireEvent.click(screen.getByRole('button', { name: 'reload' }))
   expect(h.pending[0]!.signal.aborted).toBe(true)
+  act(() => { previous.failed() })
+  expect(h.h.instance.getSnapshot().byTab[TAB_ID]?.loading).toBe(true)
   await act(async () => { h.pending[1]!.deferred.resolve(result('v2')) })
   await act(async () => { h.pending[0]!.deferred.resolve(result('v1')); previous.loaded('v1') })
   expect(screen.getByText('PDF v2')).toBeTruthy()
   expect(h.h.instance.getSnapshot().byTab[TAB_ID]?.version).toBe('v2')
 })
 
+it.each(['declared', 'exception'] as const)('automatically retries a %s conversion failure only after another file change', async (kind) => {
+  const h = setup()
+  render(<h.View />)
+  await act(async () => {
+    if (kind === 'declared') h.pending[0]!.deferred.resolve({
+      ok: false, error: new RemoteError('gateway/internal', 'Conversion failed', {}),
+    })
+    else h.pending[0]!.deferred.reject(new Error('Conversion failed'))
+  })
+  expect(screen.getByText('Conversion failed')).toBeTruthy()
+  expect(h.h.instance.getSnapshot().byTab[TAB_ID]?.loading).toBe(false)
+  expect(h.read).toHaveBeenCalledTimes(1)
+  act(() => {
+    h.h.setVersion('v2')
+    h.h.instance.actions.resourceChanged(TAB_ID)
+  })
+  expect(h.read).toHaveBeenCalledTimes(2)
+  await act(async () => { h.pending[1]!.deferred.resolve(result('v2')) })
+  expect(screen.getByText('PDF v2')).toBeTruthy()
+  expect(h.h.instance.getSnapshot().byTab[TAB_ID]?.loading).toBe(false)
+})
+
 it.each(['replace', 'close', 'hide'] as const)('retires pending conversion on %s and ignores a late rejection', async (transition) => {
   const h = setup()
   h.h.bytes.mockResolvedValue({ ok: true, value: { absolutePath: ABSOLUTE_PATH, version: 'v1', offset: 0, eof: true, data: new Uint8Array() } })
   const mounted = render(<h.View />)
+  const previous = h.request()
   if (transition === 'replace') mounted.rerender(<h.View renderer={false} />)
   else if (transition === 'close') act(() => { h.h.controller.abort() })
   else mounted.unmount()
+  if (transition !== 'hide') act(() => { previous.failed() })
   expect(h.pending[0]!.signal.aborted).toBe(true)
   await act(async () => { h.pending[0]!.deferred.reject(new Error('late error')) })
   if (transition === 'close') {

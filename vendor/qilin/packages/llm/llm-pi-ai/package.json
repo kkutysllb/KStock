@@ -1,7 +1,7 @@
 {
   "name": "@qilin/llm-pi-ai",
   "description": "pi-ai-backed DeepSeek adapter for the QiLin LLM seam (design-verification twin of qilin-llm-deepseek)",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -30,33 +30,34 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/attachment": "workspace:^",
-    "@qilin/authorization": "workspace:^",
-    "@qilin/credentials": "workspace:^",
-    "@qilin/fs": "workspace:^",
-    "@qilin/launch-environment": "workspace:^",
-    "@qilin/llm": "workspace:^",
-    "@qilin/settings": "workspace:^",
-    "@qilin/timeout": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/attachment": "workspace:*",
+    "@qilin/authorization": "workspace:*",
+    "@qilin/credentials": "workspace:*",
+    "@qilin/fs": "workspace:*",
+    "@qilin/launch-environment": "workspace:*",
+    "@qilin/llm": "workspace:*",
+    "@qilin/settings": "workspace:*",
+    "@qilin/timeout": "workspace:*"
   },
   "dependencies": {
-    "@qilin/brand": "workspace:^",
-    "@qilin/util-values": "workspace:^",
-    "@qilin/schemastery": "workspace:^",
-    "@earendil-works/pi-ai": "^0.85.1"
+    "@qilin/brand": "workspace:*",
+    "@qilin/util-values": "workspace:*",
+    "@qilin/schemastery": "workspace:~",
+    "@earendil-works/pi-ai": "^0.87.1"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/attachment": "workspace:^",
-    "@qilin/authorization": "workspace:^",
-    "@qilin/credentials": "workspace:^",
-    "@qilin/fs": "workspace:^",
-    "@qilin/launch-environment": "workspace:^",
-    "@qilin/llm": "workspace:^",
-    "@qilin/llm-deepseek": "workspace:^",
-    "@qilin/settings": "workspace:^",
-    "@qilin/timeout": "workspace:^",
-    "@qilin/http-proxy": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/attachment": "workspace:*",
+    "@qilin/authorization": "workspace:*",
+    "@qilin/credentials": "workspace:*",
+    "@qilin/fs": "workspace:*",
+    "@qilin/launch-environment": "workspace:*",
+    "@qilin/llm": "workspace:*",
+    "@qilin/llm-deepseek": "workspace:*",
+    "@qilin/llm-deepseek-api-key": "workspace:*",
+    "@qilin/settings": "workspace:*",
+    "@qilin/timeout": "workspace:*",
+    "@qilin/http-proxy": "workspace:*"
   }
 }

@@ -39,13 +39,26 @@ kind: "package-reference"
 
 插件开关只更新 profile 的 `cordis.patch.yml` 中最后一条匹配覆盖项的 `disabled`；没有匹配项时追加。匹配依据是条目 id，以及覆盖项声明的模块名称。组合包开关修改 `package.json` 的有序 `qilin.profile.bundles` 列表。关闭保留依赖；开启追加到列表末尾，可能改变配置优先级。安装新组合包默认启用。home 和单次启动 patch 保留更高优先级。
 
-`inspect(spec)` 在任何东西安装之前读出 spec 指向什么：注册表包名通过 `pnpm view` 询问注册表，在 profile 目录中运行，因而与安装使用同样的注册表与代理设置；绝对路径读取其 `package.json`；git 地址或 tarball 只答复自己的形式。答复携带名称、版本、描述以及该包是否声明组合包，否则给出 `problem`：`invalid-spec`、`already-installed`、`not-found`、`not-a-package`、`not-a-bundle`、`network` 或 `unknown`。调用方的 `signal` 或 `inspectTimeoutMs` 会结束查询。
+`registries()` 给出管理器询问的注册表：配置的首选、按序的备用源，以及 pnpm 在 profile 中自己配置指定的那个（通过 `pnpm config get registry` 读取）。被请求的源属于该集合时排在最前，否则单独询问，因此私有源不会回落到公共源；可被另一个源改变的失败会继续下一个，而由 spec 自身主机造成的失败不会。`inspect(spec, options)` 在任何东西安装之前读出 spec 指向什么：注册表包名通过 `pnpm view` 询问注册表，在 profile 目录中运行，因而与安装使用同样的注册表与代理设置；绝对路径读取其 `package.json`；git 地址或 tarball 只答复自己的形式。答复携带名称、版本、描述以及该包是否声明组合包，否则给出 `problem`：`invalid-spec`、`already-installed`、`not-found`、`not-a-package`、`not-a-bundle`、`network` 或 `unknown`。调用方的 `signal` 或 `inspectTimeoutMs` 会结束查询。
 
-`installBundle` 接受调用方生成的 `requestId`，`plugin-manager/install-log` 在其下流式转发每次 pnpm 运行的输出，`plugin-manager/install-state` 通告 `installing`、`cancelling` 与 `applying`。`cancelInstall(requestId)` 停止运行，只在 pnpm 退出且文件恢复后答复 `cancelled`，组合包已在应用时答复 `too-late`，其他 id 答复 `not-running`；安装调用随后报告 `application: 'cancelled'`。失败、被取消或装入了没有组合包 patch 的包的运行，会把 `package.json` 与 `pnpm-lock.yaml` 恢复原样；`packageResult.kind` 按退出方式与输出对失败运行分类，`bundle` 给出完成的运行新增的包。`listBundles` 携带每个组合包的一句话简介（包的 `description`）、其 patch 声明的行及其存活条目，以及它覆盖的内置行；它列出 profile 自己的组合包、安装提供的组合包，以及被选中却没有组合包 patch 的名字（作为 `not-bundle` 问题），未选中的普通依赖不列出。启动器的 `OPTIONAL_BUNDLES` 点名的组合包是 `optional`：随安装提供、默认关闭、由用户开启，永不可卸载，也不被任何随附模板选中（[理由](../../../.agents/notes/implemented/process/2026-09-15-shipped-optional-bundles.zh.md)）。每个完成的操作都会发出 `plugin-manager/changed`；在管理器之外应用的一代 patch（HMR 监视到 CLI 或手工编辑后）不发通知，页面要到下一次读取才知道。
+`installBundle` 在启动 pnpm 前用 `git ls-remote` 检查 GitHub 仓库，在 profile 目录中运行，并沿用安装器自己的 Git 与代理配置。`githubConnectionTimeoutMs` 默认 5000 毫秒，只限制这次检查，不限制包下载或构建。检查会禁用凭据助手与交互提示；只有网络故障和超时会阻止安装，此时报告 `failedAt: 'spec-host'`，并附本次运行的失败类别与诊断日志。认证、仓库查找与其他失败都留给 pnpm，包括它的 HTTPS 回退到 SSH。取消与管理器销毁会终止该检查及其子进程。注册表包、路径、tarball 与其他 Git 主机跳过该检查；可达的仓库仍可能在下载或组合包校验时失败。
+
+`installBundle` 接受调用方生成的 `requestId`，`plugin-manager/install-log` 在其下流式转发每次 pnpm 运行的输出，`plugin-manager/install-state` 通告 `installing`、`cancelling` 与 `applying`。`cancelInstall(requestId)` 停止运行，只在 pnpm 退出且文件恢复后答复 `cancelled`，组合包已在应用时答复 `too-late`，其他 id 答复 `not-running`；安装调用随后报告 `application: 'cancelled'`。失败、被取消或装入了没有组合包 patch 的包的运行，会把 `package.json` 与 `pnpm-lock.yaml` 恢复原样；`packageResult.kind` 按退出方式与输出对失败运行分类，`bundle` 给出完成的运行新增的包。`listBundles` 携带每个组合包的一句话简介（包的 `description`）、其 patch 声明的行及其存活条目，以及它覆盖的内置行；它列出 profile 自己的组合包、安装提供的组合包，以及被选中却没有组合包 patch 的名字（作为 `not-bundle` 问题），未选中的普通依赖不列出。启动器的 `OPTIONAL_BUNDLES` 点名的组合包是 `optional`：随安装提供、默认关闭、由用户开启，永不可卸载，也不被任何随附模板选中（[理由](../../../.agents/notes/implemented/process/2026-09-15-shipped-optional-bundles.zh.md)）。`updatable` 回答「装进 profile 的副本是否优先于安装实例解析」——即 profile 自己安装的组合包，或解析权归 profile 的随附组合包——这正是能否原地升级的依据。被随附模板点名的层还会报告 `readOnlyReason: 'shipped-layer'`：它随发版提供，不能从层列表里摘除，只能在行级停用。每个完成的操作都会发出 `plugin-manager/changed`；在管理器之外应用的一代 patch（HMR 监视到 CLI 或手工编辑后）不发通知，页面要到下一次读取才知道。
 
 `checkUpdates()` 把 `listBundles` 列出且能读作组合包的每一层与该包注册表的 `latest` dist-tag 比较，每个包一次有超时的查询；被选中却没有组合包 patch 的依赖不在其中，因为任何更新都动不了它。查询失败或没有该标签时报告 `latestVersion: null`，而不是让整次列举失败，调用方因此读到的是未知版本。`catalog(query, page)` 搜索 GitHub 上打了 `dsh-plugin` 主题标签的仓库，按 star 从多到少排列，返回该页仓库以及是否还有下一页；不是正整数的页码按第一页处理，2xx 之外的状态码抛出。两次查询都以十秒为上限。
 
 pnpm 11 拦下依赖脚本时，失败的安装在 `pendingBuilds` 里报告 profile 中所有待决定的包名，包括先前尝试留下的；失败的运行会恢复 `package.json` 与 `pnpm-lock.yaml`，但有意不恢复 pnpm 记录这些名字的 `pnpm-workspace.yaml`。Web 插件页提供**允许这些脚本并重试**；工具可以在用户于对话中批准这些脚本后，通过 `install_bundle` 的 `approvedBuilds` 代为授权。服务只校验待决定的名字，不核实对话中的批准。授权按包名保存在当前 profile，允许以宿主用户的权限执行命令，并在再次安装失败后保留。只能批准当前未决定的名字；已有的拒绝与通配规则不能通过此操作覆盖。`allowBuilds` 里出现 YAML 锚点或别名时拒绝授权。重试保留原来的启用选择。
+
+<a id="version-compatibility-and-exemptions"></a>
+### 版本兼容性与豁免
+
+点名包的安装命令（`add`，或带规格的 `install`）会在 pnpm 运行前被检查：本地路径从它自己的 `package.json` 读取，注册表规格则通过 pnpm 的注册表查询解析出该范围选中的版本及其声明的 peer。不兼容的 qilin peer 会在 pnpm 运行前拒绝这次操作，因此不会下载任何内容，也不会执行构建脚本；调用方随请求给出的构建授权在该检查之前就已记录，会继续保留。git 或 tarball 规格需要先真正抓取，因此在安装之后才判定：操作随后恢复 profile 清单与 lockfile，按恢复后的 lockfile 重新安装（profile 原本没有 lockfile 时，按恢复后的清单重新安装且不新建 lockfile），并报告该恢复是否成功；已被允许的构建脚本副作用可能保留。本次运行没有改动的依赖永远不会阻塞无关操作：它保持安装，运行输出一条点名它的警告，profile 启动时拒绝它。`enabled: false` 的安装请求同样被检查。启动期检查独立运行；范围语义见 [App boot](../app-boot/README.zh.md#profiles)。版本豁免不授权依赖脚本。
+
+一条豁免是 profile 自己 `compatibility.json` 中精确的 `package-name@version` 到精确 QiLin 运行时版本列表的映射，位于 `package.json` 与 `cordis.patch.yml` 之旁。写入它不会改动任何依赖、组合包选择或 patch 层。授权只覆盖那一对确切组合：插件升级和 QiLin 升级都不会继承许可，撤销某对组合中的某个运行时版本也会保留它的其它授权。用 `plugin_manager` 的 `list_version_exemptions` 取得运行时版本与已保存的授权，再用 `set_version_exemption` 传入 `target`、`runtimeVersion` 与 `enabled`。授权还要求 `acceptRisk: true`，且只能在警告用户不兼容插件可能导致崩溃或数据丢失、并取得用户对这一对组合的明确许可之后。服务校验的是确认与版本，而不是对话历史。撤销可以移除历史版本的授权。
+
+授权在下一次组态时生效。支持热更新的 profile 会重组，被授权的插件因此在正在运行的会话中挂载，结果报告 `applied`；仅启动时加载的 profile 保留当前条目直到重启，并报告 `restart-required`。
+
+CLI 提供 `qilin plugin --profile <profile> version-exemptions`、`allow-version <package@version> --qilin-version <runtime> --accept-risk` 与 `revoke-version <package@version> --qilin-version <runtime>`。授权会在保存前打印风险警告。兼容性拒绝会带上 `incompatible-version` 代码以及每个被拒绝包的 `name`、`version`、`runtimeVersion` 与未满足的 `peers`；各界面自行渲染该记录。Web 页面通过自己的本地化字典表述，CLI 拒绝则打印确切的 `allow-version` 命令。用工具或 CLI 授予豁免后，重试原来的操作。
 
 ### 配置
 
@@ -53,6 +66,9 @@ pnpm 11 拦下依赖脚本时，失败的安装在 `pendingBuilds` 里报告 pro
 |---|---|---|
 | `pnpmCommand` | `pnpm` | pnpm 可执行文件名或路径，与 `qilin plugin` 命令一样通过 `PATH` 解析。 |
 | `inspectTimeoutMs` | `20000` | 单次检查所做注册表查询的上限，单位毫秒。 |
+| `githubConnectionTimeoutMs` | `5000` | 安装前 GitHub 仓库检查的时限，单位毫秒。 |
+| `registry` | — | 查询与安装首先询问的注册表，http(s) URL；缺省时用 pnpm 自身配置指定的那个。 |
+| `fallbackRegistries` | `['https://registry.npmmirror.com/']` | 前一个不可达或没有该包副本时，依次询问的注册表。 |
 | `outputBytes` | `16384` | 每次操作返回的 pnpm 诊断字节上限；完整输出保留在返回的日志路径中。 |
 | `lockWaitMs` | `120000` | 获取 profile 写锁的最长等待毫秒数。 |
 
@@ -64,7 +80,7 @@ pnpm 11 拦下依赖脚本时，失败的安装在 `pendingBuilds` 里报告 pro
 <details>
 <summary>实现细节——点击展开</summary>
 
-服务与 `qilin plugin` 共用 [operations.ts](src/operations.ts) 中的包管理操作。启动器提供当前 profile；[QILIN HMR](../hmr/README.zh.md) 串行执行模块重载、文件监听和管理写入。每次刷新重新读取组合包选择与 patch 层，更新原有根 Include，并等待已移除插件释放资源及剩余 Loader 树稳定。CLI 与 service 操作共用 profile manifest 写锁，防止并发包操作和 manifest 写入。HMR 不获取该锁。pnpm 在 HMR 队列之外执行；安装在 pnpm 成功后选入组合包，删除则在执行 pnpm 前取消选入并完成卸载。仅依赖字段变化不会触发配置重载。
+服务与 `qilin plugin` 共用 [operations.ts](src/operations.ts) 中的包管理操作。启动器提供当前 profile；[QILIN HMR](../hmr/README.zh.md) 串行执行模块重载、文件监听和管理写入。每次刷新重新读取组合包选择与 patch 层，更新原有根 Include，并等待已移除插件释放资源及剩余 Loader 树稳定。CLI 与 service 操作共用 profile manifest 写锁，防止并发包操作和 manifest 写入。HMR 不获取该锁。pnpm 在 HMR 队列之外执行；安装在 pnpm 成功后选入组合包，删除则在执行 pnpm 前取消选入并完成卸载。每个操作把它启动的 pnpm 运行记录在 `.plugin-manager/run.json` 中，并在运行结束时删除该记录。持有者进程已退出的锁会被下一个写入方接管，但该进程的 pnpm 进程树可能仍在运行，因此发现记录的操作最多等待五秒让记录中的运行停止，否则不运行 pnpm，并以指明该进程与记录文件的诊断失败。仅依赖字段变化不会触发配置重载。
 
 结果包含最后尝试的阶段、目标、磁盘变化、应用状态和错误码。Web 词典呈现管理文案；pnpm 与 Loader 的诊断保持原样。无关的已有故障作为警告返回；新出现、配置变化后的故障，以及显式启用目标未激活，都会使操作失败。失败或被取消的安装会恢复 pnpm 运行前快照的 manifest 与 lockfile（[理由](../../../.agents/notes/implemented/architecture/2026-09-15-guided-plugin-installation.zh.md)）；失败的删除保留部分改动和诊断。安装按 request id 跟踪到调用结束，因此取消只针对一次运行，并且不取 profile 锁就能等待它结束。CLI 继承认证环境和终端描述符；service 使用清理后的环境并捕获输出。管理器直接读取文件和 Loader 状态，不维护第二份目标状态注册表，因此不发布单独的运行时不变式伴生入口。
 

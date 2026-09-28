@@ -1,7 +1,7 @@
 {
   "name": "@qilin/client-ui-settings-general",
   "description": "Settings shell plugin: the General section, shell trigger/header chrome content, and settings dictionaries",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -31,10 +31,11 @@
   "qilin": {
     "client": {
       "inject": [
-        "@qilin/client-ui-settings",
-        "@qilin/client-locale",
-        "@qilin/client-connection",
         "@qilin/api-remotes",
+        "@qilin/client-connection",
+        "@qilin/client-locale",
+        "@qilin/client-shortcuts",
+        "@qilin/client-ui-settings",
         "@qilin/client-ui-sidebar"
       ],
       "platform": "web"
@@ -46,28 +47,31 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@qilin/schemastery": "workspace:^"
+    "@qilin/schemastery": "workspace:~"
   },
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/api-remotes": "workspace:^",
-    "@qilin/client-connection": "workspace:^",
-    "@qilin/client-locale": "workspace:^",
-    "@qilin/client-store": "workspace:^",
-    "@qilin/client-test-runtime": "workspace:^",
-    "@qilin/client-ui-primitives": "workspace:^",
-    "@qilin/client-ui-settings": "workspace:^",
-    "@qilin/client-ui-sidebar": "workspace:^",
-    "@qilin/client-ui-slots": "workspace:^",
-    "@qilin/kylin": "workspace:^",
+    "@qilin/api-remotes": "workspace:*",
+    "@qilin/client-connection": "workspace:*",
+    "@qilin/client-locale": "workspace:*",
+    "@qilin/client-shortcuts": "workspace:*",
+    "@qilin/client-store": "workspace:*",
+    "@qilin/client-test-runtime": "workspace:*",
+    "@qilin/client-ui-primitives": "workspace:*",
+    "@qilin/client-ui-renderer": "workspace:*",
+    "@qilin/client-ui-session": "workspace:*",
+    "@qilin/client-ui-settings": "workspace:*",
+    "@qilin/client-ui-sidebar": "workspace:*",
+    "@qilin/client-ui-slots": "workspace:*",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/settings": "workspace:*",
     "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.0",
+    "clsx": "^2.0.0",
     "react": "^18.2.0",
-    "@qilin/client-ui-renderer": "workspace:^",
-    "@qilin/client-ui-session": "workspace:^",
-    "@qilin/settings": "workspace:^",
-    "clsx": "^2.0.0"
+    "react-dom": "^18.2.0"
   },
   "files": [
     "lib/index.js",

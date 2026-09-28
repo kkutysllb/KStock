@@ -1,7 +1,7 @@
 {
   "name": "@qilin/web-search-exa",
   "description": "Exa-backed search provider for the QiLin web capability seam (ctx.web)",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -30,17 +30,17 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/launch-environment": "workspace:^",
-    "@qilin/web": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/launch-environment": "workspace:*",
+    "@qilin/web": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   },
   "dependencies": {
-    "@qilin/schemastery": "workspace:^"
+    "@qilin/schemastery": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/launch-environment": "workspace:^",
-    "@qilin/web": "workspace:^",
-    "@qilin/kylin": "workspace:^",
-    "@qilin/http-proxy": "workspace:^"
+    "@qilin/launch-environment": "workspace:*",
+    "@qilin/web": "workspace:*",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/http-proxy": "workspace:*"
   }
 }

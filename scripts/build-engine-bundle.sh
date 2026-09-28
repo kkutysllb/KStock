@@ -38,8 +38,12 @@ esac
 UPSTREAM_EXE_BASE="deepseek-harness-sdk-runtime-$TARGET"
 
 # ── 1. KStock 插件包构建（宿主 + 四库界面 + 品牌 + 账户 + 定时任务）──────
-echo "==> 重放引擎本地补丁（patch_vendor_engine，幂等）"
+echo "==> 重放引擎本地补丁（patch_vendor_engine + patch_vendor_skills，幂等）"
 "$REPO_ROOT/scripts/python.sh" "$REPO_ROOT/scripts/patch_vendor_engine.py"
+# 补丁 14（repairStagedScope）改的是 build-exe-for-python-sdk.ts 本身，必须
+# 先于步骤 2 的 exe 构建重放——此前只在步骤 3 重放，Windows staging 修复
+# 实际从未参与单文件构建（B3）。两条均 fail-loud，锚点失配即中止。
+"$REPO_ROOT/scripts/python.sh" "$REPO_ROOT/scripts/patch_vendor_skills.py"
 
 echo "==> 构建 KStock 插件包"
 for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui chan-ui automation; do

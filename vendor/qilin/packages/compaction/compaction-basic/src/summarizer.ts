@@ -5,9 +5,10 @@
  */
 
 import type { Context } from '@qilin/kylin'
-import { contentHasImage, createUserMessage, BlockAssembler, LlmError } from '@qilin/llm'
+import { contentHasImage, BlockAssembler, LlmError } from '@qilin/llm'
+import { deepFreeze } from '@qilin/util-values'
 import type {
-  ContentBlock, FinishReason, GenerateOptions, Message, TokenUsage, ToolSchema,
+  ContentBlock, FinishReason, GenerateOptions, Message, RequestMessage, TokenUsage, ToolSchema,
 } from '@qilin/llm'
 import type { Agent } from '@qilin/agent'
 
@@ -141,17 +142,18 @@ export async function summarizeWithLlm(
   }
 
   const assembler = new BlockAssembler()
-  const messages: Message[] = [
+  const messages: RequestMessage[] = [
     ...input.messages,
-    createUserMessage({
+    deepFreeze({
+      role: 'user',
       content: [{ type: 'text', text: COMPACTION_INSTRUCTION }],
-      source: { kind: 'plugin', plugin: 'qilin-compaction-basic' },
     }),
   ]
   const options: GenerateOptions = {
     provider: target.provider,
     model: target.model,
     messages,
+    toolHistory: agent.session.toolHistory(),
     ...input.tools === undefined ? {} : { tools: [...input.tools] },
     maxTokens: config.maxTokens,
     sessionId: agent.session.id,

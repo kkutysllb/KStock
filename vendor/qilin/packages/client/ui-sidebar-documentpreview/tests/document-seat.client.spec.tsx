@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { SlotTestRuntime } from '@qilin/client-test-runtime'
+import { createSnapshotStore } from '@qilin/client-store'
 import { LocaleRuntime } from '@qilin/client-locale/client'
 import type { SessionId } from '@qilin/session/types'
 import type { ClientRemote } from '@qilin/api-gateway/client'
@@ -37,6 +38,14 @@ async function boot() {
   const rt = await SlotTestRuntime.create()
   runtime = rt
   rt.ctx.provide('layout', { openRightbar: vi.fn(), closeRightbar: vi.fn() } as never)
+  rt.ctx.provide('configForms', { developerTools: { enabled: createSnapshotStore(true) } } as never)
+  // The retained Session Views follow the Workspace UI's main selection.
+  rt.ctx.provide('uiWorkspace', {
+    selection: {
+      getSnapshot: () => ({ sessionId: SESSION }),
+      subscribe: () => () => {},
+    },
+  } as never)
   const locale = new LocaleRuntime(rt.ctx)
   rt.ctx.provide('locale', locale)
   rt.slots.installLocale(locale)

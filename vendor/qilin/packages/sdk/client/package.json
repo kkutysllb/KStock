@@ -1,7 +1,7 @@
 {
   "name": "@qilin/sdk-client",
   "description": "TypeScript client SDK for driving a QiLin runtime subprocess over stdio JSON-RPC: the DeepSeekHarness high-level turns API and the lower-level HarnessClient",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -32,15 +32,15 @@
     "@qilin/cli": "workspace:*"
   },
   "peerDependencies": {
-    "@qilin/llm": "workspace:^",
-    "@qilin/sdk-protocol": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/llm": "workspace:*",
+    "@qilin/sdk-protocol": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/llm": "workspace:^",
-    "@qilin/sdk-protocol": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/llm": "workspace:*",
+    "@qilin/sdk-protocol": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   }
 }

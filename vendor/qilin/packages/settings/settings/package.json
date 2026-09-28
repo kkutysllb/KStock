@@ -1,7 +1,7 @@
 {
   "name": "@qilin/settings",
   "description": "Abstract user-settings seam (ctx.settings) for the QiLin",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -40,20 +40,22 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/brand": "workspace:^",
-    "@qilin/invariants": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/schemastery": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/brand": "workspace:*",
+    "@qilin/invariants": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/schemastery": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/brand": "workspace:^",
-    "@qilin/invariants": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/schemastery": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/brand": "workspace:*",
+    "@qilin/invariants": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/schemastery": "workspace:~",
+    "@qilin/cosmokit": "workspace:~"
   },
   "dependencies": {
-    "@qilin/util-values": "workspace:^"
+    "@qilin/cosmokit": "workspace:~",
+    "@qilin/util-values": "workspace:*"
   }
 }

@@ -26,11 +26,13 @@ import { IMAGE_BODY_ID } from '../src/client/image/index.ts'
 import { LazyPdfBody } from '../src/client/pdf/LazyPdfBody.tsx'
 import { PDF_BODY_ID } from '../src/client/pdf/index.ts'
 import { CodeBody } from '../src/client/code/CodeBody.tsx'
+import { LazyExcelBody } from '../src/client/excel/LazyExcelBody.tsx'
 import { en, zh } from '../src/client/locales.ts'
 import { RemoteError } from '@qilin/client-test-runtime'
+import { createSnapshotStore } from '@qilin/client-store'
 import type { textFace } from '../src/client/face.ts'
 import type { TextStore } from '../src/client/store.ts'
-import { FILE, SESSION, TAB_ID, page } from './fixtures.client.ts'
+import { FILE, SESSION, TAB_ID, createResources, page } from './fixtures.client.ts'
 
 interface Recorded {
   name: string
@@ -43,6 +45,8 @@ interface Recorded {
 
 async function boot() {
   const ctx = new Context()
+  ctx.provide('resources', createResources())
+  ctx.provide('configForms', { developerTools: { enabled: createSnapshotStore(true) } } as never)
   const tabs = new SidebarRightTabRegistry(ctx)
   const registered: Recorded[] = []
   const slots = {
@@ -97,6 +101,7 @@ describe('ui-sidebar-documentpreview apply', () => {
       ['sidebar.right.tab.document', '@qilin/client-ui-sidebar-documentpreview/code', 'sidebarCodePreview', CodeBody],
       ['sidebar.right.tab.document', '@qilin/client-ui-sidebar-documentpreview/office', 'sidebarOffice', OfficeBody],
       ['sidebar.right.tab.document.office.pdf', '@qilin/client-ui-sidebar-documentpreview/office', 'sidebarPdf', LazyPdfBody],
+      ['sidebar.right.tab.document', '@qilin/client-ui-sidebar-documentpreview/excel', 'sidebarExcel', LazyExcelBody],
     ])
     expect(registered[0]?.store).toBeDefined()
     expect(typeof registered[0]?.inject).toBe('function')
@@ -110,7 +115,7 @@ describe('ui-sidebar-documentpreview apply', () => {
     expect(dictionaries.size).toBe(0)
   })
 
-  it('injects ordinary Remote reads without requiring a Resource service', async () => {
+  it('injects ordinary Remote reads independently of resource metadata', async () => {
     const { registered, workspaceFiles } = await boot()
     const registration = registered.find(entry => entry.component === TextPreview)
     if (registration === undefined) throw new Error('missing preview registration')

@@ -1,7 +1,7 @@
 {
   "name": "@qilin/client-locale",
   "description": "Locale plugin: Host-backed preference, extensible language catalog, browser fallback, and typed built-in dictionaries",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -42,24 +42,25 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/api-remotes": "workspace:^",
-    "@qilin/client-store": "workspace:^",
-    "@qilin/client-test-runtime": "workspace:^",
-    "@qilin/client-ui-primitives": "workspace:^",
-    "@qilin/client-ui-renderer": "workspace:^",
-    "@qilin/client-ui-settings": "workspace:^",
-    "@qilin/client-ui-slots": "workspace:^",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/api-remotes": "workspace:*",
+    "@qilin/client-store": "workspace:*",
+    "@qilin/client-test-runtime": "workspace:*",
+    "@qilin/client-ui-primitives": "workspace:*",
+    "@qilin/client-ui-renderer": "workspace:*",
+    "@qilin/client-ui-settings": "workspace:*",
+    "@qilin/client-ui-slots": "workspace:*",
+    "@qilin/package-manifest": "workspace:*",
     "@types/react": "~18.3.1",
     "react": "^18.2.0",
-    "@qilin/client-connection": "workspace:^",
-    "@qilin/settings": "workspace:^"
+    "@qilin/client-connection": "workspace:*",
+    "@qilin/settings": "workspace:*"
   },
   "dependencies": {
-    "@qilin/schemastery": "workspace:^"
+    "@qilin/schemastery": "workspace:~"
   },
   "files": [
     "lib/index.js",

@@ -11,7 +11,7 @@ import { JSDOM } from 'jsdom'
 import ts from 'typescript'
 import { applyEntryPatches, type PatchOptions } from '@qilin/kylin-plugin-include'
 import type { EntryOptions } from '@qilin/kylin-plugin-loader'
-import { loadOverlayPatches } from '../packages/boot/app-boot/src/index.ts'
+import { loadOverlayPatches, resolveBundleDir } from '../packages/boot/app-boot/src/index.ts'
 import { composeEntries } from '../packages/boot/app-boot/src/profile.ts'
 import { isCordisGroupEntry, loadCordisYaml } from './cordis-yaml.ts'
 import {
@@ -28,11 +28,14 @@ const RUNTIME_SECTIONS = ['dependencies', 'optionalDependencies', 'peerDependenc
 
 interface Manifest {
   name: string
+  icon?: unknown
+  exports?: Record<string, unknown>
   dependencies?: Record<string, string>
   optionalDependencies?: Record<string, string>
   peerDependencies?: Record<string, string>
   devDependencies?: Record<string, string>
   qilin?: { bundle?: { patch?: string }; configTrees?: Array<{ path: string }> }
+  dsh?: { bundle?: { patch?: string } }
 }
 
 interface Package {
@@ -78,7 +81,8 @@ export function verifyDefaultProductIsolation(root: string): ProductIsolationRes
   if (cli?.manifest.name !== '@qilin/cli') {
     failures.push('apps/cli/package.json must identify @qilin/cli')
   }
-  // The bundles the launcher ships switched off: each a runtime dependency of the installation that is a bundle, none a default.
+  // The bundles the launcher ships switched off: each a runtime dependency of the installation that is a bundle
+  // with an icon and locale display metadata for the plugin manager's Official group, none a default.
   const profilePath = resolve(root, PROFILE_SOURCE)
   const selection = existsSync(profilePath) ? profilePackages(readFileSync(profilePath, 'utf8')) : undefined
   const optionalBundles = new Set(selection?.optionalBundles ?? [])
@@ -86,8 +90,15 @@ export function verifyDefaultProductIsolation(root: string): ProductIsolationRes
     if (cli?.manifest.dependencies?.[name] === undefined) {
       failures.push(`${PROFILE_SOURCE}: optional bundle ${name} must be a runtime dependency of apps/cli`)
     }
-    if (packages.get(name)?.manifest.qilin?.bundle?.patch === undefined) {
+    const manifest = packages.get(name)?.manifest
+    if (manifest?.qilin?.bundle?.patch === undefined) {
       failures.push(`${PROFILE_SOURCE}: optional bundle ${name} must declare qilin.bundle.patch`)
+    }
+    if (typeof manifest?.icon !== 'string') {
+      failures.push(`${PROFILE_SOURCE}: optional bundle ${name} must declare an icon`)
+    }
+    if (manifest?.exports?.['./locale/*.json'] === undefined) {
+      failures.push(`${PROFILE_SOURCE}: optional bundle ${name} must export ./locale/*.json display metadata`)
     }
   }
 
@@ -236,10 +247,32 @@ export function verifyDefaultProductIsolation(root: string): ProductIsolationRes
       }
       if (optionalBundles.has(name)) failures.push(`${PROFILE_SOURCE}: optional bundle ${name} must not be a default bundle`)
     }
+    // A template bundle the workspace does not hold ships as a runtime
+    // dependency of the installation; its layer still joins the composed scan.
+    const installedBundleLayer = (name: string): PatchOptions[] | undefined => {
+      if (cli === undefined) return undefined
+      let directory: string
+      try {
+        directory = resolveBundleDir('verify-default-product-isolation', name, resolve(cli.directory, 'package.json'), cli.directory)
+      } catch {
+        return undefined
+      }
+      const manifest = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8')) as Manifest
+      const patch = manifest.qilin?.bundle?.patch ?? manifest.dsh?.bundle?.patch
+      return patch === undefined ? undefined : loadOverlayPatches('verify-default-product-isolation', resolve(directory, patch))
+    }
+    for (const name of selection.webBundles) {
+      if (packages.has(name) || cli?.manifest.dependencies?.[name] !== undefined) continue
+      failures.push(`${PROFILE_SOURCE}: default Web bundle ${name} must be a workspace package or a runtime dependency of apps/cli`)
+    }
     const webLayers = selection.webBundles.flatMap((name) => {
       const pkg = packages.get(name)
-      const patch = pkg?.manifest.qilin?.bundle?.patch
-      if (pkg === undefined || patch === undefined) return []
+      if (pkg === undefined) {
+        const installed = installedBundleLayer(name)
+        return installed === undefined ? [] : [installed]
+      }
+      const patch = pkg.manifest.qilin?.bundle?.patch
+      if (patch === undefined) return []
       return [loadOverlayPatches('verify-default-product-isolation', resolve(pkg.directory, patch))]
     })
     if (webLayers.length !== selection.webBundles.length) {

@@ -9,9 +9,9 @@
  */
 import type { Context as ClientContext } from '@qilin/kylin'
 import type { BoundActions } from '@qilin/client-ui-slots'
-// Type-only: the ctx.settingsScope Context merge. Cross-plugin collaboration
+// Type-only: the ctx.configForms Context merge. Cross-plugin collaboration
 // goes through the service, never a value import (client bundle purity gate).
-import type { SettingsScope } from '@qilin/client-ui-settings/client'
+import type { ConfigForm } from '@qilin/client-ui-settings/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@qilin/client-locale/client'
 // Type-only: pulls the SlotRegistry service merge (ctx.slots).
@@ -20,7 +20,9 @@ import type { FontSizeRowInjected } from './FontSizeRow.tsx'
 import { FontSizeRow } from './FontSizeRow.tsx'
 import type { LineSpacingRowInjected } from './LineSpacingRow.tsx'
 import { LineSpacingRow } from './LineSpacingRow.tsx'
-import { createTypographyRowStore } from './settings-store.ts'
+import type { AppearanceRowInjected } from './AppearanceRow.tsx'
+import { AppearanceRow } from './AppearanceRow.tsx'
+import { createTypographyRowStore, createAppearanceRowStore } from './settings-store.ts'
 import { installThemeStyles } from './styles.ts'
 import { en, zh, type ThemeKey } from './locales.ts'
 import {
@@ -33,7 +35,8 @@ import {
 
 export type { FontSizeRowComponentProps, FontSizeRowInjected } from './FontSizeRow.tsx'
 export type { LineSpacingRowComponentProps, LineSpacingRowInjected } from './LineSpacingRow.tsx'
-export type { TypographyRowState } from './settings-store.ts'
+export type { AppearanceRowComponentProps, AppearanceRowInjected } from './AppearanceRow.tsx'
+export type { AppearanceRowState, TypographyRowState } from './settings-store.ts'
 export type { ThemeKey } from './locales.ts'
 export type { ThemePreference, ThemeSettings } from '../theme-settings.ts'
 
@@ -161,7 +164,7 @@ const BUILTIN_INSPECT_TOKENS: readonly ThemeTokenInspection[] = Object.freeze([
  */
 export class ThemeRuntime {
   private readonly ctx: ClientContext
-  private readonly host: SettingsScope<ThemeSettings>
+  private readonly host: ConfigForm<ThemeSettings>
   private themes: ThemeDefinition[] = [...BUILTIN_THEMES]
   private preference: ThemePreference
   private fontSize: number = bootstrapFontSize()
@@ -178,7 +181,7 @@ export class ThemeRuntime {
    * media-query and scope listeners are released through ctx.effect on dispose).
    * @param host - durable preference scope owned by the same plugin.
    */
-  constructor(ctx: ClientContext, host: SettingsScope<ThemeSettings>) {
+  constructor(ctx: ClientContext, host: ConfigForm<ThemeSettings>) {
     this.ctx = ctx
     this.host = host
     this.preference = DEFAULT_PREFERENCE
@@ -457,9 +460,9 @@ function dynamicToken(name: string): ThemeTokenInspection {
 /**
  * Required services: settings transport plus slots/locale for the Appearance
  * row. `remote` carries the forwarded settings invalidation that
- * `ctx.settingsScope.bind(spec)` subscribes to on this context.
+ * `ctx.configForms.get(entryId)` subscribes to on this context.
  */
-export const inject = ['slots', 'locale', 'remote', 'settingsScope']
+export const inject = ['slots', 'locale', 'remote', 'configForms']
 
 /**
  * Client plugin body: provide the theme service and register the
@@ -469,23 +472,42 @@ export const inject = ['slots', 'locale', 'remote', 'settingsScope']
  */
 export function apply(ctx: ClientContext): void {
   installThemeStyles(ctx)
-  const host = ctx.settingsScope.bind<ThemeSettings>({ namespace: THEME_SETTINGS_NAMESPACE })
+  const host = ctx.configForms.get<ThemeSettings>(THEME_SETTINGS_NAMESPACE)
   const theme = new ThemeRuntime(ctx, host)
   ctx.provide('theme', theme)
 
   ctx.effect(() => ctx.locale.register(SETTINGS_NS, { zh, en }), 'ui-theme: settings row dictionaries')
 
   const typographyStore = createTypographyRowStore()
-  // One store handle feeds both rows, but each registration may receive its
+  const appearanceStore = createAppearanceRowStore()
+  // One store handle feeds its rows, but each registration may receive its
   // own bound-actions face, so each keeps a slot rather than overwriting one.
+  let appearanceBound: BoundActions<typeof appearanceStore> | undefined
   let fontSizeBound: BoundActions<typeof typographyStore> | undefined
   let leadingBound: BoundActions<typeof typographyStore> | undefined
   const sync = (snapshot: ThemeSnapshot): void => {
-    const { fontSize, leading, revision } = snapshot
+    const { preference, fontSize, leading, revision } = snapshot
+    appearanceBound?.sync(preference, revision)
     fontSizeBound?.sync(fontSize, leading, revision)
     leadingBound?.sync(fontSize, leading, revision)
   }
   ctx.on('theme/change', sync)
+
+  const appearanceInjected = (actions: BoundActions<typeof appearanceStore>): AppearanceRowInjected => {
+    appearanceBound = actions
+    sync(theme.getTheme())
+    return {
+      setTheme: (id) => { theme.setTheme(id) },
+    }
+  }
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'appearance',
+    order: 10,
+    store: appearanceStore,
+    locale: SETTINGS_NS,
+    inject: appearanceInjected,
+  }, AppearanceRow))
 
   const fontSizeInjected = (actions: BoundActions<typeof typographyStore>): FontSizeRowInjected => {
     fontSizeBound = actions

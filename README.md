@@ -34,7 +34,7 @@ pnpm dev:desktop                      # 启动桌面端（壳自动拉起引擎�
 ```bash
 cd vendor/qilin
 KSTOCK_APP_DATA_DIR=~/.kstock QILIN_HOME=~/.kstock/qilin-home \
-KSTOCK_SKILLS_DIR=$PWD/../vendor/skills \
+KSTOCK_PRESETS_DIR=$PWD/../../kstock/presets \
 node --import tsx/esm apps/cli/src/bin.ts --profile kstock --port 18001
 ```
 

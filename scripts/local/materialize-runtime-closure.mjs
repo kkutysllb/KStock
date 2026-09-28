@@ -73,6 +73,8 @@ function firstSymlink(dir) {
 }
 
 function copyWithoutNestedModules(source, destination) {
+  // 作用域包（@qilin/x）的目标父目录需先存在——不依赖 cpSync 的自建行为。
+  mkdirSync(dirname(destination), { recursive: true });
   const nested = join(source, "node_modules");
   cpSync(source, destination, {
     recursive: true,
@@ -117,6 +119,46 @@ const stillMissing = Object.keys(manifest.dependencies ?? {}).filter(
 );
 if (stillMissing.length > 0) throw new Error(`materialize: 部署后仍缺失：${stillMissing.join(", ")}`);
 if (restored.length > 0) console.log(`    还原 legacy hoists：${restored.join(", ")}`);
+
+// ── 2.5 repairStagedScope（KStock 等价修复，对应上游 repairStagedScope）──
+/**
+ * pnpm 的 legacy deploy 可能把部分**传递**的 workspace 作用域包留在部署源而非
+ * 目标（restoreLegacyHoists 只覆盖清单里的直接依赖），例如
+ * @qilin/sandbox-windows-acl 可经 @qilin/sandbox-local 到达却在闭包里缺位——
+ * 运行时首个裸导入即失败。这里补齐作用域包，并为其非作用域依赖补拷。
+ */
+function repairStagedScope(sourceNodeModules, stagedNodeModules) {
+  const scopes = ["@qilin", "@deepseek-ai"];
+  const repaired = [];
+  const copyPackage = (name) => {
+    const destination = join(stagedNodeModules, name);
+    if (existsSync(join(destination, "package.json"))) return;
+    const source = join(sourceNodeModules, name);
+    if (!existsSync(join(source, "package.json"))) return;
+    copyWithoutNestedModules(source, destination);
+    repaired.push(name);
+  };
+  for (const scope of scopes) {
+    const scopeDir = join(sourceNodeModules, scope);
+    if (!existsSync(scopeDir)) continue;
+    for (const entry of readdirSync(scopeDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+      copyPackage(`${scope}/${entry.name}`);
+    }
+  }
+  for (const name of [...repaired]) {
+    const manifestPath = join(stagedNodeModules, name, "package.json");
+    if (!existsSync(manifestPath)) continue;
+    const pkgManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    for (const dependency of Object.keys(pkgManifest.dependencies ?? {})) {
+      if (dependency.startsWith("@")) continue;
+      copyPackage(dependency);
+    }
+  }
+  if (repaired.length > 0) console.log(`    补齐作用域包：${repaired.join(", ")}`);
+}
+
+repairStagedScope(DEPLOY_SOURCE_NODE_MODULES, join(staging, "node_modules"));
 
 // ── 3. materializeStagedLinks ───────────────────────────────────────
 const nodeModules = join(staging, "node_modules");

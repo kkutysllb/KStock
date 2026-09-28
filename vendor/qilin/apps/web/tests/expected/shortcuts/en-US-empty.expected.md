@@ -1,0 +1,10 @@
+- dialog "Keyboard shortcuts":
+  - banner:
+    - heading "Keyboard shortcuts" [level=2]
+    - button "Close keyboard shortcuts"
+  - search "Search shortcuts":
+    - searchbox "Search shortcuts": abc
+    - button "Clear search"
+  - status: No matching shortcuts
+  - contentinfo:
+    - button "Restore all defaults" [disabled]

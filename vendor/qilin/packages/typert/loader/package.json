@@ -1,7 +1,7 @@
 {
   "name": "@qilin/typert-loader",
   "description": "Loader integration for generated Typert package contributions",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -30,18 +30,18 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/kylin-plugin-loader": "workspace:^",
-    "@qilin/typert-registry": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin-plugin-loader": "workspace:~",
+    "@qilin/typert-registry": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   },
   "dependencies": {
-    "@qilin/schemastery": "workspace:^"
+    "@qilin/schemastery": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/app-boot": "workspace:^",
-    "@qilin/kylin-plugin-loader": "workspace:^",
-    "@qilin/typert-registry": "workspace:^",
-    "@qilin/kylin": "workspace:^",
+    "@qilin/app-boot": "workspace:*",
+    "@qilin/kylin-plugin-loader": "workspace:~",
+    "@qilin/typert-registry": "workspace:*",
+    "@qilin/kylin": "workspace:~",
     "zod": "^4.4.3"
   }
 }

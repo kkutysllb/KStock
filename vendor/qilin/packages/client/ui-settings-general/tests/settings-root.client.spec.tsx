@@ -7,9 +7,10 @@ import { makeTranslate } from '@qilin/client-test-runtime'
 import type { SessionListState } from '@qilin/api-session-controller/client'
 import { SessionId } from '@qilin/session/types'
 import type { SettingsRootComponentProps } from '../src/client/shell-contract.ts'
+import { createSettingsShellStore } from '../src/client/shell-store.ts'
+import { bindSnapshotSelector } from '@qilin/client-test-runtime'
 import { SettingsRoot } from '../src/client/SettingsRoot.tsx'
 import { en, zh } from '../src/client/locales.ts'
-import type { DesktopUpdateView } from '../src/client/desktop-update-bridge.ts'
 
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
@@ -50,7 +51,6 @@ function mount({
   wide = true,
   dictionary = en,
   connectionState = 'connected',
-  desktopUpdate = { failed: false, opening: false },
   onboardingActive = true,
   mainView = true,
   rows = [
@@ -67,7 +67,6 @@ function mount({
   wide?: boolean
   dictionary?: typeof en
   connectionState?: ConnectionSnapshot
-  desktopUpdate?: DesktopUpdateView
   onboardingActive?: boolean
   mainView?: boolean
   rows?: Row[]
@@ -101,10 +100,13 @@ function mount({
         updatedAt: 0,
       },
     },
-    phase: 'ready', subagentsByParent: {}, jobsBySession: {},
+    phase: 'ready', projectionsBySession: {},
   }
   const unusedHook = (() => { throw new Error('unused by SettingsRoot') }) as never
+  const shell = createSettingsShellStore().create()
   const props: SettingsRootComponentProps = {
+    useStore: bindSnapshotSelector(shell),
+    actions: shell.actions,
     useSessions: select => select(sessions),
     useSessionStatus,
     usePanelInfo, useSessionRetainInfo: () => undefined, useResource,
@@ -115,8 +117,6 @@ function mount({
       openHandlers.add(handler)
       return () => { openHandlers.delete(handler) }
     },
-    openDesktopUpdate: () => {},
-    useDesktopUpdate: select => select(desktopUpdate),
     t: makeTranslate(dictionary),
     useConnectionState: (select) => {
       const [, force] = useState(0)
@@ -159,12 +159,8 @@ function mount({
     })
   }
   requestMountedOpen = () => { requestOpen() }
-  const setDesktopUpdate = (next: DesktopUpdateView) => {
-    desktopUpdate = next
-    view.rerender(<SettingsRoot {...props} />)
-  }
   return {
-    view, renderSlot, bump, listeners, reconnect, setConnectionState, setDesktopUpdate, requestOpen,
+    view, renderSlot, bump, listeners, reconnect, setConnectionState, requestOpen,
     openHandlers,
   }
 }
@@ -213,9 +209,12 @@ describe('settings shell open channel', () => {
     const b = mount()
     b.requestOpen('models')
 
-    const navButtons = within(screen.getByRole('navigation')).getAllByRole('button')
+    const navigation = screen.getByRole('navigation')
+    const navButtons = within(navigation).getAllByRole('button')
     expect(navButtons[navButtons.length - 1]?.textContent).toContain('About QiLin')
-    expect(screen.getByRole('button', { name: 'Back to workspace' })).toBeTruthy()
+    // The return control heads the same rail: leaving the page is the first row
+    // of the section list, one click away from wherever the user is.
+    expect(navButtons[0]?.textContent).toContain('Back to workspace')
 
     fireEvent.click(screen.getByRole('button', { name: 'About QiLin' }))
     expect(screen.getByTestId('section-about')).toBeTruthy()
@@ -307,35 +306,6 @@ describe('SettingsRoot connection status', () => {
   })
 })
 
-describe('SettingsRoot desktop update', () => {
-  it('reports the update status in the closed-panel foot row', () => {
-    const f = mount({
-      desktopUpdate: { failed: false, opening: false, presentation: { phase: 'available', version: '1.0.1' } },
-    })
-    expect(screen.getByRole('button', { name: 'Update' })).toBeTruthy()
-
-    // A failed carrier keeps the seat with a retry label and no status.
-    f.setDesktopUpdate({ failed: true, opening: false })
-    expect(screen.getByRole('button', { name: 'Retry update' })).toBeTruthy()
-
-    f.setDesktopUpdate({ failed: false, opening: false })
-    expect(screen.queryByRole('button', { name: 'Retry update' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Update' })).toBeNull()
-  })
-
-  it('shows installation instead of expected backend reconnection and restores connection feedback after failure', () => {
-    const presentation = { phase: 'installing' as const, version: '1.0.1' }
-    const f = mount({ dictionary: zh, connectionState: 'connecting',
-      desktopUpdate: { failed: false, opening: false, presentation } })
-    expect(screen.getByRole('button', { name: '正在准备重启…' })).toBeTruthy()
-    expect(screen.queryByText('重新连接中')).toBeNull()
-    f.setDesktopUpdate({ failed: false, opening: false,
-      presentation: { phase: 'error', version: presentation.version, failure: 'install' } })
-    expect(screen.queryByRole('button', { name: '重试更新' })).toBeNull()
-    expect(screen.getByText('重新连接中')).toBeTruthy()
-  })
-})
-
 describe('SettingsPanel chrome seats', () => {
   it('names the dialog via aria-labelledby pointing at the header seat node', () => {
     mount()
@@ -386,10 +356,12 @@ describe('SettingsPanel close paths', () => {
     expect(screen.getByRole('dialog')).toBeTruthy()
   })
 
-  it('lands focus on the close button when the dialog opens', () => {
+  it('lands focus on the active nav row when the dialog opens', () => {
     mount()
     openPanel()
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close' }))
+    // The modal layer's automatic entry focus targets data-modal-autofocus —
+    // the active nav row (or the title with no active section).
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'General' }))
   })
 })
 
@@ -402,13 +374,13 @@ describe('SettingsPanel navigation', () => {
 
     const nav = separator.parentElement
     if (nav === null) throw new Error('settings navigation separator must be inside the navigation rail')
-    expect(nav.getAttribute('style')).toContain('width: 188px')
+    expect(nav.getAttribute('style')).toContain('width: 240px')
 
-    pointer(separator, 'pointerdown', 188)
-    pointer(separator, 'pointermove', 248)
-    pointer(separator, 'pointerup', 248)
+    pointer(separator, 'pointerdown', 240)
+    pointer(separator, 'pointermove', 300)
+    pointer(separator, 'pointerup', 300)
 
-    expect(nav.getAttribute('style')).toContain('width: 248px')
+    expect(nav.getAttribute('style')).toContain('width: 300px')
   })
 
   it('projects rows, marks the first active, and renders only that section', () => {

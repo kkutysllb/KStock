@@ -60,7 +60,7 @@ export function createMainWindow(targetUrl: string): BrowserWindow {
     // 标题栏本体是引擎 UI 自己的 48px 顶栏带（不下推内容，见 client-brand
     // windowChrome 的 WINDOWS_TITLEBAR_CSS）；overlay 高度与该带对齐。
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
-    trafficLightPosition: process.platform === "darwin" ? { x: 13, y: 18 } : undefined,
+    trafficLightPosition: process.platform === "darwin" ? { x: 13, y: 17 } : undefined,
     titleBarOverlay:
       process.platform === "darwin"
         ? undefined

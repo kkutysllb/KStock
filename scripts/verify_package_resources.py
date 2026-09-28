@@ -21,6 +21,12 @@ PLUGIN_PACKAGES = ("accounts", "client-brand", "web", "quant",
                    "quant-strategies", "quant-factors", "quant-selections", "quant-reports",
                    "news-ui", "chan-ui")
 
+ANIMATIONS_PACKAGE = "dsh-animations"
+ANIMATIONS_REQUIRED_FILES = (
+    "package.json", "cordis.patch.yml", "entry.js", "lib/client.js", "skills/manifest.json",
+)
+ANIMATIONS_SKILL_COUNT = 8
+
 
 @dataclass
 class Check:
@@ -67,6 +73,15 @@ class Verifier:
             return
         self.pass_(f"{label} required markers")
 
+    def require_file_occurrences(self, path: Path, label: str, marker: str, expected: int) -> None:
+        if not self.require_path(path, label):
+            return
+        found = path.read_text(encoding="utf-8").count(marker)
+        if found != expected:
+            self.fail(label, f"{marker!r} occurs {found} time(s), expected {expected}")
+            return
+        self.pass_(label)
+
     def verify_source_contract(self) -> None:
         root = self.repo_root
 
@@ -78,6 +93,23 @@ class Verifier:
         self.require_path(root / "scripts" / "build-engine-bundle.sh", "source engine bundle script")
         self.require_path(root / "scripts" / "qilin-pnpm.sh", "source pinned pnpm wrapper")
         self.require_path(root / "vendor" / "skills", "source vendor/skills")
+
+        # 文件工作台标签芯片单绘字形（上游 10ed0a5980 同步）：类型级 icon 已删，
+        # 文件夹字形只由芯片标题组件绘一次——否则 chip 出现双文件夹图标。
+        sidebar_files_definition = (
+            root / "vendor" / "qilin" / "packages" / "client"
+            / "ui-sidebar-files" / "src" / "client" / "definition.tsx"
+        )
+        self.require_file_contains(
+            sidebar_files_definition,
+            "source vendor sidebar-files chip glyph owner",
+            ["The chip title owns the tab's folder glyph."],
+        )
+        self.require_file_occurrences(
+            sidebar_files_definition,
+            "source vendor sidebar-files single folder glyph",
+            "icon: FolderSheetGlyph", 1,
+        )
 
         # KStock 插件包：清单 + 宿主/客户端半端 + bundle patch
         # web 是纯宿主 bundle 包（无客户端半端）；quant 为纯数据宿主；
@@ -117,6 +149,15 @@ class Verifier:
                           "source kstock landing page")
         self.require_path(root / "kstock" / "web" / "public" / "kstock-auth.html",
                           "source kstock auth page")
+        # 落地页左上商标 = 上游 QiLin 印章（vendor/qilin packages/client/ui-brand
+        # 的 Seal 几何与字形）：资产须在位，落地页须引用它而非旧项目图标。
+        self.require_path(root / "kstock" / "web" / "public" / "qilin-seal.svg",
+                          "source kstock landing seal asset")
+        self.require_file_contains(
+            root / "kstock" / "web" / "public" / "kstock-landing.html",
+            "source kstock landing seal mark",
+            ["/kstock/qilin-seal.svg"],
+        )
 
         # 技能随 preset 分发（cordis 模式）：bundle patch 注册 KStock preset
         # root（KSTOCK_PRESETS_DIR），技能绑定在各 preset 的 skill-filesystem
@@ -170,11 +211,17 @@ class Verifier:
         electron_builder = root / "apps" / "desktop" / "electron-builder.yml"
         if self.require_path(electron_builder, "source electron-builder config"):
             text = electron_builder.read_text(encoding="utf-8")
-            if "from: ../../dist-exe" in text and "to: engine" in text:
-                self.pass_("source electron-builder extraResources maps dist-exe to engine")
+            # 3.0.5 起打包走运行时闭包（staging 三件套），旧 SEA dist-exe 映射已废。
+            staging_markers = (
+                "from: ../../staging/kstock-runtime.tar.gz",
+                "from: ../../staging/plugins",
+                "from: ../../staging/presets",
+            )
+            if all(marker in text for marker in staging_markers):
+                self.pass_("source electron-builder extraResources maps staging closure")
             else:
                 self.fail("source electron-builder extraResources",
-                          "Expected from: ../../dist-exe -> to: engine")
+                          f"Expected staging extraResources: {', '.join(staging_markers)}")
 
     def verify_engine_client_faces(self) -> None:
         """引擎客户端面契约：KStock 插件运行时消费的引擎服务成员仍存在。
@@ -235,21 +282,30 @@ class Verifier:
                 self.pass_("kstock task-target stale engine members")
 
     def verify_product_bundle(self) -> None:
-        bundle = self.repo_root / "dist-exe"
-
-        self.require_path(bundle, "product dist-exe")
-        suffix = ".exe" if os.name == "nt" else ""
-        engine = bundle / f"kstock-engine{suffix}"
-        self.require_executable(engine, "product engine executable")
-        for companion in (f"-rg{suffix}", f"-spawn-helper{suffix}"):
-            candidate = bundle / f"kstock-engine{companion}"
-            if candidate.exists():
-                self.pass_(f"product engine companion {companion}")
+        """闭包形态产物（3.0.5 起 staging 三件套；旧 SEA dist-exe 已废，A1 决策）。"""
+        closure = self.repo_root / "staging" / "kstock-runtime"
+        if not self.require_path(closure, "product runtime closure"):
+            return
+        self.require_path(closure / "runtime-bootstrap.mjs", "product closure runtime-bootstrap.mjs")
+        version_file = closure / ".runtime-version"
+        if self.require_path(version_file, "product closure .runtime-version"):
+            try:
+                version = json.loads(version_file.read_text(encoding="utf-8")).get("version")
+            except (OSError, ValueError):
+                version = None
+            vendor_version = json.loads(
+                (self.repo_root / "vendor" / "qilin" / "package.json").read_text(encoding="utf-8")
+            ).get("version")
+            if version and version == vendor_version:
+                self.pass_(f"product closure engine version = {version}")
             else:
-                self.fail(f"product engine companion {companion}", f"Missing: {candidate}")
+                self.fail("product closure engine version",
+                          f".runtime-version={version!r} != vendor/qilin package.json {vendor_version!r}")
 
-        for pkg in PLUGIN_PACKAGES:
-            pkg_dir = bundle / "plugins" / pkg
+        for pkg in ("accounts", "automation", "chan-ui", "client-brand", "datasources-ui",
+                    "news-ui", "presets-ui", "quant", "quant-factors", "quant-reports",
+                    "quant-selections", "quant-strategies", "web"):
+            pkg_dir = self.repo_root / "staging" / "plugins" / pkg
             manifest = pkg_dir / "package.json"
             if not self.require_path(manifest, f"product plugins/{pkg} manifest"):
                 continue
@@ -257,27 +313,72 @@ class Verifier:
             if not lib_dir.is_dir():
                 self.fail(f"product plugins/{pkg} lib", f"Missing: {lib_dir}")
                 continue
-            built = any(lib_dir.glob("index.js")) or any(lib_dir.glob("client.cjs"))
-            if built:
+            if any(lib_dir.glob("index.js")) or any(lib_dir.glob("client.cjs")):
                 self.pass_(f"product plugins/{pkg} lib artifacts")
             else:
                 self.fail(f"product plugins/{pkg} lib artifacts",
-                          "No index.js / client.cjs in lib (run tsdown build first)")
+                          "No index.js / client.cjs in lib (run the plugin build first)")
 
-        landing = bundle / "plugins" / "web" / "public" / "kstock-landing.html"
+        landing = self.repo_root / "staging" / "plugins" / "web" / "public" / "kstock-landing.html"
         self.require_path(landing, "product plugins/web public/kstock-landing.html")
 
-        skills = bundle / "skills"
-        if self.require_path(skills, "product skills directory"):
-            if any(skills.glob("*/SKILL.md")) or any(skills.glob("*/*/SKILL.md")):
-                self.pass_("product skills directory has SKILL.md entries")
+        presets = self.repo_root / "staging" / "presets"
+        if self.require_path(presets, "product presets directory"):
+            self.require_path(presets / "skills.manifest.json", "product presets skills.manifest.json")
+            preset_dirs = [d for d in presets.iterdir() if d.is_dir()]
+            if any(any((d / "skills").glob("*/SKILL.md")) for d in preset_dirs):
+                self.pass_("product presets carry skill directories")
             else:
-                self.fail("product skills directory has SKILL.md entries",
-                          f"No SKILL.md under {skills}")
+                self.fail("product presets carry skill directories",
+                          f"No SKILL.md under any preset in {presets}")
+
+    def verify_animations_channel(self) -> None:
+        """动效技能库通道契约（QiLin 3.0.5 起的产品层）。
+
+        这层是**启动期硬依赖**：profile 的 bundles 声明了它而安装闭包缺包时，
+        引擎的 resolveBundleDir 直接抛错 → 引擎起不来。而构建期上游两处都不拦
+        （pkg 资产 glob 空匹配静默跳过；verify-runtime-closure 只遍历 workspace
+        包，对非 workspace 依赖不可见），因此这道闸门必须做实。
+        """
+        root = self.repo_root
+        # 1) 源码锚点：壳把它写进 profile bundles；patch 下架了引擎日程三件套
+        self.require_file_contains(
+            root / "apps" / "desktop" / "electron" / "lib" / "profile-bundles.ts",
+            "source animations bundle layer",
+            [ANIMATIONS_PACKAGE, "PROFILE_BUNDLES"],
+        )
+        self.require_file_contains(
+            root / "kstock" / "web" / "cordis.patch.yml",
+            "source engine schedule capability disabled",
+            ["id: schedule", "id: ui-schedule", "disabled: true"],
+        )
+        if self.source_only:
+            return
+        # 2) 产物锚点：闭包（或 SEA 的 staging）里必须有该包全量
+        candidates = (
+            root / "staging" / "kstock-runtime" / "node_modules" / ANIMATIONS_PACKAGE,
+            root / "vendor" / "qilin" / "python" / "sdk-runtime" / "src"
+            / "deepseek_harness_runtime" / "runtime" / "node" / "node_modules" / ANIMATIONS_PACKAGE,
+        )
+        pkg_dir = next((c for c in candidates if c.is_dir()), None)
+        if pkg_dir is None:
+            self.fail("product animations package", f"Not found in any of: {[str(c) for c in candidates]}")
+            return
+        self.pass_(f"product animations package ({pkg_dir.relative_to(root)})")
+        for name in ANIMATIONS_REQUIRED_FILES:
+            self.require_path(pkg_dir / name, f"product animations {name}")
+        manifest = pkg_dir / "skills" / "manifest.json"
+        if manifest.is_file():
+            count = len(json.loads(manifest.read_text(encoding="utf-8")).get("skills", []))
+            if count == ANIMATIONS_SKILL_COUNT:
+                self.pass_(f"product animations skill count = {count}")
+            else:
+                self.fail("product animations skill count", f"expected {ANIMATIONS_SKILL_COUNT}, got {count}")
 
     def run(self) -> int:
         self.verify_source_contract()
         self.verify_engine_client_faces()
+        self.verify_animations_channel()
         if not self.source_only:
             self.verify_product_bundle()
 

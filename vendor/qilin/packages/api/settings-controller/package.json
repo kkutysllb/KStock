@@ -1,7 +1,7 @@
 {
   "name": "@qilin/api-settings-controller",
   "description": "Remote owner for the configuration surfaces over the settings-domain seams",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -47,25 +47,25 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@qilin/schemastery": "workspace:^",
+    "@qilin/schemastery": "workspace:~",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/agent-presets": "workspace:^",
-    "@qilin/credentials": "workspace:^",
-    "@qilin/native-command": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/settings": "workspace:^",
-    "@qilin/typert-protocol": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/agent-presets": "workspace:*",
+    "@qilin/credentials": "workspace:*",
+    "@qilin/native-command": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/settings": "workspace:*",
+    "@qilin/typert-protocol": "workspace:*"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/agent-presets": "workspace:^",
-    "@qilin/credentials": "workspace:^",
-    "@qilin/native-command": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/settings": "workspace:^",
-    "@qilin/typert-protocol": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/agent-presets": "workspace:*",
+    "@qilin/credentials": "workspace:*",
+    "@qilin/native-command": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/settings": "workspace:*",
+    "@qilin/typert-protocol": "workspace:*"
   }
 }

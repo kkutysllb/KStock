@@ -33,6 +33,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { homedir, platform } from "node:os";
 import { ensureEnginePythonDeps, enginePythonPath } from "./deps";
+import { PROFILE_BUNDLES, withAnimationsBundle } from "./profile-bundles";
 import { logMain } from "./logger";
 
 /**
@@ -101,7 +102,7 @@ export function ensureKstockProfile(): string {
     dependencies,
     qilin: {
       profile: {
-        bundles: ["@qilin/base", "@qilin/web-app", "@kstock/web"],
+        bundles: [...PROFILE_BUNDLES],
         patchReload: "live",
       },
     },
@@ -112,18 +113,31 @@ export function ensureKstockProfile(): string {
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     logMain(`已创建 kstock profile：${profileDir}（插件根 ${pluginRoot}）`);
   } else {
-    // 包集演进（例如新增 @kstock/accounts-local）：依赖缺失或指向失效时补写
-    // 清单，不碰用户其余数据。
+    // 包集演进（例如新增 @kstock/accounts-local）与 bundle 层演进（3.0.5 的
+    // 动效技能库）：任一缺失或指向失效时补写清单，不碰用户其余数据。
     try {
       const existing = JSON.parse(readFileSync(manifestPath, "utf8")) as {
         dependencies?: Record<string, string>;
+        qilin?: { profile?: { bundles?: string[]; patchReload?: string } };
       };
       const deps = existing.dependencies ?? {};
-      const stale = packages.some(([name, dir]) => deps[name] !== `link:${join(pluginRoot, dir)}`);
-      if (stale) {
-        existing.dependencies = dependencies;
+      const bundles = existing.qilin?.profile?.bundles ?? [];
+      const staleDeps = packages.some(([name, dir]) => deps[name] !== `link:${join(pluginRoot, dir)}`);
+      const nextBundles = withAnimationsBundle(bundles);
+      const staleBundles = nextBundles !== bundles;
+      if (staleDeps || staleBundles) {
+        if (staleDeps) existing.dependencies = dependencies;
+        if (staleBundles) {
+          existing.qilin = {
+            ...existing.qilin,
+            profile: { ...existing.qilin?.profile, bundles: [...nextBundles] },
+          };
+        }
         writeFileSync(manifestPath, `${JSON.stringify(existing, null, 2)}\n`);
-        logMain("kstock profile 包集已更新（补齐 @kstock 插件依赖）");
+        logMain(`kstock profile 已更新（${[
+          staleDeps ? "插件依赖" : "",
+          staleBundles ? "动效技能库层" : "",
+        ].filter(Boolean).join(" / ")}）`);
       }
     } catch (error) {
       logMain(`kstock profile 清单读取失败，保留原样：${String(error)}`);

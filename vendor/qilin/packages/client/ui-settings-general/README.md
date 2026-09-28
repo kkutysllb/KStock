@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use this package to give the qilin web client a settings page, connection-recovery control, feature-contributed navigation, and sequential first-run onboarding. Users open it from the account menu's Settings row in the sidebar footer, retry a failed connection immediately, and access a local configuration file when the Host makes one available on a loopback browser. Feature packages supply their own settings rows, sections, and onboarding steps; this package supplies their shared presentation and does not add onboarding copy or built-in General rows.
+Use this package to give the qilin web client a settings page, connection-recovery control, feature-contributed navigation, and sequential first-run onboarding. Users open it from the account menu's Settings row in the sidebar footer, retry a failed connection immediately, and access a local configuration file when the Host makes one available on a loopback browser. Feature packages supply their own settings rows, sections, and onboarding steps; this package supplies their shared presentation, the Coding Tools switch, and the current-release version row, without adding onboarding copy.
 
 ## Table of Contents
 
@@ -28,19 +28,16 @@ Use this package to give the qilin web client a settings page, connection-recove
 Users reach the shell from the sidebar footer's account menu, whose Settings row calls `ctx.settingsShell.open()`; feature plugins contribute their pages and onboarding steps through the slot ledgers this shell projects. The shell renders no Settings control of its own. A pale-yellow **Disconnected** action in the sidebar footer indicates browser offline suspension while the panel is closed. Automatic recovery shows **Reconnecting** with one to three dots advancing every 500ms. Hover or keyboard focus changes either yellow label to **Reconnect now** without changing its background; press feedback stays within the warning palette, and selecting it starts retry 1 immediately. Recovery changes the region to pale-green **Connected** for two seconds before it disappears. The icon, left-aligned text origin, height, and width remain fixed across every visible state. Initial startup and uninterrupted healthy operation remain silent. The shell renders the settings page, the navigation built from `settings.section` entries, and exactly one mounted onboarding step at a time.
 
 <details>
-In Desktop, the account-row update control shows availability, progress, verification, readiness, and persistent retry feedback. The preload carries semantic phase, version, progress, and classified failures; the component resolves every visible and accessible string from the active `settings` locale, including after an in-application language change. Selecting an available update starts downloading; installation requires a separate shell-owned confirmation. A collapsed sidebar shows the same status as a dot on its top expand button. Connection feedback takes priority except during shell-reported installation, when the expected backend disconnect must not hide update status. Failure restores connection feedback. Both controls share one carrier subscription; browser code cannot choose packages or authorize installation. [Desktop updates](../../../apps/desktop/README.md) owns the release workflow.
 <details>
-### Resizing the navigation
+### Panel chrome and About
 
-The settings page navigation seeds at 188px and its right edge is a vertical, pointer-captured separator: dragging reports a clamped 160–360px width, and the separator keeps the localized accessible name from the `settings` namespace. Width is viewing state local to the shell occupant, so it resets when the panel unmounts rather than persisting into the settings document.
-
-### Section cards and About
-
-Each settings page is centered inside a stable detail card. The header's **Back to workspace** capsule uses the same close path as the mask and Escape key. The navigation keeps the shell-owned **About QiLin** entry pinned to its bottom edge, and that page introduces the project with the two-character 麒麟 mark. The `settings.about.mark` seat lets the active QiLin brand provider render the vector seal; localized 麒麟 text remains the explicit fallback.
+The settings shell renders as a full-window page: the section navigation is a filled 240px rail carrying the workspace return control at its head and a draggable right edge, sections render in the scrolling content column capped to a 960px reading width, and every `settings.general.item` contribution draws as its own card. The header carries the document actions plus one close control that shares its close path with the mask and Escape. The navigation lists every `settings.section` entry in ledger order, ending with the shell-owned **About QiLin** row, and that page introduces the project with the two-character 麒麟 mark. The `settings.about.mark` seat lets the active QiLin brand provider render the vector seal; localized 麒麟 text remains the explicit fallback.
 
 ### The General section
 
-The General section holds rows registered into `settings.general.item` by feature packages — it has no built-in rows. Feature plugins own the row copy and behavior; the shell only provides the section and its slot. The Appearance row, for example, lives in ui-theme.
+The Coding Tools switch controls the shared developer-tool preference that [ui-settings](../ui-settings/README.md#use-this-package) stores under the `ui-settings` namespace. It follows accepted changes immediately, disables duplicate input while a write settles, and displays localized retry guidance after a failed write. The current release version appears at the bottom of the section, using the build's `QILIN_CLIENT_VERSION` metadata and the active language; partial builds without version metadata omit the row.
+
+The General section holds the built-in Coding Tools and Current version rows alongside rows registered into `settings.general.item` by feature packages. Each registrant owns its row copy and behavior. The Appearance row, for example, lives in ui-theme.
 
 ### Onboarding steps
 
@@ -101,7 +98,7 @@ None; this package neither assembles nor sends a provider request.
 
 These limits define what the shell itself provides versus what features must supply; they are current package constraints.
 
-- **The General section has no built-in rows** — each row appears only when its owning feature plugin is mounted; the shell cannot fill the section alone.
+- **Additional General rows require their feature plugins** — the shell supplies Coding Tools and Current version; feature plugins supply the remaining preferences.
 
 <a id="dev-note"></a>
 ### Dev Note

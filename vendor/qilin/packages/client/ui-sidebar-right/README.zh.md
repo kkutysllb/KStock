@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-右侧 Sidebar：停靠套件与本产品相遇的地方。它为每个会话持有一个停靠面，以两种呈现形态之一把它画成贴靠框架右列边缘的一块面板，把展开按钮放进会话 header，并拥有导航控制器（`ctx.sidebarRight`）、tab 类型注册表（`ctx.sidebarRightTabs`），以及告诉每个已开 tab 它是如何被导航到、能活多久的 Tab 域。
+右侧 Sidebar：停靠套件与本产品相遇的地方。root 作用域的 `rightbar` entry 通过独立的 `rightbar.session` 子树渲染选中的 Session 与需要保活的后台 Session，每个子树各自持有 Session reference；只有前台会话会上报框架列宽并绑定公共导航。每个 Session 的界面由 `DockLayout` 绘制，因此 tab 在选中变化、跨格移动与浮窗期间保留自己的 DOM。本包拥有导航控制器（`ctx.sidebarRight`）、tab 类型注册表（`ctx.sidebarRightTabs`），以及告诉每个已开 tab 它是如何被导航到、能活多久的 Tab 域。
 
 ## 目录
 
@@ -54,7 +54,7 @@ kind: "package-reference"
 
 面板隐藏时，会话 header 角落席位里的一个按钮（`conversation.session.header.corner`，在工具组右缘之外，与 Session 日志控件齐平）是回去的路。它的图形是左侧 sidebar 折叠图标的镜像。它与面板共用一个存储（slot 运行时允许两个同作用域席位共用一个 handle）；面板显示时它什么也不渲染，角落席位随之收起。于是折叠的 Sidebar 不花会话区任何代价：没有轨条、没有宽度，转录的滚动条留在列的边缘。没有会话就没有按钮也没有面板。
 
-面板取会话区的底色与正文字号，而不是自成一层浮起的表面：它是页面的一列，不是压在页面上的卡片。
+面板取会话区的底色与正文字号，而不是自成一层浮起的表面：它是页面的一列，不是压在页面上的卡片。 快捷键速查包含右侧栏切换命令（桌面 `Mod+Alt+B`，Web `Mod+Shift+B`）；同一生效绑定显示在展开控件上，且无选中会话时该命令不可用。
 
 `rightbar` 入口是 root 作用域的控制器。它读取 `usePanelInfo`，仅在选中会话界面时挂载 session 作用域的 `rightbar.session` 子树。切换到全局面板会隐藏右侧 Sidebar 并释放框架列宽，但不删除会话的 tab 状态。
 

@@ -1,7 +1,7 @@
 {
   "name": "@qilin/client-ui-primitives",
   "description": "Pure React atoms for the qilin web UI: controls, icons, markdown, and JSON inspectors (zero cordis)",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -28,7 +28,8 @@
   "devDependencies": {
     "@types/react": "~18.3.1",
     "@types/react-dom": "~18.3.0",
-    "@qilin/kylin": "workspace:^",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/util-workspace-path": "workspace:*",
     "react": "^18.2.0",
     "clsx": "^2.0.0",
     "diff": "^9.0.0",
@@ -58,6 +59,6 @@
     "lib/types/**/*.d.ts"
   ],
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin": "workspace:~"
   }
 }

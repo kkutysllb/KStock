@@ -11,7 +11,7 @@ import { DeepSeekAdapter, resolveAdapterOptions } from '@qilin/llm-deepseek'
 import { SessionId } from '@qilin/session'
 import JsonlSessionPersistence from '@qilin/session-persistence-jsonl'
 import * as SubagentSpawn from '@qilin/subagent-spawn-in-process'
-import { end, MODEL, server, sse, start } from '../../../llm/llm-deepseek/tests/messages/helpers.ts'
+import { end, MODEL, server, sse, start } from '../../../llm/llm-deepseek/tests/helpers.ts'
 import SubagentRuntime, { type SubagentRunEndInfo } from '../src/index.ts'
 import { loadStoredSession } from './persistence-helpers.ts'
 
@@ -37,7 +37,7 @@ it('continues the parent through default Messages after a reasoning-bearing cont
     const connection = resolveAdapterOptions({ baseURL: http.url })
     const adapter = new DeepSeekAdapter({
       options: () => connection,
-      resolveApiKey: () => Promise.resolve('test-key'),
+      resolveAuth: () => Promise.resolve({ headers: { 'x-api-key': 'test-key' } }),
       resolveUserId: () => '00000000-0000-4000-8000-000000000001' as AnonymousUserId,
       prepareExtensions: () => Promise.resolve({ fields: {}, accept: () => Promise.resolve() }),
     })

@@ -547,12 +547,10 @@ body[data-ds-dark-theme] {
 		*    侧栏品牌名 `.kstock-brand-wordmark` 的样式也在这层（浏览器同样渲染）。
 		*
 		* 2. `kstock-window-chrome`（仅 Electron）：无框窗口的桌面壳避让。
-		*    - macOS hiddenInset：红绿灯叠加在画布左上（trafficLightPosition
-		*      {13,18}，灯组占 y 18..30、x 13..65，中心正对 48px 顶栏带）。侧栏
-		*      品牌行收成 48px（与会话标题栏同高）并留 84px 左肩；折叠轨（56px
-		*      宽）容不下左肩，改为整体把轨内容压到灯组下方；设置弹层是全窗口
-		*      面板，导航标题行同样压到灯组下方。品牌行/标题行兼作拖拽条
-		*      （行内按钮除外）。
+		*    - macOS hiddenInset：红绿灯独立一行（引擎 topStrip 48px 拖拽条，
+		*      trafficLightPosition {13,17} 灯组居中其内），品牌行保持自然行距
+		*      落在灯条之下——与 KCoder 桌面端头部同款双行布局；品牌行/标题行
+		*      兼作拖拽条（行内按钮除外）。
 		*    - Windows/Linux（WCO 模型，参考 KCoder 桌面壳）：原生层只画右上
 		*      按钮簇（titleBarOverlay height 48），标题栏本体是引擎 UI 自己的
 		*      48px 顶栏带——内容不下推（旧版 `#root { padding-top:
@@ -604,28 +602,46 @@ button[data-file-wrap] {
   -webkit-app-region: no-drag;
 }
 `;
-		/** macOS 专属：红绿灯左上叠加的避让与顶栏 48px 统一。
-		* - 侧栏品牌行收成 48px 并吃掉侧栏列自带的 6px 顶部内边距（margin -6px），
-		*   品牌标记中心正对红绿灯中心（y=24）；84px 左肩让开灯组（x 13..65）。
-		* - 折叠轨（56px 宽）容不下左肩：轨内容整体压到灯组下方（灯组底 y=30，
-		*   折叠轨顶 padding 18 + margin 34 = y 52 起）。
-		* - 设置弹层是全窗口面板：导航标题行压到灯组下方（导航顶 padding 22
-		*   + margin 26 = y 48 起），标题行兼作拖拽条。 */
+		/** macOS 专属：红绿灯独立一行（引擎 topStrip 48px，补丁 24），品牌行
+		* 在灯条之下累计下移 30px 落于其下——对齐 KCoder 桌面端头部布局，不再与
+		* 红绿灯同排（原 84px 左肩设计随双行布局退役）。折叠轨（56px 宽）容不下
+		* 品牌，轨内容整体压到灯组下方（灯组底 y=30，折叠轨顶 margin 34 = y 52 起）。
+		* 壳未注入 data-platform="darwin"，上游 topStrip（灯组行）不渲染，折叠按钮
+		* 回落进品牌行——这里把它提回灯组行：品牌行作定位锚并放行溢出，按钮绝对
+		* 定位到行上方 26px（y 10..38，中心 24 对齐灯组中心 23.5），折叠轨恢复流内。
+		* 设置弹层是全窗口面板，且经 portal 挂在 document.body（#root 前缀够不到）：
+		* 「返回工作区」行下移 30px 让开灯组。 */
 		const MACOS_TRAFFIC_LIGHTS_CSS = `
 #root [class*="logoRow"] {
   height: 48px;
-  padding: 0 0 0 84px;
-  margin: -6px 0 8px;
+  padding: 0 0 0 16px;
+  margin: 30px 0 8px;
+  position: relative;
+  overflow: visible;
+}
+
+#root [class*="logoRow"] > [class*="toggle"] {
+  position: absolute;
+  top: -26px;
+  right: 0;
 }
 
 #root [class*="collapsed"] [class*="logoRow"] {
   height: 36px;
   padding: 0;
   margin: 34px 0 12px;
+  position: static;
+  overflow: hidden;
 }
 
-#root [class*="navTitle"] {
-  margin-top: 26px;
+#root [class*="collapsed"] [class*="logoRow"] > [class*="toggle"] {
+  position: relative;
+  top: auto;
+  right: auto;
+}
+
+body [class*="navBack"] {
+  margin-top: 30px;
 }
 `;
 		/** Windows/Linux 专属：WCO 按钮簇（右上，y 0..48）避让。标题栏本体 =

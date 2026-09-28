@@ -12,6 +12,8 @@ import type { SessionId } from '@qilin/session/types'
 import type { MainPanelId } from '@qilin/client-ui-layout/client'
 import { zh as commonZh } from '@qilin/client-locale/src/locales/zh.ts'
 import type { DirectoryFlowOwnerProps, WorkspaceBrowserProps } from '../src/client/contract/slots.ts'
+import { createSnapshotStore } from '@qilin/client-store'
+import type { WorkspaceShortcutState } from '../src/client/shortcuts.ts'
 import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
 import { UNGROUPED_KEY } from '../src/client/tree.ts'
 import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
@@ -49,7 +51,7 @@ const sessionState = (
     ids: items.map(item => item.id),
     byId: Object.fromEntries(items.map(item => [item.id, item])),
     phase: 'ready',
-    subagentsByParent: {}, jobsBySession: {},
+    projectionsBySession: {},
     ...stateOverrides,
   }
   if (main === undefined) return state
@@ -67,7 +69,8 @@ const workspace = (id: string, sessionIds: string[], title = id): WorkspaceView 
 const workspaceState = (
   items: readonly WorkspaceView[],
   archivedSessionIds: readonly SessionId[] = [],
-): WorkspaceSnapshot => ({ items, archivedSessionIds, state: 'idle', phase: 'ready', error: null })
+  pinnedSessionIds: readonly SessionId[] = [],
+): WorkspaceSnapshot => ({ items, archivedSessionIds, pinnedSessionIds, state: 'idle', phase: 'ready', error: null })
 const noPendingInteraction: SessionStatusSnapshot = new Map()
 function hook<T>(snapshot: T) {
   return function select<S>(selector: (state: T) => S): S { return selector(snapshot) }
@@ -87,6 +90,18 @@ function dragData(): Pick<DataTransfer, 'effectAllowed' | 'dropEffect' | 'setDat
 
 function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
   const store = createWorkspaceViewStore().create()
+  const shortcutStore = createSnapshotStore<WorkspaceShortcutState>({
+    searchRequest: 0, addRequested: false, directoryBusy: false, renameTarget: null,
+  })
+  const shortcutChannel = {
+    requestSearch: (): void => {
+      shortcutStore.set({ ...shortcutStore.getSnapshot(), searchRequest: shortcutStore.getSnapshot().searchRequest + 1 })
+    },
+    requestAddWorkspace: (): void => { shortcutStore.set({ ...shortcutStore.getSnapshot(), addRequested: true }) },
+    closeAddWorkspace: (): void => { shortcutStore.set({ ...shortcutStore.getSnapshot(), addRequested: false }) },
+    closeRenameRequest: (): void => { shortcutStore.set({ ...shortcutStore.getSnapshot(), renameTarget: null }) },
+  }
+  const noShortcuts: readonly never[] = []
   const props: WorkspaceBrowserProps = {
     wide: true,
     expandSidebar: vi.fn(),
@@ -106,10 +121,19 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     renameWorkspace: vi.fn(async () => {}),
     deleteWorkspace: vi.fn(async () => {}),
     archiveSession: vi.fn(async () => {}),
+    pinSession: vi.fn(async () => {}),
+    unpinSession: vi.fn(async () => {}),
     insertWorkspaceBefore: vi.fn(async () => {}),
     createWorkspace: vi.fn(async () => workspace('created', [])),
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     useHostInfo: selector => selector({ home: undefined, isLoopback: true }),
+    useWorkspaceShortcuts: bindSnapshotSelector(shortcutStore),
+    useShortcuts: bindSnapshotSelector({ getSnapshot: () => noShortcuts, subscribe: () => () => {} }),
+    requestSearch: shortcutChannel.requestSearch,
+    requestAddWorkspace: shortcutChannel.requestAddWorkspace,
+    closeAddWorkspace: shortcutChannel.closeAddWorkspace,
+    closeRenameRequest: shortcutChannel.closeRenameRequest,
+    setDirectoryBusy: vi.fn(),
     renderSlot: ((_name: string, owner: { open: boolean }) => (owner.open ? <div data-testid="directory-flow" /> : null)) as never,
     t,
     ...overrides,
@@ -709,6 +733,46 @@ describe('WorkspaceBrowser', () => {
       await Promise.resolve()
       expect(warn).toHaveBeenCalledWith('session archive rejected:', rejection)
       expect(screen.getByText('alpha-s')).toBeTruthy()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+
+  it('pins and unpins a session from the row menu, fronting and marking it, and logs a rejection', async () => {
+    const pinSession = vi.fn(async () => {})
+    const unpinSession = vi.fn(async () => {})
+    const b = mount({
+      useSessions: hook(sessionState([summary('two', 2), summary('one', 1)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['two', 'one'])])),
+      pinSession,
+      unpinSession,
+    })
+    fireEvent.click(screen.getByText('alpha'))
+    fireEvent.click(screen.getByRole('button', { name: '会话“one”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '置顶会话' }))
+    expect(pinSession).toHaveBeenCalledWith(sid('one'))
+
+    // The pin-set echo fronts the row and draws the marker in the same cell
+    // the hover button occupies.
+    rerender(b, { useWorkspaces: hook(workspaceState([workspace('alpha', ['two', 'one'])], [], [sid('one')])) })
+    const rows = screen.getAllByRole('treeitem').slice(1)
+    expect(rows[0]?.textContent).toContain('one')
+    expect(rows[1]?.textContent).toContain('two')
+    expect(screen.getByRole('img', { name: '已置顶' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '会话“one”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消置顶' }))
+    expect(unpinSession).toHaveBeenCalledWith(sid('one'))
+
+    const rejection = new Error('pin exploded')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      rerender(b, { pinSession: vi.fn(async () => { throw rejection }) })
+      fireEvent.click(screen.getByRole('button', { name: '会话“two”的操作' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: '置顶会话' }))
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(warn).toHaveBeenCalledWith('session pin rejected:', rejection)
     } finally {
       warn.mockRestore()
     }

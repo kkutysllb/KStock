@@ -42,10 +42,16 @@
       "path": "../ui-session"
     },
     {
+      "path": "../ui-workspace"
+    },
+    {
       "path": "../ui-slots"
     },
     {
       "path": "../../util/workspace-path"
+    },
+    {
+      "path": "../shortcuts/tsconfig.client.json"
     }
   ]
 }

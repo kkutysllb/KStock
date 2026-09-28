@@ -24,7 +24,8 @@
   },
   "scripts": {
     "build": "tsdown",
-    "watch": "tsdown --watch"
+    "watch": "tsdown --watch",
+    "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",

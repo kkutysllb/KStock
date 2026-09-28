@@ -11,6 +11,7 @@ import type { MessageId, ToolCallId } from '@qilin/llm/brand'
 import type {
   AssistantMessage,
   ContentBlock,
+  ContextFormed,
   MessageSource,
   StreamChunk,
   TokenUsage,
@@ -47,6 +48,12 @@ import type {
 } from '../rpc.ts'
 
 const FIXTURE_SESSION_SEARCH_RESULT_LIMIT = 20
+
+declare module '@qilin/llm' {
+  interface MessageSourceMap {
+    'fixture': { kind: 'fixture' } & ContextFormed
+  }
+}
 
 interface ModelSelection {
   readonly provider: string
@@ -359,6 +366,9 @@ interface WorkspaceInsertSessionBeforeRequest {
 }
 interface WorkspaceArchiveSessionRequest { readonly sessionId: SessionId }
 interface WorkspaceArchiveValue { readonly archivedSessionIds: readonly SessionId[] }
+interface WorkspacePinSessionRequest { readonly sessionId: SessionId }
+interface WorkspaceUnpinSessionRequest { readonly sessionId: SessionId }
+interface WorkspacePinValue { readonly pinnedSessionIds: readonly SessionId[] }
 
 type WorkspaceFollowFrame =
   | {
@@ -366,12 +376,14 @@ type WorkspaceFollowFrame =
     readonly value: {
       readonly items: readonly WorkspaceView[]
       readonly archivedSessionIds: readonly SessionId[]
+      readonly pinnedSessionIds: readonly SessionId[]
     }
   }
   | { readonly type: 'upsert'; readonly workspace: WorkspaceView }
   | { readonly type: 'remove'; readonly workspaceId: WorkspaceId }
   | { readonly type: 'order'; readonly workspaceIds: readonly WorkspaceId[] }
   | { readonly type: 'archived'; readonly archivedSessionIds: readonly SessionId[] }
+  | { readonly type: 'pinned'; readonly pinnedSessionIds: readonly SessionId[] }
 
 interface FixtureWorkspaceApi {
   create(request: WorkspaceCreateRequest): Promise<ConnectionRpcResult<WorkspaceCreateValue>>
@@ -380,6 +392,8 @@ interface FixtureWorkspaceApi {
   insertBefore(request: WorkspaceInsertBeforeRequest): Promise<ConnectionRpcResult<WorkspaceOrderValue>>
   insertSessionBefore(request: WorkspaceInsertSessionBeforeRequest): Promise<ConnectionRpcResult<WorkspaceValue>>
   archiveSession(request: WorkspaceArchiveSessionRequest): Promise<ConnectionRpcResult<WorkspaceArchiveValue>>
+  pinSession(request: WorkspacePinSessionRequest): Promise<ConnectionRpcResult<WorkspacePinValue>>
+  unpinSession(request: WorkspaceUnpinSessionRequest): Promise<ConnectionRpcResult<WorkspacePinValue>>
 }
 
 interface FixtureWorkspace {
@@ -727,7 +741,7 @@ function buildAlphaLog(): SessionEvent[] {
     if (turn === 0) {
       push({
         type: 'system/message', surfaceOp: 'append',
-        data: { turn, step: 0, message: createSystemMessage(FIXTURE_SYSTEM_PROMPT, '@qilin/system-prompt') },
+        data: { turn, step: 0, message: createSystemMessage(FIXTURE_SYSTEM_PROMPT) },
       })
     }
     const userSeq = push({
@@ -741,7 +755,7 @@ function buildAlphaLog(): SessionEvent[] {
       })
     }
     if (turn % 9 === 4) {
-      push({ type: 'user/message', surfaceOp: 'append', data: userMessage(text(`[fixture] 上下文注入（turn ${turn}）`), { kind: 'plugin', plugin: 'fixture' }) })
+      push({ type: 'user/message', surfaceOp: 'append', data: userMessage(text(`[fixture] 上下文注入（turn ${turn}）`), { kind: 'fixture' }) })
     }
     push({ type: 'step/start', data: { turn, step: 0 } })
     const withTool = turn % 5 === 2
@@ -1257,11 +1271,8 @@ function estimateFixtureContent(blocks: readonly ContentBlock[]): number {
       return tokens + densityPrice(block.name) + densityPrice(block.arguments) + BLOCK_OVERHEAD
     }
     // ContentBlockMap is merge-extensible: this client graph sees only the
-    // base four members, but fixture turns do carry extended blocks at
-    // runtime, so the structural JSON fallback below is live code.
-    if (block.type === 'tool-result') {
-      return tokens + estimateFixtureContent(block.content) + BLOCK_OVERHEAD
-    }
+    // base members, but fixture turns do carry extended blocks at runtime, so
+    // the structural JSON fallback below is live code.
     return tokens + densityPrice(JSON.stringify(block)) + BLOCK_OVERHEAD
   }, 0)
 }
@@ -1560,20 +1571,22 @@ function searchBlockText(block: ContentBlock): string[] {
       return []
     case 'tool-call':
       return [block.name, block.arguments]
-    case 'tool-result':
-      return block.content.flatMap(searchBlockText)
+    // ContentBlockMap is merge-extensible. Unknown blocks do not become
+    // searchable merely because their payload happens to contain strings.
     default:
       return []
   }
 }
 
-/** One current-surface user/assistant document, if searchable. */
+/** One current-surface user/assistant/tool document, if searchable. */
 function searchEventText(event: SessionEvent): string {
   const content = event.type === 'user/message'
     ? event.data.content
     : event.type === 'assistant/message'
       ? event.data.message.content
-      : undefined
+      : event.type === 'tool/result'
+        ? event.data.message.content
+        : undefined
   if (content === undefined) return ''
   return content.flatMap(searchBlockText).map(part => part.trim()).filter(Boolean).join('\n')
 }
@@ -2002,6 +2015,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
   // Registry-global archive set mirroring the host: archived sessions keep
   // their workspace accounting slot and only grouping surfaces hide them.
   const archivedSessionIds: SessionId[] = []
+  // Registry-global pin set, most recently pinned first; mirror of the Host's
+  // mutual exclusion with the archive set.
+  const pinnedSessionIds: SessionId[] = []
   const workspaceSnapshot = (workspace: FixtureWorkspace): WorkspaceView => ({
     ...workspace,
     sessionIds: [...workspace.sessionIds],
@@ -2011,6 +2027,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     value: {
       items: workspaces.map(workspaceSnapshot),
       archivedSessionIds: [...archivedSessionIds],
+      pinnedSessionIds: [...pinnedSessionIds],
     },
   })
 
@@ -3795,8 +3812,44 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       if (!archivedSessionIds.includes(request.sessionId)) {
         archivedSessionIds.push(request.sessionId)
         emitWorkspace({ type: 'archived', archivedSessionIds: [...archivedSessionIds] })
+        const dropPin = pinnedSessionIds.indexOf(request.sessionId)
+        if (dropPin !== -1) {
+          pinnedSessionIds.splice(dropPin, 1)
+          emitWorkspace({ type: 'pinned', pinnedSessionIds: [...pinnedSessionIds] })
+        }
       }
       return sessionOk({ archivedSessionIds: [...archivedSessionIds] })
+    },
+    pinSession: (request) => {
+      if (summaryOf(request.sessionId) === undefined) {
+        return sessionErr({
+          code: 'session/not-found',
+          message: `no session ${request.sessionId}`,
+          details: { sessionId: request.sessionId },
+        })
+      }
+      if (archivedSessionIds.includes(request.sessionId)) {
+        return sessionErr({
+          code: 'gateway/bad-request',
+          message: `session ${request.sessionId} is archived`,
+          details: {},
+        })
+      }
+      if (pinnedSessionIds[0] !== request.sessionId) {
+        const at = pinnedSessionIds.indexOf(request.sessionId)
+        if (at !== -1) pinnedSessionIds.splice(at, 1)
+        pinnedSessionIds.unshift(request.sessionId)
+        emitWorkspace({ type: 'pinned', pinnedSessionIds: [...pinnedSessionIds] })
+      }
+      return sessionOk({ pinnedSessionIds: [...pinnedSessionIds] })
+    },
+    unpinSession: (request) => {
+      const at = pinnedSessionIds.indexOf(request.sessionId)
+      if (at !== -1) {
+        pinnedSessionIds.splice(at, 1)
+        emitWorkspace({ type: 'pinned', pinnedSessionIds: [...pinnedSessionIds] })
+      }
+      return sessionOk({ pinnedSessionIds: [...pinnedSessionIds] })
     },
   }
 
@@ -4004,6 +4057,8 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
           request as WorkspaceInsertSessionBeforeRequest,
         )
         case 'workspace/archiveSession': return workspaceApi.archiveSession(request as WorkspaceArchiveSessionRequest)
+        case 'workspace/pinSession': return workspaceApi.pinSession(request as WorkspacePinSessionRequest)
+        case 'workspace/unpinSession': return workspaceApi.unpinSession(request as WorkspaceUnpinSessionRequest)
         default:
           return Promise.reject(new Error(`fixture connection RPC endpoint ${JSON.stringify(endpoint)} is unavailable`))
       }

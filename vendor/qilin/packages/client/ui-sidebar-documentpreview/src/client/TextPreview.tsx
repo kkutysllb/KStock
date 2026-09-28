@@ -9,14 +9,18 @@
  * workspace unknown — takes the same bar's place over the pages already loaded,
  * with the same reload. The type's controls — the editor open for a file the
  * editor type takes, viewer choice, wrap, and reload — sit at the end of the
- * path row; the Sidebar's strip carries none of them.
+ * path row, and the seats other plugins contribute to act on the file through
+ * its Host path; the Sidebar's strip carries none of them.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import clsx from 'clsx'
 import type { ObservableSnapshot } from '@qilin/client-store'
 import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore } from '@qilin/client-ui-slots'
-import { FileTypeIcon, IconEditOutline16, IconRefreshOutline16, Menu, Tooltip, classifyFileType } from '@qilin/client-ui-primitives'
+import {
+  FileTypeIcon, IconEditOutline16, IconPauseOutline16, IconPlayOutline16,
+  IconRefreshOutline16, Menu, Tooltip, classifyFileType,
+} from '@qilin/client-ui-primitives'
 import { acceptsPath, parseFileAddress, pathPartsOf } from '@qilin/util-workspace-path'
 import type { TextInjected } from './face.ts'
 import { failureLine } from './failure-line.ts'
@@ -66,7 +70,12 @@ export interface TextPreviewInjected extends TextInjected {
 /** The body's composed props: the tab, its navigation, the shared store and face, and copy. */
 export type TextPreviewProps =
   & PropsRuntime<'sidebar.right.pane.tab'>
-  & PropsRenderSlots<'sidebar.right.tab.document'>
+  & PropsRenderSlots<
+    | 'sidebar.right.tab.document'
+    | 'sidebar.right.tab.document.action'
+    | 'sidebar.right.tab.document.actions'
+    | 'sidebar.right.tab.document.unpreviewable'
+  >
   & PropsStore<TextStore>
   & InjectFace<TextPreviewInjected>
   & PropsLocale<'sidebarDocumentPreview'>
@@ -79,6 +88,7 @@ export type TextPreviewProps =
 export function TextPreview({
   useTabInfo, useResource, useStore, actions, loadPage, reloadPages,
   loadAll, reloadAll, prepareRenderer, useDocumentPreviews, renderSlot, t,
+  addResource, setResources,
 }: TextPreviewProps): ReactNode {
   const { tab } = useTabInfo()
   const { navigation, signal, actions: tabActions } = tab
@@ -103,13 +113,25 @@ export function TextPreview({
   const mode = selected?.loading
   const contentRendererId = mode === 'renderer' ? selected?.id : undefined
   const current = (state?.mode ?? 'text-pages') === mode && state?.contentRendererId === contentRendererId ? state : undefined
+  const add = useCallback((address: string) => {
+    addResource(tab.id, address, signal)
+  }, [addResource, tab.id, signal])
+  const set = useCallback((addresses: readonly string[]) => {
+    setResources(tab.id, [tab.contentId, ...addresses], signal)
+  }, [setResources, tab.id, tab.contentId, signal])
+  useEffect(() => {
+    set([])
+  }, [set, selected?.id])
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const scrollportRef = useRef<HTMLElement | null>(null)
   const storedScrollTopRef = useRef(0)
   const pathRef = useRef<HTMLDivElement | null>(null)
   const pathTextRef = useRef<HTMLSpanElement | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
-  const displayPath = meta.value?.absolutePath ?? current?.complete?.absolutePath ?? file.path
+  const absolutePath = meta.value?.absolutePath ?? current?.complete?.absolutePath
+  const displayPath = absolutePath ?? file.path
+  // Contributions that hand the file to the Host wait for its Host path.
+  const fileOwner = absolutePath === undefined ? undefined : { absolutePath }
   usePathClipped(pathRef, pathTextRef, displayPath, state !== undefined)
   // Every tab of this type is a `file` resource address, so its params are the
   // `file` type's; the union is narrowed on the one field read, not validated.
@@ -179,11 +201,25 @@ export function TextPreview({
   const rendererReload = useCallback((): void => {
     if (canRead && selected !== undefined) prepareRenderer(tab.id, signal, selected.id, meta.value?.version, true)
   }, [canRead, prepareRenderer, tab.id, signal, selected?.id, meta.value?.version])
+  const observedVersion = meta.value?.version
+  const changed = (current?.version !== undefined && observedVersion !== undefined
+    && observedVersion !== current.version && observedVersion !== current.observedVersion)
+    || state?.resourcesDirty === true
+  const reload = useCallback((): void => {
+    if (!canRead) return
+    if (mode === 'text-pages') reloadPages(tab.id, file, signal, observedVersion)
+    else if (mode === 'bytes-complete') reloadAll(tab.id, file, signal, observedVersion)
+    else rendererReload()
+  }, [canRead, mode, reloadPages, reloadAll, rendererReload, tab.id, file, signal, observedVersion])
+  useEffect(() => {
+    if (state?.autoRefresh && changed && current !== undefined && !current.loading && meta.status === 'live') reload()
+  }, [state?.autoRefresh, changed, current?.loading, meta.status, reload])
   const content = useMemo((): DocumentContent | undefined => {
     if (mode === 'renderer') {
       if (current === undefined) return undefined
       const revision = current.loadRevision
       return { kind: 'renderer', revision, reload: rendererReload,
+        failed: () => { actions.rendererFailed(tab.id, revision) },
         loaded: (version) => { actions.rendered(tab.id, revision, version) } }
     }
     if (mode === 'bytes-complete') {
@@ -208,11 +244,13 @@ export function TextPreview({
               <span className={css.pathName}>{unsupportedName}</span>
             </span>
           </div>
+          {fileOwner !== undefined && renderSlot('sidebar.right.tab.document.actions', fileOwner)}
         </div>
         <div className={css.body} data-textpreview-body>
           <div className={css.empty} data-textpreview-unsupported>
             <FileTypeIcon kind={classifyFileType(unsupportedName)} size={36} className={css.emptyIcon} />
             <p className={css.emptyLine}>{t('unsupportedFile')}</p>
+            {fileOwner !== undefined && renderSlot('sidebar.right.tab.document.unpreviewable', fileOwner)}
           </div>
         </div>
       </div>
@@ -229,18 +267,9 @@ export function TextPreview({
   }
   const next = loadedThrough + 1
   const { directory, name } = pathPartsOf(displayPath)
-  const observedVersion = meta.value?.version
-  const changed = current?.version !== undefined && observedVersion !== undefined
-    && observedVersion !== current.version && observedVersion !== current.observedVersion
   const loadNext = (): void => {
     if (!canRead || current?.loading || current?.eof) return
     loadPage(tab.id, file, next, signal, meta.value?.version)
-  }
-  const reload = (): void => {
-    if (!canRead) return
-    if (mode === 'text-pages') reloadPages(tab.id, file, signal, meta.value?.version)
-    else if (mode === 'bytes-complete') reloadAll(tab.id, file, signal, meta.value?.version)
-    else rendererReload()
   }
   return (
     <div className={css.preview} data-textpreview-state="text" data-textpreview-url={tab.contentId} data-document-preview={selected.id}>
@@ -331,6 +360,16 @@ export function TextPreview({
             </button>
           </Tooltip>
         )}
+        {content !== undefined && renderSlot('sidebar.right.tab.document.action', { content }, { entryKey: selected.id, hookContext: useTabInfo })}
+        <span hidden>
+          <Tooltip label={t(state.autoRefresh ? 'autoRefresh.disable' : 'autoRefresh.enable')} side="bottom" delayMs={500}>
+            <button type="button" className={css.tool} aria-label={t('autoRefresh')}
+              aria-pressed={state.autoRefresh} data-textpreview-tool="auto-refresh"
+              onClick={() => { actions.toggledAutoRefresh(tab.id) }}>
+              {state.autoRefresh ? <IconPauseOutline16 /> : <IconPlayOutline16 />}
+            </button>
+          </Tooltip>
+        </span>
         <Tooltip label={t('reload')} side="bottom" delayMs={500}>
           <button
             type="button"
@@ -342,6 +381,7 @@ export function TextPreview({
             <IconRefreshOutline16 />
           </button>
         </Tooltip>
+        {fileOwner !== undefined && renderSlot('sidebar.right.tab.document.actions', fileOwner)}
       </div>
       <div
         ref={bindBody}
@@ -363,6 +403,7 @@ export function TextPreview({
         )}
         {content !== undefined && renderSlot('sidebar.right.tab.document', {
           resourceAddress: tab.contentId, content, wrap: state.wrap, scrollportRef: bindScrollport,
+          addResource: add, setResources: set,
         }, {
           entryKey: selected.id, hookContext: useTabInfo,
           fallback: <p className={css.statusLine}>{t('rendererUnavailable', { name: selected.title() })}</p>,

@@ -9,12 +9,14 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
-  HoverCard, IconAlarmClockOutline16, IconArchiveOutline20, IconBranchOutline16,
+  HoverCard, IconArchiveOutline20, IconBranchOutline16,
   IconEditOutline16, IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16,
-  IconPlusOutline16, IconTrashOutline16, IconTriangleRightFill14, Menu, relativeTime,
+  IconPinFillRegular, IconPinOutlineRegular, IconPlusOutline16, IconTrashOutline16,
+  IconTriangleRightFill14, Menu, relativeTime,
   StateDot,
 } from '@qilin/client-ui-primitives'
 import type { StateDotState } from '@qilin/client-ui-primitives'
+import type { PropsRenderSlots } from '@qilin/client-ui-slots'
 import { abbreviateHomePath } from '@qilin/util-workspace-path'
 import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
@@ -307,23 +309,30 @@ function SessionStatusDots({ statuses }: { statuses: readonly [SessionStatus, ..
   )
 }
 
-/** Non-interactive active-Schedule marker; the enclosing row remains the only action. */
-function ActiveScheduleIndicator({ t, search = false }: { t: RowTranslate; search?: boolean }) {
-  const label = t('schedule.active')
+/** Non-interactive pinned-row marker; the enclosing row remains the only action. */
+function PinnedIndicator({ t }: { t: RowTranslate }) {
+  const label = t('row.pinned')
   return (
-    <span
-      className={clsx(css.scheduleIndicator, search && css.searchScheduleIndicator)}
-      role="img"
-      aria-label={label}
-      title={label}
-    >
-      <IconAlarmClockOutline16 />
+    <span className={css.pinIndicator} role="img" aria-label={label} title={label}>
+      <IconPinFillRegular size={14} />
     </span>
   )
 }
 
-/** Hover-card body: full title, relative time, and every relevant live status. */
-function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number; t: RowTranslate }) {
+/** Child seats a Session row renders: its leading decoration and hover-card section. */
+type SessionRowRenderSlots = PropsRenderSlots<'sidebar.session.row.leading' | 'sidebar.session.row.hover'>['renderSlot']
+
+/**
+ * Hover-card body: full title, relative time, the Session's own scheduled-task
+ * section, and every relevant live status. The seat section sits above the
+ * status lines so they stay the card's trailing status line.
+ */
+function SessionHoverContent({ node, now, renderSlot, t }: {
+  node: SessionNode
+  now: number
+  renderSlot: SessionRowRenderSlots
+  t: RowTranslate
+}) {
   const statuses = sessionStatuses(node, t)
   return (
     <div className={css.hoverContent}>
@@ -331,6 +340,7 @@ function SessionHoverContent({ node, now, t }: { node: SessionNode; now: number;
       {/* Same placeholder rule as the row's trailing cell: no timestamp
           before the first prompt. */}
       {!node.blank && <div className={css.hoverTime}>{hoverTimeLabel(node.updatedAt, now, t)}</div>}
+      {renderSlot('sidebar.session.row.hover', { sessionId: node.id })}
       {statuses.map(status => (
         <div className={css.hoverStatus} key={status.label}>
           <StateDot state={status.state} />
@@ -375,7 +385,6 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
           )}
         </span>
         <span className={css.searchResultTitle}>{result.title}</span>
-        {result.hasActiveSchedule && <ActiveScheduleIndicator t={t} search />}
       </span>
       <span className={css.searchResultMeta}>
         <span className={css.searchResultWorkspace}>{result.workspace || t('group.ungrouped')}</span>
@@ -397,14 +406,15 @@ export function SearchResultItem({ result, currentId, onOpen, t }: {
  * @param props.onRename - open the session rename dialog (id + current title).
  * @param props.onFork - fork a session at its last completed turn.
  * @param props.onArchive - archive a session by id.
+ * @param props.onPin - pin a session by id (leading its group and the flat list).
+ * @param props.onUnpin - drop a session's pin.
  * @param props.onReveal - scroll this row into view after search navigation, then acknowledge it.
  * @param props.drag - optional row-drag target wiring; blank rows cannot start a drag.
- * @param props.flat - omit the empty status slot in the hierarchy-free flat list.
  * @param props.t - the browser root's locale seat.
  * @returns the session row.
  */
 export function SessionNodeItem({
-  node, currentId, now, onOpen, onRename, onFork, onArchive, onReveal, drag, flat = false, t,
+  node, currentId, now, onOpen, onRename, onFork, onArchive, onPin, onUnpin, onReveal, drag, renderSlot, t,
 }: {
   node: SessionNode
   currentId: string | undefined
@@ -416,12 +426,16 @@ export function SessionNodeItem({
   onFork: (id: SessionNode['id']) => void
   /** Archive this session (row menu action; commits without a dialog). */
   onArchive: (id: SessionNode['id']) => void
+  /** Pin this session ahead of unpinned rows (row menu and hover action). */
+  onPin: (id: SessionNode['id']) => void
+  /** Drop this session's pin (row menu and hover action). */
+  onUnpin: (id: SessionNode['id']) => void
   /** Scroll this row into view after search navigation, then acknowledge it. */
   onReveal?: (() => void) | undefined
   /** Present on reorderable-list rows so every row can remain a drop target. */
   drag?: RowDragProps | undefined
-  /** The row is rendered without a parent Workspace header. */
-  flat?: boolean | undefined
+  /** Child-seat renderer for the row's leading decoration and hover-card section. */
+  renderSlot: SessionRowRenderSlots
   t: RowTranslate
 }) {
   const row = node
@@ -443,6 +457,13 @@ export function SessionNodeItem({
   // touches the session log, so it is not styled as destructive and needs no
   // confirmation dialog.
   const sessionMenuItems = [
+    // Pin leads the menu: it changes where the row sits, before any action on
+    // its content. Upstream's order is pin 100, rename 200, fork 300, archive 400.
+    {
+      id: 'pin',
+      label: t(row.pinned ? 'menu.unpinSession' : 'menu.pinSession'),
+      icon: row.pinned ? <IconPinFillRegular /> : <IconPinOutlineRegular />,
+    },
     { id: 'rename', label: t('rename'), icon: <IconEditOutline16 /> },
     { id: 'fork', label: t('menu.fork'), icon: <IconBranchOutline16 /> },
     // 20-native glyph in the menu's 16px icon slot (Menu.module.css .itemIcon).
@@ -454,7 +475,6 @@ export function SessionNodeItem({
       ref={rowRef}
       className={clsx(
         css.sessionRow, selected && css.selected, menuOpen && css.menuOpen,
-        flat && !showStatus && css.flatSessionRowWithoutStatus,
         drag?.marker === 'before' && css.dropBefore, drag?.marker === 'after' && css.dropAfter,
       )}
       role="treeitem"
@@ -490,26 +510,42 @@ export function SessionNodeItem({
       {/* Pending interaction and own or descendant activity outrank the
           finished-but-unviewed reminder, which returns after activity stops
           and is cleared by opening the session. */}
-      {(!flat || showStatus) && (
-        <span className={css.slot}>
-          {showStatus && <SessionStatusDots statuses={statuses} />}
-        </span>
-      )}
+      {/* The leading cell hosts the row's state dot, or the leading seat
+          while the row's primary state is idle, so a status dot and a leading
+          occupant never share the row. Archived rows keep the cell blank — the
+          grayed row carries the archived look — and their live status stays on
+          the hover card only. */}
+      <span className={css.slot}>
+        {!row.blank && (showStatus
+          ? <SessionStatusDots statuses={statuses} />
+          : renderSlot('sidebar.session.row.leading', { sessionId: node.id }))}
+      </span>
       <span ref={titleRef} className={css.title}>{title}</span>
-      {row.hasActiveSchedule && <ActiveScheduleIndicator t={t} />}
       {/* A blank New Session row is a provisional placeholder: nothing has
           happened in it yet, so a "now" timestamp and the row verbs
           (rename/fork/archive) would all act on content that does not
           exist — both trailing cells stay off until the first prompt. */}
       {!row.blank && <span className={css.time}>{timeLabel(row.updatedAt, now, t)}</span>}
+      {/* Trails the time so the marker occupies the same right-edge cell as
+          the hover pin button that replaces it. */}
+      {row.pinned && !row.blank && <PinnedIndicator t={t} />}
       {!row.blank && (
         <span className={css.rowActions}>
+          <button
+            type="button"
+            className={css.iconButton}
+            aria-label={t(row.pinned ? 'actions.unpin' : 'actions.pin')}
+            onClick={(e) => { e.stopPropagation(); (row.pinned ? onUnpin : onPin)(node.id) }}
+          >
+            {row.pinned ? <IconPinFillRegular size={14} /> : <IconPinOutlineRegular size={14} />}
+          </button>
           <Menu
             open={menuOpen}
             onClose={() => { setMenuOpen(false) }}
             items={sessionMenuItems}
             onSelect={(id) => {
               setMenuOpen(false)
+              if (id === 'pin') (row.pinned ? onUnpin : onPin)(node.id)
               if (id === 'rename') onRename(node.id, row.title)
               if (id === 'fork') onFork(node.id)
               if (id === 'archive') onArchive(node.id)
@@ -534,7 +570,7 @@ export function SessionNodeItem({
   return (
     <HoverCard
       anchor={ownRow}
-      content={<SessionHoverContent node={node} now={now} t={t} />}
+      content={<SessionHoverContent node={node} now={now} renderSlot={renderSlot} t={t} />}
       disabled={menuOpen || drag?.active === true}
       copyText={row.blank ? undefined : row.title}
       copyLabel={t('copy')}
