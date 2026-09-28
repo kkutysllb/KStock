@@ -1135,3 +1135,10 @@ source 冒烟（本地身份可见走跳过分支、CSC_LINK 保持 unset）、Y
 均已通过，electron-builder 三连败于 `Please remove prefix "Developer ID Application:" from
 the specified name`——`CSC_NAME` 要短名（`build-signed-macos.sh` 的 `CSC_NAME=KS_SIGN_IDENTITY`
 即短名口径，本次直接取 APPLE_SIGNING_IDENTITY 踩了前缀坑）→ 导出前剥前缀。
+
+**第 4 轮**（tag `7b20b46c` + lib 产物 `c6fec549`，run 36425780559）：ubuntu/win 连续第二轮
+全绿；mac **签名 + 公证成功**（`notarization successful`，V5 非 adhoc + TeamIdentifier +
+spctl + stapler 过，V1–V6/V8 全绿）。唯一红是 V7 门禁自身语义过严——mac 包的
+app-update.yml 本就不写 publisherName（NSIS 侧字段），「缺字段」非事故、「写错 CN」才是
+（KCoder 事故形态）→ 语义校准为「缺省合规、出现须 = 证书 CN」。本轮起跑前另补交
+kstock/quant/lib 产物（入库构建产物随源码，close() 提交漏带——脏树被发布门正确拦截）。

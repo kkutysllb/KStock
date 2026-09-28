@@ -180,10 +180,12 @@ AU="$RES/app-update.yml"
 if [ ! -f "$AU" ]; then
   bad "V7 缺 ${AU}（updater 元数据未随包）"
 elif [ "$PLATFORM" = "mac" ]; then
+  # publisherName 是 NSIS/Windows 侧字段，electron-builder 在 mac 包本就不写；
+  # 这里防的是「写进来了但 CN 是别的证书」的污染（KCoder 事故形态）。
   cert_cn="$(printf '%s' "${CS_OUT:-$(codesign -dv --verbose=4 "$APP" 2>&1 || true)}" | sed -n 's/^Authority=\(Developer ID Application: [^()]*([A-Z0-9]*)\).*/\1/p' | head -1)"
   pub_cn="$(sed -n 's/^publisherName:[[:space:]]*//p' "$AU" | head -1 | tr -d '"'\''')"
   if [ -z "$pub_cn" ]; then
-    bad "V7 macOS 产物 app-update.yml 缺 publisherName"
+    ok "V7 macOS 产物无 publisherName（mac updater 不消费该字段；出现即须 = 证书 CN）"
   elif [ -z "$cert_cn" ]; then
     bad "V7 无法读取本机证书 CN（签名无效？V5 会另有断言）"
   elif [ "$pub_cn" != "$cert_cn" ]; then
