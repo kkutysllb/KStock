@@ -840,3 +840,40 @@ git -C /Users/libing/kk_Projects/QiLin grep -l "incompatible-version" d456452786
 未改动 KStock 与 QiLin 的任何**源码**；未执行安装、构建、迁移脚本；
 唯一动过的文件系统对象是分析用临时目录 `/tmp/qilin-base`、`/tmp/qilin-305`（已清理）。
 KStock 已存在上次升级遗留的同名分支 `upgrade/qilin-3.0.5`（`43931980`），故本计划用 `-2` 后缀。
+
+---
+
+## 执行记录（2026-09-28，分支 upgrade/qilin-3.0.5-2）
+
+### 锚点
+- KStock 起始 SHA：`5f1f9ba0`（在飞改动固化后）→ 分支首提交 `049d6283`；上游 SHA：`d456452786`；旧 lock：`9798395b` / 3.0.4
+- 会话备份：`~/kstock-sessions-backup-20260928-1313.tar.gz`（291 条）；profile 备份：`~/kstock-profile-backup-20260928-1313.json`
+
+### 阶段结果
+| 阶段 | 结果 | 证据（命令输出摘要） |
+|---|---|---|
+| E0 | ✅ | 分支 `upgrade/qilin-3.0.5-2`；modified-left=0；A1=跳过旧 SEA、A2=web-app 后、A3=110 |
+| E1 阻断项 | ✅ | 五条 grep 1/1/2/1/1；fail-loud 红（锚点失配 exit 1）绿（重放 exit 0）；C1 `8a1adf0e` |
+| E2 同步 | ✅ | 快照 d456452786/3.0.5，3733 文件 +366k/−118k；`patch_vendor_engine：应用 2 处`；C2 `46abcdfc` |
+| E3 依赖与产物 | ✅ | install/build/闭包门禁 exit 0：**11 agent presets / 144 workspace packages**；闭包动画包 1.2.3 + 8 技能 + 113 HTML；tar.gz 209M（闭包 563M，净增 +17M：动效库 +82M 被上游移除桌面壳等抵消）；C3 `e4ecec03` |
+| E4 产品面 | ✅ | patch 5 目标行 + 2 disabled；profile 迁移单测 5/5（红路径 4/1 验证）；门禁红（改名 manifest → exit 1）绿（exit 0）；C4 `4a2f184e` |
+| E5 其余适配 | ✅ | kstock 工作区 +news-ui/chan-ui（lock 136 entries）；repairStagedScope 等价修复；blank 观察项不改代码；C5 `4b8d6ed1` |
+| E6 验证 | ✅/⚠️ | check-ci 全绿（exit 0）；迁移预检：83/94 发布 v4，11 个 write_locked（活跃旧实例持有，留 v3 待写打开自迁移）；引擎独立冒烟（隔离 home:18011）五探针全过、8 技能注册；真机 13 项待人工；发布链路（A5）独立窗口 |
+| E7 收尾 | ✅/⚠️ | 文档回写完成；**合并待真机 13 项确认后执行** |
+
+### 计划外适配（执行中发现并处置）
+| 现象 | 根因 | 处置 | 是否已补进门禁 |
+|---|---|---|---|
+| E1.2 计划锚点在 3.0.5 仍失配（图标行尾多了 ` useModalLayer,`） | 计划给的稳定锚点猜测有误 | 改锚「值导入块闭括号 → import type 行」收尾序列；插入只含 5 个新增图标（避免重复导入） | 否（一次性修正，锚点本身即门禁） |
+| E1.6 红路径按计划 `git checkout --` 把未提交的 E1 编辑一并抹掉 | 计划步骤顺序 bug（checkout 先于 E1.8 提交） | 重放六处编辑；红路径改用反向替换 + 缺文件分支演练；真绿移到 E2 同步后 | 是（S3 已有处置条目） |
+| E1.1 期望「三行均 FAIL」实际 2 FAIL + glob 行 OK | glob 锚点在 3.0.5 存在（病理是目录不存在），计划期望写反 | 以「锚点在 + 目录不在」为 B4 病理证据 | 否（文档性修正） |
+| **verify-runtime-closure 指回 agent.cordis.yml 后 0 presets 假绿** | 3.0.5 起「组合文件本身即 preset」，presetDefinitions 提不出包装行 | 补丁 22 扩为四段（glob / path 导入 / 校验循环整文件回退 / 计数同口径）；门禁恢复真实语义（11 presets 校验通过） | 是（补丁 22 随 sync 重放） |
+| build-runtime-bundle.sh 无条件要求 APPLE_SIGNING_IDENTITY | 在飞脚本按公证场景写死 | 未设身份→跳过预签（本地开发闭包）；发布窗仍强制 | 是（脚本内注释） |
+| check-ci 首步 tsdown 失败（deps-status-check 触发自动安装失败） | E5.1 只 `--lockfile-only` 未同步 node_modules | `CI=true pnpm install`（kstock 工作区）后全绿 | 否（本地操作顺序问题，CI 无此路径） |
+| 迁移预检 11 个会话 write_locked | 活跃旧桌面实例持有写句柄 | 按 S8 保守口径：留 v3，其所有者写打开时自迁移；备份在，可回滚 | 否（S8 已有处置条目） |
+| E6.3 冒烟与活跃实例冲突（18001 被占、共享 home 有锁） | 计划假设无活跃实例 | 隔离 home + 备用端口 18011；profile 由备份清单 + register-profile-plugins.sh 现造 | 否（执行环境问题） |
+
+### 遗留观察（不阻塞本次）
+- 闭包内 dsh-animations 实测 113 个 HTML（计划估算 108；非门禁项）。
+- 首次启动新构建会按 tar 指纹自动刷新 `~/.kstock/runtime` 并把 profile bundles 迁到四元素——两者都在引擎 spawn 前完成，无 R6 窗口（engine.ts `ensureRuntimeExtracted` + `ensureKstockProfile`）。
+- 发布链路改造（R0–R7）见 [plans/2026-09-28-release-pipeline-refit.md](../plans/2026-09-28-release-pipeline-refit.md)，A5 独立窗口执行。
