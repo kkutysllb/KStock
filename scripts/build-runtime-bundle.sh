@@ -141,3 +141,10 @@ TAR_SIZE=$(du -h "$STAGING/kstock-runtime.tar.gz" | cut -f1)
 CLO_SIZE=$(du -sh "$CLOSURE" | cut -f1)
 log "完成：tar.gz $TAR_SIZE（闭包未压缩 $CLO_SIZE）"
 ls -la "$STAGING" | grep -vE "^total|\.$"
+
+# ── 7. 收尾：恢复引擎工作区依赖（pnpm deploy --prod 副作用）─────────
+# deploy 会把工作区状态置为 production 并剪掉部分 workspace 包的
+# node_modules（实机两次复现：apps/cli/node_modules 整体消失，dev 引擎
+# 源码直跑随即 ERR_MODULE_NOT_FOUND 'commander'）。store 命中，代价秒级。
+log "恢复引擎工作区依赖（deploy 剪枝回滚）"
+"$REPO_ROOT/scripts/qilin-pnpm.sh" install --frozen-lockfile >/dev/null
