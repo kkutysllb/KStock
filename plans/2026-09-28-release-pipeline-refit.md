@@ -14,9 +14,16 @@
 electron-builder 26 + electron-updater 6、macOS `codesign` / `notarytool` / `stapler`、`gh` CLI、Bash + Python 3。
 
 **状态:** 本文件为**改造计划**，尚未执行；本轮未改动任何代码（唯一新增文件即本计划）。
-与既有两份计划的衔接：引擎升级相关改动见 [升级设计稿](2026-09-28-qilin-3.0.5-upgrade.md) 与
-[执行手册](2026-09-28-qilin-3.0.5-implementation.md)；本计划**独立于**引擎版本，可先做（R0–R5）
-再叠引擎升级，也可在其后做（R6 演练应包含引擎升级后的产物）。
+与既有计划的衔接：引擎升级见 [执行手册](2026-09-28-qilin-3.0.5-implementation.md)
+（已执行完毕，2026-09-28 晚随合并提交 `e6547774` 落入 main）；本计划**独立于**引擎版本，
+R6 演练产物应包含引擎升级后的形态。
+
+**复核修订（2026-09-28 晚，引擎升级合并后）:** 升级落地改变了本计划的四条事实前提，
+修订已回写正文——①F3/G3 证据过期（`verify_package_resources` 已绿）但缺口变形到
+`check-release.sh` / `build-desktop.sh`（见 R1.5 新形态）；②G11 表述不准，且 R1.6 原改法
+会误伤本地开发闭包构建（见 R1.6 修订版：fail-closed 移到发布门）；③R0.3 基线过期
+（在飞改动已合入 main），暂存改按路径、禁用 `git add -A`；④R1 增加先行完成记录：
+`build-runtime-bundle.sh` 的 `REPO_ROOT` 变量 bug 当日已顺手修复。
 
 ---
 
@@ -33,7 +40,7 @@ electron-builder 26 + electron-updater 6、macOS `codesign` / `notarytool` / `st
 |---|---|---|---|
 | **F1** | **publish job 没有 `actions/checkout`**，却调用仓内脚本 `scripts/publish_release_notes.sh`；而 `push: tags` 事件的 workflow 取自**被推 tag 的 commit** → 改 main 对已推 tag 无效，只能 `--delete-tag` 重发。当前**未触发**（最后一次 tag `v1.1.0` 早于引入该步的提交 31 分钟），属**潜伏缺陷** | **致命** | `release.yml:76-94`（无 checkout）；引入步 `73f6c87a`（2026-09-01 22:23）晚于 `v1.1.0` tag（21:52） |
 | **F2** | **CI 没有引擎引导步骤**：`vendor/qilin` 不在根 workspace（根 `pnpm-workspace.yaml` 只有 `apps/*`、`kstock/*`），而 `build-engine-bundle.sh` 需要 `vendor/qilin/node_modules` + `lib/` → 全新 runner 上 `qilin-pnpm.sh exec tsx …` 必然找不到 tsx | **阻断** | `scripts/build-engine-bundle.sh:75-78`（`--skip-build` 要求 lib 已存在）；工作流无任何 `qilin-pnpm`/`vendor/qilin` 步骤 |
-| **F3** | **发布契约四方不一致**（实测红）：`electron-builder.yml`（在飞改动）`extraResources` 指向 `staging/*`，而门禁脚本仍断言 `dist-exe/`；该门禁同时是 `check-ci.sh` 与 `build-release.sh` 的发布前门 | **阻断** | 实跑 `verify_package_resources.py --source-only` → `[FAIL] source electron-builder extraResources — Expected from: ../../dist-exe -> to: engine`，EXIT=1 |
+| **F3** | **发布契约不一致（缺口变形，2026-09-28 晚复核）**：`extraResources` 与 `verify_package_resources` 已随引擎升级切到 `staging/` 闭包（A1 决策，实测 exit 0），但**发布执行体没跟着切**——`check-release.sh` 仍调已退役的 `build-engine-bundle.sh` 且不调 `build-runtime-bundle.sh`，`build-desktop.sh` 仍断言 `dist-exe/kstock-engine` → 全新 runner 上 `staging/` 无人构建，打包链必断（本地因 `staging/` 恰好存在而侥幸） | **阻断** | 实跑 `verify_package_resources.py --source-only` = exit 0（原红灯已消）；`check-release.sh:8-11`、`build-desktop.sh:15` 仍见 `dist-exe` / 旧 SEA 构建 |
 | **F4** | **签名凭据在三个平台全量注入**（无 `runner.os` 守卫）。KCoder 已记录同类事故：Windows 包被 Apple 证书签名 → Authenticode NotValid → electron-updater 拒更新，且 `app-update.yml` 写入 mac 证书 CN 作 publisherName | **高（潜伏）** | `release.yml:38-54`（单一 env 块，job/step 无 `if`）vs KCoder `release.yml:77-78/103/128-131` |
 | **F5** | **mac 未显式声明 `notarize`** → 凭据缺失时 electron-builder **静默跳过公证**并照常出包，用户侧被 Gatekeeper 拦 | **高** | `electron-builder.yml` 无 `notarize` 键（KCoder 有 `notarize: true:102`） |
 | **F6** | **本地入口 2.0 后不可执行**：`build-release.sh` 仍按 1.x 处理 `pyproject.toml`（已删）与 `uv.lock`（已删），`update_versions` 读不到文件即抛异常 | **高** | `build-release.sh:316-350`（无守卫 `read_text`）；`git ls-files` 无根级 `pyproject.toml`/`uv.lock` |
@@ -141,18 +148,18 @@ CI：push tag / workflow_dispatch(tag)
 | 产物收集 | 按扩展名含 `rpm`/`blockmap`/`latest*.yml`，`if-no-files-found: error` | `:56-74` |
 | publish job | download-artifact → ls → **调用仓内脚本（无 checkout）** → softprops | `:76-94` |
 
-### 2.3 打包契约（含未提交的在飞改动）
+### 2.3 打包契约（原「在飞改动」已随引擎升级合入 main，2026-09-28）
 
 | 文件 | 现状 |
 |---|---|
-| `electron-builder.yml` | mac dmg+zip、`hardenedRuntime`、entitlements（单份，内容为主文件超集，**够用**）、`gatekeeperAssess:false`、**无 `notarize` 键**；win nsis + `artifactName: ${productName}-Setup-${version}.${ext}`（v1.0.8 404 的正式防线）；linux deb+rpm；**win/linux 无签名配置**；`extraResources` **已改指 `staging/*`**（在飞） |
-| `electron-builder.local.yml`（在飞） | `extends: ./electron-builder.yml` + `publish: null`，治本地离线构建触网 |
+| `electron-builder.yml` | mac dmg+zip、`hardenedRuntime`、entitlements（单份，内容为主文件超集，**够用**）、`gatekeeperAssess:false`、**无 `notarize` 键**；win nsis + `artifactName: ${productName}-Setup-${version}.${ext}`（v1.0.8 404 的正式防线）；linux deb+rpm；**win/linux 无签名配置**；`extraResources` 指 `staging/*` 三件套（随引擎升级合入 main） |
+| `electron-builder.local.yml` | `extends: ./electron-builder.yml` + `publish: null`，治本地离线构建触网 |
 | `build-desktop.sh` | 前置断言 **`dist-exe/kstock-engine`**（旧路径）；Darwin 分支 `ulimit -n 10240`、`CSC_LINK` 未设则 `CSC_IDENTITY_AUTO_DISCOVERY=false`；重试 3 次（仅 mac）；`KSTOCK_OFFLINE_BUILD` 切 local 配置 |
-| `build-runtime-bundle.sh`（在飞） | 闭包构建（deploy + 物化 + ABI 冒烟 + **闭包预签**）；`:109-111` **无条件要求 `APPLE_SIGNING_IDENTITY`，无 `uname` 守卫** → 在 ubuntu/windows runner 上必然 die |
-| `verify_package_resources.py` | `:171-178` 断言 `from: ../../dist-exe` + `to: engine`（**与在飞 builder 配置矛盾**）；product 模式 `:237-240` 也硬编码 `dist-exe/` |
+| `build-runtime-bundle.sh` | 闭包构建（deploy + 物化 + ABI 冒烟 + 闭包预签）；预签分支**缺 `uname` 守卫**：未设 `APPLE_SIGNING_IDENTITY` 时优雅跳过（当日两次实测），但变量被全局注入（G4）时 ubuntu/windows 会执行 mac 预签脚本而挂；`:151` 的 `REPO_ROOT` 未定义变量已当日修复（收尾依赖还原步此前必失败） |
+| `verify_package_resources.py` | 断言已随引擎升级切闭包形态（A1 决策）：`extraResources` 断言 `staging/` 三件套、product 模式断言闭包结构，实测 exit=0；**遗留**：顶部 docstring 仍写「product 模式校验 dist-exe」（R1.5 收尾） |
 | `check-ci.sh` | `:30` 跑 `verify_package_resources.py --source-only`；`:41` 冒烟 `dist-exe/kstock-engine --help` |
-| `presign-engine-macos.sh`（在飞） | 默认目录仍写死 `dist-exe`（调用方传参，功能可用，**默认值/注释陈旧**） |
-| 本地签名流水线（在飞） | `build-signed-macos.sh`（223 行）已固化四个实测坑：离线配置、`ELECTRON_MIRROR`、**不设 `CSC_LINK` 改走 `CSC_KEYCHAIN`+`CSC_NAME`**、以 `notarytool history` 的 Apple 侧状态为准；**CI 完全不复用** |
+| `presign-engine-macos.sh` | 默认目录仍写死 `dist-exe`（调用方传参，功能可用，**默认值/注释陈旧**） |
+| 本地签名流水线 | `build-signed-macos.sh`（223 行）已固化四个实测坑：离线配置、`ELECTRON_MIRROR`、**不设 `CSC_LINK` 改走 `CSC_KEYCHAIN`+`CSC_NAME`**、以 `notarytool history` 的 Apple 侧状态为准；**CI 完全不复用** |
 
 ### 2.4 自动更新
 
@@ -180,7 +187,7 @@ CI：push tag / workflow_dispatch(tag)
 |---|---|---|---|
 | **G1** | publish job 无 `checkout`（F1） | 下次推 tag 必然不产出 Release；三平台各最多 90 min 白跑；且**不可原地修**（须 delete-tag 重发） | 1.2 的 publish job 结构 |
 | **G2** | CI 无引擎引导（F2） | 全新 runner 上发布链第一步就断 | 1.2 的「上游克隆+构建」前置步 |
-| **G3** | 发布契约四方不一致（F3） | 门禁当前实测红；CI 打包路径与新 `extraResources` 不一致 | 1.3 的「目录级映射 + 对账」+ 1.4-3 |
+| **G3** | 发布执行体未随闭包形态切换（F3 变形后）：`check-release.sh` / `build-desktop.sh` 仍走旧 SEA | 全新 runner 打包链必断；本地「恰好有 staging」掩盖矛盾 | 1.3 的「目录级映射 + 对账」+ 1.4-3 |
 | **G4** | 签名变量三平台全量注入（F4） | 隐式安全，随时重演「Windows 包被 mac 证书签名 → 更新被拒」 | 1.2 的平台化注入 |
 | **G5** | mac 未 `notarize: true`（F5） | 凭据失效即静默发未公证包 | 1.3 |
 | **G6** | 本地入口 2.0 后不可执行（F6） | 无法用一条命令准备发版 | 1.1 的单一入口 |
@@ -188,7 +195,7 @@ CI：push tag / workflow_dispatch(tag)
 | **G8** | 无 `workflow_dispatch`（平台失败不能补跑） | 单平台失败要重跑全矩阵 | 1.2 的触发面 |
 | **G9** | 无发布说明前置门 | 漏写说明静默退化为提交列表 | 1.1 的 ship 强制校验 |
 | **G10** | updater `quitAndInstall` 无异常兜底 | 安装失败无用户可见反馈 | 1.5 |
-| **G11** | `build-runtime-bundle.sh` 无 Darwin 守卫（与 G4 的按平台注入冲突） | 接入 CI 后 ubuntu/windows 必挂 | — |
+| **G11** | 闭包预签分支**无 `uname` 守卫**（与 G4 的按平台注入冲突）：现脚本是「未设 `APPLE_SIGNING_IDENTITY` → 跳过」的优雅降级（当日实测），但变量一旦被全局注入（G4 现状），ubuntu/windows 会拿 mac 变量跑 `presign-engine-macos.sh`（`codesign` 不存在）→ 必挂 | 接入 CI 后 ubuntu/windows 必挂 | — |
 | **G12** | 文档陈旧 | 误导后续维护 | 1.1/1.2 的约定文档化 |
 | **G13** | Windows 未签名（SmartScreen 警告）；Linux 无 AppImage | 用户侧体验 | KCoder 显式接受 win/linux 不签名 + 出 AppImage |
 
@@ -287,34 +294,46 @@ jobs:
 
 ### Phase R0 — 契约冻结与基线（半天）
 
-- [ ] **R0.1 记录基线红灯（只读）**
+- [ ] **R0.1 记录基线证据（只读，2026-09-28 晚修订）**
 
 ```bash
 cd /Users/libing/kk_Projects/KStock
-scripts/python.sh scripts/verify_package_resources.py --source-only; echo "exit=$?"   # 期望（当前）exit=1，报 extraResources
-grep -n "dist-exe" scripts/check-ci.sh scripts/build-desktop.sh scripts/check-release.sh \
-    scripts/verify_package_resources.py apps/desktop/electron-builder.yml 2>/dev/null
+scripts/python.sh scripts/verify_package_resources.py --source-only; echo "exit=$?"   # 期望 exit=0（原红灯已随引擎升级消解）
+grep -n "dist-exe\|build-engine-bundle\|build-runtime-bundle" scripts/check-ci.sh \
+    scripts/build-desktop.sh scripts/check-release.sh scripts/verify_package_resources.py \
+    apps/desktop/electron-builder.yml 2>/dev/null
 ```
 
-**交付**：把两条命令的输出贴进本计划的执行记录（证明 G3 存在）。
+**交付**：把两条命令的输出贴进本计划的执行记录。第一条证明 verify 已绿（F3 原证据过期），
+第二条证明缺口变形到 `check-release.sh` / `build-desktop.sh`（仍指 `dist-exe` / 旧 SEA 构建）。
 
 - [ ] **R0.2 写 `docs/开发/发布契约.md`**（新建）
 
 内容 = §4.1 的单一事实源表 + §4.4 的门禁矩阵 + §4.5 的不可变 tag SOP + secrets 清单与注入范围。
 **这是本阶段最重要的产出**：后续所有任务都以它为准绳。
 
-- [ ] **R0.3 冻结基线：提交在飞改动**
+- [ ] **R0.3 从当前 main 开分支（2026-09-28 晚修订：基线过期）**
+
+> 原文「冻结基线：提交在飞改动」已过期——在飞的闭包装配与本地签名流水线已随
+> 引擎升级合并 main（`e6547774`），无需补提交；基线即当前 main，仍需记录起始 SHA。
 
 ```bash
-git add -A && git commit -m "chore(desktop): 固化运行时闭包装配与本地签名流水线（发布改造的基线）"
+git checkout main && git pull
 git checkout -b refit/release-pipeline
+git rev-parse HEAD   # 记入执行记录 = 回滚锚点
 ```
 
-**验收**：`git status --short` 干净（除 gitignored 生成物）；记录起始 SHA 作为回滚锚点。
+**验收**：`git status --short` 干净（除 gitignored 生成物）；暂存一律**按路径**
+`git add <path>...`，禁用 `git add -A`（`vendor/` 下偶有未跟踪杂物，如临时截图，
+全量暂存会把它们吞进提交）。
 
 ---
 
 ### Phase R1 — 本地链路修复：让「一条命令准备发版」重新可用（1 天）
+
+> **先行完成（2026-09-28 晚，随引擎升级顺手修）**：`build-runtime-bundle.sh:151`
+> 收尾「deploy 剪枝回滚」误用未定义 `REPO_ROOT`（应为 `ROOT`），此前该步必失败、
+> 依赖还原不执行（`commander` 缺失类问题的复发点）。已修，全脚本端到端 exit 0。
 
 - [ ] **R1.1 去掉 1.x 遗留的版本/锁文件**
 
@@ -388,18 +407,23 @@ fi
 （a）把文档改成事实；（b）增加 `--with-desktop-build` 开关，走 `scripts/check-release.sh`。
 **建议（a）+ 保留 `check-release.sh` 作为手动入口**——本地打包成本高，且签名/公证凭据在 CI 才有。
 
-- [ ] **R1.5 发布契约切到闭包形态（G3 主修）**
+- [ ] **R1.5 发布执行体切到闭包形态（G3 主修，2026-09-28 晚修订）**
 
-逐文件把「引擎产物 = `dist-exe/`」改为「= `staging/` 闭包」：
+> 修订背景：`electron-builder.yml` 的 `extraResources` 与 `verify_package_resources.py`
+> 的断言已随引擎升级切到 `staging/` 闭包（A1 决策，实测 exit 0）——原表两行 verify
+> 断言项**已完成**。缺口变形在发布执行体：本表以「让 `check-release.sh` 这条链
+> 产出并消费同一份 `staging/` 三件套」为唯一目标。
 
 | 文件 | 改动 |
 |---|---|
-| `scripts/check-release.sh` | `build-engine-bundle.sh` → `build-runtime-bundle.sh`；product verify 仍走 `verify_package_resources.py`（其断言同步改） |
-| `scripts/build-desktop.sh:15-20` | 前置断言改 `staging/kstock-runtime.tar.gz` + `staging/plugins` + `staging/presets` |
-| `scripts/verify_package_resources.py:171-178` | `extraResources` 断言改为 `from: ../../staging/kstock-runtime.tar.gz` + `to: kstock-runtime.tar.gz`（以及 plugins/presets 两条） |
-| `scripts/verify_package_resources.py:237-283`（product 模式） | 断言根由 `dist-exe/` 改为 `staging/`（`kstock-engine*` 可执行断言改为闭包结构断言：`runtime-bootstrap.mjs` + `node_modules/`） |
-| `scripts/check-ci.sh:41` | `dist-exe/kstock-engine --help` → `staging/kstock-runtime` 存在时跑 `runtime-bootstrap.mjs --help`（用 Electron node） |
-| `scripts/local/presign-engine-macos.sh:22` | 默认目录注释与默认值改为闭包目录（或直接去掉默认值，强制传参） |
+| `scripts/check-release.sh` | `build-engine-bundle.sh` → `build-runtime-bundle.sh`（CI 上 `staging/` 的唯一来源）；product verify 仍走 `verify_package_resources.py` |
+| `scripts/build-desktop.sh:6,15` | 前置断言改 `staging/kstock-runtime.tar.gz` + `staging/plugins` + `staging/presets` |
+| `scripts/check-ci.sh:43-44` | `dist-exe/kstock-engine --help` 冒烟改闭包冒烟（`staging/kstock-runtime` 存在时以 Electron node 跑 `runtime-bootstrap.mjs --help`） |
+| `scripts/local/presign-engine-macos.sh:2-22` | 默认目录与注释从 `dist-exe` 改为闭包目录（或去掉默认值，强制传参） |
+| 契约裁决 | `build-engine-bundle.sh`（旧 SEA，文档已称退役）二选一写进契约文档：(a) 从 `verify_package_resources` 必查清单摘除并标注「仅新旧回归对比手动用」；(b) 彻底删除。**建议 (a)**（已登记进 `docs/开发/发布契约.md` §5） |
+| `apps/desktop/electron-builder.yml:65` | 注释仍写「引擎 Mach-O 的预签由 build-engine-bundle.sh 负责」——预签主体已是 `build-runtime-bundle.sh`（闭包整树），同步注释（R0 复核新发现） |
+| `verify_package_resources.py:7` | 顶部 docstring 仍写「product 模式校验 dist-exe」，同步为闭包口径 |
+| ~~verify 断言两行~~ | **已完成**（引擎升级落地）：`extraResources` 与 product 模式断言均已切 `staging/` |
 
 **验收（绿）**：
 
@@ -408,29 +432,45 @@ scripts/python.sh scripts/verify_package_resources.py --source-only; echo "exit=
 bash -n scripts/check-release.sh scripts/build-desktop.sh scripts/check-ci.sh
 ```
 
+另加一条：在**没有 `staging/` 的干净副本**（如 `git worktree`）里跑 `check-release.sh` 至打包前一步，
+必须自建 `staging/`，而不是依赖「本地恰好构建过」。
+
 **验收（红路径）**：把 `electron-builder.yml` 的 `extraResources` 临时改回 `../../dist-exe` → 门禁必须 `FAIL`（证明这道门还活着）。
 
-- [ ] **R1.6 `build-runtime-bundle.sh` 加 Darwin 守卫（G11）**
+- [ ] **R1.6 闭包预签的平台守卫与 fail-closed 位置（G11，2026-09-28 晚修订）**
+
+> 原提案把「macOS 缺 `APPLE_SIGNING_IDENTITY`」改成 `die`——会把本地开发闭包构建
+> （无身份、不公证，当日两次实测可用）一起打死。修订为职责分离：
+> **脚本本体保本地可用**（缺身份 = 跳过预签；非 Darwin = 根本不碰预签脚本），
+> **fail-closed 放到发布门**（`check-release.sh` 入口要求身份齐备）。
 
 ```diff
--case "$(uname -s)" in
--  Darwin)
--    if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
--      ...预签...
--    else
--      echo "（跳过 macOS 引擎预签：APPLE_SIGNING_IDENTITY 未设置...）"
--    fi
--    ;;
--esac
-+# 闭包预签只在 macOS 有意义（其他平台无 Mach-O）；非 Darwin 不要求该 secret，
-+# 否则 ubuntu/windows runner 会在这一步无条件 die。
+ # scripts/build-runtime-bundle.sh（预签步）
+-if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
+-  log "未设 APPLE_SIGNING_IDENTITY——跳过预签（本地开发闭包，不公证）"
+-else
+-  ...预签...
+-fi
++# 预签只在 macOS 有意义（其他平台无 Mach-O）；非 Darwin 不碰预签脚本，
++# 否则配合 G4 的全局凭据注入，ubuntu/windows 会拿 mac 变量跑 codesign 而挂。
 +if [ "$(uname -s)" = "Darwin" ]; then
-+  [ -n "${APPLE_SIGNING_IDENTITY:-}" ] || die "macOS 必须提供 APPLE_SIGNING_IDENTITY（公证硬要求）"
-+  ...预签 + codesign --verify --strict...
++  if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
++    ...预签 + codesign --verify --strict...
++  else
++    log "未设 APPLE_SIGNING_IDENTITY——跳过预签（本地开发闭包，不公证）"
++  fi
 +fi
 ```
 
-**验收**：`bash -n scripts/build-runtime-bundle.sh`；在非 Darwin 上跑至该步不再要求该变量（可用 `env -u APPLE_SIGNING_IDENTITY bash -x` 观察分支，无需真跑完）。
+```diff
+ # scripts/check-release.sh（发布门，fail-closed 所在）
++if [ "$(uname -s)" = "Darwin" ]; then
++  [ -n "${APPLE_SIGNING_IDENTITY:-}" ] || die "发布构建必须提供 APPLE_SIGNING_IDENTITY（公证硬要求）"
++fi
+```
+
+**验收**：① 本地无身份 `bash scripts/build-runtime-bundle.sh` 照常可跑（不回归当日行为）；
+② macOS 上 `check-release.sh` 无身份响亮失败；③ 非 Darwin 分支不执行预签（`bash -x` 或 `uname` 桩观察）。
 
 - [ ] **R1.7 提交 R1**
 
@@ -845,7 +885,7 @@ git checkout main && git merge --no-ff refit/release-pipeline
 ## 7. 验收清单
 
 - [ ] R0：`docs/开发/发布契约.md` 落地；基线红灯已记录；工作树干净、分支已开
-- [ ] R1：`--dry-run` 可跑；发布说明前置门红路径通过；`verify_package_resources.py --source-only` **exit 0**（当前 exit 1）；`extraResources` 回改即红
+- [ ] R1：`--dry-run` 可跑；发布说明前置门红路径通过；`verify_package_resources.py --source-only` **exit 0**（2026-09-28 晚复核已达标，保留作防回归）；`extraResources` 回改即红；`check-release.sh` 在无 `staging/` 的干净副本可自建闭包
 - [ ] R1：`build-runtime-bundle.sh` 非 Darwin 不再要求 `APPLE_SIGNING_IDENTITY`
 - [ ] R2：CI 引擎引导步绿（日志有 `verify-runtime-closure`）；publish job 有 checkout；`workflow_dispatch` 可补跑单平台
 - [ ] R3：`notarize: true`；缺凭据即构建失败（红路径）；非 macOS runner 的 `env | grep CSC_/APPLE_` 为空
@@ -893,9 +933,9 @@ grep -n "qilin-pnpm\|vendor/qilin" /Users/libing/kk_Projects/KStock/.github/work
 cat /Users/libing/kk_Projects/KStock/pnpm-workspace.yaml                                       # 只有 apps/* kstock/*
 sed -n '74,78p' /Users/libing/kk_Projects/KStock/scripts/build-engine-bundle.sh
 
-# F3：契约不一致（实测红）
-cd /Users/libing/kk_Projects/KStock && scripts/python.sh scripts/verify_package_resources.py --source-only; echo "exit=$?"
-grep -n "dist-exe" scripts/check-ci.sh scripts/build-desktop.sh scripts/verify_package_resources.py | head
+# F3：契约缺口变形（2026-09-28 晚修订；原「verify 实测红」已随引擎升级消解）
+cd /Users/libing/kk_Projects/KStock && scripts/python.sh scripts/verify_package_resources.py --source-only; echo "exit=$?"   # exit=0
+grep -n "dist-exe\|build-engine-bundle" scripts/check-ci.sh scripts/build-desktop.sh scripts/check-release.sh | head
 
 # F4/F5：签名与公证
 sed -n '36,55p' /Users/libing/kk_Projects/KStock/.github/workflows/release.yml
@@ -919,3 +959,150 @@ grep -n "quitAndInstall" -B 4 -A 6 /Users/libing/kk_Projects/KCoder/desktop/main
 未改动任何文件（唯一新增文件即本计划）。
 `gh release view --repo ""` 的回落行为已实测（返回 `{"tagName":"v1.1.0"}`），
 故 `REPO_SLUG` 未 export 属**脆弱但当前可用**，按 R1.2 显式修掉。
+
+---
+
+## 9. 执行记录
+
+### R0 — 契约冻结与基线（2026-09-28 晚执行完毕）
+
+**R0.1 基线证据**：
+
+```bash
+$ scripts/python.sh scripts/verify_package_resources.py --source-only; echo "exit=$?"
+exit=0    # 原「extraResources 实测红」已随引擎升级消解
+
+$ grep -n "dist-exe\|build-engine-bundle\|build-runtime-bundle" scripts/check-ci.sh \
+    scripts/build-desktop.sh scripts/check-release.sh scripts/verify_package_resources.py \
+    apps/desktop/electron-builder.yml
+scripts/check-ci.sh:43:if [ -f dist-exe/kstock-engine ]; then
+scripts/check-ci.sh:44:  dist-exe/kstock-engine --help > /dev/null
+scripts/build-desktop.sh:6:# 前置条件：dist-exe/ 已由 scripts/build-engine-bundle.sh 构建完成
+scripts/build-desktop.sh:15:ENGINE_BUNDLE="$(cd "$(dirname "$0")/.." && pwd)/dist-exe/kstock-engine"
+scripts/build-desktop.sh:18:  echo "请先执行 scripts/build-engine-bundle.sh 构建引擎分发束。" >&2
+scripts/check-release.sh:9:bash scripts/build-engine-bundle.sh
+scripts/verify_package_resources.py:7:The default product mode validates the built ``dist-exe/`` directory before
+scripts/verify_package_resources.py:93:        self.require_path(root / "scripts" / "build-engine-bundle.sh", "source engine bundle script")
+scripts/verify_package_resources.py:214:            # 3.0.5 起打包走运行时闭包（staging 三件套），旧 SEA dist-exe 映射已废。
+scripts/verify_package_resources.py:285:        """闭包形态产物（3.0.5 起 staging 三件套；旧 SEA dist-exe 已废，A1 决策）。"""
+apps/desktop/electron-builder.yml:33:# 内置引擎分发束（scripts/build-runtime-bundle.sh 产物）：
+apps/desktop/electron-builder.yml:65:  # 引擎 Mach-O 的预签由 build-engine-bundle.sh 负责（APPLE_SIGNING_IDENTITY）。
+```
+
+**结论**：verify 已绿（F3 原证据过期）；缺口变形清单 = `check-release.sh:9`（旧 SEA 构建）、
+`build-desktop.sh:6,15,18`（dist-exe 断言）、`check-ci.sh:43-44`（dist-exe 冒烟）、
+`verify_package_resources.py:7`（docstring）、`verify:93`（仍必查旧脚本，进契约裁决）、
+`electron-builder.yml:65`（注释仍写旧预签主体）——后两条为本次复核新发现，已并入 R1.5 清单。
+
+**R0.2 产出**：`docs/开发/发布契约.md`——单一事实源表（§1）、V1–V7 门禁矩阵（§2）、
+secrets 清单与注入范围（§3）、不可变 tag SOP（§4）、决策登记（§5，含
+`build-engine-bundle.sh` 裁决与 feed 单一来源等 8 条）。
+
+**R0.3 回滚锚点**：`e6547774`（分支 `refit/release-pipeline` 自 main 该点开出；
+远端 `origin/main` = `d1eef9f7` 为其祖先，本地领先 21 提交未推送，pull 无内容）。
+暂存纪律：按路径 `git add`，禁用 `git add -A`。
+
+### R1 — 本地链路修复（2026-09-28 晚执行完毕）
+
+**改动**：R1.1 去 `pyproject.toml`/`uv.lock`/`need_cmd uv`/`uv lock`；R1.2 `export REPO_SLUG`；
+R1.3 发布说明前置门 + `--allow-missing-notes`（门在 dry-run 退出后、confirm 前）；
+R1.5 `check-release.sh` 切 `build-runtime-bundle.sh`、`build-desktop.sh` 断言改 staging 三件套、
+`check-ci.sh` dist-exe 冒烟改闭包结构断言（重门留发布链，契约 RR7）、`presign-engine-macos.sh`
+默认目录/注释切闭包、`verify_package_resources.py` docstring 更新 + 必查清单裁决
+（`build-engine-bundle.sh` 退出、`build-runtime-bundle.sh` 进入）、`electron-builder.yml:65`
+预签主体注释同步；R1.6 预签分支加 `uname` 守卫（非 Darwin 不碰预签脚本）+ 发布门
+fail-closed（macOS 无身份 die）；R1.4 修 `docs/发布说明.md` 两处失实表述。
+
+**验收（红绿实录）**：
+- `bash -n` 六脚本全过；`./build-release.sh v9.9.9 --dry-run --force --no-fetch --branch refit/release-pipeline`
+  exit=0、打印完整计划（`Repo: kkutysllb/KStock` 佐证 R1.2）、无文件改动、无 v9.9.9 tag；
+- R1.3 红：无 `release/v9.9.9.md` → exit=1 +「缺发布说明」提示；绿：有说明 → 过门到
+  confirm 中止（非 TTY），输出无「缺发布说明」；`--allow-missing-notes` 旁路可用；
+- R1.5 红：`extraResources` 回改 `../../dist-exe` → `[FAIL] source electron-builder extraResources`
+  exit=1；还原复绿 exit=0；
+- R1.6②：`env -u APPLE_SIGNING_IDENTITY bash scripts/check-release.sh` → 发布门 die ✓；
+  ① 本地无身份 `build-runtime-bundle.sh` 可跑（当日两次端到端 exit 0 佐证）；③ 非 Darwin
+  分支由 `uname` 守卫隔开（bash -n + 分支结构核对）；
+- `bash scripts/check-ci.sh` 全量回归（见提交前输出）。
+
+**偏差记录**：check-ci 的冒烟改为「闭包入口在位」结构断言而非计划原文的 Electron node
+`--help`——完整冒烟已内建于 `build-runtime-bundle.sh`，重门只进发布链（RR7），避免轻量门变重。
+
+### R2 + R3 — CI 结构、引擎引导与平台化签名（2026-09-28 晚执行完毕）
+
+> R2.6 的注释口径（「仅 macOS 注入凭据」）以 R3.2 为前提，两者落在同一构建步上，
+> 合并执行避免 workflow 出现自相矛盾的中间态。
+
+**改动**：R2.1 引擎引导步（`qilin-pnpm install/build/verify-runtime-closure`，30min 上限）；
+R2.2 publish job 补 `actions/checkout`（G1 致命项，按计划决定全量 checkout 不用 sparse）+
+正文取 `${INPUTS_TAG:-$GITHUB_REF_NAME}` 兼容 dispatch 补跑；R2.3 `workflow_dispatch(tag)` +
+所有 checkout `ref: inputs.tag || github.ref` + `concurrency: release-<tag>` 串行防覆盖；
+R2.4 runner 固定 `ubuntu-22.04`；R2.6 注释按闭包预签主体重写；R3.1 `mac.notarize: true`
+（fail-closed）+ `electron-builder.local.yml` 补 `mac.notarize: false`；R3.2 签名凭据拆入
+macOS-only 步（`if: runner.os == 'macOS'` / `!= 'macOS'` 两步，非 mac 步零 env）；
+R3.3 签名 fallback 显式化（`KSTOCK_UNSIGNED_BUILD=1`），未签名构建自动切 local 配置。
+
+**执行中修正的两处计划偏差**：
+1. R2.4 原文「pnpm/action-setup 显式给 `version: 9.15.0`」**不可行**——根
+   `package.json` 已有 `packageManager: pnpm@9.15.0`，双指定会报
+   "Multiple versions of pnpm specified"。钉版留在 `packageManager` 单一来源，
+   action 不带 version 输入；
+2. R3.1/R3.3 交互：`notarize: true` 会让未签名本地构建无法通过主配置 →
+   `KSTOCK_UNSIGNED_BUILD=1`（及 `KSTOCK_OFFLINE_BUILD=1`）切 `electron-builder.local.yml`
+   （`notarize: false`），与 `build-signed-macos.sh` 的手动 notarytool 流水线
+   （坑 4：不用 electron-builder 内置公证）兼容。
+
+**验收**：js-yaml 解析三份 YAML 全过；workflow 结构断言 11/11（checkout×2、dispatch+tag、
+引擎引导、ubuntu-22.04、pnpm 单一来源、secrets 仅 macOS 步、非 mac 步零 env、publish
+checkout+body_path、concurrency、notarize 双配置）；`bash -n build-desktop.sh`。
+
+**R3.1 红路径实跑记录（暴露重大发现，红路径文化的价值实证）**：无凭据直跑
+electron-builder（主配置、keychain 自动发现签名），日志
+`skipped macOS notarization reason=\`notarize\` options were unable to be generated`
+后**照常出包 dmg/zip 并 exit 0**——`notarize: true` 对 electron-builder 26.15.3
+**不构成 fail-closed**，R3.1 原始假设不成立。处置：fail-closed 落到自有发布门
+（`check-release.sh` 与 `build-desktop.sh` 均查 macOS 发布配置的凭据齐备，任一缺失
+即门前失败），`notarize: true` 保留（凭据齐备时正常公证），产物层 V5（R4）作事后
+兜底；契约 §3 规则 2 已同步为双防线口径。红路径复跑：无凭据 `bash scripts/build-desktop.sh`
+秒级 die（缺 APPLE_ID 指名报错）。
+
+### R4 — 产物层门禁电池（2026-09-28 晚执行完毕）
+
+**改动**：新建 `scripts/verify-desktop-artifacts.sh`（V1–V7 全硬门，逐项收集 + 指名报错，
+macOS 项非 Darwin 打印 skip；断言对象自动识别 *.app / win-unpacked / linux-unpacked）。
+V1 包内闭包在位；V2 闭包结构（tar 流式列目录断言入口 + dsh-animations 两件）；
+V3 随包对账（staging ↔ 包内 engine/plugins、engine/presets 双向逐项）；V4 Electron-node
+冒烟（ABI + 包内入口 --help，真机解释器路径）；V5 签名公证（拒 adhoc、TeamIdentifier、
+spctl、stapler validate）；V6 更新元数据齐全 + url/path ∈ 资源名；V7 publisherName
+平台边界（非 macOS 不得带、macOS 须等于本机证书 CN）。
+R4.2 同源接线：`check-release.sh` 末尾 + `release.yml` 收集产物前，同一文件两处调用。
+
+**脚本自纠（基线跑抓到三个自身 bug，红路径文化的连带收益）**：① `pipefail + grep -q`
+管道早收口 → printf 吃 SIGPIPE → V2 假红，改 here-string；② BSD sed 不认 `\s` → V6 url
+解析带前导空格假红，改 `[[:space:]]`；③ 无证书时 V7 假绿，改「读不到证书 CN 即红」。
+
+**红路径实录（五条全中，各自指名道姓）**：
+- ① 缺 `latest-mac.yml` → `V6 缺更新元数据 latest-mac.yml`；
+- ② 闭包换空 tar → `V2 闭包 tar 无法列出` + `V4 ABI 冒烟未通过` + `V4 入口 --help 未通过`；
+- ③ 删 `engine/plugins/quant` → `V3 包内缺 engine/plugins/quant（仓库有、包里无）`；
+- ④ 真包（keychain 签名、未公证）→ `V5 spctl 评估未通过` + `V5 公证票据未随包`；
+- ⑤ Windows 产物写入 `publisherName` → `V7 非 macOS 产物的 app-update.yml 不得带
+  publisherName（mac 证书污染）`。
+基线绿项：V1/V2/V3/V4/V6 全绿（真闭包 symlink 夹具 + 13 plugins / 8 presets 对账过）。
+V5/V7 的「全绿」需真实签名 + 公证产物，留待 R6 演练（本地 keychain 构建无公证票据、
+无 publisherName，红属预期）。
+
+### R5 — 自动更新加固（2026-09-28 晚执行完毕）
+
+**改动**：R5.1 `installUpdate` 的 `quitAndInstall` 加 try/catch——失败弹错误框并保留
+「重试」入口（复用 `showBox` + `checkForUpdatesInteractive`，不引入新状态机）；
+R5.2 启动检查改「打包态 + 延迟 8s + 单次」，避开引擎冷启动 IO 峰值；
+R5.3 feed 单一来源按契约决策 (b) 落地——保留 `setFeedURL` 硬编码，新增门禁
+**V8**：`app-update.yml` 的 `owner/repo` 必须与 `updater.ts` 硬编码一致（契约 §2 已
+登记 V8 行）。R5.4 预发布通道按契约默认不开，仅登记不动代码。
+
+**验收**：`tsc -p electron/tsconfig.json --noEmit` 过；`bash -n` 过；V8 红绿双证——
+真包 `app-update.yml` 一致绿（kkutysllb/KStock），夹具篡改 owner 即红
+（`feed 双源不一致：app-update.yml(wrong-owner/KStock) ≠ updater.ts(kkutysllb/KStock)`）。
+`quitAndInstall` 兜底为异常路径，静态实现 + 类型检查为证，真实失败演练归入 R6.2
+自动更新真机验证。

@@ -106,14 +106,18 @@ echo "    入口 OK"
 # hardened runtime 一律 Invalid（LibreOffice dylibs、node-pty prebuilds、
 # sharp、koffi、rg 全部中招）。打 tar 前对整棵闭包树深→浅预签。
 # （KCoder 同款前置：其 release.sh 签名阶段即递归签内置运行时树。）
-if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
-  # 未设身份 = 本地开发闭包（不经公证分发）。预签只是公证前置，不是
-  # 运行前置；发布窗口（check-release.sh / CI）必须携带身份，届时此分支
-  # 不生效、codesign 任何失败仍会响亮中止。
-  log "未设 APPLE_SIGNING_IDENTITY——跳过 Developer ID 预签（本地开发闭包，不公证）"
-else
-  log "预签闭包内全部 Mach-O（含嵌套 LibreOfficeDev.app）"
-  bash "$ROOT/scripts/local/presign-engine-macos.sh" "$CLOSURE"
+# 预签只在 macOS 有意义（其他平台无 Mach-O）；非 Darwin 不碰预签脚本，
+# 否则凭据一旦被全平台注入（G4），ubuntu/windows 会拿 mac 变量跑 codesign 而挂。
+# fail-closed 的身份要求在发布门（check-release.sh）；此处保本地开发可用。
+if [ "$(uname -s)" = "Darwin" ]; then
+  if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+    log "预签闭包内全部 Mach-O（含嵌套 LibreOfficeDev.app）"
+    bash "$ROOT/scripts/local/presign-engine-macos.sh" "$CLOSURE"
+  else
+    # 未设身份 = 本地开发闭包（不经公证分发）。预签只是公证前置，不是
+    # 运行前置；发布窗口（check-release.sh / CI）由发布门保证身份齐备。
+    log "未设 APPLE_SIGNING_IDENTITY——跳过 Developer ID 预签（本地开发闭包，不公证）"
+  fi
 fi
 
 # ── 5. office kit 平台断言 ──────────────────────────────────────────
