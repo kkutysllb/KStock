@@ -185,7 +185,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  height: 52px;
+  height: 48px;
   box-sizing: border-box;
   margin: -6px calc(-1 * var(--qilin-sidebar-inline-padding)) 0;
   padding: 0 12px;

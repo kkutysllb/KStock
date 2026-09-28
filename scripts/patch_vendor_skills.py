@@ -1549,23 +1549,46 @@ def _fix_kstock_client_version_badge(text: str) -> str | None:
 # 自然行距在其下——与 KCoder 桌面端头部一致。
 _SIDEBAR_TOPSTRIP_CSS_REL = "qilin/packages/client/ui-sidebar/src/client/SidebarRoot.module.css"
 _SIDEBAR_TOPSTRIP_MARKER = "KStock patch: 品牌行不再上提"
-_SIDEBAR_TOPSTRIP_ANCHOR = """.topStrip + .logoRow {
+_SIDEBAR_TOPSTRIP_PAIRS: tuple[tuple[str, str], ...] = (
+    (
+        # 灯条高度 52px → 48px（KStock 顶栏口径，KStock 壳 trafficLightPosition 同步对齐）。
+        """.topStrip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 52px;""",
+        """.topStrip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 48px;""",
+    ),
+    (
+        # 品牌行不再上提进灯条——两行布局（对齐 KCoder 桌面端头部）。
+        """.topStrip + .logoRow {
   margin-top: -12px;
-}"""
-_SIDEBAR_TOPSTRIP_REPLACEMENT = """/*
+}""",
+        """/*
  * KStock patch: 品牌行不再上提——topStrip（窗口拖拽条 + 红绿灯落位带）
  * 独占一行，logoRow 保持自然行距在其下（对齐 KCoder 桌面端头部布局），
  * 避免品牌徽章与红绿灯同排拥挤。
- */"""
+ */""",
+    ),
+)
 
 
 def _fix_sidebar_topstrip_logo_overlap(text: str) -> str | None:
-    """侧栏品牌行与红绿灯拆行；已修/锚点失配返回 None。"""
+    """侧栏品牌行与红绿灯拆行 + 灯条 48px；已修/锚点失配返回 None。"""
     if _SIDEBAR_TOPSTRIP_MARKER in text:
         return None
-    if _SIDEBAR_TOPSTRIP_ANCHOR not in text:
-        return None
-    return text.replace(_SIDEBAR_TOPSTRIP_ANCHOR, _SIDEBAR_TOPSTRIP_REPLACEMENT, 1)
+    patched = text
+    for anchor, replacement in _SIDEBAR_TOPSTRIP_PAIRS:
+        if anchor not in patched:
+            return None
+        patched = patched.replace(anchor, replacement, 1)
+    return patched
 
 
 # ── 补丁 16：kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界）──
