@@ -25,7 +25,7 @@ if [ -z "$DEV_ID" ]; then
   echo "!! 需要 APPLE_SIGNING_IDENTITY（如 'Developer ID Application: Bing Li (DHV5D72JNF)'）" >&2
   exit 1
 fi
-[ -d "$OUT_DIR" ] || { echo "!! 目录不存在：$OUT_DIR（先跑 scripts/build-runtime-bundle.sh）" >&2; exit 1; }
+[ -d "$OUT_DIR" ] || { echo "!! 目录不存在：${OUT_DIR}（先跑 scripts/build-runtime-bundle.sh）" >&2; exit 1; }
 
 ENTITLEMENTS="$ROOT/scripts/local/entitlements-nested.plist"
 [ -f "$ENTITLEMENTS" ] || { echo "!! 缺 entitlements: $ENTITLEMENTS" >&2; exit 1; }
@@ -39,7 +39,7 @@ fi
 SIGN_ARGS=(--force --timestamp --options runtime --entitlements "$ENTITLEMENTS" --sign "$DEV_ID")
 SIGN_ARGS_PLAIN=(--force --timestamp --options runtime --sign "$DEV_ID")
 
-echo "==> 枚举 Mach-O（$OUT_DIR）"
+echo "==> 枚举 Mach-O（${OUT_DIR}）"
 TMPD="$(mktemp -d)"
 trap 'rm -rf "$TMPD"' EXIT
 ALL="$TMPD/all.txt"

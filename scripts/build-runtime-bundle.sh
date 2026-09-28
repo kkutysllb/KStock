@@ -80,6 +80,13 @@ CLOSURE="$STAGING/kstock-runtime"
 
 # ── 3. ABI 冒烟（Electron 内置 Node 直跑；门禁，失败即停）──────────
 log "定位 Electron 二进制"
+# electron@44 起包内无 scripts 字段（不再有 postinstall 拉二进制）：全新
+# runner / 首次构建须显式跑 install.js，否则 require 直接抛「未能正确安装」。
+# 幂等：二进制已就位则 require 成功，直接跳过。
+if ! (cd "$ROOT/apps/desktop" && node -e 'require("electron")' > /dev/null 2>&1); then
+  log "补跑 electron install.js（首次拉取 Electron 二进制）"
+  (cd "$ROOT/apps/desktop" && node node_modules/electron/install.js)
+fi
 ELECTRON_BIN="$(cd "$ROOT/apps/desktop" && node -p 'require("electron")')"
 [ -x "$ELECTRON_BIN" ] || ELECTRON_BIN="$(cd "$ROOT/apps/desktop" && node -p 'require("electron").default' 2>/dev/null || true)"
 [ -n "$ELECTRON_BIN" ] && [ -e "$ELECTRON_BIN" ] || die "未定位到 Electron 二进制"
@@ -133,7 +140,7 @@ if [ -n "$KIT" ]; then
   if [ -d "$CLOSURE/node_modules/@deepseek-ai/$KIT" ]; then
     log "office kit 已随闭包分发：$KIT ($(du -sh "$CLOSURE/node_modules/@deepseek-ai/$KIT" | cut -f1))"
   else
-    log "WARN: 本平台未装 office kit（$KIT）——办公文档转 PDF 能力将不可用"
+    log "WARN: 本平台未装 office kit（${KIT}）——办公文档转 PDF 能力将不可用"
   fi
 fi
 
@@ -143,7 +150,7 @@ rm -f "$STAGING/kstock-runtime.tar.gz"
 COPYFILE_DISABLE=1 tar -czf "$STAGING/kstock-runtime.tar.gz" -C "$CLOSURE" .
 TAR_SIZE=$(du -h "$STAGING/kstock-runtime.tar.gz" | cut -f1)
 CLO_SIZE=$(du -sh "$CLOSURE" | cut -f1)
-log "完成：tar.gz $TAR_SIZE（闭包未压缩 $CLO_SIZE）"
+log "完成：tar.gz ${TAR_SIZE}（闭包未压缩 ${CLO_SIZE}）"
 ls -la "$STAGING" | grep -vE "^total|\.$"
 
 # ── 7. 收尾：恢复引擎工作区依赖（pnpm deploy --prod 副作用）─────────

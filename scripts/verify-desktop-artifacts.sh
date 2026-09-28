@@ -41,14 +41,14 @@ elif [ -d "$DIR/linux-unpacked" ]; then
 else
   die "未找到可断言的包（*.app / win-unpacked / linux-unpacked）：$DIR"
 fi
-say "断言对象：$RES（平台 $PLATFORM）"
+say "断言对象：${RES}（平台 ${PLATFORM}）"
 
 # ── V1 包内运行时闭包在位 ────────────────────────────────────────────
 TAR="$RES/kstock-runtime.tar.gz"
 if [ -f "$TAR" ]; then
   ok "V1 包内 kstock-runtime.tar.gz 在位"
 else
-  bad "V1 缺包内运行时闭包：$TAR（extraResources 契约漂移）"
+  bad "V1 缺包内运行时闭包：${TAR}（extraResources 契约漂移）"
 fi
 
 # ── V2 闭包结构（流式列目录，不整包解压）────────────────────────────
@@ -62,7 +62,7 @@ if [ -f "$TAR" ]; then
       # here-string 而非管道：grep -q 提前收口会让 printf 吃 SIGPIPE，
       # 配 pipefail 变成假红。
       if ! grep -qE "(^|/)${want//\//\\/}$" <<<"$LISTING"; then
-        bad "V2 闭包缺 $want（引擎启动期硬依赖）"
+        bad "V2 闭包缺 ${want}（引擎启动期硬依赖）"
         v2_ok=0
       fi
     done
@@ -80,10 +80,10 @@ else
     dst="$RES/engine/$side"
     [ -d "$dst" ] || { bad "V3 缺包内 engine/$side/"; v3_ok=0; continue; }
     while IFS= read -r name; do
-      [ -e "$dst/$name" ] || { bad "V3 包内缺 engine/$side/$name（仓库有、包里无）"; v3_ok=0; }
+      [ -e "$dst/$name" ] || { bad "V3 包内缺 engine/$side/${name}（仓库有、包里无）"; v3_ok=0; }
     done < <(ls "$src")
     while IFS= read -r name; do
-      [ -e "$src/$name" ] || { bad "V3 包内多出 engine/$side/$name（包里有、仓库无）"; v3_ok=0; }
+      [ -e "$src/$name" ] || { bad "V3 包内多出 engine/$side/${name}（包里有、仓库无）"; v3_ok=0; }
     done < <(ls "$dst")
   done
   [ "$v3_ok" = 1 ] && ok "V3 随包对账一致（plugins $(ls "$STAGING/plugins" | wc -l | tr -d ' ') 项 / presets $(ls "$STAGING/presets" | wc -l | tr -d ' ') 项）"
@@ -178,7 +178,7 @@ fi
 # ── V7 app-update.yml 的 publisherName 平台边界 ─────────────────────
 AU="$RES/app-update.yml"
 if [ ! -f "$AU" ]; then
-  bad "V7 缺 $AU（updater 元数据未随包）"
+  bad "V7 缺 ${AU}（updater 元数据未随包）"
 elif [ "$PLATFORM" = "mac" ]; then
   cert_cn="$(printf '%s' "${CS_OUT:-$(codesign -dv --verbose=4 "$APP" 2>&1 || true)}" | sed -n 's/^Authority=\(Developer ID Application: [^()]*([A-Z0-9]*)\).*/\1/p' | head -1)"
   pub_cn="$(sed -n 's/^publisherName:[[:space:]]*//p' "$AU" | head -1 | tr -d '"'\''')"
@@ -187,7 +187,7 @@ elif [ "$PLATFORM" = "mac" ]; then
   elif [ -z "$cert_cn" ]; then
     bad "V7 无法读取本机证书 CN（签名无效？V5 会另有断言）"
   elif [ "$pub_cn" != "$cert_cn" ]; then
-    bad "V7 publisherName（$pub_cn）≠ 本机证书 CN（$cert_cn）"
+    bad "V7 publisherName（${pub_cn}）≠ 本机证书 CN（${cert_cn}）"
   else
     ok "V7 macOS publisherName 与证书 CN 一致"
   fi
@@ -210,7 +210,7 @@ if [ -f "$AU" ]; then
   elif [ "$yml_owner" != "$code_owner" ] || [ "$yml_repo" != "$code_repo" ]; then
     bad "V8 feed 双源不一致：app-update.yml($yml_owner/$yml_repo) ≠ updater.ts($code_owner/$code_repo)"
   else
-    ok "V8 feed 单一来源一致（$code_owner/$code_repo）"
+    ok "V8 feed 单一来源一致（$code_owner/${code_repo}）"
   fi
 fi
 

@@ -63,7 +63,7 @@ esac
 BUILD_CONFIG="electron-builder.yml"
 if [ "${KSTOCK_OFFLINE_BUILD:-0}" = "1" ] || [ "${KSTOCK_UNSIGNED_BUILD:-0}" = "1" ]; then
   BUILD_CONFIG="electron-builder.local.yml"
-  echo "==> 本地构建模式：使用 $BUILD_CONFIG（publish 已禁用 + 不公证）"
+  echo "==> 本地构建模式：使用 ${BUILD_CONFIG}（publish 已禁用 + 不公证）"
 fi
 
 # 发布配置 fail-closed：electron-builder 26 的 notarize:true 生成不了选项时会
@@ -72,7 +72,7 @@ fi
 if [ "$BUILD_CONFIG" = "electron-builder.yml" ] && [ "$(uname -s)" = "Darwin" ]; then
   for var in APPLE_SIGNING_IDENTITY APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
     if [ -z "${!var:-}" ]; then
-      echo "ERROR: 发布构建缺少凭据：$var（公证硬要求）。" >&2
+      echo "ERROR: 发布构建缺少凭据：${var}（公证硬要求）。" >&2
       echo "未签名本地包用 KSTOCK_UNSIGNED_BUILD=1 bash scripts/build-desktop.sh。" >&2
       exit 1
     fi

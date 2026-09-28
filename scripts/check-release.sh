@@ -19,7 +19,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
     [ -n "${!var:-}" ] || missing="$missing $var"
   done
   if [ -n "$missing" ]; then
-    echo "ERROR: 发布构建缺少凭据：$missing（公证硬要求）。" >&2
+    echo "ERROR: 发布构建缺少凭据：${missing}（公证硬要求）。" >&2
     exit 1
   fi
 fi

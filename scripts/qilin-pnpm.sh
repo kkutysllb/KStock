@@ -16,7 +16,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PNPM_CJS="$REPO_ROOT/.tools/pnpm11/node_modules/pnpm/bin/pnpm.cjs"
 
 if [[ ! -f "$PNPM_CJS" ]]; then
-  echo "qilin-pnpm: 未找到 $PNPM_CJS，正在安装 pnpm@11.7.0 ..." >&2
+  echo "qilin-pnpm: 未找到 ${PNPM_CJS}，正在安装 pnpm@11.7.0 ..." >&2
   npm i --prefix "$REPO_ROOT/.tools/pnpm11" pnpm@11.7.0 >&2
 fi
 
@@ -52,7 +52,9 @@ export pnpm_config_verify_deps_before_run=false
 # 版本事实源是 apps/desktop/package.json（build-release.sh 升版），此处
 # 统一注入「桌面端 vX.Y.Z」，所有引擎构建路径自动随发布版本更新。
 if [ -f "$REPO_ROOT/apps/desktop/package.json" ]; then
-  KSTOCK_DESKTOP_VERSION="$(node -p "require('$REPO_ROOT/apps/desktop/package.json').version")"
+  # 相对路径 + cd：Windows runner 上 node 不认 Git Bash 的 POSIX 形绝对路径
+  # （/d/a/... 直接 require 报 Cannot find module）。
+  KSTOCK_DESKTOP_VERSION="$(cd "$REPO_ROOT" && node -p "require('./apps/desktop/package.json').version")"
   export KSTOCK_CLIENT_VERSION="${KSTOCK_CLIENT_VERSION:-桌面端 v$KSTOCK_DESKTOP_VERSION}"
 fi
 

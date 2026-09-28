@@ -88,7 +88,7 @@ fi
 
 # 签名身份必须在钥匙串里可见，否则后面会以晦涩的方式失败
 if ! security find-identity -v -p codesigning | grep -q "$KS_SIGN_IDENTITY"; then
-  die "钥匙串里找不到签名身份：$KS_SIGN_IDENTITY（security find-identity -v -p codesigning）"
+  die "钥匙串里找不到签名身份：${KS_SIGN_IDENTITY}（security find-identity -v -p codesigning）"
 fi
 log "签名身份可用：$KS_SIGN_IDENTITY"
 
@@ -127,7 +127,7 @@ log "编译主进程（esbuild → dist-electron/main.cjs）"
 (cd "$DESKTOP" && pnpm run build:electron-main > "$LOG.build" 2>&1) || {
   tail -20 "$LOG.build" >&2; die "主进程编译失败"; }
 
-log "electron-builder 签名打包（日志 $LOG）"
+log "electron-builder 签名打包（日志 ${LOG}）"
 cd "$DESKTOP"
 if [ "${KSTOCK_SKIP_NOTARIZE:-0}" = "1" ]; then
   warn "KSTOCK_SKIP_NOTARIZE=1：只签名，不公证"
@@ -185,7 +185,7 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
   esac
   sleep 45
 done
-[ "$SUB_STATUS" = "Accepted" ] || { warn "10 轮后仍非 Accepted（$SUB_STATUS）；可稍后重跑本脚本续 staple/dmg"; exit 2; }
+[ "$SUB_STATUS" = "Accepted" ] || { warn "10 轮后仍非 Accepted（${SUB_STATUS}）；可稍后重跑本脚本续 staple/dmg"; exit 2; }
 
 # ── 4. staple：把公证票据钉进 .app（刚 Accepted 时票据查询有传播延迟，重试）─
 log "staple 公证票据"
