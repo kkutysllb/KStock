@@ -73,6 +73,15 @@ class Verifier:
             return
         self.pass_(f"{label} required markers")
 
+    def require_file_occurrences(self, path: Path, label: str, marker: str, expected: int) -> None:
+        if not self.require_path(path, label):
+            return
+        found = path.read_text(encoding="utf-8").count(marker)
+        if found != expected:
+            self.fail(label, f"{marker!r} occurs {found} time(s), expected {expected}")
+            return
+        self.pass_(label)
+
     def verify_source_contract(self) -> None:
         root = self.repo_root
 
@@ -84,6 +93,23 @@ class Verifier:
         self.require_path(root / "scripts" / "build-engine-bundle.sh", "source engine bundle script")
         self.require_path(root / "scripts" / "qilin-pnpm.sh", "source pinned pnpm wrapper")
         self.require_path(root / "vendor" / "skills", "source vendor/skills")
+
+        # 文件工作台标签芯片单绘字形（上游 10ed0a5980 同步）：类型级 icon 已删，
+        # 文件夹字形只由芯片标题组件绘一次——否则 chip 出现双文件夹图标。
+        sidebar_files_definition = (
+            root / "vendor" / "qilin" / "packages" / "client"
+            / "ui-sidebar-files" / "src" / "client" / "definition.tsx"
+        )
+        self.require_file_contains(
+            sidebar_files_definition,
+            "source vendor sidebar-files chip glyph owner",
+            ["The chip title owns the tab's folder glyph."],
+        )
+        self.require_file_occurrences(
+            sidebar_files_definition,
+            "source vendor sidebar-files single folder glyph",
+            "icon: FolderSheetGlyph", 1,
+        )
 
         # KStock 插件包：清单 + 宿主/客户端半端 + bundle patch
         # web 是纯宿主 bundle 包（无客户端半端）；quant 为纯数据宿主；

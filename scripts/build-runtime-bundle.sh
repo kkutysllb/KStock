@@ -148,4 +148,4 @@ ls -la "$STAGING" | grep -vE "^total|\.$"
 # 源码直跑随即 ERR_MODULE_NOT_FOUND 'commander'）。恢复会重排 modules
 # 目录，pnpm 无 TTY 时会弹确认中止——CI=true 自动确认。store 命中，秒级。
 log "恢复引擎工作区依赖（deploy 剪枝回滚）"
-CI=true "$REPO_ROOT/scripts/qilin-pnpm.sh" install --frozen-lockfile >/dev/null
+CI=true "$ROOT/scripts/qilin-pnpm.sh" install --frozen-lockfile >/dev/null
