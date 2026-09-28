@@ -94,7 +94,8 @@ describe('default product isolation', () => {
     const root = fixture()
     const layer = '@qilin/experimental-layer'
     write(root, 'packages/experimental/layer/package.json', {
-      name: layer, dependencies: { [experimental]: 'workspace:^' }, qilin: { bundle: { patch: './cordis.patch.yml' } },
+      name: layer, icon: './icon.svg', exports: { './locale/*.json': './locale/*.json' },
+      dependencies: { [experimental]: 'workspace:^' }, qilin: { bundle: { patch: './cordis.patch.yml' } },
     })
     write(root, 'packages/experimental/layer/cordis.patch.yml', [{ insert: [{ name: experimental }] }])
     manifest(root, 'apps/cli/package.json', { dependencies: { [core]: 'workspace:^', [layer]: 'workspace:^' } })
@@ -113,7 +114,35 @@ describe('default product isolation', () => {
     expect(verifyDefaultProductIsolation(root).failures.join('\n')).toContain(`optional bundle ${layer} must not be a default bundle`)
   })
 
-  it('requires each optional bundle to be a runtime dependency that declares a bundle patch', () => {
+  it('composes a Web template bundle the installation carries and rejects one it does not declare', () => {
+    const root = fixture()
+    const installed = 'installed-anim-bundle'
+    write(root, 'apps/cli/node_modules/' + installed + '/package.json', {
+      name: installed, version: '1.0.0', qilin: { bundle: { patch: './cordis.patch.yml' } },
+    })
+    write(root, 'apps/cli/node_modules/' + installed + '/cordis.patch.yml', [{ insert: [{ name: experimental }] }])
+    manifest(root, 'apps/cli/package.json', { dependencies: { [core]: 'workspace:^', [installed]: '^1.0.0' } })
+    write(root, profile, `export const PROFILE_TEMPLATES = { web: { bundles: ['${base}', '${installed}'] } }\n`
+      + `export const DEFAULT_PROFILE_BUNDLES = ['${base}']\n`)
+    // The installation's copy contributes a layer, so the composed scan still
+    // sees what it inserts.
+    expect(verifyDefaultProductIsolation(root).failures.join('\n'))
+      .toContain('default product must not include experimental packages')
+
+    // An undeclared package is a distribution gap, not a template detail.
+    write(root, 'apps/cli/node_modules/' + installed + '/cordis.patch.yml', '[]\n')
+    manifest(root, 'apps/cli/package.json', { dependencies: { [core]: 'workspace:^' } })
+    expect(verifyDefaultProductIsolation(root).failures.join('\n'))
+      .toContain(`default Web bundle ${installed} must be a workspace package or a runtime dependency of apps/cli`)
+
+    // Declared, but without a bundle patch: the layer set stays incomplete.
+    manifest(root, 'apps/cli/package.json', { dependencies: { [core]: 'workspace:^', [installed]: '^1.0.0' } })
+    write(root, 'apps/cli/node_modules/' + installed + '/package.json', { name: installed, version: '1.0.0' })
+    expect(verifyDefaultProductIsolation(root).failures.join('\n'))
+      .toContain('default Web bundle layers are incomplete')
+  })
+
+  it('requires each optional bundle to be a runtime dependency that declares a bundle patch, an icon, and locale metadata', () => {
     const root = fixture()
     write(root, profile, `export const PROFILE_TEMPLATES = { web: { bundles: ['${base}'] } }\n`
       + `export const DEFAULT_PROFILE_BUNDLES = ['${base}']\n`
@@ -121,6 +150,8 @@ describe('default product isolation', () => {
     const failures = verifyDefaultProductIsolation(root).failures.join('\n')
     expect(failures).toContain(`optional bundle ${experimental} must be a runtime dependency of apps/cli`)
     expect(failures).toContain(`optional bundle ${experimental} must declare qilin.bundle.patch`)
+    expect(failures).toContain(`optional bundle ${experimental} must declare an icon`)
+    expect(failures).toContain(`optional bundle ${experimental} must export ./locale/*.json display metadata`)
 
     // An experimental runtime dependency the list does not name is still a product requirement.
     write(root, profile, `export const PROFILE_TEMPLATES = { web: { bundles: ['${base}'] } }\n`
@@ -163,9 +194,9 @@ describe('default product isolation', () => {
 
   it('follows private application intermediaries and terminates cycles', () => {
     const root = fixture()
-    write(root, 'apps/desktop/package.json', { name: '@fixture/desktop', private: true,
+    write(root, 'apps/fixture/package.json', { name: '@fixture/app', private: true,
       dependencies: { [core]: '*', [experimental]: '*' } })
-    manifest(root, 'packages/core/core/package.json', { peerDependencies: { '@fixture/desktop': '*' } })
+    manifest(root, 'packages/core/core/package.json', { peerDependencies: { '@fixture/app': '*' } })
 
     expect(verifyDefaultProductIsolation(root).failures.join('\n')).toContain(experimental)
   })
@@ -342,11 +373,11 @@ describe('default product isolation', () => {
     expect(verifyDefaultProductIsolation(root).failures).toEqual([])
   })
 
-  it('checks desktop configuration reached through a source URL', () => {
+  it('checks application configuration reached through a source URL', () => {
     const root = fixture()
-    write(root, 'apps/desktop-host/package.json', { name: '@fixture/desktop-host', private: true })
-    write(root, 'apps/desktop-host/src/index.ts', "new URL('../config/desktop.cordis.patch.yml', import.meta.url)")
-    write(root, 'apps/desktop-host/config/desktop.cordis.patch.yml', [{ insert: [{ name: experimental }] }])
+    write(root, 'apps/fixture-host/package.json', { name: '@fixture/app-host', private: true })
+    write(root, 'apps/fixture-host/src/index.ts', "new URL('../config/app.cordis.patch.yml', import.meta.url)")
+    write(root, 'apps/fixture-host/config/app.cordis.patch.yml', [{ insert: [{ name: experimental }] }])
 
     expect(verifyDefaultProductIsolation(root).failures.join('\n')).toContain(experimental)
   })

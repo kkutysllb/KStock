@@ -1,7 +1,7 @@
 {
   "name": "@qilin/storage-domain",
   "description": "Domain data form (ctx.storage.domain): schema-validated, event-emitting KV domains over storage backends for the QiLin",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -35,17 +35,17 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/invariants": "workspace:^",
-    "@qilin/storage": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/invariants": "workspace:*",
+    "@qilin/storage": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   },
   "dependencies": {
-    "@qilin/schemastery": "workspace:^",
+    "@qilin/schemastery": "workspace:~",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@qilin/invariants": "workspace:^",
-    "@qilin/storage": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/invariants": "workspace:*",
+    "@qilin/storage": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   }
 }

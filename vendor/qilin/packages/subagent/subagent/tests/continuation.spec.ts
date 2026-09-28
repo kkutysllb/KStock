@@ -10,7 +10,10 @@ import { mountAgentLoopTestDependencies } from '@qilin/agent-loop-testkit'
 import { SessionId } from '@qilin/session'
 import type { SessionEvent, SessionEventMap } from '@qilin/session'
 import JsonlSessionPersistence from '@qilin/session-persistence-jsonl'
-import * as toolSchedule from '@qilin/schedule'
+import ScheduleService from '@qilin/schedule'
+import Storage from '@qilin/storage'
+import * as StorageDomain from '@qilin/storage-domain'
+import * as StorageJson from '@qilin/storage-json'
 import * as SubagentSpawn from '@qilin/subagent-spawn-in-process'
 import * as SubagentFork from '@qilin/subagent-fork-in-process'
 import type { ContentBlock, GenerateOptions, MessageId, StreamChunk } from '@qilin/llm'
@@ -81,6 +84,25 @@ afterEach(async () => {
   if (errors.length > 1) throw new AggregateError(errors, 'temp-root cleanup failed')
 })
 
+/** Mount the real Schedule service for root-only tool-registration assertions. */
+async function mountScheduleForOwnership(ctx: Context): Promise<void> {
+  const root = mkdtempSync(join(tmpdir(), 'qilin-subagent-schedule-'))
+  const fibers: Array<{ dispose(): Promise<void> }> = []
+  cleanups.unshift(async () => {
+    for (const fiber of fibers.toReversed()) await fiber.dispose()
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  })
+  fibers.push(await ctx.plugin(Storage))
+  fibers.push(await ctx.plugin(StorageJson, { root }))
+  fibers.push(await ctx.plugin(StorageDomain, { backend: 'json' }))
+  // This ownership test creates no reminders and invokes no Remote methods.
+  // Unexpected delivery must fail instead of activating an unrelated Session.
+  ctx.provide('sessionController', {
+    resolveAgent: async () => { throw new Error('ownership test must not dispatch reminders') },
+  } as never)
+  fibers.push(await ctx.plugin(ScheduleService))
+}
+
 /** Boot the full continuable stack: loop, persistence, providers, and subagents. */
 async function setupWith(
   adapter: LlmAdapter,
@@ -101,7 +123,7 @@ async function setupWith(
     })
   }
   await ctx.plugin(AgentLoop, { agents: [] })
-  if (options.schedule) await ctx.plugin(toolSchedule)
+  if (options.schedule) await mountScheduleForOwnership(ctx)
   if (options.sessionQuery !== false) await ctx.plugin(TestSessionQuery)
   await ctx.plugin(SubagentRuntime, options.maxActiveSubagents === undefined ? {} : { maxActiveSubagents: options.maxActiveSubagents })
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
@@ -144,7 +166,7 @@ function hasAssistantText(events: readonly SessionEvent[], text: string): boolea
 
 /** Caller-supplied user message texts in log order (runtime-context snapshots excluded). */
 function userTexts(events: readonly SessionEvent[]): string[] {
-  return events.flatMap(event => event.type === 'user/message' && event.data.source.kind !== 'plugin'
+  return events.flatMap(event => event.type === 'user/message' && event.data.source.kind !== 'runtime-context'
     ? event.data.content.flatMap(block => block.type === 'text'
       && !block.text.startsWith('Your parent agent id is ')
       ? [block.text]
@@ -2421,7 +2443,7 @@ describe('continuable review regressions', () => {
   })
 
   it.each([
-    { label: 'plugin', source: { kind: 'plugin' as const, plugin: 'tool-jobs' } },
+    { label: 'plugin', source: { kind: 'tool-jobs' as const } },
     { label: 'non-plugin', source: { kind: 'team-message', teamId: 't-1' } as never },
   ])('keeps an idle child resident while its Inbox holds $label injected context', async ({ source }) => {
     const release = Promise.withResolvers<undefined>()
@@ -2455,7 +2477,7 @@ describe('continuable review regressions', () => {
     // a driver, so residency must survive until that turn claims the message.
     const steered = createUserMessage({
       content: message('Cordis Host handler failed'),
-      source: { kind: 'plugin', plugin: 'kylin-host-runner' },
+      source: { kind: 'kylin-host-runner' },
     })
     child.steer(steered)
     ctx.subagents.interrupt(started.childId, { kind: 'user', parentSessionId: parent.id })

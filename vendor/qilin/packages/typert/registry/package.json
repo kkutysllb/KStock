@@ -1,7 +1,7 @@
 {
   "name": "@qilin/typert-registry",
   "description": "Runtime registry for generated package reflection and Zod schemas",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -54,10 +54,10 @@
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/typert-protocol": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/typert-protocol": "workspace:*"
   }
 }

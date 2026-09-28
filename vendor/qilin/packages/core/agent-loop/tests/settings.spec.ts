@@ -49,11 +49,11 @@ async function boot(): Promise<{ ctx: Context; settingsFiber: Fiber; loopFiber: 
 describe('agent-loop settings section', () => {
   it('layers the stored parallel cap over the composition entry', async () => {
     const bench = await boot()
-    expect(bench.ctx.agentLoop.config.maxParallelToolCalls).toBe(4)
+    expect(bench.ctx.agentLoop.config.maxParallelToolCalls.get()).toBe(4)
 
     await bench.ctx.settings.update(AGENT_LOOP_SETTINGS_NAMESPACE, { maxParallelToolCalls: 1 })
 
-    expect(bench.ctx.agentLoop.config.maxParallelToolCalls).toBe(1)
+    expect(bench.ctx.agentLoop.config.maxParallelToolCalls.get()).toBe(1)
     await bench.ctx.fiber.dispose()
   })
 
@@ -63,7 +63,7 @@ describe('agent-loop settings section', () => {
     await expect(bench.ctx.settings.update(AGENT_LOOP_SETTINGS_NAMESPACE, { maxParallelToolCalls: 0 }))
       .rejects.toThrow()
 
-    expect(bench.ctx.agentLoop.config.maxParallelToolCalls).toBe(4)
+    expect(bench.ctx.agentLoop.config.maxParallelToolCalls.get()).toBe(4)
     await bench.ctx.fiber.dispose()
   })
 
@@ -88,11 +88,11 @@ describe('agent-loop settings section', () => {
   it('falls back to the composition entry when the settings provider detaches', async () => {
     const bench = await boot()
     await bench.ctx.settings.update(AGENT_LOOP_SETTINGS_NAMESPACE, { maxParallelToolCalls: 1 })
-    expect(bench.ctx.agentLoop.config.maxParallelToolCalls).toBe(1)
+    expect(bench.ctx.agentLoop.config.maxParallelToolCalls.get()).toBe(1)
 
     await bench.settingsFiber.dispose()
 
-    expect(bench.ctx.agentLoop.config.maxParallelToolCalls).toBe(4)
+    expect(bench.ctx.agentLoop.config.maxParallelToolCalls.get()).toBe(4)
     await bench.ctx.fiber.dispose()
   })
 

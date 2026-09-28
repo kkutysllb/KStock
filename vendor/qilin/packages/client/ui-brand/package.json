@@ -1,7 +1,7 @@
 {
   "name": "@qilin/client-ui-brand",
   "description": "QiLin brand occupants for the Web client's sidebar and conversation-hero brand slots: the 麒麟 seal mark",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -44,16 +44,16 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/client-test-runtime": "workspace:^",
-    "@qilin/client-ui-conversation": "workspace:^",
-    "@qilin/client-ui-primitives": "workspace:^",
-    "@qilin/client-ui-renderer": "workspace:^",
-    "@qilin/client-ui-sidebar": "workspace:^",
-    "@qilin/client-ui-settings": "workspace:^",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/client-test-runtime": "workspace:*",
+    "@qilin/client-ui-conversation": "workspace:*",
+    "@qilin/client-ui-primitives": "workspace:*",
+    "@qilin/client-ui-renderer": "workspace:*",
+    "@qilin/client-ui-sidebar": "workspace:*",
+    "@qilin/client-ui-settings": "workspace:*",
     "@testing-library/react": "^16.1.0",
     "@types/react": "~18.3.1",
     "react": "^18.2.0",

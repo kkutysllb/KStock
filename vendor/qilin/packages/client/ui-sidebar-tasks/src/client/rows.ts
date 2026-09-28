@@ -8,17 +8,98 @@
  * (`indexSubagentDescendants`), the only projection that sees subagents below
  * the direct children a catalog reports.
  */
-import type { SubagentCatalogSnapshot } from '@qilin/api-session-controller/client'
-import type { SessionJob } from '@qilin/api-session-controller/types'
+import type { SessionProjectionSnapshot } from '@qilin/api-session-controller/client'
+import type { JobView } from '@qilin/jobs/view'
 import type { StateDotState } from '@qilin/client-ui-primitives'
 import type { TranslateNS } from '@qilin/client-ui-slots'
 import type { SessionId } from '@qilin/session/types'
-import type { SubagentAddress, SubagentListEntry } from '@qilin/subagent/client'
+import type { SubagentAddress, SubagentCatalogEntry } from '@qilin/subagent/client'
 import type { SubagentDescendantSummary } from './lineage.ts'
 import { NS } from './locales.ts'
 
 /** Stable empty job list, so a Session without jobs keeps one array identity. */
-export const NO_JOBS: readonly SessionJob[] = []
+export const NO_JOBS: readonly JobView[] = []
+
+/**
+ * One row of a parent's direct-child catalog as the page draws it: a described
+ * child, or a candidate the Host could not describe.
+ */
+export type CatalogRow =
+  | {
+    readonly kind: 'child'
+    readonly id: SessionId
+    readonly mode: SubagentAddress['mode']
+    readonly label?: string
+    /** Whether the Session list currently reports the child as running. */
+    readonly activity: 'running' | 'inactive'
+    /** Whether a catalog below this child has yet to prove it childless. */
+    readonly hasChildren: boolean
+  }
+  | {
+    readonly kind: 'diagnostic'
+    readonly id: SessionId
+    readonly reason: 'corrupt' | 'unsupported' | 'unavailable'
+  }
+
+/** One parent's direct-child catalog and the state of its explicit read. */
+export interface CatalogSnapshot {
+  readonly state: 'loading' | 'ready' | 'error'
+  readonly error: { readonly message: string } | null
+  readonly entries: readonly CatalogRow[]
+}
+
+/** Direct-child catalogs keyed by the Session they describe. */
+export type Catalogs = Readonly<Record<SessionId, CatalogSnapshot>>
+
+/**
+ * The read state of one parent's catalog, as the page draws it. A snapshot that
+ * has not settled is `loading` while it carries no catalog value and `ready`
+ * once it does, so a Session the Host described as childless reads as a settled
+ * empty catalog rather than as a pending one.
+ * @param snapshot - the Session's projection snapshot.
+ * @returns the catalog read state.
+ */
+function catalogState(snapshot: SessionProjectionSnapshot): CatalogSnapshot['state'] {
+  if (snapshot.state !== 'idle') return snapshot.state
+  return snapshot.values.subagentCatalog === undefined ? 'loading' : 'ready'
+}
+
+/**
+ * Project the shared per-Session projection snapshots into the catalogs the page draws.
+ * @param projections - projection snapshots keyed by Session id.
+ * @param running - whether the Session list currently reports a Session as running.
+ * @returns one catalog per projected Session.
+ */
+export function catalogsOf(
+  projections: Readonly<Record<SessionId, SessionProjectionSnapshot>>,
+  running: (id: SessionId) => boolean,
+): Catalogs {
+  const catalogs: Record<SessionId, CatalogSnapshot> = {}
+  for (const [key, snapshot] of Object.entries(projections)) {
+    const id = key as SessionId
+    const entries: readonly SubagentCatalogEntry[] = snapshot.values.subagentCatalog ?? []
+    catalogs[id] = {
+      state: catalogState(snapshot),
+      error: snapshot.error,
+      entries: entries.map((entry) => {
+        const below = projections[entry.id]
+        return {
+          kind: 'child',
+          id: entry.id,
+          mode: entry.mode,
+          ...(entry.label === undefined ? {} : { label: entry.label }),
+          activity: running(entry.id) ? 'running' : 'inactive',
+          // Only a settled empty catalog proves a child childless; an unread
+          // one keeps its disclosure so the level can still be walked.
+          hasChildren: below === undefined
+            || catalogState(below) !== 'ready'
+            || (below.values.subagentCatalog?.length ?? 0) > 0,
+        }
+      }),
+    }
+  }
+  return catalogs
+}
 
 /** One row the subagents section draws: a catalog child, or a child whose durable record could not be read. */
 export type SubagentRow =
@@ -47,13 +128,13 @@ export type SubagentRow =
  * @param depth - nesting level under the section's root.
  * @returns the row the section draws.
  */
-function rowOf(entry: SubagentListEntry, parentSessionId: SessionId, depth: number): SubagentRow {
+function rowOf(entry: CatalogRow, parentSessionId: SessionId, depth: number): SubagentRow {
   if (entry.kind === 'diagnostic') {
     return { kind: 'diagnostic', id: entry.id, depth, reason: entry.reason }
   }
-  const address: SubagentAddress = entry.mode === 'one-shot'
-    ? { parentSessionId, childSessionId: entry.id, mode: 'one-shot' }
-    : { parentSessionId, childSessionId: entry.id, mode: 'continuable' }
+  const address: SubagentAddress = {
+    parentSessionId, childSessionId: entry.id, mode: entry.mode,
+  }
   return {
     kind: 'child',
     id: entry.id,
@@ -79,7 +160,7 @@ function rowOf(entry: SubagentListEntry, parentSessionId: SessionId, depth: numb
  * @returns rows in display order, depth-first.
  */
 export function subagentRows(
-  catalogs: Readonly<Record<SessionId, SubagentCatalogSnapshot>>,
+  catalogs: Catalogs,
   rootSessionId: SessionId,
 ): SubagentRow[] {
   const rows: SubagentRow[] = []
@@ -134,7 +215,7 @@ export function subagentTotal(
  * @param job - the Session job row.
  * @returns whether the job is running or stopping.
  */
-export function isLive(job: SessionJob): boolean {
+export function isLive(job: JobView): boolean {
   return job.status === 'running' || job.status === 'stopping'
 }
 
@@ -146,7 +227,7 @@ export function isLive(job: SessionJob): boolean {
  * @param jobs - the Session's job rows.
  * @returns a new array in display order.
  */
-export function orderedJobs(jobs: readonly SessionJob[]): SessionJob[] {
+export function orderedJobs(jobs: readonly JobView[]): JobView[] {
   return [...jobs].sort((left, right) => {
     const liveLeft = isLive(left)
     if (liveLeft !== isLive(right)) return liveLeft ? -1 : 1
@@ -162,7 +243,7 @@ export function orderedJobs(jobs: readonly SessionJob[]): SessionJob[] {
  * @param now - the clock sample a live duration measures against.
  * @returns its span so far while it runs, its own span once it settled.
  */
-export function jobElapsed(job: SessionJob, now: number): number {
+export function jobElapsed(job: JobView, now: number): number {
   return isLive(job) ? now - job.startedAt : (job.finishedAt ?? job.startedAt) - job.startedAt
 }
 
@@ -195,7 +276,7 @@ function assertNever(value: never): never {
  * @param t - namespace-bound translate.
  * @returns the word the row shows.
  */
-export function jobStatusLabel(status: SessionJob['status'], t: TranslateNS<typeof NS>): string {
+export function jobStatusLabel(status: JobView['status'], t: TranslateNS<typeof NS>): string {
   switch (status) {
     case 'running': return t('tasks.status.running')
     case 'stopping': return t('tasks.status.stopping')
@@ -213,7 +294,7 @@ export function jobStatusLabel(status: SessionJob['status'], t: TranslateNS<type
  * @param status - the wire status.
  * @returns the state the dot draws.
  */
-export function jobDotState(status: SessionJob['status']): StateDotState {
+export function jobDotState(status: JobView['status']): StateDotState {
   switch (status) {
     case 'running': return 'ongoing'
     case 'stopping': return 'warning'
@@ -239,8 +320,8 @@ export function jobDotState(status: SessionJob['status']): StateDotState {
  * @returns the count, zero when nothing is active.
  */
 export function activeWorkCount(
-  catalogs: Readonly<Record<SessionId, SubagentCatalogSnapshot>>,
-  jobs: readonly SessionJob[],
+  catalogs: Catalogs,
+  jobs: readonly JobView[],
   sessionId: SessionId,
 ): number {
   const entries = catalogs[sessionId]?.entries ?? []

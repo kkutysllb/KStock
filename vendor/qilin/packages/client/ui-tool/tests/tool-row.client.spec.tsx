@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
+import { useDisclosure } from '@qilin/client-ui-chat/src/client/chat/use-disclosure.ts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 
-import type { RunningToolCall, ToolResultNode } from '@qilin/client-ui-chat/client'
+import type { StartedToolCall, ToolResultNode } from '@qilin/client-ui-chat/client'
 import { makeTranslate } from '@qilin/client-test-runtime'
 import { zh as commonZh } from '@qilin/client-locale/src/locales/zh.ts'
 import { localizeAutoReviewDenial, normalizeAutoReviewReason } from '../src/client/tool/models/auto-review-denial.ts'
@@ -20,8 +21,8 @@ afterEach(() => {
 
 const t: GenericToolCardProps['t'] = makeTranslate(zh, commonZh)
 
-const running = (over?: Partial<RunningToolCall>): RunningToolCall => ({
-  callId: 'c1', name: 'bash', argsRaw: '{"command":"ls -la","description":"List files"}',
+const running = (over?: Partial<StartedToolCall>): StartedToolCall => ({
+  phase: 'start' as const, callId: 'c1', name: 'bash', argsRaw: '{"command":"ls -la","description":"List files"}',
   turn: 1, step: 1, time: 1_000, subCalls: [], ...over,
 })
 
@@ -273,6 +274,7 @@ describe('tool-call-model', () => {
 
 describe('ToolRow', () => {
   const rowProps = {
+    useDisclosure,
     t,
     variant: 'bash' as const, icon: <i data-testid="tool-icon" />, title: 'Bash',
     summary: 'List files', bodyRaw: '{"a":1}', state: 'ok' as const,
@@ -284,6 +286,11 @@ describe('ToolRow', () => {
     expect(view.getByText('Bash')).toBeTruthy()
     expect(view.getByText('List files')).toBeTruthy()
     expect(view.container.querySelector('[aria-expanded]')?.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('keeps the preparing state non-expandable', () => {
+    const view = render(<ToolRow {...rowProps} state="preparing" />)
+    expect(view.container.querySelector('[aria-expanded]')).toBeNull()
   })
 
   it('row click expands: chevron leading, summary kept inline, body in the scrolling card', () => {
@@ -493,9 +500,10 @@ describe('ToolRow', () => {
 })
 
 describe('GenericToolCard', () => {
-  const props = (toolName: string, block: RunningToolCall | ToolResultNode): GenericToolCardProps => ({
+  const props = (toolName: string, block: StartedToolCall | ToolResultNode): GenericToolCardProps => ({
     loadImage: vi.fn(() => Promise.reject(new Error('not used'))),
-    callId: 'c1', toolName, block, openFile: vi.fn(), t,
+    useDisclosure,
+    callId: 'c1', toolName, ...('kind' in block ? { phase: 'result' as const, block } : { phase: 'start' as const, block }), openFile: vi.fn(), t,
   })
 
   it('renders the classified variant row from the frozen slice', () => {

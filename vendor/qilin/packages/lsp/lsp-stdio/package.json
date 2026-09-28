@@ -1,7 +1,7 @@
 {
   "name": "@qilin/lsp-stdio",
   "description": "Generic stdio language-server provider for the QiLin LSP capability seam (ctx.lsp) — spawns configured servers, translates JSON-RPC, and serves transient-open goToDefinition/findReferences/goToImplementation/hover queries in the host filesystem namespace",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -30,28 +30,28 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/brand": "workspace:^",
-    "@qilin/fs": "workspace:^",
-    "@qilin/llm": "workspace:^",
-    "@qilin/lsp": "workspace:^",
-    "@qilin/subprocess": "workspace:^",
-    "@qilin/timeout": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/brand": "workspace:*",
+    "@qilin/fs": "workspace:*",
+    "@qilin/llm": "workspace:*",
+    "@qilin/lsp": "workspace:*",
+    "@qilin/subprocess": "workspace:*",
+    "@qilin/timeout": "workspace:*"
   },
   "dependencies": {
-    "@qilin/util-values": "workspace:^",
-    "@qilin/schemastery": "workspace:^"
+    "@qilin/util-values": "workspace:*",
+    "@qilin/schemastery": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/brand": "workspace:^",
-    "@qilin/fs": "workspace:^",
-    "@qilin/fs-local": "workspace:^",
-    "@qilin/llm": "workspace:^",
-    "@qilin/lsp": "workspace:^",
-    "@qilin/subprocess": "workspace:^",
-    "@qilin/subprocess-local": "workspace:^",
-    "@qilin/timeout": "workspace:^",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/brand": "workspace:*",
+    "@qilin/fs": "workspace:*",
+    "@qilin/fs-local": "workspace:*",
+    "@qilin/llm": "workspace:*",
+    "@qilin/lsp": "workspace:*",
+    "@qilin/subprocess": "workspace:*",
+    "@qilin/subprocess-local": "workspace:*",
+    "@qilin/timeout": "workspace:*",
     "typescript": "^6.0.3",
     "typescript-language-server": "^5.0.0"
   }

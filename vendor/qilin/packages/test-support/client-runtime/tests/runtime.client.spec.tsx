@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@qilin/kylin'
-import { stubSettingsScope } from '../src/settings-scope.ts'
+import { stubConfigForm } from '../src/config-form.ts'
 import { act, cleanup } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
 import { createSnapshotStore, defineStore } from '@qilin/client-store'
@@ -192,8 +192,7 @@ describe('sessions', () => {
     await runtime.sessions.updateSummary('s1', { displayTitle: 'renamed', running: true })
     expect(runtime.sessions.list.getSnapshot().byId['s1' as SessionId])
       .toMatchObject({ displayTitle: 'renamed', running: true })
-    runtime.sessions.setSubagentCatalogOpen('s2' as SessionId, true)
-    await runtime.sessions.refreshSubagents('s2' as SessionId)
+    await runtime.sessions.refreshProjections('s2' as SessionId)
     reference.release()
     expect(runtime.sessions.binding('s1')).toBeUndefined()
     expect(runtime.sessions.subagentAddress('s1' as SessionId)).toEqual(address)
@@ -201,8 +200,7 @@ describe('sessions', () => {
       sessionId: 's1' as SessionId, atSeq: 7, increaseTitle: true,
     })).resolves.toBe('s1')
     expect(runtime.sessions.calls).toEqual([
-      { method: 'setSubagentCatalogOpen', args: ['s2', true] },
-      { method: 'refreshSubagents', args: ['s2'] },
+      { method: 'refreshProjections', args: ['s2'] },
       { method: 'fork', args: [{ sessionId: 's1', atSeq: 7, increaseTitle: true }] },
     ])
     await runtime.dispose()
@@ -213,13 +211,13 @@ describe('sessions', () => {
     const parentId = 'parent' as SessionId
     await runtime.sessions.add({ id: 'child' })
     runtime.sessions.list.update((draft) => {
-      draft.subagentsByParent = {
+      draft.projectionsBySession = {
         [parentId]: {
-          state: 'ready', error: null, parentAvailable: true,
-          entries: [
-            { kind: 'child', id: 'other' as SessionId, mode: 'one-shot', activity: 'inactive', hasChildren: false },
-            { kind: 'child', id: 'child' as SessionId, mode: 'continuable', label: 'Child', activity: 'inactive', hasChildren: false },
-          ],
+          state: 'ready', error: null,
+          values: { subagentCatalog: [
+            { createdAt: 1, id: 'other' as SessionId, mode: 'one-shot' },
+            { createdAt: 2, id: 'child' as SessionId, mode: 'continuable', label: 'Child' },
+          ] },
         },
       }
     })
@@ -834,7 +832,7 @@ describe('single-slot mounting edge arms', () => {
 
 describe('stubbed settings scope', () => {
   it('records both write kinds and publishes a Host acceptance to its listeners', async () => {
-    const host = stubSettingsScope<{ preference: string }>()
+    const host = stubConfigForm<{ preference: string }>()
     let notified = 0
     const stop = host.scope.subscribe(() => { notified += 1 })
     expect(host.listenerCount()).toBe(1)
@@ -843,7 +841,8 @@ describe('stubbed settings scope', () => {
     })
 
     await host.scope.set('preference', 'dark')
-    await host.scope.unset('preference')
+    await expect(host.scope.unset('preference')).resolves.toBe(true)
+    await expect(host.scope.mutate([{ op: 'set', path: ['preference'], value: 'dark' }])).resolves.toBe(true)
     host.publish({
       status: 'ready',
       value: { preference: 'system' },

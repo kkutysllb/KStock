@@ -46,8 +46,8 @@ import type { Stabilizer } from './fixtures.ts'
 export type { UseSession } from '@qilin/client-ui-session/client'
 export { domSnapshotSerializer, registerDomSnapshotSerializer } from './snapshot.ts'
 export { FixtureSession, TestSessions } from './sessions.ts'
-export { stubSettingsScope } from './settings-scope.ts'
-export type { StubSettingsScope } from './settings-scope.ts'
+export { stubConfigForm } from './config-form.ts'
+export type { StubConfigForm } from './config-form.ts'
 export { scriptedSettingsRemote } from './settings-remote.ts'
 export type { ScriptedNamespace, ScriptedSettingsRemote } from './settings-remote.ts'
 export { TestWorkspaces } from './workspaces.ts'
@@ -262,6 +262,19 @@ export class SlotTestRuntime {
     ctx.provide('sessions', this.sessions)
     ctx.provide('workspaces', this.workspaces)
     ctx.provide('fileUpload', this.fileUpload as never)
+    // The assembled roster always mounts the shortcuts service; a spec that
+    // asserts command registration replaces this stub via provide().
+    ctx.provide('shortcuts', {
+      runtime: 'web', platform: 'macos', stopSequenceMs: 500,
+      catalog: { getSnapshot: () => [], subscribe: () => () => {} },
+      fixedCatalog: { getSnapshot: () => [], subscribe: () => () => {} },
+      config: { getSnapshot: () => ({ sequence: 0, status: 'ready' } as never), subscribe: () => () => {} },
+      register: () => () => {}, registerFixed: () => () => {}, observeFixedInput: () => () => {},
+      describeBinding: () => ({ binding: null, keys: [], issue: null, conflicts: [] }),
+      edit: () => Promise.resolve({ status: 'saved' } as never),
+      recording: () => Promise.resolve(),
+      closeWindow: () => Promise.resolve(),
+    } as never)
     this.disposeWorkspaceSource = slots.provideRoot({ hooks: { workspaces: this.workspaces.list } })
     this.disposePanelInfoSource = slots.provideRoot({ hooks: { panelInfo: this.panelInfo } })
     // Capturing install: the production renderer does the rendering; the

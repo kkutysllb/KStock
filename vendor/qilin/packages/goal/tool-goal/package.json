@@ -1,7 +1,7 @@
 {
   "name": "@qilin/tool-goal",
   "description": "Model-facing same-session goal tools with execution-time authority checks",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -30,29 +30,29 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/agent": "workspace:^",
-    "@qilin/goal": "workspace:^",
-    "@qilin/llm": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/system-prompt": "workspace:^",
-    "@qilin/tools": "workspace:^",
-    "@qilin/kylin": "workspace:^",
-    "@qilin/session-projection": "workspace:^"
+    "@qilin/agent": "workspace:*",
+    "@qilin/goal": "workspace:*",
+    "@qilin/llm": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/system-prompt": "workspace:*",
+    "@qilin/tools": "workspace:*",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/session-projection": "workspace:*"
   },
   "dependencies": {
-    "@qilin/schemastery": "workspace:^"
+    "@qilin/schemastery": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/kylin-plugin-loader": "workspace:^",
-    "@qilin/agent": "workspace:^",
-    "@qilin/agent-loop-testkit": "workspace:^",
-    "@qilin/agent-loop": "workspace:^",
-    "@qilin/goal": "workspace:^",
-    "@qilin/llm": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/system-prompt": "workspace:^",
-    "@qilin/tools": "workspace:^",
-    "@qilin/kylin": "workspace:^",
-    "@qilin/session-projection": "workspace:^"
+    "@qilin/kylin-plugin-loader": "workspace:~",
+    "@qilin/agent": "workspace:*",
+    "@qilin/agent-loop-testkit": "workspace:*",
+    "@qilin/agent-loop": "workspace:*",
+    "@qilin/goal": "workspace:*",
+    "@qilin/llm": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/system-prompt": "workspace:*",
+    "@qilin/tools": "workspace:*",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/session-projection": "workspace:*"
   }
 }

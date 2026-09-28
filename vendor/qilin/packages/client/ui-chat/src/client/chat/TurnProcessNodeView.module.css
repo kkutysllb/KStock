@@ -4,14 +4,23 @@
   align-items: center;
   width: 100%;
   min-width: 0;
-  height: 33px;
+  height: calc(33px + var(--qilin-content-font-delta, 0px));
   padding: 0 0 8px;
   border: none;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   background: none;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
   text-align: left;
+  transition: color 100ms ease;
+}
+
+.root:disabled {
+  cursor: default;
+}
+
+.root:not(:disabled):hover {
+  color: var(--dsw-alias-label-primary);
 }
 
 .root:not([data-open]) {
@@ -20,29 +29,67 @@
 
 .chevron {
   flex: none;
-  width: 16px;
-  height: 16px;
-  margin-left: 6px;
-  color: var(--dsw-alias-label-tertiary);
-  transform: rotate(-90deg);
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  color: var(--dsw-alias-label-caption);
   transition: transform 100ms ease;
 }
 
 .root[data-open] .chevron {
-  transform: rotate(0deg);
+  transform: rotate(180deg);
 }
 
 .label {
   min-width: 0;
   overflow: hidden;
-  font-size: 14px;
-  line-height: 24px;
+  font-size: var(--qilin-content-font-size-secondary, 13px);
+  line-height: calc(24px + var(--qilin-content-font-delta, 0px));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* The running status label sweeps deep blue: 0.1.6's .turnStatus sweep that
+   did not come along when the status line moved into this row — the label is
+   a bare span here and the group headers' TextShimmer sweeps currentColor
+   (grey). Same static tokens, 250% background, 1.8s linear loop; the duration
+   travels inside the same label string, so it sweeps too. */
+.root[data-turn-running] .label {
+  background: linear-gradient(
+    90deg,
+    var(--dsw-static-deepseek-500) 0%,
+    var(--dsw-static-deepseek-500) 40%,
+    var(--dsw-static-deepseek-200) 50%,
+    var(--dsw-static-deepseek-500) 60%,
+    var(--dsw-static-deepseek-500) 100%
+  );
+  background-position: 100% 0;
+  background-size: 250% 100%;
+  background-clip: text;
+  color: transparent;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: qilin-turn-status-shimmer 1.8s linear infinite;
+}
+
+@keyframes qilin-turn-status-shimmer {
+  to {
+    background-position: 0 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .root,
   .chevron {
     transition: none;
+  }
+
+  .root[data-turn-running] .label {
+    background: none;
+    background-position: 0 0;
+    background-size: 100% 100%;
+    color: inherit;
+    -webkit-text-fill-color: currentColor;
+    animation: none;
   }
 }

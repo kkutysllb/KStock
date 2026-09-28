@@ -6,13 +6,14 @@ import {
   type OpenInAppAppsPayload, type OpenInAppOpenPayload,
 } from '@qilin/host-open-in-app/shared'
 
-type Fetch = (input: string | URL, init?: RequestInit) => Promise<Response>
-
-/** Resolve the browser's Host base with the connection carrier's null-origin fallback. */
-function hostBase(): string {
-  const origin = (globalThis as { location?: { origin?: string } }).location?.origin
-  return origin !== undefined && origin !== 'null' ? origin : 'http://qilin.internal'
+/** Shared launch status for controls targeting the captured workspace path. */
+export interface OpenInAppLaunchState {
+  readonly phase: 'idle' | 'busy' | 'error'
+  readonly path: string | null
 }
+
+/** Fetch-shaped carrier; a document-relative route reaches the served mount when the carrier resolves it. */
+type Fetch = (input: string | URL, init?: RequestInit) => Promise<Response>
 
 /**
  * Owns the once-per-page availability read, the persisted last choice, and
@@ -27,7 +28,20 @@ export class OpenInAppController {
     persist: { name: 'qilin.open-in-app.choice' },
   })
 
+  /** Current launch, shared by pointer and keyboard gestures. */
+  readonly operation = createSnapshotStore<OpenInAppLaunchState>({ phase: 'idle', path: null })
+
   private loading: Promise<void> | undefined
+
+  /**
+   * Resolve the remembered installed application, with the first-installed fallback.
+   * @returns the installed app id, or undefined while unavailable.
+   */
+  currentApp(): string | undefined {
+    const apps = this.apps.getSnapshot() ?? []
+    const choice = this.choice.getSnapshot()
+    return apps.includes(choice) ? choice : apps[0]
+  }
 
   /**
    * @param fetcher - HTTP carrier for the apps read and the launch POST.
@@ -49,29 +63,38 @@ export class OpenInAppController {
    * @param appId - catalog id from the availability list.
    */
   choose(appId: string): void {
-    this.choice.set(appId)
+    if (this.operation.getSnapshot().phase !== 'busy') this.choice.set(appId)
   }
 
   /**
    * Launch one installed app on a workspace directory.
    * @param appId - catalog id from the availability list.
    * @param path - the session's absolute workspace directory.
+   * Concurrent gestures are ignored until the current Host request settles.
    * @returns after the host acknowledged the launch; rejects on any failure.
    */
   async launch(appId: string, path: string): Promise<void> {
+    if (this.operation.getSnapshot().phase === 'busy') return
+    this.operation.set({ phase: 'busy', path })
     const body: OpenInAppOpenPayload = { app: appId, path }
-    const response = await this.fetcher(new URL(OPEN_IN_APP_OPEN_ROUTE, hostBase()), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (!response.ok) throw new Error(`open failed: HTTP ${String(response.status)}`)
+    try {
+      const response = await this.fetcher(OPEN_IN_APP_OPEN_ROUTE, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!response.ok) throw new Error(`open failed: HTTP ${String(response.status)}`)
+      this.operation.set({ phase: 'idle', path })
+    } catch (error) {
+      this.operation.set({ phase: 'error', path })
+      throw error
+    }
   }
 
   private async run(): Promise<void> {
     let apps: readonly string[] = []
     try {
-      const response = await this.fetcher(new URL(OPEN_IN_APP_APPS_ROUTE, hostBase()), {
+      const response = await this.fetcher(OPEN_IN_APP_APPS_ROUTE, {
         headers: { accept: 'application/json' },
       })
       if (response.ok) {

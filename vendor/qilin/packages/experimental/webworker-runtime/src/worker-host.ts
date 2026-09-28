@@ -256,7 +256,9 @@ export function createWorkerHost(options: WorkerHostOptions): WorkerHost {
       tunnel.serve({
         directFetch: (request: Request) => handler.fetch(request),
         bootPayload: () => readBootPayload(ctx),
-        openStream: typertGateway.wireStream.open,
+        // The worker tree serves its own page: every stream speaks for the operator.
+        openStream: (endpoint, payload, uplink, signal) =>
+          typertGateway.wireStream.open(endpoint, payload, uplink, undefined, signal),
         streamFailure: typertGateway.wireStream.failure,
       })
     } catch (reason) {
@@ -407,7 +409,13 @@ function bootPatches(
   // the JSONL backend's plaintext path is the composition's one legal encoding.
   const jsonl = find(rows, 'session-persistence-jsonl')
   if (jsonl !== undefined) {
-    patches.push({ id: 'session-persistence-jsonl', config: { ...configOf(jsonl), compression: 'none' } })
+    // This host stubs node:worker_threads (nested workers are unsupported), so the
+    // backend's full-generation verifier cannot spawn its isolate and must run
+    // inline. Both verifiers hold the same corruption contract.
+    patches.push({
+      id: 'session-persistence-jsonl',
+      config: { ...configOf(jsonl), compression: 'none', verification: 'inline' },
+    })
   }
   return { patches, presetOverlay }
 }

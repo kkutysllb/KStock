@@ -11,8 +11,8 @@ import {
 } from './scaffold.ts'
 import { expandOwningTurnProcess, newEnglishPage } from './support.ts'
 
-const FIXTURE = fileURLToPath(new URL('../../../snapshots/web/kylin-tool-round/session.v3.jsonl', import.meta.url))
-const UI_EXPECTED = fileURLToPath(new URL('./expected/kylin-history/ui.expected.md', import.meta.url))
+const FIXTURE = fileURLToPath(new URL('../../../snapshots/web/cordis-tool-round/session.v3.jsonl', import.meta.url))
+const UI_EXPECTED = fileURLToPath(new URL('./expected/cordis-history/ui.expected.md', import.meta.url))
 const MODE = webSnapshotMode()
 const SEED_ID = 'kylin-history'
 
@@ -46,6 +46,14 @@ describe.skipIf(MODE === 'record')('web e2e: historical Kylin cards', () => {
     expect(tools(persisted)).toEqual(tools(expected))
     const names = scaffold.ctx.tools.schemas().map(tool => tool.name)
     expect(names).not.toEqual(expect.arrayContaining(['cordis_define']))
+    // Pin the reader-away state this capture encodes: the follow reconciliation
+    // can still be following the tail when the interactions finish under load,
+    // and scrolling after them would move content under the pointer and add a
+    // hover tooltip that the golden does not record.
+    await page.locator('[data-conversation-scroll]').evaluate((element) => {
+      element.scrollTop = Math.max(0, element.scrollTop - 400)
+    })
+    await page.getByRole('button', { name: 'Back to bottom' }).waitFor({ state: 'visible' })
     const define = page.locator('[data-tool="cordis_define"]').first()
     await expandOwningTurnProcess(page, define)
     await define.locator('[aria-expanded]').first().click()

@@ -1,7 +1,7 @@
 {
   "name": "@qilin/cmdline",
   "description": "Immutable command-line handoff from a qilin launcher to any app plugin that injects cmdlineArgs",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -30,13 +30,13 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/kylin-plugin-loader": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin-plugin-loader": "workspace:~",
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/kylin-plugin-include": "workspace:^",
-    "@qilin/kylin-plugin-loader": "workspace:^",
+    "@qilin/kylin-plugin-include": "workspace:~",
+    "@qilin/kylin-plugin-loader": "workspace:~",
     "commander": "^15.0.0",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin": "workspace:~"
   }
 }

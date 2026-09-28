@@ -302,8 +302,12 @@ export interface LaunchOptions {
   profileResolutionMode?: Extract<ProfileResolutionMode, 'dual' | 'runtime'>
   /** Enable the real Open In rows with deterministic launch-environment facts. */
   openInAppEnvironment?: LaunchEnvironmentSnapshot
-  /** Compare the replayed root session with `replayFixture`; defaults on for a manifest-owned canonical recording. */
-  compareReplaySession?: boolean
+  /**
+   * Compare the replayed root session with `replayFixture`; defaults on for a
+   * manifest-owned canonical recording; `read-only` also forbids refresh
+   * writes to a borrowed fixture.
+   */
+  compareReplaySession?: boolean | 'read-only'
   /**
    * Optional product overlay applied after the shipped Web surface and before
    * the scaffold's hermetic test patches, matching the launcher's `--patch`
@@ -678,8 +682,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
         },
       }],
     ...maskDeepSeekCredential && !messages ? [] : [
-      { id: 'llm-deepseek', disabled: mode !== 'record' && !maskDeepSeekCredential,
-        config: messages ? {} : { protocol: 'chat-completions' } },
+      { id: 'llm-deepseek', disabled: mode !== 'record' && !maskDeepSeekCredential },
     ],
   ]
   const patches: PatchOptions[] = [...basePatches, ...surfacePatches, ...overlayPatches]
@@ -927,7 +930,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
           await assertReplaySession(
             [...observedSessions.values()],
             replayFixture,
-            mode,
+            compareReplaySession === 'read-only' ? 'replay' : mode,
             `http://${browserHost}:${port}`,
             harnessHome,
           )
@@ -986,6 +989,27 @@ function mapJsonStringValues(value: unknown, map: (value: string) => string): un
     ]))
   }
   return value
+}
+
+/** Volatile fields inside one durable time-context reading, each replaced by a fixed token. */
+const TIME_CONTEXT_READING_FIELDS: readonly (readonly [RegExp, string])[] = [
+  [/(Time sampled while preparing turn \d+, step \d+: )[^\n]*/, '$1{{timeContextTimestamp}}'],
+  [/(Browser time zone for this request: )[^.]*\./, '$1{{clientTimeZone}}.'],
+  [/(Elapsed since the preceding [^:]*: )[^\n]*/, '$1{{elapsed}}'],
+]
+
+/** Replace the sampled instant, browser zone, and elapsed duration a time-context reading carries. */
+function tokenizeTimeContextReading(text: string): string {
+  let normalized = text
+  for (const [pattern, replacement] of TIME_CONTEXT_READING_FIELDS) normalized = normalized.replace(pattern, replacement)
+  return normalized
+}
+
+/** Whether one parsed Session record is a durable time-context reading. */
+function isTimeContextReading(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') return false
+  const record = value as { type?: unknown; data?: { source?: { kind?: unknown } } }
+  return record.type === 'user/message' && record.data?.source?.kind === 'time-context'
 }
 
 /** Tokenize the browser timezone carried by user message sources. */
@@ -1065,7 +1089,7 @@ export function normalizeWebSessionVolatiles(log: string, workspaceCwd?: string)
     }))].sort((left, right) => right.length - left.length)
   return log.split(/\r?\n/).map((line) => {
     if (line.trim() === '') return line
-    const record = normalizeClientTimeZones(mapJsonStringValues(JSON.parse(line), (value) => {
+    let record = normalizeClientTimeZones(mapJsonStringValues(JSON.parse(line), (value) => {
       let normalized = value
         .replace(/Anonymous user: [0-9a-f-]{36}(?=\.$)/gi, 'Anonymous user: {{anonymousUserId}}')
       for (const cwd of cwdSpellings) normalized = replaceWebCwd(normalized, cwd)
@@ -1073,6 +1097,9 @@ export function normalizeWebSessionVolatiles(log: string, workspaceCwd?: string)
     })) as { type?: unknown; data?: { endpoint?: unknown } }
     if (record.type === 'web/deepseek-search-llm-request' && typeof record.data?.endpoint === 'string') {
       record.data.endpoint = '{{webSearchEndpoint}}'
+    }
+    if (isTimeContextReading(record)) {
+      record = mapJsonStringValues(record, tokenizeTimeContextReading) as typeof record
     }
     return JSON.stringify(record)
   }).join('\n')
@@ -1498,6 +1525,9 @@ function normalizeAria(snapshot: string, workspaceCwd: string, age: boolean): st
     // Seeded compaction prices realized file paths, whose length differs
     // between local worktrees and CI scratch directories.
     .replace(/(Compacted \d+ history items \(~)\d+( tokens\))/g, '$1{{tokens}}$2')
+    // The empty-state greeting follows the viewer's local time of day, so a
+    // golden captured in the afternoon must not fail an evening run.
+    .replace(/(?:Good (?:morning, a fresh start to a new day|afternoon, hope your work goes well|evening, great job today)|早上好，新的一天，新的开始|下午好，愿你工作顺利|晚上好，今天辛苦了)/g, '{{greeting}}')
     // Session summaries and Message IconActions clocks cross calendar
     // boundaries; collapse every shape so goldens stay stable across them.
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g, '{{timestamp}}')
@@ -1561,13 +1591,13 @@ export async function captureExpandedTurnProcessAria(
   workspaceCwd: string,
   options: { scrollToBottom?: boolean } = {},
 ): Promise<string> {
-  const controls = page.locator('[data-turn-process]')
+  const controls = page.locator('[data-turn-process], [data-process-activity]')
   const count = await controls.count()
   expect(count).toBeGreaterThan(0)
   const opened: number[] = []
   for (let index = 0; index < count; index++) {
     const control = controls.nth(index)
-    if (!await control.isVisible() || await control.getAttribute('aria-expanded') === 'true') continue
+    if (!await control.isVisible() || await control.getAttribute('aria-expanded') !== 'false') continue
     await control.click()
     opened.push(index)
   }
@@ -1583,6 +1613,11 @@ export async function captureExpandedTurnProcessAria(
         return Math.abs(distanceFromBottom) <= 1 && await backToBottom.count() === 0
       }, { timeout: 10_000 }).toBe(true)
     }
+    // Expansion clicks and the programmatic scroll shift content under the
+    // stationary pointer; a hover tooltip left open at the capture point is a
+    // pointer-dependent artifact, not product content.
+    await page.mouse.move(0, 0)
+    await expect.poll(() => page.getByRole('tooltip').count(), { timeout: 5_000 }).toBe(0)
     return await captureStableAria(page, selector, workspaceCwd)
   } finally {
     for (const index of opened.reverse()) {

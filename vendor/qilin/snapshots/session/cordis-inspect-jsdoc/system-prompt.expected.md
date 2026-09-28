@@ -66,12 +66,12 @@ interface ToolArgsMap {
     run_in_background?: boolean;
     /** The wider sandbox mode this command needs. Only valid as a one-shot retry of a command the sandbox just denied; requires justification and user approval. */
     sandbox_permissions?: "workspace-write" | "danger-full-access";
-    /** Required with sandbox_permissions: one sentence for the user explaining why this exact command needs the wider access. */
+    /** Required with sandbox_permissions: one sentence for the user explaining why this exact command needs the wider access. Use the language of the user’s current request. */
     justification?: string;
   } & Record<string, JsonValue>;
   /** List every Cordis Inspect Provider currently known to the Host, including local Host Providers and the latest manifests synchronized from the Client. Each entry includes its platform, purpose, read-only methods, and input/output schemas. Call this Tool before writing or configuring a plugin, then select the provider and method for cordis_inspect_query from its result. Do not guess names or treat an Inspect method as a business Service that Plugin code can call. */
   cordis_inspect_list: Record<string, JsonValue>;
-  /** Run a read-only query explicitly declared by an Inspect Provider. platform, provider, and method must come from cordis_inspect_list, and input must satisfy that method's schema. Use this Tool before writing plugin code to read exact Service methods, Event modes, Builtin signatures, Tool schemas, theme tokens, or live Slot trees and props. Host queries run locally. A Client query waits for the first valid page response and remains pending until a page answers or the Tool is cancelled. This Tool cannot invoke business Service methods or modify the runtime. For Service.listService and Event.listEvents, query without input to navigate the compact signature directory, then query the exact service or event for its structured contract and referenced types. For Slots.listSubTree, query without root to navigate the compact tree, then query an exact Slot root for its complete registration contract and props; an exact Factory root returns its identity, scope, and registrant. */
+  /** Run a read-only query explicitly declared by an Inspect Provider. platform, provider, and method must come from cordis_inspect_list, and input must satisfy that method's schema. Use this Tool before writing plugin code to read exact Service methods, Event modes, plugin Config schemas, Builtin signatures, Tool schemas, theme tokens, or live Slot trees and props. Host queries run locally. A Client query waits for the first valid page response and remains pending until a page answers or the Tool is cancelled. This Tool cannot invoke business Service methods or modify the runtime. For Service.listService and Event.listEvents, query without input to navigate the compact signature directory, then query the exact service or event for its structured contract and referenced types. For Slots.listSubTree, query without root to navigate the compact tree, then query an exact Slot root for its complete registration contract and props; an exact Factory root returns its identity, scope, and registrant. */
   cordis_inspect_query: {
     /** Runtime platform that owns the Provider. */
     platform: "host" | "client";
@@ -101,7 +101,7 @@ interface ToolArgsMap {
     replace_all?: boolean;
     /** The wider sandbox mode this file operation needs. Only valid as a one-shot retry of an operation the sandbox just denied; requires justification and user approval. */
     sandbox_permissions?: "workspace-write" | "danger-full-access";
-    /** Required with sandbox_permissions: one sentence for the user explaining why this exact file operation needs the wider access. */
+    /** Required with sandbox_permissions: one sentence for the user explaining why this exact file operation needs the wider access. Use the language of the user’s current request. */
     justification?: string;
   } & Record<string, JsonValue>;
   /** Use only in plan mode. Present your plan for the user's review and, on approval, leave plan mode. Send the COMPLETE plan as markdown, starting with a # heading that names it. The user may approve (carry out the plan from your next step) or keep planning — their feedback comes back in the tool result; revise and present again. */
@@ -267,7 +267,7 @@ interface ToolArgsMap {
     content: string;
     /** The wider sandbox mode this file operation needs. Only valid as a one-shot retry of an operation the sandbox just denied; requires justification and user approval. */
     sandbox_permissions?: "workspace-write" | "danger-full-access";
-    /** Required with sandbox_permissions: one sentence for the user explaining why this exact file operation needs the wider access. */
+    /** Required with sandbox_permissions: one sentence for the user explaining why this exact file operation needs the wider access. Use the language of the user’s current request. */
     justification?: string;
   } & Record<string, JsonValue>;
 }

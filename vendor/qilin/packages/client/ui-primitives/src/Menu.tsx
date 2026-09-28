@@ -4,6 +4,10 @@ import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import { IconCheckOutline16 } from './icons/index.tsx'
 import { usePointerGrace } from './pointer-grace.ts'
+import { isBehindModal } from './useModalLayer.ts'
+import { observeComposition } from './keyboard-composition.ts'
+import { focusWithoutRing } from './focus.ts'
+import { ShortcutKeys } from './ShortcutKeys.tsx'
 import css from './Menu.module.css'
 
 /** Selectable row (optionally with a nested submenu). */
@@ -11,6 +15,8 @@ export interface MenuItem {
   id: string
   label: ReactNode
   disabled?: boolean
+  /** Effective binding supplied by the command owner; omitted for unbound actions. */
+  shortcut?: { keys: readonly string[]; aria?: string | undefined }
   /** Leading icon (figma .Menu_cell gap 8). */
   icon?: ReactNode
   /** Destructive row: error-colored text/icon and danger hover fill. */
@@ -34,6 +40,66 @@ export interface MenuLabel {
 
 /** One primary-menu entry: a row, a separator, or a heading label. */
 export type MenuEntry = MenuItem | MenuSeparator | MenuLabel
+
+/** Props for one component-rendered menu row. */
+export interface MenuItemButtonProps {
+  /** Visible row label. */
+  children: ReactNode
+  /** Effective binding supplied by the command owner; omitted for unbound actions. */
+  shortcut?: MenuItem['shortcut']
+  /** Leading icon (figma .Menu_cell gap 8). */
+  icon?: ReactNode
+  /** Whether the row cannot be activated. */
+  disabled?: boolean
+  /** Destructive row: error-colored text/icon and danger hover fill. */
+  danger?: boolean
+  /**
+   * Start a new group: a hairline above this row, the same one a
+   * `{ type: 'separator' }` data entry draws. It comes and goes with the row,
+   * so a row that renders nothing leaves no stray line; a data separator
+   * directly before it draws no second line, and the list's first row draws none.
+   */
+  separatorBefore?: boolean
+  /** Row activation (click, Enter, or Tab on the focused row). */
+  onSelect: () => void
+}
+
+/**
+ * Render one `role="menuitem"` row for a {@link Menu} whose rows are
+ * components rather than `items` data: the same markup and styling as a data
+ * row, so it joins the list's keyboard walk and post-selection focus return
+ * without any shared state. Closing the menu stays the owner's decision, as
+ * it is for data rows.
+ * @param props.children - visible row label.
+ * @param props.shortcut - effective key labels and accessible combination.
+ * @param props.icon - optional leading icon.
+ * @param props.disabled - whether the row cannot be activated.
+ * @param props.danger - whether to use the destructive row colors.
+ * @param props.separatorBefore - whether this row starts a new group (hairline above it).
+ * @param props.onSelect - row activation callback.
+ * @returns one menu-item row.
+ */
+export function MenuItemButton({
+  children, shortcut, icon, disabled = false, danger = false, separatorBefore = false, onSelect,
+}: MenuItemButtonProps) {
+  return (
+    <div className={css.itemWrap}>
+      {separatorBefore && <div className={css.separator} role="separator" />}
+      <button
+        type="button"
+        role="menuitem"
+        className={clsx(css.item, danger && css.danger)}
+        disabled={disabled}
+        aria-keyshortcuts={shortcut?.aria}
+        onClick={onSelect}
+      >
+        {icon !== undefined && <span className={css.itemIcon}>{icon}</span>}
+        <span className={css.itemLabel}>{children}</span>
+        {shortcut !== undefined && <span aria-hidden="true" className={css.shortcut}><ShortcutKeys keys={shortcut.keys} className={css.shortcutKeys} /></span>}
+      </button>
+    </div>
+  )
+}
 
 function isSeparator(entry: MenuEntry): entry is MenuSeparator {
   return 'type' in entry && entry.type === 'separator'
@@ -119,6 +185,7 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
    * able to name by position.
    */
   const triggerRef = useRef<HTMLElement | null>(null)
+  const selectingWithTab = useRef(false)
 
   /**
    * Hand the keyboard back to the trigger that opened the menu — or, when the
@@ -126,13 +193,13 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
    * row otherwise falls to the page body, where the next Tab restarts from the
    * top of the page.
    */
-  const refocusAnchor = (): void => {
+  const refocusAnchor = (navigation = false): void => {
     const trigger = triggerRef.current
-    if (trigger !== null && document.contains(trigger) && !(trigger as HTMLButtonElement).disabled) {
-      trigger.focus()
-      return
-    }
-    rootRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+    const target = trigger !== null && document.contains(trigger) && !(trigger as HTMLButtonElement).disabled
+      ? trigger : rootRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+    if (target == null) return
+    if (navigation) target.focus()
+    else focusWithoutRing(target)
   }
 
   /**
@@ -146,7 +213,8 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
     queueMicrotask(() => {
       if (openRef.current) return
       const active = document.activeElement
-      if (active === null || active === document.body || listRef.current?.contains(active) === true) refocusAnchor()
+      const navigation = selectingWithTab.current
+      if (active === null || active === document.body || listRef.current?.contains(active) === true) refocusAnchor(navigation)
     })
   }
   const openRef = useRef(open)
@@ -225,7 +293,7 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
     if (!open || !autoFocus) return
     const first = listRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')
     walkIndex.current = first === undefined || first === null ? null : 0
-    first?.focus()
+    if (first != null) focusWithoutRing(first)
   }, [open, autoFocus])
 
   useEffect(() => {
@@ -247,12 +315,15 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
       const focused = document.activeElement
       const insideList = listRef.current?.contains(focused) === true
       const anchored = rootRef.current?.contains(focused) === true || insideList
-      if (e.key === 'Escape') {
+      if (composition.guards(e) || isBehindModal(rootRef.current) || e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey) return
+      if (e.key === 'Escape' && !e.shiftKey) {
+        e.preventDefault()
         // Closing hands the keyboard back when the menu had it — and, as this
         // primitive always did for autoFocus menus, when it held the keyboard
         // and lost it again (a row that unmounted under it).
+        if (e.repeat) return
         onClose()
-        if (anchored || autoFocus) refocusAnchor()
+        if (anchored || autoFocus) refocusAnchor(true)
       }
       // Tab settles like Enter and Shift+Tab leaves like Escape, so a menu's
       // keys mean what they mean in the composer. Only a keyboard already on
@@ -274,7 +345,9 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
         if (insideList) {
           if (focused instanceof Element && focused.getAttribute('role') === 'menuitem') {
             e.preventDefault()
-            ;(focused as HTMLElement).click()
+            selectingWithTab.current = true
+            try { (focused as HTMLElement).click() }
+            finally { selectingWithTab.current = false }
           }
           return
         }
@@ -315,12 +388,20 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
     const onWindowBlur = () => {
       if (document.activeElement instanceof HTMLIFrameElement) onClose()
     }
+    // Local menus close on Escape during capture, before the modal layer's
+    // bubble listener can dismiss the dialog behind the menu.
+    const onEscape = (event: KeyboardEvent): void => { if (event.key === 'Escape') onKeyDown(event) }
+    const onOtherKey = (event: KeyboardEvent): void => { if (event.key !== 'Escape') onKeyDown(event) }
+    const composition = observeComposition(document)
     document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('keydown', onOtherKey)
+    document.addEventListener('keydown', onEscape, true)
     window.addEventListener('blur', onWindowBlur)
     return () => {
+      composition.dispose()
       document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('keydown', onOtherKey)
+      document.removeEventListener('keydown', onEscape, true)
       window.removeEventListener('blur', onWindowBlur)
     }
   }, [open, onClose, autoFocus])
@@ -359,6 +440,7 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
           role="menuitem"
           className={clsx(css.item, selected && (selection === 'fill' ? css.selectedFill : css.selected), entry.danger === true && css.danger)}
           disabled={entry.disabled}
+          aria-keyshortcuts={entry.shortcut?.aria}
           aria-haspopup={hasSub ? 'menu' : undefined}
           aria-expanded={hasSub ? subOpen : undefined}
           onFocus={() => { setOpenSubmenuId(hasSub ? entry.id : null) }}
@@ -373,6 +455,7 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
         >
           {entry.icon !== undefined && <span className={css.itemIcon}>{entry.icon}</span>}
           <span className={css.itemLabel}>{entry.label}</span>
+          {entry.shortcut !== undefined && <span aria-hidden="true" className={css.shortcut}><ShortcutKeys keys={entry.shortcut.keys} className={css.shortcutKeys} /></span>}
           {/* Selection marker is a trailing check (figma .Menu_cell) unless the fill mode carries it. */}
           {selected && selection === 'check' && <IconCheckOutline16 className={css.check} />}
         </button>
@@ -385,10 +468,12 @@ export function Menu({ open, anchor, items, selectedId, selectedIds, onSelect, o
                 role="menuitem"
                 className={css.item}
                 disabled={sub.disabled}
+                aria-keyshortcuts={sub.shortcut?.aria}
                 onClick={() => { onSelect(sub.id); refocusAfterSelection() }}
               >
                 {sub.icon !== undefined && <span className={css.itemIcon}>{sub.icon}</span>}
                 <span className={css.itemLabel}>{sub.label}</span>
+                {sub.shortcut !== undefined && <span aria-hidden="true" className={css.shortcut}><ShortcutKeys keys={sub.shortcut.keys} className={css.shortcutKeys} /></span>}
               </button>
             ))}
           </div>

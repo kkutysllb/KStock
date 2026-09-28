@@ -1,7 +1,7 @@
 {
   "name": "@qilin/session-snapshot",
   "description": "Session-log snapshot core with an ACP protocol adapter, expected-output normalization, and fixture invariants",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -31,31 +31,31 @@
   "license": "MIT",
   "dependencies": {
     "@agentclientprotocol/sdk": "1.4.0",
-    "@qilin/kylin-plugin-include": "workspace:*",
-    "@qilin/llm-replay": "workspace:^",
+    "@qilin/kylin-plugin-include": "workspace:~",
+    "@qilin/llm-replay": "workspace:*",
     "@qilin/loader-smoke": "workspace:*",
-    "@qilin/session-format": "workspace:^",
+    "@qilin/session-format": "workspace:*",
     "js-yaml": "^4.2.0",
     "vitest": "^4.1.8"
   },
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/http-proxy": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/session": "workspace:*",
+    "@qilin/http-proxy": "workspace:*"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/agent": "workspace:^",
-    "@qilin/agent-loop": "workspace:^",
-    "@qilin/compaction": "workspace:^",
-    "@qilin/llm": "workspace:^",
-    "@qilin/sandbox": "workspace:^",
-    "@qilin/sandbox-policy": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/subagent": "workspace:^",
-    "@qilin/tools": "workspace:^",
-    "@qilin/user-questions": "workspace:^",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/agent": "workspace:*",
+    "@qilin/agent-loop": "workspace:*",
+    "@qilin/compaction": "workspace:*",
+    "@qilin/llm": "workspace:*",
+    "@qilin/sandbox": "workspace:*",
+    "@qilin/sandbox-policy": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/subagent": "workspace:*",
+    "@qilin/tools": "workspace:*",
+    "@qilin/user-questions": "workspace:*",
     "@types/js-yaml": "^4.0.9",
-    "@qilin/http-proxy": "workspace:^"
+    "@qilin/http-proxy": "workspace:*"
   }
 }

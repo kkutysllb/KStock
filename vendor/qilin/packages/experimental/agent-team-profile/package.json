@@ -1,7 +1,8 @@
 {
   "name": "@qilin/experimental-agent-team-profile",
   "description": "Experimental profile bundle enabling Agent Teams over qilin-base",
-  "version": "3.0.4",
+  "icon": "./icon.svg",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -23,9 +24,12 @@
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./src/*": "./src/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
+    "icon.svg",
+    "locale/*.json",
     "lib/index.js",
     "cordis.patch.yml",
     "lib/types/**/*.d.ts"
@@ -37,15 +41,15 @@
     }
   },
   "dependencies": {
-    "@qilin/experimental-agent-team": "workspace:^",
-    "@qilin/experimental-tool-agent-team": "workspace:^"
+    "@qilin/experimental-agent-team": "workspace:*",
+    "@qilin/experimental-tool-agent-team": "workspace:*"
   },
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/kylin-plugin-include": "workspace:^",
-    "@qilin/kylin": "workspace:^",
+    "@qilin/kylin-plugin-include": "workspace:~",
+    "@qilin/kylin": "workspace:~",
     "js-yaml": "^4.2.0"
   }
 }

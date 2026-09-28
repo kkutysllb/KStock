@@ -1,7 +1,7 @@
 {
   "name": "@qilin/remote-mock",
   "description": "Endpoint-named mock for Typert Remote traffic: unary answers and stream scripts per <namespace>/<method>, live stream control, a log, and the Connection carrier face whole-client specs install",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -29,13 +29,14 @@
     "@vitest/spy": "^4.1.8"
   },
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/typert-protocol": "workspace:*"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/api-settings-controller": "workspace:^",
-    "@qilin/client-connection": "workspace:^",
-    "@qilin/typert-protocol": "workspace:^",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/api-settings-controller": "workspace:*",
+    "@qilin/client-connection": "workspace:*",
+    "@qilin/typert-protocol": "workspace:*",
     "typescript": "^6.0.3"
   },
   "files": [

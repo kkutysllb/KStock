@@ -9,8 +9,8 @@
  */
 
 import { LlmError } from '@qilin/llm'
-import type { Message, ModelMessageSource, ReplayEnvelope } from '@qilin/llm'
-import type { Api, AssistantMessage, Usage as PiUsage } from '@earendil-works/pi-ai'
+import type { AssistantMessage as HarnessAssistantMessage, ModelMessageSource, ReplayEnvelope } from '@qilin/llm'
+import type { Api, AssistantMessage, JsonObject, Usage as PiUsage } from '@earendil-works/pi-ai'
 
 /** Per-block half of the pi-ai replay envelope, one entry per content block. */
 export type PiAiReplayBlock =
@@ -41,11 +41,11 @@ interface PiAiReplayState {
 }
 
 /** Parse tool-call argument JSON; tolerate model malformations with {}. */
-function parseArguments(raw: string): Record<string, unknown> {
+function parseArguments(raw: string): JsonObject {
   try {
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>
+      return parsed as JsonObject
     }
   } catch {
     // fall through
@@ -150,8 +150,8 @@ function readReplayState(value: unknown): PiAiReplayState {
 }
 
 /** Convert provider-neutral blocks without trusting them as same-model replay. */
-function foreignAssistant(message: Message): AssistantMessage {
-  const source = message.source.kind === 'model' ? message.source : undefined
+function foreignAssistant(message: HarnessAssistantMessage): AssistantMessage {
+  const source = message.source
   const content: AssistantMessage['content'] = []
   for (const block of message.content) {
     switch (block.type) {
@@ -176,8 +176,8 @@ function foreignAssistant(message: Message): AssistantMessage {
     // Deliberately never equals a catalog API: absent replay state is foreign
     // even if source names the same provider/model as this request.
     api: 'qilin-foreign',
-    provider: source?.provider ?? 'qilin-foreign',
-    model: source?.model ?? 'qilin-foreign',
+    provider: source.provider,
+    model: source.model,
     usage: emptyPiUsage(),
     stopReason: content.some(piece => piece.type === 'toolCall') ? 'toolUse' : 'stop',
     timestamp: 0,
@@ -185,7 +185,7 @@ function foreignAssistant(message: Message): AssistantMessage {
 }
 
 /** Recombine durable Harness content with validated pi-ai replay metadata. */
-function replayedAssistant(message: Message, source: ModelMessageSource, rawState: unknown): AssistantMessage {
+function replayedAssistant(message: HarnessAssistantMessage, source: ModelMessageSource, rawState: unknown): AssistantMessage {
   const state = readReplayState(rawState)
   if (state.response.provider !== source.provider) return invalidReplay('provider does not match assistant source')
   if (state.response.model !== source.model) return invalidReplay('model does not match assistant source')
@@ -241,14 +241,14 @@ function replayedAssistant(message: Message, source: ModelMessageSource, rawStat
  * another adapter's kind, another version, a malformed value, or metadata that
  * no longer matches the content — therefore degrades the one message to
  * provider-neutral history instead of failing the request.
- * @param message - assistant content with required source and optional adapter-owned replay metadata.
+ * @param message - model-produced assistant content with provider, model, and optional adapter-owned replay metadata.
  * @param onDegrade - called with the diagnostic reason when an unusable replay
  *   state falls back to provider-neutral conversion.
  * @returns a native pi-ai assistant message reconstructed from durable content.
  */
-export function toPiAssistant(message: Message, onDegrade?: (reason: string) => void): AssistantMessage {
+export function toPiAssistant(message: HarnessAssistantMessage, onDegrade?: (reason: string) => void): AssistantMessage {
   const source = message.source
-  if (source.kind !== 'model' || source.replayState === undefined) return foreignAssistant(message)
+  if (source.replayState === undefined) return foreignAssistant(message)
   try {
     return replayedAssistant(message, source, source.replayState)
   } catch (error: unknown) {

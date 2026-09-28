@@ -131,8 +131,17 @@ declare module '@qilin/client-ui-slots' {
       scope: 'session'
       owner: { view?: string }
     }
+    /** Resident navigation container, including when no Session is selected. */
+    'conversation.header': { kind: 'single'; scope: 'session-maybe' }
     /** Strict per-Session title, actions, and View navigation. */
-    'conversation.session.header': { kind: 'single'; scope: 'session' }
+    'conversation.session.header': {
+      kind: 'single'
+      scope: 'session'
+      owner: {
+        /** Parent-owned visibility shared with the header container styling. */
+        hideChrome: boolean
+      }
+    }
     /** Optional replacement for one Session breadcrumb title. */
     'conversation.session.header.lineage': {
       kind: 'single'
@@ -152,15 +161,14 @@ declare module '@qilin/client-ui-slots' {
       owner: ConversationHeaderActionOwnerProps
     }
     /**
-     * Leading seat before the Session breadcrumbs, for window-chrome-adjacent
-     * controls (macOS desktop sidebar reopen and New Session while the sidebar
-     * is hidden). The seat is laid out only while its occupant renders
-     * something, and it stays mounted through the blank-session state so a
-     * hidden sidebar always keeps a reopen control on screen.
+     * Global navigation before the Session title, available without a Session,
+     * for window-chrome-adjacent controls (macOS desktop sidebar reopen and
+     * New Session while the sidebar is hidden). The seat is laid out only while
+     * its occupant renders something.
      */
-    'conversation.session.header.leading': {
+    'conversation.header.leading': {
       kind: 'single'
-      scope: 'session'
+      scope: 'root'
       owner: ConversationHeaderLeadingOwnerProps
     }
     /**
@@ -194,6 +202,8 @@ declare module '@qilin/client-ui-slots' {
     'conversation.input.left': { kind: 'list'; scope: 'session' }
     /** Compact controls before the composer submit action. */
     'conversation.input.right': { kind: 'list'; scope: 'session' }
+    /** Compact action after the model selector; it can expand across the toolbar while retaining the editor and submit action. */
+    'conversation.input.activity': { kind: 'single'; scope: 'session'; owner: InputActivityOwnerProps }
     /** Resident composer body, including the no-Session inert state. */
     'conversation.composer.bar': { kind: 'single'; scope: 'session-maybe'; owner: ComposerBarOwnerProps }
     /** Optional draft-attachment rail and drop target. */
@@ -206,7 +216,11 @@ declare module '@qilin/client-ui-slots' {
     'conversation.input.plan': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
     /** Current-session permission control inside the composer tool row. */
     'conversation.input.permission': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
-    /** Model selector inside the composer tool row. */
+    /**
+     * Model selector inside the composer tool row. When expanded controls cannot
+     * share a line, the row sets --dsh-composer-model-text-display to none and
+     * --dsh-composer-model-icon-display to block for an occupant's compact display.
+     */
     'conversation.input.model': { kind: 'single'; scope: 'session'; owner: InputControlOwnerProps }
   }
 
@@ -393,6 +407,12 @@ export interface InputControlOwnerProps {
   locked: boolean
 }
 
+/** A toolbar activity hides ordinary accessory controls while expanded; its occupant must release expansion on unmount. */
+export interface InputActivityOwnerProps extends InputControlOwnerProps {
+  /** @param active - whether the occupant needs the toolbar width before the submit action. */
+  onActiveChange: (active: boolean) => void
+}
+
 /** Full props of the resident composer bar. */
 export type ComposerBarProps =
   PropsRuntime<'conversation.composer.bar'>
@@ -400,7 +420,7 @@ export type ComposerBarProps =
     | 'conversation.input.attachments' | 'conversation.input.overlay'
     | 'conversation.input.permission'
     | 'conversation.input.left' | 'conversation.input.plan'
-    | 'conversation.input.right' | 'conversation.input.model'
+    | 'conversation.input.right' | 'conversation.input.model' | 'conversation.input.activity'
     | 'conversation.composer.dock'
   >
   & InjectFace<ComposerBarInjected>
@@ -427,8 +447,13 @@ export interface HeroBrandMarkOwnerProps {
 /** Full props of the resident optional-Session Conversation shell. */
 export type ConversationSlotProps =
   PropsRuntime<'main.conversation'>
-  & PropsRenderSlots<'conversation.session.header'>
+  & PropsRenderSlots<'conversation.header'>
   & PropsRenderFactories
+
+/** Full props of the resident navigation header. */
+export type ConversationHeaderProps =
+  PropsRuntime<'conversation.header'>
+  & PropsRenderSlots<'conversation.header.leading' | 'conversation.session.header'>
 
 /** Inputs shared by main and embedded Conversation content occurrences. */
 export interface ConversationContentInputProps {
@@ -470,7 +495,6 @@ export type ConversationSessionHeaderSlotProps =
   PropsRuntime<'conversation.session.header'>
   & PropsRenderSlots<
     'conversation.session.header.lineage'
-    | 'conversation.session.header.leading'
     | 'conversation.session.header.actions'
     | 'conversation.session.header.utilities'
     | 'conversation.session.header.corner'

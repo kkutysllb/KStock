@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
+import { useDisclosure } from '@qilin/client-ui-chat/src/client/chat/use-disclosure.ts'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import type { RunningToolCall, ToolResultNode } from '@qilin/client-ui-chat/client'
+import type { StartedToolCall, ToolResultNode } from '@qilin/client-ui-chat/client'
 import type { SessionId } from '@qilin/session/types'
 import { makeTranslate } from '@qilin/client-test-runtime'
 import { zh as commonZh } from '@qilin/client-locale/src/locales/zh.ts'
@@ -61,8 +62,8 @@ const pathsMeta = (over?: Partial<PathsMeta>): PathsMeta => ({
   shape: 'paths', paths: ['src/a.ts', 'src/b.ts'], truncated: false, total: 2, ...over,
 })
 
-const runningGrep = (over?: Partial<RunningToolCall>): RunningToolCall => ({
-  callId: 'c1', name: 'grep', argsRaw: GREP_ARGS,
+const runningGrep = (over?: Partial<StartedToolCall>): StartedToolCall => ({
+  phase: 'start' as const, callId: 'c1', name: 'grep', argsRaw: GREP_ARGS,
   turn: 1, step: 1, time: 1_000, subCalls: [], ...over,
 })
 
@@ -174,9 +175,10 @@ describe('searchCardModel', () => {
 })
 
 describe('chat row search body (GenericToolCard fallback)', () => {
-  const ownerProps = (block: RunningToolCall | ToolResultNode, toolName: string): GenericToolCardProps => ({
+  const ownerProps = (block: StartedToolCall | ToolResultNode, toolName: string): GenericToolCardProps => ({
     loadImage: vi.fn(() => Promise.reject(new Error('not used'))),
-    callId: 'c1', toolName, block, openFile: vi.fn(), t,
+    useDisclosure,
+    callId: 'c1', toolName, ...('kind' in block ? { phase: 'result' as const, block } : { phase: 'start' as const, block }), openFile: vi.fn(), t,
   })
   /** The whole summary row is the expand toggle (ToolRow's unified interaction). */
   const toggleRow = (view: { container: HTMLElement }) => {
@@ -225,8 +227,8 @@ describe('chat row search body (GenericToolCard fallback)', () => {
 })
 
 describe('SearchRow keyed card', () => {
-  const rowProps = (block: RunningToolCall | ToolResultNode, toolName: string): SearchRowProps => ({
-    callId: 'c1', toolName, block, openFile: vi.fn(), sessionId: SID, t,
+  const rowProps = (block: StartedToolCall | ToolResultNode, toolName: string): SearchRowProps => ({
+    useDisclosure, callId: 'c1', toolName, ...('kind' in block ? { phase: 'result' as const, block } : { phase: 'start' as const, block }), openFile: vi.fn(), sessionId: SID, t,
   } as unknown as SearchRowProps)
 
   /** The whole summary row is the expand toggle (ToolRow's unified interaction). */

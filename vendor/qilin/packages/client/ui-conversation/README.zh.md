@@ -27,7 +27,9 @@ kind: "package-reference"
 
 `UiConversation.events` 是 event Definition 的唯一 registry，`UiConversation.views` 是 target snapshot builder 的唯一 registry。两者都拒绝重复 key、保持注册顺序、返回幂等 disposer，并在 contribution roster 变化时重建现有 binding。`UiConversation.binding(bindingOrSessionId)` 为当前 Session Controller binding 返回 identity 稳定的 Conversation binding，不会另开事件源。
 
-适配器把每个 `SessionEventLikeEntry` 直接交给 assembler。外层 `type` 区分持久事件与 Client-only transient event，内部 `event` 则统一公开 `type`、`seq`、`time` 与 `data`；Definition 接收这个内部 `SessionEventLike`。replacement window 可以包含两种 entry，历史 prepend 携带持久 entry，实时 append 则可以携带任一种。两种事件都使用 Definition 的同一组 `match` 与 `update` 方法，`start` 只接收持久 event，assembler 会拒绝 transient start。不消费 Assistant delta 的 Definition 对 `assistant/live-chunk` 返回 `null`。replace window 或 revision 断档从完整已加载窗口重建；连续 revision 的 append、prepend 与 Assistant settlement 使用增量组装。settlement 只删除具名 attempt 的 transient match，应用可选持久 entry，并重放受影响的 Context 及其 dependent，不替换无关 target node。assembler 拥有 Context 匹配、Turn/Step location、target node 物化、target activity 和稳定 target source。`ConversationSnapshot` 只包含与 target 无关的 View 与 active-target 事实；Session lifecycle 状态仍属于 `SessionSnapshot`。
+适配器把每个 `SessionEventLikeEntry` 直接交给 assembler。外层 `type` 区分持久事件与 Client-only transient event，内部 `event` 则统一公开 `type`、`seq`、`time` 与 `data`；Definition 接收这个内部 `SessionEventLike`。replacement window 可以包含两种 entry，历史 prepend 携带持久 entry，实时 append 则可以携带任一种。持久与瞬态事件使用同一组 match/start/update 接口。当前最早的 start 初始化 State；后续所有 Match，包括同一身份的其他 start，都用于更新。不消费 Assistant delta 的 Definition 对 `assistant/live-chunk` 返回 `null`。replace window 或 revision 断档从完整已加载窗口重建；连续 revision 的 append、prepend 与 Assistant settlement 使用增量组装。settlement 只删除具名 attempt 的 transient match，应用可选持久 entry，并从剩余最早的 start 重算受影响的 Context，刷新前序索引及 dependent，不替换无关 target node。没有剩余 start 的 Context 不保留 State，但其 key 和已发布节点仍保留，供后续证据复用，直到完整窗口重建；所属 Definition 可以隐藏这些节点。assembler 拥有 Context 匹配、Turn/Step location、target node 物化、target activity 和稳定 target source。`ConversationSnapshot` 只包含与 target 无关的 View 与 active-target 事实；Session lifecycle 状态仍属于 `SessionSnapshot`。
+
+`UiConversation.groups` 为每个已存在的 target 注册一个可选业务分组定义。它在 Node 物化之后消费 Builder 投影出的 Node 变更与变更轮次（含首次激活），并拥有全部分段与分组数据。装配器在校验并安装根引用与键控分组快照之后，才发布 Node、分组与位置数据源。未分组的 target 保持原有路径。
 
 shell 选择解析出 target 或 target source 收到首个 subscriber 时，该 target 进入 active 状态。assembler 从当前 Context 对它执行一次 replace，并使它参与后续增量 flush；创建 source 不会激活 target，取消订阅也不会停用 target。
 
@@ -37,6 +39,8 @@ target package 通过 declaration merge 扩展 snapshot 与 Location data map，
 ## Shell 与标准 props
 
 共享图片插槽属性将展示选择与持久化引用分开：`thumbnail` 请求完整缩放的附件列表缩略图，`compact` 请求裁剪的图片方块。每张图片可通过可选的 `label` 提供无障碍展示名称；加载和缓存标识仍使用原始附件引用。[ui-attachment](../ui-attachment/README.zh.md) 负责渲染与灯箱。
+
+控件组的尺寸、内容、可见性或字体加载状态变化后，composer 测量展开状态下的控件组。若无法排在同一行，控制栏为模型位设置 `--dsh-composer-model-text-display: none` 和 `--dsh-composer-model-icon-display: block`；两者默认值分别为 `block` 和 `none`。若连图标也放不下，仍允许换行。
 
 上下文占用按钮在输入卡片下方、会话统计右侧显示圆环和百分比。点击按钮可在视口内的面板查看 token 构成，没有统计项时面板也不会越界；上下文用量和容量尚不可用时，按钮保持隐藏。
 
@@ -50,9 +54,9 @@ target package 通过 declaration merge 扩展 snapshot 与 Location data map，
 
 本包占据 root 作用域 `main` 中的 `conversation` key。其 `main.conversation` shell 将 strict Session Header 保留在 optional-Session `conversation.content` Component Factory 外。Factory 拥有共享正文与 Composer，通过其标准 Hook 读取当前 Session，并公开 strict-Session `views` 与 root-scoped `widthControls` 两个局部位置。默认 adapter 渲染现有 `conversation.session` entry，主 occurrence 选择宽度拖拽条；嵌入式 occurrence 可以替换 `views`、省略拖拽条，且不渲染主 Header。`ctx.uiSession.provide()` 从同一个 Session binding 物化 Conversation 与 input source，并将 `inputActions` 作为稳定标准 prop 提供。
 
-blank Session 保留 header 的 leading 与 corner 控件，包括右侧栏展开入口，同时隐藏标题、actions、utilities 和 View tabs。选择 Workspace 会创建这些控件所需的 Session，无需先发送消息。没有选中 Session 时，strict header 不挂载。侧栏各入口仍遵循自身的数据与执行环境要求。
+常驻的 `conversation.header` entry 无论是否选中 Session 都挂载 root 作用域的 `conversation.header.leading` 席位，并把标题、actions、utilities 与 View tabs 交给它的 strict Session 子项 `conversation.session.header`。blank Session 保留 header 的 leading 与 corner 控件，包括右侧栏展开入口，同时隐藏标题、actions、utilities 和 View tabs。选择 Workspace 会创建这些控件所需的 Session，无需先发送消息。没有选中 Session 时，strict Session header 不挂载，而 leading 席位仍在屏上。侧栏各入口仍遵循自身的数据与执行环境要求。
 
-View 选择规则固定：有效且已注册的持久化选择优先，其次是已注册的 `chat`，否则不渲染 View；绝不选择第一个已注册 View。Shell phase 只组合 Session lifecycle 与 active-target set，不读取任何 target-specific 快照。
+View 选择规则固定：有效且已注册的持久化选择优先，其次是已注册的 `chat`，否则不渲染 View；绝不选择第一个已注册 View。`ctx.configForms.developerTools` 关闭时，roster 隐藏 `trajectory` View，并跟随该偏好，在开发者工具重新打开时让标签页回来。Shell phase 只组合 Session lifecycle 与 active-target set，不读取任何 target-specific 快照。
 
 Session 首次绑定或缓存的 Session 成为 current 时，shell 会在渲染前读取持久化 View 偏好，激活已注册的偏好 View 或 Chat fallback，并在后续 tab 或 focus 选择写入 store 前先激活对应 target。blank Session 仍不渲染 `conversation.view` slot；未选中的 target 不会激活。
 

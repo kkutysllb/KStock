@@ -1,7 +1,7 @@
 {
   "name": "@qilin/host-directory-picker-browse",
   "description": "In-app browsing backend of the directory-picker seam (listing/creation primitives over the host filesystem)",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -30,13 +30,13 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@qilin/host-directory-picker": "workspace:^",
-    "@qilin/schemastery": "workspace:^"
+    "@qilin/host-directory-picker": "workspace:*",
+    "@qilin/schemastery": "workspace:~"
   },
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin": "workspace:~"
   }
 }

@@ -19,7 +19,7 @@ import {
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { expandTurnProcesses, newEnglishPage, saveFailureShot } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/minimal-preset', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.v3.jsonl')
@@ -82,8 +82,7 @@ describe('minimal agent preset', () => {
     const systemPrompt = systemPromptText(agentHandle.agent.session)
     if (systemPrompt === undefined) throw new Error('the minimal agent issued no system prompt')
     expect(agentHandle.agent.session.snapshotEvents().some(event => event.type === 'user/message'
-      && event.data.source.kind === 'plugin'
-      && event.data.source.plugin === '@qilin/system-prompt')).toBe(false)
+      && event.data.source.kind === 'runtime-context')).toBe(false)
     expect(scaffold.ctx.agentPresets.serviceFor(agentHandle.agent, 'fs')).toBeUndefined()
     expect(scaffold.ctx.agentPresets.serviceFor(agentHandle.agent, 'compaction')).toBeUndefined()
 
@@ -124,6 +123,10 @@ describe('minimal agent preset', () => {
         "prompt": "You are a helpful software engineer assistant.",
         "tools": [
           "bash",
+          "schedule_create",
+          "schedule_delete",
+          "schedule_list",
+          "schedule_update",
         ],
       }
     `)
@@ -152,6 +155,9 @@ describe('minimal agent preset', () => {
     await expect.poll(() => process.getAttribute('aria-expanded')).toBe('false')
     await process.click()
     await expect.poll(() => process.getAttribute('aria-expanded')).toBe('true')
+    // The tool rows sit inside the grouped presentation's own seat, which the
+    // Turn-process disclosure does not open.
+    await expandTurnProcesses(page)
 
     const row = page.locator('[data-sample="bash"]').first()
     await row.waitFor({ timeout: 15_000 })

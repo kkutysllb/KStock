@@ -18,7 +18,7 @@ export type {
   AssistantTiming, ChatLocationNodeIndex, ChatNodeProcessSource, ChatNodeSource, ChatNodeStore,
   ChatSnapshot, ChatTurnNavigationIndex, ChatTurnProcessPresentation,
   CommandNode, CompactionSummaryNode, ContextMessageNode, ConversationNode,
-  LegacyConversationSlice, ModelRetryNode, PartialAssistant, RunningToolCall,
+  LegacyConversationSlice, ModelRetryNode, PartialAssistant, PreparingToolCall, RunningToolCall, StartedToolCall,
   SteeringMessageNode, ToolCallBlock, ToolResultNode, TurnErrorNode, TurnMaxTokensNode,
   TurnNavigationItem, UnknownSurfaceNode, UserMessageNode,
 } from './contract/snapshot.ts'
@@ -30,12 +30,17 @@ export type {
 export type { ChatStoreState, ToolCallId, TurnProcessViewEntry } from './contract/store.ts'
 export type { TranscriptViewRowInjected, TranscriptViewRowProps } from './settings/TranscriptViewRow.tsx'
 export type { TranscriptViewMode } from '../chat-settings.ts'
+export type { ChatPresentationPolicy } from './presentation-policy.ts'
 export type {
-  AssistantActionOwnerProps, ChatFileMentions, ChatNodeOwnerProps, ChatNodeTurnDataInjected,
-  ChatNodeViewProps, ChatScrollPosition, ChatStore, ChatViewInjected, ChatViewSlotProps,
-  CommandRowOwnerProps, CommandRowProps, MessageImagesProps, OpenFileOptions,
-  TurnProcessOwnerProps, TurnTailOwnerProps, UseChat, UseChatNodeTurnData,
+  AssistantActionOwnerProps, ChatFileMentions, ChatNodeHookContext, ChatNodeInjected,
+  ChatNodeOwnerProps, ChatNodeViewProps, ChatScrollPosition, ChatStore, ChatViewInjected,
+  ChatViewSlotProps, CommandRowOwnerProps, CommandRowProps, MessageImagesProps, OpenFileOptions,
+  PerformanceUsageInjected, PresentationInjected, TurnProcessOwnerProps, TurnTailOwnerProps,
+  UseChat, UseChatNodeTurnData, UseDisclosure, UsePresentation,
 } from './contract/slots.ts'
+export type {
+  ProcessActivity, ProcessActivitySummary, ProcessGroupData,
+} from './contract/process-groups.ts'
 export type {
   TurnProcessSpec,
 } from './contract/turn-process.ts'

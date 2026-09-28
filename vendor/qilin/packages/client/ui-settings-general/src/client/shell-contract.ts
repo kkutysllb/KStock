@@ -8,14 +8,13 @@
  */
 import type { ConnectionState } from '@qilin/client-connection/client'
 import type {
-  HostObservable, InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime,
+  HostObservable, InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
 } from '@qilin/client-ui-slots'
 // Type-only: pulls ui-sidebar's SlotMap merge (the 'sidebar.settings' entry)
 // into every program that sees this contract.
 import type {} from '@qilin/client-ui-sidebar/client'
 // Type-only: pulls the settings slot declarations the shell renders into.
 import type {} from '@qilin/client-ui-settings/client'
-import type { DesktopUpdateView } from './desktop-update-bridge.ts'
 
 /** One nav row projected from a settings.section registration's options. */
 export interface SettingsSectionRow {
@@ -57,8 +56,6 @@ declare module '@qilin/kylin' {
  * remain plain callbacks.
  */
 export type SettingsRootInjected = {
-  /** Request the current shell-owned update action. */
-  openDesktopUpdate: () => void
   /** Request a fresh logical generation and physical WebSocket immediately. */
   reconnect: () => void
   /**
@@ -68,8 +65,6 @@ export type SettingsRootInjected = {
    */
   registerOpen: (handler: (sectionId?: string) => void) => () => void
   hooks: {
-    /** Shared Electron status for both sidebar locations. */
-    desktopUpdate: HostObservable<DesktopUpdateView>
     /** Connection-owned state for the current Host connection. */
     connectionState: HostObservable<ConnectionState | undefined>
     /** settings.section winner cells (one per id, lowest live priority) projected into ordered nav rows. */
@@ -82,11 +77,12 @@ export type SettingsRootInjected = {
 /**
  * Full component props of the settings shell root: the sidebar owner share
  * (wide/rail state) plus the declared render shares and the injected face
- * (hooks compartment bound to useSections). No store is registered — modal
- * open state and active section id are component-local viewing state.
+ * (hooks compartment bound to useSections). The declared store shares modal
+ * visibility and section selection with application commands.
  */
 export type SettingsRootComponentProps =
   PropsRuntime<'sidebar.settings'>
+  & PropsStore<ReturnType<typeof import('./shell-store.ts').createSettingsShellStore>>
   & PropsRenderSlots<
     | 'settings.header'
     | 'settings.action'

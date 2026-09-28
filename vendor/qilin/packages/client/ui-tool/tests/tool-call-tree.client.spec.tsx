@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useDisclosure } from '@qilin/client-ui-chat/src/client/chat/use-disclosure.ts'
 /** ToolCallTree-owned root/subcall markers and selection projection. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
@@ -45,6 +46,7 @@ function props(
       data: { root: block },
     },
     selectedCallId,
+    useDisclosure,
     openFile: vi.fn(),
     inspectCall: vi.fn(),
     forkAt: vi.fn(),
@@ -96,7 +98,7 @@ describe('ToolCallTree', () => {
   it('dispatches a running call by its wire name and forwards inspect', () => {
     const owners: ToolCallOwnerProps[] = []
     const block: ToolCallBlock = {
-      callId: 'running', name: 'bash', argsRaw: '{"command":"pwd"}',
+      phase: 'start' as const, callId: 'running', name: 'bash', argsRaw: '{"command":"pwd"}',
       turn: 1, step: 0, time: 1_000, subCalls: [],
     }
     const treeProps = props(block, undefined, undefined, owners)

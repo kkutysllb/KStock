@@ -2,14 +2,14 @@
 import type { MessageId } from '@qilin/llm/brand'
 import type { SessionId, SessionSeq } from '@qilin/session/types'
 import type {
-  CommandNode, CompactionSummaryNode, ConversationLocationDataStore, ConversationTurnDataMap,
-  MessageImageLoader, MessageImagesOwnerProps, RenderMessageImages, TurnLocation,
+  CommandNode, CompactionSummaryNode, ConversationGroupData, ConversationLocationDataStore,
+  ConversationTurnDataMap, GroupSnapshot, MessageImageLoader, MessageImagesOwnerProps,
+  RenderMessageImages, TurnLocation,
 } from '@qilin/client-ui-conversation/client'
 import type {
   InjectFace, KeyedSnapshotSelectorHook, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
   SlotHookFactory, SnapshotSelectorHook,
 } from '@qilin/client-ui-slots'
-import type { SnapshotStore } from '@qilin/client-store'
 import type { MarkdownFileMentions } from '@qilin/client-ui-primitives'
 import type {} from '@qilin/client-ui-layout/client'
 import type { createChatStore } from '../stores.ts'
@@ -19,7 +19,9 @@ import type {
   ChatNodeProcessSource, ChatNodeSource, ChatSnapshot, ChatTurnProcessPresentation,
 } from './snapshot.ts'
 import type { TurnProcessSpec } from './turn-process.ts'
-import type { TranscriptViewMode } from '../../chat-settings.ts'
+import type { ObservableSnapshot } from '@qilin/client-store'
+import type { ChatPresentationPolicy } from '../presentation-policy.ts'
+import type { PerformanceUsageMode } from '../../chat-settings.ts'
 
 /** Selector hook over the current Conversation binding's Chat target. */
 export type UseChat = SnapshotSelectorHook<ChatSnapshot>
@@ -29,6 +31,13 @@ export type UseChatNode = KeyedSnapshotSelectorHook<ChatConversationViewNode | u
 
 /** Per-key selector hook over one Chat Node's Turn-process presentation. */
 export type UseChatNodeProcess = KeyedSnapshotSelectorHook<ChatTurnProcessPresentation | undefined>
+
+/**
+ * Selector hook over the live presentation policy. Callers select one field or
+ * a derived conclusion, never the whole policy, so a mode change re-renders
+ * only components whose selected value changed.
+ */
+export type UsePresentation = SnapshotSelectorHook<ChatPresentationPolicy>
 
 /** Where in a file an open should land. */
 export interface OpenFileOptions {
@@ -71,13 +80,36 @@ export type UseChatNodeTurnData = <Key extends Extract<keyof ConversationTurnDat
   key: Key,
 ) => Readonly<ConversationTurnDataMap[Key]> | undefined
 
-/** Slot-level Hook factory for keyed Chat renderers. */
-export interface ChatNodeTurnDataInjected {
-  hooks: { turnData: SlotHookFactory<'conversation.chat.node', UseChatNodeTurnData> }
+/**
+ * Subscribe to enclosing-Turn resets and own one initially collapsed disclosure.
+ * Each invocation has independent open state; display-mode changes do not reset it.
+ * @returns the current open state, explicit setter, and toggle action.
+ */
+export type UseDisclosure = () => {
+  readonly expanded: boolean
+  /** @param open - whether this disclosure is expanded. */
+  readonly setExpanded: (open: boolean) => void
+  readonly toggle: () => void
+}
+
+/** Stable sources bound to one rendered Chat Node. */
+export interface ChatNodeHookContext {
+  readonly turnData: ConversationLocationDataStore<ConversationTurnDataMap> | undefined
+  readonly disclosureReset: ObservableSnapshot<number>
+}
+
+/** Slot-level Hook factories for keyed Chat renderers. */
+export interface ChatNodeInjected {
+  hooks: {
+    turnData: SlotHookFactory<'conversation.chat.node', UseChatNodeTurnData>
+    disclosure: SlotHookFactory<'conversation.chat.node', UseDisclosure>
+  }
 }
 
 /** Stable owner currency delivered to a keyed Chat renderer. */
 export interface ChatNodeOwnerProps {
+  /** Renderer-owned Node portion selected by the grouping Definition. */
+  groupPart?: string
   cwd?: string | undefined
   /** Open the current source file of a skill referenced by a sent message. */
   openSkill: (name: string) => void
@@ -85,11 +117,13 @@ export interface ChatNodeOwnerProps {
   inspectCall: (callId: ToolCallId) => void
   forkAt: (seq: number) => void
   /**
-   * Session-authorized image loader, down-threaded from the Chat view so a
-   * chat-node renderer can render the attachment presentation slot directly
-   * with only the durable references plus this loader, instead of receiving a
-   * rendering closure.
+   * Revise one sent user message: replace the composer draft with its text
+   * (the user edits the bubble and resends a new turn). User bubbles only;
+   * absent for owners that do not provide the wiring.
+   * @param text - the user message's plain text.
    */
+  editUserMessage?: ((text: string) => void) | undefined
+  /** Session-authorized image loader for the attachment presentation slot. */
   loadImage: MessageImageLoader
   renderMessageImages: RenderMessageImages
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
@@ -99,10 +133,28 @@ export interface ChatNodeOwnerProps {
 
 /** Shared presentation state for one Turn-process answer generation. */
 export interface TurnProcessOwnerProps {
+  /** Process content eligible to share one Turn-level disclosure. */
+  readonly hasContent: boolean
   readonly spec: TurnProcessSpec
   readonly foldable: boolean
   readonly open: boolean
   setOpen(open: boolean): void
+}
+
+/** Shared presentation-policy source for renderers that depend on the work-details mode. */
+export interface PresentationInjected {
+  hooks: {
+    /** Live presentation policy derived from the accepted work-details mode. */
+    presentation: ObservableSnapshot<ChatPresentationPolicy>
+  }
+}
+
+/** Shared settings source for the performance row, composer statistics, and turn tail. */
+export interface PerformanceUsageInjected {
+  hooks: {
+    /** Accepted performance and usage detail preference. */
+    performanceUsage: ObservableSnapshot<PerformanceUsageMode>
+  }
 }
 
 /** Full props of one keyed Chat renderer. */
@@ -131,18 +183,20 @@ export interface ChatScrollPosition {
 /** Business callbacks injected into the Chat view. */
 export interface ChatViewInjected {
   hooks: {
-    /** Persisted completed-Turn transcript presentation. */
-    transcriptView: SnapshotStore<TranscriptViewMode>
+    /** Live presentation policy derived from the accepted work-details mode. */
+    presentation: ObservableSnapshot<ChatPresentationPolicy>
   }
   keyedHooks: {
     /** Resolve the stable source for one Chat Node key. */
     chatNode: (key: string) => ChatNodeSource
     /** Resolve the stable Turn-process source for one Chat Node key. */
     chatNodeProcess: (key: string) => ChatNodeProcessSource
+    /** Resolve one optional group without subscribing the root View to its data. */
+    chatGroup: (key: string) => ObservableSnapshot<GroupSnapshot<ConversationGroupData<'chat'>> | undefined> | undefined
   }
   /** Open the current source file of a skill referenced by a sent message. */
   openSkill: (name: string) => void
-  /** Open one HTTP(S) message link in a Sidebar Browser tab. */
+  /** Open one HTTP(S) message link at the selected destination, using an external tab if Sidebar Browser is unavailable. */
   openExternalLink: (url: string) => void
   openFile: (path: string, options?: OpenFileOptions) => Promise<void>
   /** Open the right Sidebar's Trajectory tab focused on one tool call. */
@@ -156,6 +210,12 @@ export interface ChatViewInjected {
     read: () => ChatScrollPosition | null
   }
   forkAt: (seq: number) => void
+  /**
+   * Revise one sent user message: replace the composer draft with its text.
+   * Implemented by the composition wiring over the conversation service.
+   * @param text - the user message's plain text.
+   */
+  editUserMessage?: ((text: string) => void) | undefined
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
 }
 
@@ -192,8 +252,8 @@ declare module '@qilin/client-ui-slots' {
       scope: 'session'
       owner: ChatNodeOwnerProps
       keyProps: { [Kind in ChatNodeKind]: { node: ChatNode<Kind> } }
-      hookContext: ConversationLocationDataStore<ConversationTurnDataMap> | undefined
-      inject: ChatNodeTurnDataInjected
+      hookContext: ChatNodeHookContext
+      inject: ChatNodeInjected
     }
     /**
      * Renderer for one consecutive group of durable message images. The owner

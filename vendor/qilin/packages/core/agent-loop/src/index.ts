@@ -4,6 +4,7 @@
  *
  * @module @qilin/agent-loop
  */
+import type { Volatile } from '@qilin/cosmokit'
 
 import { Context, FiberState, Service } from '@qilin/kylin'
 import { randomUUID } from 'node:crypto'
@@ -34,6 +35,7 @@ import type { SessionHandle, SessionPersistence } from '@qilin/session-persisten
 import { ReactLoopAgent } from './agent.ts'
 import { inboxProjectionDefinition } from './inbox.ts'
 import { DEFAULT_MAX_PARALLEL_TOOL_CALLS } from './constants.ts'
+import type {} from './runtime-context.ts'
 
 /** Fiber states that cannot own or serve a new lifecycle. */
 const INACTIVE_STATES: ReadonlySet<FiberState> = new Set([
@@ -186,15 +188,6 @@ async function raceAbortCall<T>(
   }
 }
 
-/** Resolve the deployment-wide scheduler cap at the owning config boundary. */
-function resolveMaxParallelToolCalls(value: number | undefined): number {
-  const maxParallelToolCalls = value ?? DEFAULT_MAX_PARALLEL_TOOL_CALLS
-  if (!Number.isInteger(maxParallelToolCalls) || maxParallelToolCalls < 1) {
-    throw new Error('maxParallelToolCalls must be a positive integer')
-  }
-  return maxParallelToolCalls
-}
-
 /** Reject an output-token cap that cannot be represented exactly on the request wire. */
 function assertAgentOptions(options: AgentOptions): void {
   if (options.maxTokens !== undefined
@@ -320,7 +313,7 @@ export interface Config {
    * Maximum parallel-safe calls in flight per agent step. `1` is serial;
    * omission defaults to {@link DEFAULT_MAX_PARALLEL_TOOL_CALLS}.
    */
-  maxParallelToolCalls?: number
+  maxParallelToolCalls: Volatile<number>
   /** Agents created or resumed at plugin startup. */
   agents: (AgentOptions & {
     /** Stable config label used in logs and as the fresh combined-id prefix. */
@@ -333,9 +326,6 @@ export interface Config {
     resumeSessionId?: SessionId
   })[]
 }
-
-/** Agent-loop configuration after defaults and load-time validation. */
-type ResolvedConfig = Config & { maxParallelToolCalls: number }
 
 /** Reject self-contained identity conflicts before any configured agent starts. */
 function validateConfiguredAgents(agents: Config['agents']): void {
@@ -360,8 +350,8 @@ export class AgentLoop extends Service implements AgentFactory {
   static inject = ['agents', 'sessions', 'llm', 'tools', 'systemPrompt', 'sessionProjections']
 
   /** Runtime schema for declarative agents. */
-  static Config = z.object({
-    maxParallelToolCalls: z.number().step(1).min(1).default(DEFAULT_MAX_PARALLEL_TOOL_CALLS),
+  static Config: z<{ agents?: Config['agents']; maxParallelToolCalls?: number }, Config> = z.object({
+    maxParallelToolCalls: z.number().step(1).min(1).default(DEFAULT_MAX_PARALLEL_TOOL_CALLS).volatile(),
     agents: z.array(z.object({
       id: z.string().required(),
       sessionId: z.string().min(1),
@@ -372,10 +362,10 @@ export class AgentLoop extends Service implements AgentFactory {
       cwd: z.string(),
       resumeSessionId: z.string(),
     })).default([]),
-  }) as z<Config>
+  }) as z<{ agents?: Config['agents']; maxParallelToolCalls?: number }, Config>
 
   /** Validated configuration owned by the agent-loop service. */
-  readonly config: ResolvedConfig
+  readonly config: Config
   private readonly ownership: FactoryOwnership
   /** Plain holder prevents Cordis from re-tracing the factory's dependency context through a caller shadow. */
   private readonly runtime: { ctx: Context }
@@ -383,26 +373,25 @@ export class AgentLoop extends Service implements AgentFactory {
   constructor(ctx: Context, config: Config) {
     super(ctx, 'agentLoop')
 
-    const entry: AgentLoopSettings = {
-      maxParallelToolCalls: resolveMaxParallelToolCalls(config.maxParallelToolCalls),
-    }
+    // The active section source: the settings provider's resolved namespace while
+    // one is attached, this composition entry otherwise.
+    const entry: AgentLoopSettings = { maxParallelToolCalls: config.maxParallelToolCalls.get() }
     let source: () => AgentLoopSettings = () => entry
     this.config = {
-      ...config,
       agents: applyLauncherIdentities(config.agents, ctx.get(CONFIGURED_AGENT_IDENTITIES_KEY)),
-      // Read through on every scheduler decision: `tool-calls.ts` destructures
-      // this at the start of each group, so a committed change caps the next
-      // group without disturbing the one in flight.
-      get maxParallelToolCalls() {
-        return source().maxParallelToolCalls
+      // Read through on every scheduler decision: `tool-calls.ts` calls `get()`
+      // at the start of each group, so a committed change caps the next group
+      // without disturbing the one in flight.
+      get maxParallelToolCalls(): Volatile<number> {
+        const value = source().maxParallelToolCalls
+        return { get: () => value }
       },
     }
     ctx.inject(['settings'], (settingsCtx) => {
+      // The section's own schema owns the cap rule (`.step(1).min(1)`), so a refused
+      // write leaves the running scheduler on its last good cap. `agents` stays out
+      // of the section: the loop consumes it once, above.
       settingsCtx.settings.installSection(ctx, AGENT_LOOP_SETTINGS_NAMESPACE, AGENT_LOOP_SETTINGS_SCHEMA, entry, {
-        // The schema admits any integer above zero; `resolveMaxParallelToolCalls`
-        // owns the whole rule, so refusing here keeps the running scheduler on
-        // its last good cap instead of failing at the next tool group.
-        validate: value => void resolveMaxParallelToolCalls(value.maxParallelToolCalls),
         setSource: (current) => {
           source = current
         },

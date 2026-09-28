@@ -32,6 +32,10 @@ export const remoteDefaultResponses: RemoteTable = {
     'credentials/describe': ok({}),
     // ui-permission-presets `PermissionCatalogDirectory` on its first read for a connection generation.
     'permissionPresets/catalog': ok({ options: [] }),
+    // ui-schedule catalog source `list()` at mount and on `schedule/changed`.
+    'schedule/catalog': ok([]),
+    // ui-schedule Session-catalog source `list()` for the open Session.
+    'schedule/list': ok([]),
     // ui-settings-models `ModelDirectoryStore` joins the declared providers with the configurable ones.
     'llm/listProviders': ok([]),
     'llm/listConfigurableProviders': ok([]),
@@ -45,6 +49,9 @@ export const remoteDefaultResponses: RemoteTable = {
     // api-session-controller client `apply`: the control stream's opening baseline, then open.
     'session/control': openStream([{ type: 'baseline', value: { jobs: {}, projections: {} } }]),
     // api-workspace-controller client `apply`: the follow stream's opening baseline, then open.
-    'workspace/follow': openStream([{ type: 'baseline', value: { items: [], archivedSessionIds: [] } }]),
+    'workspace/follow': openStream([{
+      type: 'baseline',
+      value: { items: [], archivedSessionIds: [], pinnedSessionIds: [] },
+    }]),
   },
 }

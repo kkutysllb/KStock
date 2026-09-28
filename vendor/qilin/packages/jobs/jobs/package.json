@@ -1,7 +1,7 @@
 {
   "name": "@qilin/jobs",
   "description": "Background job registry (ctx.jobs) for the QiLin — shared ids, owner isolation, polling, cancellation, and completion listeners for long-running tool work",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -29,6 +29,10 @@
       "types": "./lib/types/brand.d.ts",
       "default": "./lib/types/brand.js"
     },
+    "./view": {
+      "types": "./lib/types/view.d.ts",
+      "default": "./lib/types/view.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -40,17 +44,24 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/agent": "workspace:^",
-    "@qilin/brand": "workspace:^",
-    "@qilin/invariants": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/agent": "workspace:*",
+    "@qilin/brand": "workspace:*",
+    "@qilin/invariants": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/workspace": "workspace:*",
+    "@qilin/kylin": "workspace:~"
+  },
+  "peerDependenciesMeta": {
+    "@qilin/workspace": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "@qilin/agent": "workspace:^",
-    "@qilin/brand": "workspace:^",
-    "@qilin/invariants": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/agent": "workspace:*",
+    "@qilin/brand": "workspace:*",
+    "@qilin/invariants": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/workspace": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   }
 }

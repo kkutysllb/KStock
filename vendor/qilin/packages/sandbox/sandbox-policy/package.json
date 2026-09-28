@@ -1,7 +1,7 @@
 {
   "name": "@qilin/sandbox-policy",
   "description": "Per-call sandbox policy resolver and current model context: deployment fallbacks plus each session's mode and workspace root, shared by every enforcing capability family",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -35,25 +35,25 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/agent": "workspace:^",
-    "@qilin/invariants": "workspace:^",
-    "@qilin/sandbox": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/system-prompt": "workspace:^",
-    "@qilin/kylin": "workspace:^",
-    "@qilin/session-projection": "workspace:^"
+    "@qilin/agent": "workspace:*",
+    "@qilin/invariants": "workspace:*",
+    "@qilin/sandbox": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/system-prompt": "workspace:*",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/session-projection": "workspace:*"
   },
   "dependencies": {
-    "@qilin/schemastery": "workspace:^",
+    "@qilin/schemastery": "workspace:~",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@qilin/agent": "workspace:^",
-    "@qilin/invariants": "workspace:^",
-    "@qilin/sandbox": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/system-prompt": "workspace:^",
-    "@qilin/kylin": "workspace:^",
-    "@qilin/session-projection": "workspace:^"
+    "@qilin/agent": "workspace:*",
+    "@qilin/invariants": "workspace:*",
+    "@qilin/sandbox": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/system-prompt": "workspace:*",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/session-projection": "workspace:*"
   }
 }

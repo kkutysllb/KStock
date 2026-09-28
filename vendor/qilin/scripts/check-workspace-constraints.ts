@@ -57,15 +57,10 @@ const experimentalPackageDirectory = /^packages\/experimental\/[^/]+$/
 /** npm namespace reserved for experimental packages. */
 const experimentalPackageNamePrefix = '@qilin/experimental-'
 /** Ordinary directories whose packages this repository publishes: one release member each. */
-const standardReleaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|apps\/(?!desktop(?:-host)?$)[^/]+|vendor\/[^/]+)$/
-/** Installable application assembled by electron-builder rather than published to npm. */
-const desktopApplicationDirectory = 'apps/desktop'
+const standardReleaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|apps\/[^/]+|vendor\/[^/]+)$/
 const localArtifactDirs = new Set(['node_modules'])
 const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   '@qilin/cli': ['lib/*.js', 'lib/types/*.d.ts'],
-  '@qilin/desktop-host': [
-    'lib/index.js',
-  ],
   // Sourcemaps stay out by payload policy; the worker-preview surface
   // (dist/preview.html and dist/preview/) backs opt-in experimental
   // packages and is not published.
@@ -99,6 +94,8 @@ export interface PackageManifest {
   devDependencies?: Record<string, string>
   dependencies?: Record<string, string>
   optionalDependencies?: Record<string, string>
+  /** Declared plugin icon, shipped with the package payload. */
+  icon?: string
   qilin?: {
     bundle?: {
       patch?: string
@@ -166,8 +163,13 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   '@qilin/client-ui-sidebar-terminal': ['lib/client.*.js'],
   '@qilin/client-web': ['lib/**/*.css', 'lib/apply-injections.js'],
   '@qilin/client-ui-theme': ['lib/styles'],
+  // The physical-key protocol is a public entry usable without the browser service.
+  '@qilin/client-shortcuts': ['lib/protocol.js'],
   // The CPython side ships as source .py files, published as-is rather than built.
   '@qilin/experimental-ptc-runtime-python': ['py/**/*.py'],
+  // The local recognizer reads its revision-pinned model catalog from this
+  // runtime file; the Worker bundle and the packaged payload both need it.
+  '@qilin/experimental-speech-to-text-sensevoice': ['runtime/assets.json'],
   // The isolated Node bootstrap is a separately launched bundle.
   '@qilin/ptc-runtime-node': ['lib/process.js'],
   // The Host entry starts its sibling Worker by URL rather than a package export.
@@ -214,7 +216,18 @@ function sameStringList(actual: readonly string[] | undefined, expected: readonl
   return !!actual && actual.length === expected.length && actual.every((value, index) => value === expected[index])
 }
 
+/**
+ * Compute canonical publication patterns, including the declared icon and exported locale JSON resources.
+ * @param manifest - workspace package manifest.
+ * @returns the icon and deduplicated locale targets followed by runtime and declaration payloads.
+ */
 export function expectedQilinPackageFiles(manifest: PackageManifest): readonly string[] {
+  const localeFiles = new Set<string>()
+  for (const resource of Object.keys(manifest.exports ?? {})) {
+    if (!/^\.\/(?:.+\/)?locale\/[^/]+\.json$/u.test(resource)) continue
+    const target = exportDefault(manifest, resource)
+    if (target?.startsWith('./') && target.endsWith('.json')) localeFiles.add(target.slice(2))
+  }
   const declaredPatch = manifest.qilin?.bundle?.patch
   const bundleFiles = declaredPatch === undefined ? [] : [declaredPatch.replace(/^\.\//, '')]
   const extras = [
@@ -222,6 +235,8 @@ export function expectedQilinPackageFiles(manifest: PackageManifest): readonly s
     ...(manifest.name ? packageFileExtras[manifest.name] ?? [] : []),
   ]
   return [
+    ...typeof manifest.icon === 'string' ? [manifest.icon.replace(/^\.\//u, '')] : [],
+    ...[...localeFiles].sort(),
     'lib/index.js',
     // Packages with an invariant export publish its runtime as a separate
     // bundle; the package-invariant gate validates the source/export pairing.
@@ -419,7 +434,7 @@ export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): st
     }
   }
 
-  if (dir.startsWith('apps/') && dir !== desktopApplicationDirectory && manifest.name?.startsWith('@qilin/')) {
+  if (dir.startsWith('apps/') && manifest.name?.startsWith('@qilin/')) {
     const expectedFiles = appPackageFiles[manifest.name]
     if (expectedFiles === undefined) {
       errors.push(`${label}: app package has no publication files policy`)

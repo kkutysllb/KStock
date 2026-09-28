@@ -2,6 +2,7 @@
 import type { Context } from '@qilin/kylin'
 import z from '@qilin/schemastery'
 import type { ISessions, SessionBinding } from '@qilin/api-session-controller/client'
+import type { ShortcutCommandId, ShortcutFixedCommand } from '@qilin/client-shortcuts/client'
 import { IconPaperclipOutline16 } from '@qilin/client-ui-primitives'
 import { createSnapshotStore, type BoundActions } from '@qilin/client-store'
 import { resolveSlotLabel } from '@qilin/client-ui-slots'
@@ -30,14 +31,16 @@ import { queueDockEntry } from './queue/QueueDock.tsx'
 import { ContentWidthRow } from './settings/ContentWidthRow.tsx'
 import type { ContentWidthRowInjected } from './settings/ContentWidthRow.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
+import { installStopShortcut } from './stop-shortcut.ts'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
+import { ConversationHeader } from './skeleton/ConversationHeader.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationContent } from './skeleton/ConversationContent.tsx'
 import { ConversationPanel } from './skeleton/ConversationPanel.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
-import { resolveActiveView } from './view-selection.ts'
+import { TRAJECTORY_VIEW_ID, resolveActiveView } from './view-selection.ts'
 import { en, NS, zh, type ConversationKey } from './locales.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../conversation-settings.ts'
 
@@ -50,7 +53,7 @@ declare module '@qilin/client-ui-slots' {
 
 /** Services required by the Conversation plugin. */
 export const inject = [
-  'slots', 'sessions', 'fileUpload', 'uiSession', 'uiWorkspace', 'locale', 'settingsScope',
+  'slots', 'sessions', 'fileUpload', 'uiSession', 'uiWorkspace', 'locale', 'configForms', 'shortcuts',
 ]
 
 /** Conversation runtime configuration. */
@@ -140,8 +143,44 @@ export function apply(ctx: Context, config: Config = Config({})): void {
 
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-conversation: dictionaries')
   const t = ctx.locale.bind(NS)
+  const stop = (sessionId: SessionId): void => {
+    scopedConversation(sessions, sessionId).cancel().catch((_error: unknown) => {
+      // Stop failure is published through Session promptError.
+    })
+  }
+  const stopShortcut = createSnapshotStore<readonly string[]>([])
+  ctx.inject(['shortcuts'], (scope: Context) => {
+    const fixedInputs: readonly ShortcutFixedCommand[] = [
+      { id: 'fixed.send' as ShortcutCommandId, label: () => t('input.send'), keys: ['Enter'],
+        bindings: [{ code: 'Enter', modifiers: [] }], group: 'input' },
+      { id: 'fixed.newline' as ShortcutCommandId, label: () => t('shortcut.newline'),
+        keys: scope.shortcuts.describeBinding({ code: 'Enter', modifiers: ['shift'] }).keys,
+        bindings: [{ code: 'Enter', modifiers: ['shift'] }], group: 'input' },
+      { id: 'fixed.complementary' as ShortcutCommandId, label: () => t('shortcut.complementary'),
+        keys: scope.shortcuts.describeBinding({ code: 'Enter', modifiers: ['primary'] }).keys,
+        bindings: [{ code: 'Enter', modifiers: ['control'] }, { code: 'Enter', modifiers: ['meta'] }], group: 'input' },
+      { id: 'fixed.slash' as ShortcutCommandId, label: () => t('shortcut.slash'), keys: ['/'],
+        bindings: [{ code: 'Slash', modifiers: [] }], group: 'input' },
+      { id: 'fixed.mention' as ShortcutCommandId, label: () => t('shortcut.mention'), keys: ['@'],
+        bindings: [{ code: 'Digit2', modifiers: ['shift'] }], group: 'input' },
+    ]
+    for (const command of fixedInputs) {
+      scope.effect(() => scope.shortcuts.registerFixed(command), `ui-conversation: ${command.id}`)
+    }
+    scope.effect(() => installStopShortcut(
+      scope.shortcuts, sessions, binding => uiConversation.binding(binding).openTurn, ctx.uiSession, stop,
+    ), 'ui-conversation: fixed stop input')
+    scope.effect(() => {
+      const command: ShortcutFixedCommand = {
+        id: 'response.stop' as ShortcutCommandId, label: () => t('input.stop'), keys: ['Esc', 'Esc'], bindings: [{ code: 'Escape', modifiers: [] }], group: 'input',
+      }
+      const dispose = scope.shortcuts.registerFixed(command)
+      stopShortcut.set(command.keys)
+      return () => { stopShortcut.set([]); dispose() }
+    }, 'ui-conversation: fixed stop reference')
+  })
   const conversationStore = createConversationStore()
-  const conversationHost = ctx.settingsScope.bind<ConversationSettings>({ namespace: CONVERSATION_SETTINGS_NAMESPACE })
+  const conversationHost = ctx.configForms.get<ConversationSettings>(CONVERSATION_SETTINGS_NAMESPACE)
   const submissionPolicy = new ComposerSubmissionPolicy(conversationHost)
   const layoutPolicy = new ConversationLayoutPolicy(conversationHost)
 
@@ -172,6 +211,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     for (const entry of slots.entries('conversation.view')) {
       /* v8 ignore next -- list registration validates id at load. */
       if (entry.options.id === undefined) continue
+      if (!ctx.configForms.developerTools.enabled.getSnapshot() && entry.options.id === TRAJECTORY_VIEW_ID) continue
       tabs.push({
         id: entry.options.id,
         label: resolveSlotLabel(entry.options.label) ?? entry.options.id,
@@ -209,7 +249,9 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   ctx.effect(() => {
     const disposeViews = slots.subscribe('conversation.view', refreshViews)
     const disposeLocale = ctx.locale.subscribe(refreshViews)
+    const disposeDeveloperTools = ctx.configForms.developerTools.enabled.subscribe(refreshViews)
     return () => {
+      disposeDeveloperTools()
       disposeLocale()
       disposeViews()
     }
@@ -252,7 +294,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   const registerConversationRoot = () => slots.register({
     name: 'main.conversation',
     children: {
-      'conversation.session.header': { kind: 'single', scope: 'session' },
+      'conversation.header': { kind: 'single', scope: 'session-maybe' },
     },
   }, ConversationRoot)
 
@@ -319,12 +361,22 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     }),
   }, ConversationSession)
 
+  // The resident header owns the global navigation seat and defers the
+  // Session-specific half to the strict Session child; a Session-less frame
+  // still renders the header with only the leading seat in it.
+  const registerHeader = () => slots.register({
+    name: 'conversation.header',
+    children: {
+      'conversation.header.leading': { kind: 'single', scope: 'root' },
+      'conversation.session.header': { kind: 'single', scope: 'session' },
+    },
+  }, ConversationHeader)
+
   const registerConversationHeader = () => slots.register({
     name: 'conversation.session.header',
     locale: NS,
     children: {
       'conversation.session.header.lineage': { kind: 'single', scope: 'session' },
-      'conversation.session.header.leading': { kind: 'single', scope: 'session' },
       'conversation.session.header.actions': { kind: 'list', scope: 'session' },
       'conversation.session.header.utilities': { kind: 'list', scope: 'session' },
       'conversation.session.header.corner': { kind: 'single', scope: 'session' },
@@ -351,6 +403,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       'conversation.input.plan': { kind: 'single', scope: 'session' },
       'conversation.input.right': { kind: 'list', scope: 'session' },
       'conversation.input.model': { kind: 'single', scope: 'session' },
+      'conversation.input.activity': { kind: 'single', scope: 'session' },
       'conversation.composer.dock': { kind: 'list', scope: 'session' },
     },
     inject: (sessionId: SessionId | undefined): ComposerBarInjected => {
@@ -433,6 +486,7 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       children: { 'main.conversation': { kind: 'single', scope: 'session-maybe' } },
     }, ConversationPanel)
     yield registerConversationRoot()
+    yield registerHeader()
     yield registerConversationContent()
     yield registerConversationSession()
     yield registerConversationHeader()

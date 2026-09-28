@@ -4,10 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent } from '@testing-library/react'
 import { createSnapshotStore } from '@qilin/client-store'
 import type {
-  ChatSnapshot, RunningToolCall, ToolCallBlock, ToolResultNode,
+  ChatSnapshot, StartedToolCall, ToolCallBlock, ToolResultNode,
 } from '@qilin/client-ui-chat/client'
 import type { SessionId } from '@qilin/session/types'
-import { SlotTestRuntime, stubSettingsScope } from '@qilin/client-test-runtime'
+import { SlotTestRuntime, stubConfigForm } from '@qilin/client-test-runtime'
+import { EMPTY_CONVERSATION_SNAPSHOT } from '@qilin/client-ui-conversation/client'
 import { LocaleRuntime } from '@qilin/client-locale/client'
 import type { PropsRenderSlots } from '@qilin/client-ui-slots'
 import {
@@ -50,8 +51,8 @@ const codeResult = (seq: number, callId: string): ToolResultNode => ({
   subCalls: [],
 })
 
-const runningCode = (callId: string): RunningToolCall => ({
-  callId, name: 'run_code', argsRaw: RUN_CODE_ARGS, turn: 9, step: 0, time: 9_000,
+const runningCode = (callId: string): StartedToolCall => ({
+  phase: 'start' as const, callId, name: 'run_code', argsRaw: RUN_CODE_ARGS, turn: 9, step: 0, time: 9_000,
   subCalls: [],
 })
 
@@ -70,7 +71,7 @@ const subCall = (
 function snapshotWith(
   nodes: ToolResultNode[],
   subCalls: readonly ToolCallBlock[],
-  runningCalls: RunningToolCall[] = [],
+  runningCalls: StartedToolCall[] = [],
 ): ChatSnapshot {
   const nestedNodes = nodes.map(node => ({ ...node, subCalls }))
   const nestedRunningCalls = runningCalls.map(call => ({ ...call, subCalls }))
@@ -97,14 +98,20 @@ async function bench(snapshot: ChatSnapshot) {
   runtimes.push(runtime)
   const ctx = runtime.ctx
   const chat = createSnapshotStore(snapshot)
+  const conversation = createSnapshotStore(EMPTY_CONVERSATION_SNAPSHOT)
   const events = new ConversationEventRegistry(ctx)
   const views = new ConversationViewRegistry(ctx)
-  ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
+  ctx.provide('configForms', { developerTools: { enabled: createSnapshotStore(true) }, get: () => stubConfigForm().scope } as never)
   ctx.provide('uiConversation', {
     events,
     views,
-    binding: () => ({ target: () => chat }),
+    groups: { register: () => () => {} },
+    binding: () => ({ target: () => chat, snapshot: conversation }),
   } as never)
+  ctx.uiSession.provide({
+    hooks: ['conversation'],
+    resolve: () => ({ hooks: { conversation } }),
+  })
 
   await runtime.sessions.add({
     id: SID,
@@ -247,13 +254,13 @@ describe('run_code sub-calls through the real chat machinery', () => {
   it('a started-but-unsettled sub-call renders the running state exactly like a native in-flight row', async () => {
     const parent = 'call-live'
     const runningSub: ToolCallBlock = {
-      callId: `${parent}:code:1`, name: 'grep', argsRaw: '{"pattern":"todo"}',
+      phase: 'start' as const, callId: `${parent}:code:1`, name: 'grep', argsRaw: '{"pattern":"todo"}',
       parentCallId: parent,
       turn: 0, step: 0, time: 21_000, subCalls: [],
     }
     const b = await bench(snapshotWith([], [runningSub], [runningCode(parent)]))
     const view = mountApp(b.runtime)
-    // The nested row derives 'running' from the RunningToolCall shape — the
+    // The nested row derives 'running' from the StartedToolCall shape — the
     // same data-state chrome (row sweep) a native in-flight row wears.
     const nested = view.container.querySelector('[data-subcalls] [data-variant][data-state="running"]')
     expect(nested).not.toBeNull()

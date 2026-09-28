@@ -1,7 +1,7 @@
 {
   "name": "@qilin/user-questions",
   "description": "Abstract user-questions seam (ctx.userQuestions) for asking the human during agent runs",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -35,15 +35,15 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/agent": "workspace:^",
-    "@qilin/llm": "workspace:^",
-    "@qilin/scope": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/agent": "workspace:*",
+    "@qilin/llm": "workspace:*",
+    "@qilin/scope": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/agent": "workspace:^",
-    "@qilin/llm": "workspace:^",
-    "@qilin/scope": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/agent": "workspace:*",
+    "@qilin/llm": "workspace:*",
+    "@qilin/scope": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   }
 }

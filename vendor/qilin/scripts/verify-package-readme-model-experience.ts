@@ -44,7 +44,13 @@ const NO_MODEL_EXPERIENCE_SECTION: Readonly<Record<string, string>> = {
  * blocks. A package moves on or off this list with its context behavior.
  */
 const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
+  'packages/experimental/speech-to-text': { kind: 'none', reason: 'Routes transient recognition without adding model requests or Session events.' },
+  'packages/experimental/api-speech-to-text': { kind: 'none', reason: 'Transports audio and preparation state; ordinary user submission owns model-visible text.' },
+  'packages/experimental/speech-to-text-sensevoice': { kind: 'none', reason: 'Local recognition returns transient text without modifying model context.' },
+  'packages/experimental/client-ui-voice-input': { kind: 'none', reason: 'Inserts reviewable text into the unsent draft without submitting to the Agent.' },
+  'packages/experimental/voice-input-bundle': { kind: 'none', reason: 'Composes dictation and preparation plugins without adding any model-facing contribution.' },
   'packages/api/terminal-controller': { kind: 'none', reason: 'User-owned terminal processes and screen streams never enter model requests or Session events.' },
+  'packages/api/job-controller': { kind: 'none', reason: 'Job rosters and observation streams are browser and Host control state; they register no prompt, tool, or Session event.' },
   'packages/client/ui-sidebar-terminal': { kind: 'none', reason: 'The browser renders user terminal screens without exposing them to the model.' },
   'packages/ssh/ssh': { kind: 'none', reason: 'The connection owner transports private provider operations; consumers own all model-facing content.' },
   'packages/ssh/fs-ssh': { kind: 'indirect', reason: 'The remote filesystem delegates model rendering to the existing filesystem consumers.' },
@@ -94,8 +100,9 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/client/connection': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/client/file-upload': { kind: 'none', reason: 'Browser-side request-body transport; registers nothing model-facing.' },
   'packages/api/remotes': { kind: 'none', reason: 'The Remote BFF selects business methods and forwarded events; selected services own any model-visible effect.' },
-  'packages/experimental/agent-team-web-profile': { kind: 'indirect', reason: 'The Web layer delegates model composition to the Host-side Agent Teams profile.' },
   'packages/experimental/client-ui-agent-team': { kind: 'none', reason: 'The browser projection and task controls register no model-facing input.' },
+  'packages/client/shortcuts': { kind: 'none', reason: 'Browser keyboard routing; registers nothing model-facing.' },
+  'packages/client/ui-shortcuts': { kind: 'none', reason: 'Read-only browser reference; registers nothing model-facing.' },
   'packages/client/ui-layout': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/client/ui-dockkit': { kind: 'none', reason: 'Browser-side docking layout engine and components; registers nothing model-facing.' },
   'packages/client/ui-sidebar-right': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
@@ -107,7 +114,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/client/ui-message-feedback': { kind: 'none', reason: 'Browser-side controls over log-only message feedback; ratings and notes never enter model context or change model-input tokens.' },
   'packages/client/ui-tool': { kind: 'none', reason: 'Browser-side Tool presentation layer; renders logged calls without changing model context.' },
   'packages/client/ui-jobs': { kind: 'none', reason: 'Browser-side read-only projection of ctx.jobs records; qilin-tool-jobs owns the model-facing behavior.' },
-  'packages/client/ui-schedule': { kind: 'none', reason: 'Browser-side read-only projection of active Schedule records; qilin-schedule owns the model-facing tools and delivery.' },
+  'packages/client/ui-schedule': { kind: 'none', reason: 'Browser-side catalog, editing, and deletion of Host Schedule records; qilin-schedule owns the model-facing tools and delivery.' },
   'packages/client/ui-workflow-run': { kind: 'none', reason: 'Browser-side UI plugin layer; renders durable workflow records without changing model context.' },
   'packages/client/ui-input-trigger': { kind: 'none', reason: 'Browser-side UI plugin layer; registers nothing model-facing.' },
   'packages/client/ui-reference': { kind: 'indirect', reason: 'Browser-side reference selection delegates file guidance and session snapshot preparation to Host-owned providers.' },

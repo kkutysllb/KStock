@@ -241,10 +241,19 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
       () => branchButtons.evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-disabled'))),
       { timeout: 5_000 },
     ).toEqual(['true', null, null])
-    await branchButtons.first().focus()
-    await expect.poll(() => page.getByRole('tooltip').textContent(), { timeout: 5_000 })
-      .toBe('Available only on the last message of a completed turn')
-    await expect.poll(() => page.getByRole('button', { name: 'Edit' }).count(), { timeout: 5_000 }).toBe(0)
+    // Tooltips follow the last input, and the tree clicks above left pointer
+    // modality, under which a programmatic focus stays silent. Two key presses
+    // return the document to keyboard modality and land focus back on the
+    // unavailable branch control; allTextContents() reports instead of waiting
+    // on a bubble that a modality change would never raise.
+    await branchButtons.first().press('Shift+Tab')
+    await page.keyboard.press('Tab')
+    await expect.poll(() => page.getByRole('tooltip').allTextContents(), { timeout: 5_000 })
+      .toEqual(['Available only on the last message of a completed turn'])
+    // Every user bubble carries the edit action now; the keyboard-modality
+    // dance above lands focus on the unavailable branch control, so its
+    // tooltip is the one asserted above while the edit tooltips stay shut.
+    await expect.poll(() => page.getByRole('button', { name: 'Edit' }).count(), { timeout: 5_000 }).toBe(3)
   }, 60_000)
 
   it.skipIf(MODE === 'record')('keeps an action tooltip above the sticky composer', async () => {

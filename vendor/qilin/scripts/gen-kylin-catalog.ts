@@ -18,7 +18,7 @@
  * a missing regeneration.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import {
   projectCordisCatalog,
@@ -31,11 +31,7 @@ import type { CordisCatalogPolicy } from '@qilin/typert-generator'
 import { renderCordisCoreApiPages } from './kylin-core-api.ts'
 import { contextKeyMap, contextMergeFiles, eventNameList } from './cordis-walk.ts'
 import {
-  blobHash,
-  parsePairMeta,
   parseTranslationPairingManifest,
-  partitionGeneratedRegions,
-  renderPairMeta,
   translationPairSourcePredicate,
 } from './translation-pairing.ts'
 import { rewriteTranslationLinkLocales } from './translation-links.ts'
@@ -56,6 +52,7 @@ export { REGION_BEGIN, REGION_END }
 export const SERVICE_PAGE: Record<string, string> = {
   connection: 'web-server.md',
   pluginManager: 'boot.md',
+  pluginRegistryProbe: 'boot.md',
   profileContext: 'boot.md',
   hmr: 'boot.md',
   mcpResources: 'mcp.md',
@@ -86,6 +83,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   fileReferences: 'session-reference.md',
   fs: 'filesystem.md',
   goals: 'goal.md',
+  schedule: 'schedule.md',
   inspector: 'extensions.md',
   webServer: 'web-server.md',
   invariants: 'invariants.md',
@@ -108,6 +106,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   sessionController: 'session.md',
   sessionSkillCatalog: 'skills.md',
   sessions: 'session.md',
+  jobController: 'jobs.md',
   settings: 'settings.md',
   sessionTitle: 'session-title.md',
   skills: 'skills.md',
@@ -120,6 +119,8 @@ export const SERVICE_PAGE: Record<string, string> = {
   systemPrompt: 'system-prompt.md',
   jobs: 'jobs.md',
   sessionTelemetry: 'session-telemetry.md',
+  speechController: 'voice-input.md',
+  speechToText: 'voice-input.md',
   agentTeams: 'agent-team.md',
   tokenMeter: 'token-meter.md',
   toolResultPruner: 'compaction.md',
@@ -157,6 +158,7 @@ export const SERVICE_PAGE: Record<string, string> = {
  * to a model as `cordis_runtime_inspect what:"client"`).
  */
 export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
+  invocation: 'not a service: per-call accessor (RemoteInvocation | undefined) the Gateway derives for each Remote call — packages/api/gateway/README.md owns the contract',
   webTerminals: 'client-side terminal view models — packages/api/terminal-controller/README.md owns the API',
   appReady: 'not a service: launcher-provided successful-startup signal — packages/boot/cmdline/README.md owns the launcher contract',
   appExit: 'not a service: launcher-provided bounded process-exit callback — packages/boot/cmdline/README.md owns the launcher contract',
@@ -172,11 +174,13 @@ export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
   uiConversation: 'client-side Conversation registries and assembler — packages/client/ui-conversation/README.md owns the API',
   uiWorkspace: 'client-side Workspace navigation adapter — packages/client/ui-workspace/README.md owns the API',
   settingsSchema: 'client-side schema introspection service — packages/client/ui-settings/README.md owns the API',
-  settingsScope: 'client-side settings-namespace transport service — packages/client/ui-settings/README.md owns the API',
+  configForms: 'client-side shared configuration-form service — packages/client/ui-settings/README.md owns the API',
   chatFileMentions: 'client-side slot-contract accessor (ChatFileMentions) — packages/client/ui-chat/README.md owns the API',
+  shortcuts: 'client-side interface-typed keyboard service — packages/client/shortcuts/README.md owns the API',
   commandUi: 'client-side interface-typed browser service — packages/client/ui-commands/README.md owns the API',
   conversation: 'client-side interface-typed browser service — packages/client/ui-conversation/README.md owns the API',
   layout: 'client-side interface-typed browser service — packages/client/ui-layout/README.md owns the API',
+  pluginNavigation: 'client-side bundle navigation — packages/client/ui-plugin-manager/README.md owns the API',
   locale: 'client-side interface-typed browser service — packages/client/locale/README.md owns the API',
   modelDirectories: 'client-side interface-typed browser service — packages/client/ui-model-selection/README.md owns the API',
   modules: 'client-side interface-typed browser service — packages/client/modules/README.md owns the API',
@@ -219,6 +223,7 @@ export const EVENT_SCOPE_PAGE: Record<string, string> = {
   'domain': 'storage.md',
   'fs': 'filesystem.md',
   'goal': 'goal.md',
+  'schedule': 'schedule.md',
   'llm': 'llm-streaming.md',
   'permission-presets': 'permission-presets.md',
   'session': 'session.md',
@@ -231,6 +236,7 @@ export const EVENT_SCOPE_PAGE: Record<string, string> = {
   'tools': 'tools.md',
   'user-questions': 'user-questions.md',
   'webserver': 'web-server.md',
+  'workspace': 'workspace.md',
   'workflow': 'workflow.md',
 }
 
@@ -270,6 +276,9 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   BundleInfo: 'boot.md',
   ChangeResult: 'boot.md',
   InstallBundleOptions: 'boot.md',
+  InspectOptions: 'boot.md',
+  PluginRegistries: 'boot.md',
+  Registry: 'boot.md',
   PluginEntryId: 'boot.md',
   BundleRowInfo: 'boot.md',
   PluginInstallCancellation: 'boot.md',
@@ -466,6 +475,23 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   GoalChanged: 'goal.md',
   GoalRef: 'goal.md',
   GoalView: 'goal.md',
+  ScheduleCatalogEntry: 'schedule.md',
+  ScheduleDeliveryReceipt: 'schedule.md',
+  ScheduleDeliveryRecord: 'schedule.md',
+  ScheduleDeliveryHistoryRequest: 'schedule.md',
+  ScheduleDeliveryHistoryResult: 'schedule.md',
+  ScheduleCreateRequest: 'schedule.md',
+  ScheduleListRequest: 'schedule.md',
+  ScheduleDeleteRequest: 'schedule.md',
+  ScheduleDeleteResult: 'schedule.md',
+  ScheduleTimingChange: 'schedule.md',
+  ScheduleUpdateRequest: 'schedule.md',
+  ScheduleUpdateResult: 'schedule.md',
+  ScheduleRecord: 'schedule.md',
+  DailyInput: 'schedule.md',
+  DailyScheduleRecord: 'schedule.md',
+  RecurringScheduleRecord: 'schedule.md',
+  LegacyScheduleRecord: 'schedule.md',
   CreateGoalResult: 'goal.md',
   CommandDefinition: 'commands.md',
   CommandDescriptor: 'commands.md',
@@ -580,12 +606,45 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   PromptSectionOrderName: 'system-prompt.md',
   SystemPrompt: 'system-prompt.md',
   ToolProviderResult: 'system-prompt.md',
-  JobDoneListener: 'jobs.md',
+  JobChunk: 'jobs.md',
+  JobEvent: 'jobs.md',
+  JobEventFilter: 'jobs.md',
+  JobEventListener: 'jobs.md',
+  JobEvents: 'jobs.md',
+  JobHandle: 'jobs.md',
+  JobHooks: 'jobs.md',
   JobId: 'jobs.md',
+  JobKind: 'jobs.md',
+  JobKindMap: 'jobs.md',
+  JobOutcome: 'jobs.md',
+  JobOutputRead: 'jobs.md',
+  JobOutputSource: 'jobs.md',
   JobRead: 'jobs.md',
-  JobSnapshot: 'jobs.md',
-  JobStart: 'jobs.md',
-  JobsChangedListener: 'jobs.md',
+  JobSettleCause: 'jobs.md',
+  JobSourceRead: 'jobs.md',
+  JobSpec: 'jobs.md',
+  JobStatus: 'jobs.md',
+  JobView: 'jobs.md',
+  SpeechDownloadFailure: 'voice-input.md',
+  SpeechPreparationState: 'voice-input.md',
+  SpeechPreparationOptions: 'voice-input.md',
+  SpeechPreparationStep: 'voice-input.md',
+  SpeechPreparationStepKind: 'voice-input.md',
+  SpeechProviderView: 'voice-input.md',
+  SpeechSetupEstimate: 'voice-input.md',
+  SpeechSelection: 'voice-input.md',
+  SpeechSelectionPatch: 'voice-input.md',
+  SpeechSnapshot: 'voice-input.md',
+  SpeechPreparation: 'voice-input.md',
+  SpeechProvider: 'voice-input.md',
+  SpeechProviderId: 'voice-input.md',
+  SpeechProviderInfo: 'voice-input.md',
+  SpeechInput: 'voice-input.md',
+  SpeechRequest: 'voice-input.md',
+  SpeechSpec: 'voice-input.md',
+  Transcript: 'voice-input.md',
+  SpeechCatalog: 'voice-input.md',
+  TranscriptionRequest: 'voice-input.md',
   CreateTeamTaskRequest: 'agent-team.md',
   SendTeamMessageRequest: 'agent-team.md',
   SendTeamMessageResult: 'agent-team.md',
@@ -676,6 +735,13 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   DomainChanged: 'storage.md',
   DomainFacility: 'storage.md',
   Workspace: 'workspace.md',
+  SubagentCatalogEntry: 'subagent.md',
+  SessionWorkspacePathApplication: 'session.md',
+  SessionProjectionsValue: 'session.md',
+  SessionProjectionsRequest: 'session.md',
+  ArchiveSessionOptions: 'workspace.md',
+  SessionActivity: 'workspace.md',
+  SessionActivityRequest: 'workspace.md',
   WorkspaceArchiveSessionRequest: 'workspace.md',
   WorkspaceArchiveValue: 'workspace.md',
   WorkspaceCreateRequest: 'workspace.md',
@@ -687,7 +753,10 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   WorkspaceInsertBeforeRequest: 'workspace.md',
   WorkspaceInsertSessionBeforeRequest: 'workspace.md',
   WorkspaceOrderValue: 'workspace.md',
+  WorkspacePinSessionRequest: 'workspace.md',
+  WorkspacePinValue: 'workspace.md',
   WorkspaceRenameRequest: 'workspace.md',
+  WorkspaceUnpinSessionRequest: 'workspace.md',
   WorkspaceUnarchiveSessionRequest: 'workspace.md',
   WorkspaceValue: 'workspace.md',
   ClientArtifactBaseline: 'client-modules.md',
@@ -746,6 +815,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   ConnectionFetchHandler: 'shared Fetch dispatch is owned by packages/client/connection/src/rpc.ts',
   ConnectionRequestRejection: 'transport rejection status is owned by packages/client/connection/src/rpc.ts',
   ConnectionTrustRequest: 'transport authentication input is owned by packages/client/connection/src/rpc.ts',
+  PeerAdmission: 'Peer admission outcome is owned by packages/client/connection/src/rpc.ts',
+  PeerScope: 'Peer scope contract is owned by packages/typert/protocol/src/types.ts',
   ConnectionIndexRequest: 'frontend authentication request is owned by packages/client/connection/src/rpc.ts',
   ConnectionIndexResponse: 'frontend authentication response is owned by packages/client/connection/src/rpc.ts',
   Profile: 'resolved profile layers are owned by packages/boot/app-boot/README.md',
@@ -841,6 +912,12 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   WebTerminalInfo: 'Browser terminal metadata is owned by packages/api/terminal-controller/README.md',
   TerminalCreateRequest: 'Browser terminal allocation fields are owned by packages/api/terminal-controller/README.md',
   TerminalAttachmentId: 'Browser terminal input ownership is owned by packages/api/terminal-controller/README.md',
+  JobFollowFrame: 'Job observation frames are owned by packages/api/job-controller/README.md',
+  JobFollowRequest: 'Job observation requests are owned by packages/api/job-controller/README.md',
+  JobKillRequest: 'Human job-kill requests are owned by packages/api/job-controller/README.md',
+  JobKillValue: 'Human job-kill receipts are owned by packages/api/job-controller/README.md',
+  JobListFrame: 'Job roster frames are owned by packages/api/job-controller/README.md',
+  JobListRequest: 'Job roster requests are owned by packages/api/job-controller/README.md',
   TerminalFrame: 'Browser terminal stream frames are owned by packages/api/terminal-controller/README.md',
   TerminalRetentionFrame: 'Browser terminal window holds are owned by packages/api/terminal-controller/README.md',
   WebTerminalId: 'Browser terminal identity is owned by packages/api/terminal-controller/README.md',
@@ -887,19 +964,21 @@ export const CORDIS_CATALOG_POLICY: CordisCatalogPolicy = {
     ],
   }],
   inheritedEvents: [
-    { name: 'internal/plugin', summary: 'A plugin fiber was created.', source: 'vendor/cordis/src/events.ts:328' },
-    { name: 'internal/status', summary: 'A fiber changed lifecycle state.', source: 'vendor/cordis/src/events.ts:330' },
-    { name: 'internal/service', summary: 'Interception hook for a service binding (no core producer).', source: 'vendor/cordis/src/events.ts:332' },
-    { name: 'internal/update', summary: 'Waterfall: a fiber config update is being applied.', source: 'vendor/cordis/src/events.ts:334' },
-    { name: 'internal/get', summary: 'Waterfall: a service is being read from the store.', source: 'vendor/cordis/src/events.ts:336' },
-    { name: 'internal/set', summary: 'Waterfall: a service is being written to the store.', source: 'vendor/cordis/src/events.ts:338' },
-    { name: 'internal/listener', summary: 'A listener was registered.', source: 'vendor/cordis/src/events.ts:340' },
-    { name: 'internal/dispatch', summary: 'An event is being dispatched to listeners.', source: 'vendor/cordis/src/events.ts:342' },
-    { name: 'exit', summary: 'The process is exiting on a signal.', source: 'vendor/loader/src/index.ts:23' },
-    { name: 'loader/config-update', summary: 'The loader config tree changed.', source: 'vendor/loader/src/index.ts:24' },
-    { name: 'loader/entry-init', summary: 'A config entry is being initialized.', source: 'vendor/loader/src/index.ts:25' },
-    { name: 'loader/partial-dispose', summary: 'An entry is being partially disposed on reload.', source: 'vendor/loader/src/index.ts:26' },
-    { name: 'loader/patch-context', summary: 'A context is being patched during a reload.', source: 'vendor/loader/src/index.ts:27' },
+    { name: 'internal/plugin', summary: 'A plugin fiber was created.', source: 'vendor/cordis/src/events.ts:331' },
+    { name: 'internal/status', summary: 'A fiber changed lifecycle state.', source: 'vendor/cordis/src/events.ts:333' },
+    { name: 'internal/service', summary: 'Interception hook for a service binding (no core producer).', source: 'vendor/cordis/src/events.ts:341' },
+    { name: 'internal/update', summary: 'Waterfall: a fiber config update is being applied.', source: 'vendor/cordis/src/events.ts:343' },
+    { name: 'internal/config', summary: 'Waterfall: a fiber config is being resolved before validation.', source: 'vendor/cordis/src/events.ts:339' },
+    { name: 'internal/get', summary: 'Waterfall: a service is being read from the store.', source: 'vendor/cordis/src/events.ts:345' },
+    { name: 'internal/set', summary: 'Waterfall: a service is being written to the store.', source: 'vendor/cordis/src/events.ts:347' },
+    { name: 'internal/listener', summary: 'A listener was registered.', source: 'vendor/cordis/src/events.ts:349' },
+    { name: 'internal/dispatch', summary: 'An event is being dispatched to listeners.', source: 'vendor/cordis/src/events.ts:351' },
+    { name: 'exit', summary: 'The process is exiting on a signal.', source: 'vendor/loader/src/index.ts:25' },
+    { name: 'loader/config-update', summary: 'The loader config tree changed.', source: 'vendor/loader/src/index.ts:26' },
+    { name: 'loader/entry-init', summary: 'A config entry is being initialized.', source: 'vendor/loader/src/index.ts:27' },
+    { name: 'loader/partial-dispose', summary: 'An entry is being partially disposed on reload.', source: 'vendor/loader/src/index.ts:28' },
+    { name: 'loader/patch-context', summary: 'A context is being patched during a reload.', source: 'vendor/loader/src/index.ts:41' },
+    { name: 'loader/volatile-update', summary: 'Volatile config values committed into the running fiber without a remount; dispatched to the owning fiber only.', source: 'vendor/loader/src/index.ts:34' },
   ],
   inheritedServices: [
     { name: 'ctx.on / ctx.once', summary: 'Register an event listener (disposable).', source: 'vendor/cordis/src/events.ts:34' },
@@ -1119,51 +1198,6 @@ export function computeOutputs(): [string, string][] {
   return outputs
 }
 
-/**
- * Re-record a pair's `.i18n.yaml` after a region write ONLY when the write is
- * region-confined: both sides' region-stripped content must be byte-equal to
- * the region-stripped previous content whose hashes the record holds. The
- * caller supplies the previous bytes (read before writing); human-content
- * drift leaves the record untouched so the pairing gate still demands the
- * normal translation flow.
- * @param pageRel - repo-relative English page path (`docs/subsystems/x.md`).
- * @param before - pre-write bytes per repo-relative path.
- * @param scanRoot - repository root override for tests.
- * @returns true when the record was refreshed.
- */
-export function maybeRecordPair(pageRel: string, before: Map<string, Buffer>, scanRoot: string = root): boolean {
-  const zhRel = pageRel.replace(/\.md$/, '.zh.md')
-  const metaRel = pageRel.replace(/\.md$/, '.i18n.yaml')
-  const metaAbs = resolve(scanRoot, metaRel)
-  let meta: string
-  try {
-    meta = readFileSync(metaAbs, 'utf8')
-  } catch {
-    // No record yet: a brand-new pair is recorded by the author's --write
-    // after review, never silently by regeneration.
-    return false
-  }
-  // The record must contain exactly the two valid entries for THIS pair;
-  // a malformed or renamed-key sidecar is the pairing gate's problem to
-  // report, never something regeneration silently repairs into validity.
-  const recorded = parsePairMeta(meta)
-  const names = [pageRel, zhRel].map(rel => rel.split('/').at(-1) ?? rel)
-  if (!recorded || recorded.size !== 2 || !names.every(name => recorded.has(name))) return false
-  for (const rel of [pageRel, zhRel]) {
-    const previous = before.get(rel)
-    if (!previous) return false
-    if (recorded.get(rel.split('/').at(-1) ?? rel) !== blobHash(previous)) return false
-    const current = readFileSync(resolve(scanRoot, rel))
-    const strippedBefore = partitionGeneratedRegions(previous.toString('utf8')).stripped
-    const strippedAfter = partitionGeneratedRegions(current.toString('utf8')).stripped
-    if (strippedBefore !== strippedAfter) return false
-  }
-  const source = readFileSync(resolve(scanRoot, pageRel))
-  const zh = readFileSync(resolve(scanRoot, zhRel))
-  writeFileSync(metaAbs, renderPairMeta(pageRel, blobHash(source), zhRel, blobHash(zh)))
-  return true
-}
-
 /** CLI entry: default regenerates every artifact, `--check` fails if any is
  * stale. Guarded behind an entry-point check so importing this module for
  * tests neither regenerates the committed files nor calls process.exit.
@@ -1196,33 +1230,15 @@ export function main(): void {
     process.exit(1)
   }
 
-  const before = new Map<string, Buffer>()
-  for (const [out] of outputs) {
-    try {
-      before.set(out, readFileSync(resolve(root, out)))
-    } catch {
-      // First generation of this artifact; nothing to guard, nothing to record.
-    }
-  }
   let changedPages = 0
-  let recorded = 0
   for (const [out, content] of outputs) {
     const destination = resolve(root, out)
-    if (before.get(out)?.toString('utf8') === content) continue
+    if (existsSync(destination) && readFileSync(destination, 'utf8') === content) continue
     mkdirSync(dirname(destination), { recursive: true })
     writeFileSync(destination, content)
     changedPages++
   }
-  for (const page of [...new Set([...Object.values(SERVICE_PAGE), ...Object.values(EVENT_SCOPE_PAGE)])]) {
-    const rel = `${SUBSYSTEMS_DIR}/${page}`
-    const zhRel = rel.replace(/\.md$/, '.zh.md')
-    const wroteEither = [rel, zhRel].some((side) => {
-      const previous = before.get(side)
-      return previous !== undefined && previous.toString('utf8') !== readFileSync(resolve(root, side), 'utf8')
-    })
-    if (wroteEither && maybeRecordPair(rel, before)) recorded++
-  }
-  console.log(`gen-cordis-catalog: ${outputs.length} artifact(s) computed, ${changedPages} written, ${recorded} pair record(s) refreshed.`)
+  console.log(`gen-cordis-catalog: ${outputs.length} artifact(s) computed, ${changedPages} written.`)
 }
 
 if (process.argv[1] && import.meta.filename === resolve(process.argv[1])) {

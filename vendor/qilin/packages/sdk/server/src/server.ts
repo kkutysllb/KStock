@@ -15,7 +15,7 @@ import { carrierKeyOf, type Scoped } from '@qilin/scope'
 import type { SessionId } from '@qilin/session'
 import type SubagentRuntime from '@qilin/subagent'
 import type { SubagentRunEndInfo } from '@qilin/subagent'
-import * as LlmDeepSeek from '@qilin/llm-deepseek'
+import * as LlmDeepSeek from '@qilin/llm-deepseek-api-key'
 import type {
   InitializeParams,
   InitializeResult,
@@ -121,7 +121,9 @@ export class HarnessSdkJsonRpcServer {
         childSessionId: String(info.id),
         status: successStatus(info.stopReason, serverOptions),
         stopReason: info.stopReason,
-        ...(info.lastAssistantMessage === undefined ? {} : { lastAssistantMessage: info.lastAssistantMessage }),
+        ...(info.lastAssistantMessage === undefined
+          ? {}
+          : { lastAssistantMessage: [...info.lastAssistantMessage] }),
       }
       transport.notify('subagent.finished', payload)
     }))

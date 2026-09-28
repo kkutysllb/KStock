@@ -1,7 +1,7 @@
 {
   "name": "@qilin/web-search-deepseek",
   "description": "DeepSeek-backed search provider (native web_search via the Anthropic-compatible API) for the QiLin web capability seam (ctx.web)",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -30,26 +30,26 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/agent": "workspace:^",
-    "@qilin/credentials": "workspace:^",
-    "@qilin/launch-environment": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/web": "workspace:^",
-    "@qilin/kylin": "workspace:^",
-    "@qilin/settings": "workspace:^"
+    "@qilin/agent": "workspace:*",
+    "@qilin/credentials": "workspace:*",
+    "@qilin/launch-environment": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/web": "workspace:*",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/settings": "workspace:*"
   },
   "dependencies": {
-    "@qilin/schemastery": "workspace:^"
+    "@qilin/schemastery": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/agent": "workspace:^",
-    "@qilin/credentials": "workspace:^",
-    "@qilin/credentials-local": "workspace:^",
-    "@qilin/launch-environment": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/web": "workspace:^",
-    "@qilin/kylin": "workspace:^",
-    "@qilin/settings": "workspace:^",
-    "@qilin/http-proxy": "workspace:^"
+    "@qilin/agent": "workspace:*",
+    "@qilin/credentials": "workspace:*",
+    "@qilin/credentials-local": "workspace:*",
+    "@qilin/launch-environment": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/web": "workspace:*",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/settings": "workspace:*",
+    "@qilin/http-proxy": "workspace:*"
   }
 }

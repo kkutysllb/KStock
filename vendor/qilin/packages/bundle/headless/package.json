@@ -1,7 +1,7 @@
 {
   "name": "@qilin/headless",
   "description": "The qilin one-shot bundle: a direct core Agent/Session runner over qilin-base with no Host, HTTP, or browser layer",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -43,32 +43,32 @@
     }
   },
   "dependencies": {
-    "@qilin/brand": "workspace:^",
-    "@qilin/cmdline": "workspace:^",
-    "@qilin/util-values": "workspace:^",
-    "@qilin/schemastery": "workspace:^",
+    "@qilin/brand": "workspace:*",
+    "@qilin/cmdline": "workspace:*",
+    "@qilin/util-values": "workspace:*",
+    "@qilin/schemastery": "workspace:~",
     "commander": "^15.0.0"
   },
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/kylin-plugin-loader": "workspace:^",
-    "@qilin/agent": "workspace:^",
-    "@qilin/agent-default-model": "workspace:^",
-    "@qilin/llm": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/session-query": "workspace:^",
-    "@qilin/fs": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/kylin-plugin-loader": "workspace:~",
+    "@qilin/agent": "workspace:*",
+    "@qilin/agent-default-model": "workspace:*",
+    "@qilin/llm": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/session-query": "workspace:*",
+    "@qilin/fs": "workspace:*"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/kylin-plugin-loader": "workspace:^",
-    "@qilin/agent": "workspace:^",
-    "@qilin/agent-default-model": "workspace:^",
-    "@qilin/agent-loop": "workspace:^",
-    "@qilin/agent-loop-testkit": "workspace:^",
-    "@qilin/llm": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/session-query": "workspace:^",
-    "@qilin/fs": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/kylin-plugin-loader": "workspace:~",
+    "@qilin/agent": "workspace:*",
+    "@qilin/agent-default-model": "workspace:*",
+    "@qilin/agent-loop": "workspace:*",
+    "@qilin/agent-loop-testkit": "workspace:*",
+    "@qilin/llm": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/session-query": "workspace:*",
+    "@qilin/fs": "workspace:*"
   }
 }

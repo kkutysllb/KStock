@@ -118,9 +118,11 @@ Before pushing, follow [qilin-pre-push-checks](.agents/skills/qilin-pre-push-che
 
 ## Secrets / .env
 
-Windows packaging/signing: [required reading](apps/desktop/README.md#windows-ev-signing).
-
 Real-API tests/demos read `DEEPSEEK_API_KEY`, optional `DEEPSEEK_BASE_URL`, and root `.env`. cordis.yml allows `!!js` (never `!js`) under plugin `config` and entry `disabled`; other metadata stays literal, so conditional composition also uses overlays ([primer](docs/kylin-primer.md#loader-configuration)). Never commit credentials. CI e2e skips without a key; [testing.md](docs/testing.md) owns key policy.
+
+## Desktop and account alignment boundaries
+
+QiLin's desktop application is a separate project: no desktop shell lives here and upstream desktop changes are never ported. The web-side interfaces the shell consumes — `packages/client/web` window-drag with `data-window-drag`, and the `qilinDesktop` / `__QILIN_SHORTCUTS_CONFIG__` globals — stay ([boundary note](.agents/notes/implemented/architecture/2026-09-25-desktop-and-account-alignment-boundaries.md)). The account surface is the own ui-account `/api/auth` gate; the upstream deepseek-account stack is never ported.
 
 ## Conventions
 
@@ -154,7 +156,7 @@ Real-API tests/demos read `DEEPSEEK_API_KEY`, optional `DEEPSEEK_BASE_URL`, and 
 - **Plan unit, e2e, and snapshot coverage** for capability seams, lifecycle paths, and transcript output; include missing snapshot-harness support in the same change.
 - **Both SDKs project the loop.** Agent-loop, session-lifecycle, and `SessionEventMap` changes update the TypeScript and Python SDK expected outputs in the same PR; `pnpm run test` covers neither ([surfaces](docs/testing.md#when-a-snapshot-test-is-required)).
 - **Choose PR history deliberately.** Split independent changes and fix the introducing PR before propagation. Standalone/stack branches may merge-forward or rebase. Rewrites use `--force-with-lease`, abort on remote movement, never raw `--force`; preserve an in-progress merge-forward checkpoint before taking a newer base ([rationale](.agents/notes/implemented/process/2026-08-02-native-github-stacks-and-optional-rebases.md)).
-- **Every `main` push ships a release.** Before pushing, tag the commit with an annotated `v*` tag and publish its GitHub Release with notes (`gh release create <tag> --title … --notes-file …`; semver: fix → patch, feat → minor, breaking → major). The pre-push hook refuses a `main` push lacking tag and release ([checker](scripts/verify-release-tag.ts)); `QILIN_RELEASE_SKIP=<reason>` bypasses a dead GitHub.
+- **Every `main` push ships a release.** Bump the workspace version first (`pnpm run version:set <x.y.z>`; `--check` reports drift), rebuild, then tag the commit with an annotated `v*` tag and publish its GitHub Release with notes (`gh release create <tag> --title … --notes-file …`; semver: fix → patch, feat → minor, breaking → major). The pre-push hook refuses a `main` push lacking tag, release, or a version equal to the tag's ([checker](scripts/verify-release-tag.ts)); `QILIN_RELEASE_SKIP=<reason>` bypasses a dead GitHub.
 - **Labels:** one PR `kind/*`, all material `area/*`, and native Issue Type ([taxonomy](.agents/notes/implemented/process/2026-08-08-unified-github-label-taxonomy.md)).
 - TODO markers: `FIXME`/`TODO`/`XXX` by urgency ([semantics](docs/development.md)).
 - Files end with exactly one trailing newline; `git diff --cached --check` (pre-commit) gates it.

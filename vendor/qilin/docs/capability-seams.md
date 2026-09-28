@@ -13,6 +13,8 @@ flowchart LR
   pkg_plugin_manager["plugin-manager"]
   svc_pluginManager["ctx.pluginManager<br/>Current-profile plugin and bundle management"]
   pkg_ui_settings_plugin_inventory["ui-settings-plugin-inventory"]
+  pkg_client_ui_plugin_manager["client-ui-plugin-manager"]
+  svc_pluginRegistryProbe["ctx.pluginRegistryProbe<br/>Public registry response comparison"]
   svc_profileContext["ctx.profileContext<br/>Launcher-owned profile data"]
   pkg_client_connection["client-connection"]
   svc_connection["ctx.connection<br/>Authenticated browser transport"]
@@ -64,6 +66,8 @@ flowchart LR
   pkg_subagent_in_process_driver["subagent-in-process-driver"]
   pkg_invariants["invariants"]
   pkg_message_feedback["message-feedback"]
+  pkg_experimental_api_speech_to_text["experimental-api-speech-to-text"]
+  svc_speechController["ctx.speechController<br/>Experimental transcription Remote"]
   svc_sessionController["ctx.sessionController<br/>Host Session Remote controller"]
   svc_sessionFileReferences["ctx.sessionFileReferences<br/>Session-addressed file-reference Remote adapter"]
   svc_sessionSkillCatalog["ctx.sessionSkillCatalog<br/>Session-addressed skill Remote adapter"]
@@ -74,6 +78,8 @@ flowchart LR
   svc_workspaceFiles["ctx.workspaceFiles<br/>Host workspace file Remote service"]
   pkg_workspace_changes["workspace-changes"]
   svc_workspaceChanges["ctx.workspaceChanges<br/>Host per-turn changed-file summaries"]
+  pkg_api_job_controller["api-job-controller"]
+  svc_jobController["ctx.jobController<br/>Host background-job Remote controller"]
   pkg_api_terminal_controller["api-terminal-controller"]
   svc_terminalController["ctx.terminalController<br/>Session interactive terminal Remote controller"]
   pkg_api_workspace_controller["api-workspace-controller"]
@@ -161,6 +167,8 @@ flowchart LR
   svc_agentLoop["ctx.agentLoop<br/>Concrete loop driver"]
   pkg_base["base"]
   pkg_sdk_minimal["sdk-minimal"]
+  pkg_schedule["schedule"]
+  svc_schedule["ctx.schedule<br/>Host scheduled messages"]
   pkg_goal["goal"]
   svc_goals["ctx.goals<br/>Same-session goal domain"]
   pkg_ssh["ssh"]
@@ -213,6 +221,9 @@ flowchart LR
   pkg_subagent_qilin_sdk["subagent-qilin-sdk"]
   pkg_tool_subagent_control["tool-subagent-control"]
   pkg_tool_ralph["tool-ralph"]
+  pkg_experimental_speech_to_text["experimental-speech-to-text"]
+  svc_speechToText["ctx.speechToText<br/>Experimental speech recognition providers"]
+  pkg_experimental_speech_to_text_sensevoice["experimental-speech-to-text-sensevoice"]
   pkg_experimental_agent_team["experimental-agent-team"]
   svc_agentTeams["ctx.agentTeams<br/>Agent Teams coordination domain"]
   pkg_experimental_tool_agent_team["experimental-tool-agent-team"]
@@ -259,6 +270,7 @@ flowchart LR
   pkg_agent_loop --> svc_agentLoop
   pkg_agent_presets --> svc_agentPresets
   pkg_api_gateway --> svc_typertGateway
+  pkg_api_job_controller --> svc_jobController
   pkg_api_session_controller --> svc_sessionController
   pkg_api_session_controller --> svc_sessionFileReferences
   pkg_api_session_controller --> svc_sessionSkillCatalog
@@ -278,6 +290,7 @@ flowchart LR
   pkg_client_connection --> svc_connection
   pkg_client_file_upload --> svc_fileUploads
   pkg_client_modules --> svc_clientModules
+  pkg_client_ui_plugin_manager --> svc_pluginRegistryProbe
   pkg_command_feedback --> svc_sessionFeedback
   pkg_commands --> svc_commands
   pkg_compaction --> svc_compaction
@@ -288,12 +301,15 @@ flowchart LR
   pkg_credentials_local --> svc_credentials
   pkg_deepseek_llm_api_extensions --> svc_deepseekLlmApiExtensions
   pkg_experimental_agent_team --> svc_agentTeams
+  pkg_experimental_api_speech_to_text --> svc_speechController
   pkg_experimental_browser_use_chrome_devtools_mcp --> svc_browserUse
   pkg_experimental_browser_use_playwright_mcp --> svc_browserUse
   pkg_experimental_browser_use_stagehand_native --> svc_browserUse
   pkg_experimental_computer_use_cua_driver_mcp --> svc_computerUse
   pkg_experimental_computer_use_cua_driver_native --> svc_computerUse
   pkg_experimental_ptc_runtime_python --> svc_ptcRuntime
+  pkg_experimental_speech_to_text --> svc_speechToText
+  pkg_experimental_speech_to_text_sensevoice --> svc_speechToText
   pkg_file_reference --> svc_fileReferences
   pkg_file_reference_local --> svc_fileReferences
   pkg_fs --> svc_fs
@@ -333,6 +349,7 @@ flowchart LR
   pkg_sandbox_local --> svc_sandbox
   pkg_sandbox_policy --> svc_sandboxPolicy
   pkg_sandbox_ssh --> svc_sandbox
+  pkg_schedule --> svc_schedule
   pkg_session --> svc_sessions
   pkg_session_log_deepseek --> svc_deepseekLlmApiExtensions
   pkg_session_persistence --> svc_sessionPersistence
@@ -443,6 +460,7 @@ flowchart LR
   svc_officeToPdf --> pkg_client_ui_sidebar_documentpreview
   svc_pluginManager --> pkg_plugin_manager
   svc_pluginManager --> pkg_ui_settings_plugin_inventory
+  svc_pluginRegistryProbe --> pkg_client_ui_plugin_manager
   svc_profileContext --> pkg_plugin_manager
   svc_ptcRuntime --> pkg_tools
   svc_ptcRuntime --> pkg_workflow_ptc
@@ -485,6 +503,7 @@ flowchart LR
   svc_shellEnv --> pkg_tool_bash
   svc_shellEnv --> pkg_tool_pwsh
   svc_skills --> pkg_tool_skill
+  svc_speechToText --> pkg_experimental_api_speech_to_text
   svc_spillStore --> pkg_spill_policy
   svc_ssh --> pkg_fs_ssh
   svc_ssh --> pkg_sandbox_ssh
@@ -539,6 +558,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- | --- |
 | `ctx.hmr` | `core` | [`hmr`](../packages/boot/hmr) | - | [`app-boot`](../packages/boot/app-boot) | - | Owns module and exact configuration watchers; application mutations share its queue and automatic reloads await the application file lock. |
 | `ctx.pluginManager` | `core` | [`plugin-manager`](../packages/boot/plugin-manager) | - | [`plugin-manager`](../packages/boot/plugin-manager), `ui-settings-plugin-inventory` | - | Shares profile package operations with the CLI and reports persisted and running state to Web and agent callers. |
+| `ctx.pluginRegistryProbe` | `core` | [`client-ui-plugin-manager`](../packages/client/ui-plugin-manager) | - | [`client-ui-plugin-manager`](../packages/client/ui-plugin-manager) | - | Pings the public npm registries from the Host and caches the first winner, so the install dialog can start from the faster one. |
 | `ctx.profileContext` | `core` | [`app-boot`](../packages/boot/app-boot) | - | [`plugin-manager`](../packages/boot/plugin-manager) | - | The qilin launcher supplies data-only profile locations and composition inputs; reload scheduling belongs to qilin-hmr. |
 | `ctx.connection` | `core` | [`client-connection`](../packages/client/connection) | - | [`api-gateway`](../packages/api/gateway), [`host-frontend-static`](../packages/host/frontend-static) | - | Owns browser authentication and shared HTTP request dispatch; API adapters register endpoints and streams. |
 | `ctx.mcpResources` | `seam` | [`mcp-resources`](../packages/mcp/mcp-resources) | [`mcp-client`](../packages/mcp/mcp-client) | [`mcp-resources`](../packages/mcp/mcp-resources) | - | Connection-owned providers serve shared resource tools in the calling agent scope. |
@@ -552,6 +572,7 @@ flowchart LR
 | `ctx.tokenMeter` | `core` | [`token-meter`](../packages/llm/token-meter) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | Owns isolated per-session replay folds; pressure consumers share immutable revisioned measurements. |
 | `ctx.toolResultPruner` | `core` | [`compaction-tool-result-pruner`](../packages/compaction/compaction-tool-result-pruner) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | Rewrites oversized current tool results through replayable single-node surface replacements before summary compaction. |
 | `ctx.sessions` | `core` | [`session`](../packages/core/session) | - | [`agent-loop`](../packages/core/agent-loop), [`agent`](../packages/core/agent), [`session-persistence`](../packages/session/session-persistence), [`session-query`](../packages/session-query/session-query), [`session-query-sqlite`](../packages/session-query/session-query-sqlite), [`subagent-in-process-driver`](../packages/subagent/subagent-in-process-driver), [`invariants`](../packages/runtime-diagnostics/invariants), [`message-feedback`](../packages/feedback/message-feedback) | - | Owns append-only Session instances and emits the durable session event feed. |
+| `ctx.speechController` | `core` | [`experimental-api-speech-to-text`](../packages/experimental/api-speech-to-text) | - | - | - | Validates bounded browser audio before provider dispatch. |
 | `ctx.sessionController` | `core` | [`api-session-controller`](../packages/api/session-controller) | - | - | - | Owns Session commands, cold reads, durable-event following, live control state, model catalogs, workspace opening, and Agent activation policy. |
 | `ctx.sessionFileReferences` | `core` | [`api-session-controller`](../packages/api/session-controller) | - | - | - | Delegates file-reference discovery through the Session Controller's established Agent lookup policy. |
 | `ctx.sessionSkillCatalog` | `core` | [`api-session-controller`](../packages/api/session-controller) | - | - | - | Lists the Session composition's user-invocable skills without activating a cold Agent. |
@@ -559,6 +580,7 @@ flowchart LR
 | `ctx.settingsController` | `core` | [`api-settings-controller`](../packages/api/settings-controller) | - | - | - | Projects the user-settings seam onto the generated Remote namespace: the read is always redacted and every refusal is classified here, not on the seam Definition. |
 | `ctx.workspaceFiles` | `core` | [`api-workspace-files`](../packages/api/workspace-files) | - | - | - | Serves stat, paged text, byte windows, directory listings, the change feed, and the guarded save for files inside a Session's workspace root, confined by lstat, containment, and a stat re-check. |
 | `ctx.workspaceChanges` | `core` | [`workspace-changes`](../packages/deliverables/workspace-changes) | - | - | - | Serves the summary each workspace/changes event announced and each listed file's turn-start and turn-end comparison, by Session and event sequence, until that Session is disposed; the log carries only the turn. |
+| `ctx.jobController` | `core` | [`api-job-controller`](../packages/api/job-controller) | - | - | - | Streams the per-session job roster and one retained output, and stops a job for a human, as projections of the ctx.jobs registry over the generated Remote namespace. |
 | `ctx.terminalController` | `core` | [`api-terminal-controller`](../packages/api/terminal-controller) | - | - | - | Owns user terminal processes, default shell resolution and bounded screen recovery through the subprocess provider and typed Remote transport. |
 | `ctx.workspaceController` | `core` | [`api-workspace-controller`](../packages/api/workspace-controller) | - | - | - | Owns Workspace commands and reconnect-safe Workspace state delivery through the generated Remote namespace. |
 | `ctx.directoryPickerController` | `core` | [`api-workspace-controller`](../packages/api/workspace-controller) | - | - | - | Carries the picking seam onto the wire: capability gating, cancellation, and the seam-coded failures a browser directory flow discriminates on. |
@@ -592,6 +614,7 @@ flowchart LR
 | `ctx.agents` | `core` | [`agent`](../packages/core/agent) | - | [`agent-loop`](../packages/core/agent-loop), [`acp`](../packages/acp/acp), [`subagent-in-process-driver`](../packages/subagent/subagent-in-process-driver) | - | Owns live Agent handles, the create/resume factory seam, and process-local initiator propagation. |
 | `ctx.agentDefaultModel` | `core` | [`agent-default-model`](../packages/core/agent-default-model) | - | [`api-session-controller`](../packages/api/session-controller), [`headless`](../packages/bundle/headless) | - | Layers the default ModelSelection through settings so direct and Host-backed Agent entry points share one state owner. |
 | `ctx.agentLoop` | `bundle` | [`agent-loop`](../packages/core/agent-loop) | - | [`base`](../packages/bundle/base), [`sdk-minimal`](../packages/bundle/sdk-minimal) | - | The one concrete loop plugin; extension packages depend on qilin-agent events and services, not on this package. |
+| `ctx.schedule` | `core` | [`schedule`](../packages/schedule/schedule) | - | - | - | Stores tasks independently of Session activation and queues due messages in the original Session. |
 | `ctx.goals` | `core` | [`goal`](../packages/goal/goal) | - | - | - | Folds revisioned objective state from the session log and keeps live continuation activation process-local. |
 | `ctx.ssh` | `core` | [`ssh`](../packages/ssh/ssh) | - | [`fs-ssh`](../packages/ssh/fs-ssh), [`subprocess-ssh`](../packages/ssh/subprocess-ssh), [`sandbox-ssh`](../packages/ssh/sandbox-ssh) | - | Owns one authenticated OpenSSH connection, installed helper identity, independent program streams and disconnect cleanup for the paired remote providers. |
 | `ctx.subprocess` | `seam` | [`subprocess`](../packages/subprocess/subprocess) | [`subprocess-local`](../packages/subprocess/subprocess-local), [`subprocess-ssh`](../packages/ssh/subprocess-ssh) | [`bash-local`](../packages/shell/bash-local), [`bash-sandbox`](../packages/shell/bash-sandbox), [`terminal-bash`](../packages/terminal/terminal-bash), [`lsp-stdio`](../packages/lsp/lsp-stdio), [`subagent-acp`](../packages/subagent/subagent-acp), [`subagent-codex`](../packages/subagent/subagent-codex), [`subagent-claude-code`](../packages/subagent/subagent-claude-code) | - | The bash executors, the PTY shell backend, the LSP host, and the out-of-process ACP, Codex, and Claude Code subagent backends spawn through ctx.subprocess; the service owns process coordinates, tree/session lifetime, stdio dispositions, terminal mechanics, and kill escalation. |
@@ -606,6 +629,7 @@ flowchart LR
 | `ctx.fs` | `seam` | [`fs`](../packages/fs/fs) | [`fs-local`](../packages/fs/fs-local), [`fs-sandbox`](../packages/fs/fs-sandbox), [`fs-ssh`](../packages/ssh/fs-ssh) | [`tool-fs`](../packages/fs/tool-fs) | [`fs-observation-policy`](../packages/fs/fs-observation-policy) | tool-fs executes read/write/edit through ctx.fs; fs-sandbox fences mutations by the shared sandbox mode; fs-observation-policy contributes observed-state checks through the fs/* event gate. |
 | `ctx.compaction` | `seam` | [`compaction`](../packages/compaction/compaction) | [`compaction-basic`](../packages/compaction/compaction-basic) | [`compaction-basic`](../packages/compaction/compaction-basic) | - | The basic backend consumes post-step pressure and request-error recovery events; there is no model-facing compact tool. |
 | `ctx.subagents` | `seam` | [`subagent`](../packages/subagent/subagent) | [`subagent-spawn-in-process`](../packages/subagent/subagent-spawn-in-process), [`subagent-fork-in-process`](../packages/subagent/subagent-fork-in-process), [`subagent-acp`](../packages/subagent/subagent-acp), [`subagent-codex`](../packages/subagent/subagent-codex), [`subagent-claude-code`](../packages/subagent/subagent-claude-code), [`subagent-qilin-sdk`](../packages/subagent/subagent-qilin-sdk) | [`tool-subagent`](../packages/subagent/tool-subagent), [`tool-subagent-control`](../packages/subagent/tool-subagent-control), [`tool-ralph`](../packages/workflow/tool-ralph) | - | Providers implement transports; the service also owns optional Activation-based continuation orchestration, tool-subagent selects one-shot or continuable delegation, tool-subagent-control delivers follow-ups, and tool-ralph requires one fresh structured-output route. |
+| `ctx.speechToText` | `seam` | [`experimental-speech-to-text`](../packages/experimental/speech-to-text) | [`experimental-speech-to-text-sensevoice`](../packages/experimental/speech-to-text-sensevoice) | [`experimental-api-speech-to-text`](../packages/experimental/api-speech-to-text) | - | Routes explicit recognizers; the browser uses the authenticated Remote and keeps transcripts in the draft until submission. |
 | `ctx.agentTeams` | `core` | [`experimental-agent-team`](../packages/experimental/agent-team) | - | [`experimental-tool-agent-team`](../packages/experimental/tool-agent-team), [`experimental-client-ui-agent-team`](../packages/experimental/client-ui-agent-team) | - | Owns the implicit-root roster, durable peer mailbox, shared task DAG, continuable-child lifecycle, and generated Team Remote methods; tool-agent-team contributes model controls and client-ui-agent-team mounts the browser contribution. |
 | `ctx.inspector` | `core` | `inspector` | - | - | - | Owns the Worker-hosted CDP target and the transport-independent Host and Client observation and Cordis-tree query API. |
 | `ctx.jobs` | `seam` | [`jobs`](../packages/jobs/jobs) | [`jobs-local`](../packages/jobs/jobs-local) | [`tool-bash`](../packages/shell/tool-bash), [`tool-terminal`](../packages/terminal/tool-terminal), [`tool-subagent`](../packages/subagent/tool-subagent), [`tool-jobs`](../packages/jobs/tool-jobs) | - | Producers (background bash, PTY sends, and subagent delegations) register running work; tool-jobs is the model-facing controller that reads, lists, and kills it; jobs-local is the process-local registry. |

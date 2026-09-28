@@ -1,7 +1,7 @@
 {
   "name": "@qilin/hook-protocol",
   "description": "Shared Claude Code / Codex hook wire protocol: matcher engine, stdin/exit-code/stdout codec, multi-hook merge, and hook/* session events",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -35,15 +35,15 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/shell": "workspace:^",
-    "@qilin/invariants": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/shell": "workspace:*",
+    "@qilin/invariants": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/shell": "workspace:^",
-    "@qilin/invariants": "workspace:^",
-    "@qilin/session": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/shell": "workspace:*",
+    "@qilin/invariants": "workspace:*",
+    "@qilin/session": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   }
 }

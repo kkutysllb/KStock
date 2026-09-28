@@ -5,13 +5,14 @@
  * document language attribute.
  */
 import type { Context as ClientContext } from '@qilin/kylin'
+import type { LocalizedText } from '@qilin/package-manifest'
 import {
   type LocaleDictOf, type LocaleNamespaceMap, type Translate, type TranslateNS,
 } from '@qilin/client-ui-slots'
-// Type-only: the ctx.settingsScope Context merge and the settings slot types.
+// Type-only: the ctx.configForms Context merge and the settings slot types.
 // Cross-plugin collaboration goes through the service, never a value import
 // (client bundle purity gate).
-import type { SettingsScope } from '@qilin/client-ui-settings/client'
+import type { ConfigForm } from '@qilin/client-ui-settings/client'
 // Type-only: pulls the SlotRegistry service merge (ctx.slots).
 import type {} from '@qilin/client-ui-renderer/client'
 import {
@@ -154,7 +155,7 @@ export class LocaleRuntime {
   private snapshot: LocaleSnapshot
   private listeners = new Set<() => void>()
   private readonly ctx: ClientContext
-  private readonly host: SettingsScope<LocaleSettings> | undefined
+  private readonly host: ConfigForm<LocaleSettings> | undefined
   /** Browser-derived locale standing wherever no explicit Host selection does. */
   private provisional: LocaleId
   /** Last explicit selection, including one awaiting an external registration. */
@@ -166,7 +167,7 @@ export class LocaleRuntime {
    * @param host - durable preference scope owned by the providing plugin;
    * absent compositions (standalone dictionary registries) stay process-local.
    */
-  constructor(ctx: ClientContext, host?: SettingsScope<LocaleSettings>) {
+  constructor(ctx: ClientContext, host?: ConfigForm<LocaleSettings>) {
     this.ctx = ctx
     this.host = host
     for (const locale of BUILT_IN_LOCALES) this.catalog.set(localeKey(locale.id), locale)
@@ -185,6 +186,20 @@ export class LocaleRuntime {
    */
   getLocale(): LocaleSnapshot {
     return this.snapshot
+  }
+
+  /**
+   * Resolve package text through the active language's declared fallback chain.
+   * Plain strings stay verbatim; maps do not consult registered dictionaries.
+   * @param text - package text whose locale keys are lowercase and include English.
+   * @returns the first available translation, including an empty string.
+   */
+  resolveText(text: LocalizedText): string {
+    if (typeof text === 'string') return text
+    return this.fallbackChain(this.snapshot.active).reduceRight(
+      (resolved, locale) => text[localeKey(locale)] ?? resolved,
+      text.en,
+    )
   }
 
   /**
@@ -269,7 +284,7 @@ export class LocaleRuntime {
    * absent selection returns to the browser-derived locale.
    * @param host - the constructor-narrowed scope driving this adoption.
    */
-  private adopt(host: SettingsScope<LocaleSettings>): void {
+  private adopt(host: ConfigForm<LocaleSettings>): void {
     const section = host.getSnapshot().value
     if (section === undefined) return
     this.preference = section.preference
@@ -515,7 +530,7 @@ function detectBrowserLocale(locales: readonly LocaleDefinition[]): LocaleId | u
 }
 
 /** Required services: slot registration plus the settings transport. */
-export const inject = ['slots', 'remote', 'settingsScope']
+export const inject = ['slots', 'remote', 'configForms']
 
 /**
  * Client plugin body: provide the locale service with base dictionaries and
@@ -525,7 +540,7 @@ export const inject = ['slots', 'remote', 'settingsScope']
  * @param ctx - client cordis context.
  */
 export function apply(ctx: ClientContext): void {
-  const host = ctx.settingsScope.bind<LocaleSettings>({ namespace: LOCALE_SETTINGS_NAMESPACE })
+  const host = ctx.configForms.get<LocaleSettings>(LOCALE_SETTINGS_NAMESPACE)
   const locale = new LocaleRuntime(ctx, host)
   locale.register(COMMON_NS, { zh, en })
   ctx.provide('locale', locale)

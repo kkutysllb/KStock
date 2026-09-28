@@ -8,10 +8,14 @@
  * not the slot runtime.
  */
 import { onTestFinished, vi } from 'vitest'
-import type { PropsRenderSlots } from '@qilin/client-ui-slots'
+import { Context } from '@qilin/kylin'
+import { ResourceRegistry } from '@qilin/client-resources/src/client/resources.ts'
+import type { RenderOpts } from '@qilin/client-ui-slots'
+import type { UseSidebarRightTabInfo } from '@qilin/client-ui-sidebar-right/client'
 import type { Mock } from 'vitest'
 import { act } from '@testing-library/react'
 import { createElement, useSyncExternalStore } from 'react'
+import type { ReactNode } from 'react'
 import type { RemoteFailure, RemoteResult } from '@qilin/api-remotes/client'
 import type { ResourceSnapshot } from '@qilin/client-resources/client'
 import type { SessionId } from '@qilin/session/types'
@@ -22,15 +26,36 @@ import type { TextInjected } from '../src/client/face.ts'
 import type { ReadDocumentBytes, ReadWorkspaceFilePage, SessionFile } from '../src/client/rpc.ts'
 import { createTextStore } from '../src/client/store.ts'
 import type { TextStore } from '../src/client/store.ts'
-import type { DocumentPreviewProps } from '../src/client/document/contract.ts'
+import type { DocumentBodyOwner, DocumentPreviewProps } from '../src/client/document/contract.ts'
 import { TextBody } from '../src/client/text/TextBody.tsx'
 import { textBodyDefinition } from '../src/client/text/index.ts'
 import type { TabId } from '@qilin/client-ui-dockkit'
 
-type BodySlot = PropsRenderSlots<'sidebar.right.tab.document'>['renderSlot']
+/** One document-body dispatch, with the file owner and the enclosing tab hook a body fixture reads. */
+type BodyDispatch = (
+  key: 'sidebar.right.tab.document',
+  owner: DocumentBodyOwner,
+  opts: RenderOpts & { hookContext: UseSidebarRightTabInfo },
+) => ReactNode
 
-/** Preserve the body-slot callback used by component fixtures. */
-export function documentSlots(body: BodySlot): TextPreviewProps['renderSlot'] { return body }
+/** A real resource face over a fresh Context; the face's membership bookkeeping is what the specs drive. */
+export function createResources(): ResourceRegistry {
+  const ctx = new Context()
+  onTestFinished(() => ctx.fiber.dispose())
+  return new ResourceRegistry(ctx)
+}
+
+/**
+ * Preserve the body-slot callback used by component fixtures. The frame's
+ * other child seats carry owner shapes these body fixtures never render, so
+ * only the document body dispatch reaches the fixture's callback.
+ */
+export function documentSlots(body: BodyDispatch): TextPreviewProps['renderSlot'] {
+  return (key: string, owner: object, opts?: RenderOpts & { hookContext?: unknown }): ReactNode =>
+    key === 'sidebar.right.tab.document'
+      ? body(key, owner as DocumentBodyOwner, opts as Parameters<BodyDispatch>[2])
+      : null
+}
 
 export const TAB_ID = 'tab-1' as TabId
 export const SESSION = 's-1' as SessionId
@@ -129,7 +154,7 @@ export function harness(
   const read = vi.fn<ReadWorkspaceFilePage>((_session, _path, offset) =>
     Promise.resolve(pages[offset] ?? failure('workspace-file/not-found', { path: PATH })))
   const bytes = vi.fn<ReadDocumentBytes>()
-  const face = textFace(read, bytes)(SESSION, instance.actions)
+  const face = textFace(read, bytes, createResources())(SESSION, instance.actions)
   const current = { version: 'v1' as string | undefined, failure: undefined as RemoteFailure | undefined, snapshot: meta('v1', undefined) }
   const refresh = (): void => { current.snapshot = meta(current.version, current.failure) }
   const useResource = vi.fn<() => ResourceSnapshot<WorkspaceFileStat>>(() => current.snapshot)
@@ -159,6 +184,7 @@ export function harness(
     reloadPages: face.reloadPages,
     prepareRenderer: face.prepareRenderer, loadAll: face.loadAll,
     reloadAll: face.reloadAll,
+    addResource: face.addResource, setResources: face.setResources,
     useDocumentPreviews: () => definitions,
     renderSlot,
     t,

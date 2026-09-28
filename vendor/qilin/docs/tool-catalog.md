@@ -32,7 +32,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@qilin/tool-fs-search` | `glob`, `grep` | `ctx.tools`, `ctx.subprocess`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | glob and grep are unconditional discovery tools that spawn the packaged ripgrep binary (`@vscode/ripgrep`) through ctx.subprocess as ordinary foreground calls (never background jobs) — no host `rg` install and no shell layer. The catalog uses `sampleOverCapGlobResults: true`; deployments must choose that behavior explicitly. Capped results save the complete formatted list through the optional ctx.spillStore backend; returned locators are follow-up-readable/searchable when the backend exposes local paths in co-located deployments. |
 | `@qilin/tool-terminal` | `terminal_close`, `terminal_list`, `terminal_open`, `terminal_read`, `terminal_send`, `terminal_signal` | `ctx.tools`, `ctx.terminals`, `ctx.systemPrompt`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The six terminal tools are opt-in and complement one-shot shell/filesystem tools. `terminal_send(run_in_background: true)` registers with `ctx.jobs`; TUI, named key sequences, BEL, resize, auto-start, and cross-agent sharing are absent from the schema. |
 | `@qilin/tool-goal` | `create_goal`, `get_goal`, `update_goal` | `ctx.tools`, `ctx.agents`, `ctx.goals`, `ctx.systemPrompt`, `a calling Agent in an authorized open turn` | `tool/call`, `goal/change for mutations`, `tool/result` | - | create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds. |
-| `@qilin/schedule` | `schedule_create`, `schedule_delete`, `schedule_list` | `ctx.tools`, `ctx.sessions`, `Session persistence`, `a future live root Agent` | `tool/call`, `schedule/change create or delete`, `tool/result` | - | Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier. |
+| `@qilin/schedule` | `schedule_create`, `schedule_delete`, `schedule_list`, `schedule_update` | `ctx.tools`, `ctx.schedule`, `a live root Agent` | `tool/call`, `Schedule storage domain create, update, or delete`, `tool/result` | - | Registered in live root Agent scopes while the opt-in Schedule service is loaded. Accepts after_seconds, explicit absolute at, bounded fixed-rate every_seconds, daily and weekly local times in an explicit IANA zone, and cron as a five-field expression. Management uses the Host storage domain; due messages resume the original Session. |
 | `@qilin/tool-lsp` | `lsp` | `ctx.tools`, `ctx.lsp`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@qilin/lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema. |
 | `@qilin/tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
 | `@qilin/tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
@@ -43,6 +43,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@qilin/experimental-tool-agent-team` | `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All nine tools are scoped to implicit Team Leads and durable teammates. The shipped qilin-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
 | `@qilin/tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@qilin/tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
+| `@qilin/tool-workspace-dependencies` | `load_workspace_dependencies` | `ctx.tools` | `tool/call`, `tool/result` | - | - |
 | `@qilin/tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
 
 <a id="qilinplugin-manager"></a>
@@ -51,7 +52,7 @@ This table connects model-visible tool names to the plugin package and service s
 
 ### `plugin_manager`
 
-List plugins or bundles in the current profile, enable or disable them, install a bundle, or remove an installed bundle. Every action requires danger-full-access permission or approval for this call. Approval does not change the session permission mode. Changes affect every session in this profile. List first to obtain exact identifiers. Package installation can execute allowed build scripts. Live profiles apply changes immediately; startup profiles require restart.
+List plugins or bundles in the current profile, enable or disable them, install a bundle, or remove an installed bundle. Every action requires danger-full-access permission or approval for this call. Approval does not change the session permission mode. Changes affect every session in this profile. List first to obtain exact identifiers. Package installation can execute allowed build scripts. Live profiles apply changes immediately; startup profiles require restart. Incompatible qilin peer dependencies block installation and activation. Version exemptions risk crashes and data loss: warn the user and obtain explicit permission for the exact plugin and runtime versions before granting one.
 
 ```json
 {
@@ -66,7 +67,9 @@ List plugins or bundles in the current profile, enable or disable them, install 
         "set_plugin",
         "set_bundle",
         "install_bundle",
-        "remove_bundle"
+        "remove_bundle",
+        "list_version_exemptions",
+        "set_version_exemption"
       ]
     },
     "target": {
@@ -75,7 +78,15 @@ List plugins or bundles in the current profile, enable or disable them, install 
     },
     "enabled": {
       "type": "boolean",
-      "description": "Required for set operations; defaults to true for installation."
+      "description": "Required for set operations; defaults to true for installation. For set_version_exemption, true grants and false revokes."
+    },
+    "runtimeVersion": {
+      "type": "string",
+      "description": "For set_version_exemption: exact qilin version from list_version_exemptions. Target must be the manifest package-name@version, not an alias or version range."
+    },
+    "acceptRisk": {
+      "type": "boolean",
+      "description": "For granting an exemption: true only after warning the user about possible crashes and data loss and receiving explicit permission for this exact plugin/runtime pair. General installation permission is not enough."
     },
     "approvedBuilds": {
       "type": "array",
@@ -727,7 +738,7 @@ Source: [`packages/extensions/tool-kylin/src/index.ts`](../packages/extensions/t
 
 ### `cordis_inspect_query`
 
-Run a read-only query explicitly declared by an Inspect Provider. platform, provider, and method must come from cordis_inspect_list, and input must satisfy that method's schema. Use this Tool before writing plugin code to read exact Service methods, Event modes, Builtin signatures, Tool schemas, theme tokens, or live Slot trees and props. Host queries run locally. A Client query waits for the first valid page response and remains pending until a page answers or the Tool is cancelled. This Tool cannot invoke business Service methods or modify the runtime. For Service.listService and Event.listEvents, query without input to navigate the compact signature directory, then query the exact service or event for its structured contract and referenced types. For Slots.listSubTree, query without root to navigate the compact tree, then query an exact Slot root for its complete registration contract and props; an exact Factory root returns its identity, scope, and registrant.
+Run a read-only query explicitly declared by an Inspect Provider. platform, provider, and method must come from cordis_inspect_list, and input must satisfy that method's schema. Use this Tool before writing plugin code to read exact Service methods, Event modes, plugin Config schemas, Builtin signatures, Tool schemas, theme tokens, or live Slot trees and props. Host queries run locally. A Client query waits for the first valid page response and remains pending until a page answers or the Tool is cancelled. This Tool cannot invoke business Service methods or modify the runtime. For Service.listService and Event.listEvents, query without input to navigate the compact signature directory, then query the exact service or event for its structured contract and referenced types. For Slots.listSubTree, query without root to navigate the compact tree, then query an exact Slot root for its complete registration contract and props; an exact Factory root returns its identity, scope, and registrant.
 
 ```json
 {
@@ -1367,7 +1378,7 @@ create, edit, pause, and resume require direct-human root authority; complete an
 
 ### `schedule_create`
 
-Create one reminder in the current session. Supply a non-empty prompt and exactly one selector: a positive safe-integer after_seconds delay, at as a strict offset date-time or local date/time object, or safe-integer every_seconds of at least 300. Fixed-rate reminders stay creation-aligned, skip missed occurrences, and batch one latest occurrence per overdue rule. Delivery is session-local: the reminder runs on time only while this session is live and otherwise becomes overdue until the session is resumed.
+Create a reminder in the current session that delivers prompt when it becomes due. Supply exactly one timing parameter: after_seconds, at, every_seconds, daily, weekly, or cron. Local times that do not exist in the zone are skipped; repeated local times fire once, at the earlier instant. After downtime, a recurring reminder delivers only its latest missed occurrence. Delivery can repeat after a crash.
 
 ```json
 {
@@ -1377,13 +1388,82 @@ Create one reminder in the current session. Supply a non-empty prompt and exactl
       "type": "string",
       "description": "Reminder content to present when the target becomes due."
     },
+    "title": {
+      "type": "string",
+      "description": "Task name of at most 120 characters, shown on the task card and in task lists."
+    },
     "after_seconds": {
       "type": "number",
-      "description": "Positive safe-integer delay in seconds."
+      "description": "Delay in whole seconds."
     },
     "every_seconds": {
       "type": "number",
-      "description": "Fixed-rate safe-integer interval in seconds, at least 300."
+      "description": "Fixed-rate interval in whole seconds, at least 60, aligned to the creation time; changing it with schedule_update re-aligns it to the save time."
+    },
+    "daily": {
+      "type": "object",
+      "description": "Every day at a local time.",
+      "additionalProperties": false,
+      "properties": {
+        "time": {
+          "type": "string",
+          "description": "HH:mm:ss with optional 1-3 fractional digits, for example 23:00:00."
+        },
+        "time_zone": {
+          "type": "string",
+          "description": "UTC or IANA Area/Location, for example Asia/Shanghai."
+        }
+      },
+      "required": [
+        "time",
+        "time_zone"
+      ]
+    },
+    "weekly": {
+      "type": "object",
+      "description": "On the given weekdays at a local time.",
+      "additionalProperties": false,
+      "properties": {
+        "time": {
+          "type": "string",
+          "description": "HH:mm:ss with optional 1-3 fractional digits, for example 09:00:00."
+        },
+        "time_zone": {
+          "type": "string",
+          "description": "UTC or IANA Area/Location, for example Asia/Shanghai."
+        },
+        "weekdays": {
+          "type": "array",
+          "description": "ISO weekdays, Monday 1 through Sunday 7, without repetitions.",
+          "items": {
+            "type": "integer"
+          }
+        }
+      },
+      "required": [
+        "time",
+        "time_zone",
+        "weekdays"
+      ]
+    },
+    "cron": {
+      "type": "object",
+      "description": "Five-field Vixie cron expression in a time zone.",
+      "additionalProperties": false,
+      "properties": {
+        "expression": {
+          "type": "string",
+          "description": "minute hour day-of-month month day-of-week, for example \"*/15 9-17 * * 1-5\". When both day fields are restricted, a date matches if either one matches."
+        },
+        "time_zone": {
+          "type": "string",
+          "description": "UTC or IANA Area/Location, for example Asia/Shanghai."
+        }
+      },
+      "required": [
+        "expression",
+        "time_zone"
+      ]
     },
     "at": {
       "oneOf": [
@@ -1411,11 +1491,12 @@ Create one reminder in the current session. Supply a non-empty prompt and exactl
           ]
         }
       ],
-      "description": "Absolute target as strict offset RFC 3339 or local date/time with an explicit IANA zone."
+      "description": "Absolute target: an RFC 3339 date-time with offset, or a local date, time, and IANA time_zone."
     }
   },
   "required": [
-    "prompt"
+    "prompt",
+    "title"
   ]
 }
 ```
@@ -1424,7 +1505,7 @@ Source: [`packages/schedule/schedule/src/tools.ts`](../packages/schedule/schedul
 
 ### `schedule_delete`
 
-Delete one active reminder in the current session by the exact id returned by schedule_create or schedule_list. Unknown or already-finished ids return deleted false.
+Delete a reminder in the current session, active or inactive. Deletion does not retract a reminder message that is already queued.
 
 ```json
 {
@@ -1432,7 +1513,7 @@ Delete one active reminder in the current session by the exact id returned by sc
   "properties": {
     "id": {
       "type": "string",
-      "description": "Exact session-local schedule id."
+      "description": "Schedule id returned by schedule_list."
     }
   },
   "required": [
@@ -1445,7 +1526,7 @@ Source: [`packages/schedule/schedule/src/tools.ts`](../packages/schedule/schedul
 
 ### `schedule_list`
 
-List every active reminder in the current session in creation order, including its exact id, UTC target, scheduled or overdue state, and session-local delivery mode.
+List the active reminders in the current session.
 
 ```json
 {
@@ -1456,7 +1537,133 @@ List every active reminder in the current session in creation order, including i
 
 Source: [`packages/schedule/schedule/src/tools.ts`](../packages/schedule/schedule/src/tools.ts)
 
-Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier.
+### `schedule_update`
+
+Change a reminder in place, keeping its id. Supply a new title, prompt, or at most one timing parameter; omitted fields keep their stored values. To change a relative delay, create a new reminder.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Schedule id returned by schedule_list."
+    },
+    "title": {
+      "type": "string",
+      "description": "New task name of at most 120 characters."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "New reminder content."
+    },
+    "every_seconds": {
+      "type": "number",
+      "description": "Fixed-rate interval in whole seconds, at least 60, aligned to the creation time; changing it with schedule_update re-aligns it to the save time."
+    },
+    "daily": {
+      "type": "object",
+      "description": "Every day at a local time.",
+      "additionalProperties": false,
+      "properties": {
+        "time": {
+          "type": "string",
+          "description": "HH:mm:ss with optional 1-3 fractional digits, for example 23:00:00."
+        },
+        "time_zone": {
+          "type": "string",
+          "description": "UTC or IANA Area/Location, for example Asia/Shanghai."
+        }
+      },
+      "required": [
+        "time",
+        "time_zone"
+      ]
+    },
+    "weekly": {
+      "type": "object",
+      "description": "On the given weekdays at a local time.",
+      "additionalProperties": false,
+      "properties": {
+        "time": {
+          "type": "string",
+          "description": "HH:mm:ss with optional 1-3 fractional digits, for example 09:00:00."
+        },
+        "time_zone": {
+          "type": "string",
+          "description": "UTC or IANA Area/Location, for example Asia/Shanghai."
+        },
+        "weekdays": {
+          "type": "array",
+          "description": "ISO weekdays, Monday 1 through Sunday 7, without repetitions.",
+          "items": {
+            "type": "integer"
+          }
+        }
+      },
+      "required": [
+        "time",
+        "time_zone",
+        "weekdays"
+      ]
+    },
+    "cron": {
+      "type": "object",
+      "description": "Five-field Vixie cron expression in a time zone.",
+      "additionalProperties": false,
+      "properties": {
+        "expression": {
+          "type": "string",
+          "description": "minute hour day-of-month month day-of-week, for example \"*/15 9-17 * * 1-5\". When both day fields are restricted, a date matches if either one matches."
+        },
+        "time_zone": {
+          "type": "string",
+          "description": "UTC or IANA Area/Location, for example Asia/Shanghai."
+        }
+      },
+      "required": [
+        "expression",
+        "time_zone"
+      ]
+    },
+    "at": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "date": {
+              "type": "string"
+            },
+            "time": {
+              "type": "string"
+            },
+            "time_zone": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "date",
+            "time",
+            "time_zone"
+          ]
+        }
+      ],
+      "description": "Absolute target: an RFC 3339 date-time with offset, or a local date, time, and IANA time_zone."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/schedule/schedule/src/tools.ts`](../packages/schedule/schedule/src/tools.ts)
+
+Registered in live root Agent scopes while the opt-in Schedule service is loaded. Accepts after_seconds, explicit absolute at, bounded fixed-rate every_seconds, daily and weekly local times in an explicit IANA zone, and cron as a five-field expression. Management uses the Host storage domain; due messages resume the original Session.
 
 <a id="qilintool-lsp"></a>
 
@@ -1882,7 +2089,7 @@ Source: [`packages/subagent/tool-subagent-control/src/index.ts`](../packages/sub
 
 ### `list_agents`
 
-List your continuable background subagents by durable id and label. Use it to recall which ones you started, not to poll for completion — you are told when one finishes. Status comes from the live registry: running means the agent is working right now, idle means it is loaded but between turns (it may be waiting on agents it started), and ready means it exists only in storage — resumable, not terminal, and not a result waiting to be collected; a `send_message` steers a running child at its nearest step boundary or starts a turn for an idle or ready child, and a direct child remains a `send_message` candidate in every status. The snapshot is not a delivery promise — `send_message` performs the authoritative check and may still fail. Children that could not be read are reported as diagnostics instead of being silently dropped. Scope `descendants` walks the whole tree below you in stable pre-order, annotating each entry with its durable direct-parent session id and depth. You may use `send_message` only for depth-1 entries; deeper entries are candidates for `interrupt_agent` only.
+List your continuable background subagents by durable id and label. Use it to recall which ones you started, not to poll for completion — you are told when one finishes. Status comes from the live registry: running means the agent is working right now; inactive means no turn is executing, whether the child is loaded or must be resumed. inactive does not describe task completion, success, failure, or waiting for other agents. A `send_message` steers a running child at its nearest step boundary or starts or resumes a turn for an inactive child, and a direct child remains a `send_message` candidate in every status. The snapshot is not a delivery promise — `send_message` performs the authoritative check and may still fail. Children that could not be read are reported as diagnostics only in `descendants` scope. Scope `descendants` walks the whole tree below you in stable pre-order, annotating each entry with its durable direct-parent session id and depth. You may use `send_message` only for depth-1 entries; deeper entries are candidates for `interrupt_agent` only.
 
 ```json
 {
@@ -1904,7 +2111,7 @@ Source: [`packages/subagent/tool-subagent-control/src/list-agents.ts`](../packag
 
 ### `send_message`
 
-Send a message to a direct continuable child by its agent id. If you are a resident continuable child, you may also target your direct parent. If the target is still working, the message steers its nearest step; if it is idle, the message starts a turn. This call returns no answer from the agent — only confirmation that the message was delivered. A failure means the message was NOT delivered.
+Send a message to a direct continuable child by its agent id. If you are a resident continuable child, you may also target your direct parent. If the target is still working, the message steers its nearest step; if it is inactive, the message starts or resumes a turn. This call returns no answer from the agent — only confirmation that the message was delivered. A failure means the message was NOT delivered.
 
 ```json
 {
@@ -1936,7 +2143,7 @@ The globally named control tools over continuable background subagents: provider
 
 ### `job_kill`
 
-Request cancellation of a running background job by job id. Returns immediately; the job settles as killed once its work actually stops.
+Request cancellation of a running background job.
 
 ```json
 {
@@ -1974,7 +2181,7 @@ Source: [`packages/jobs/tool-jobs/src/index.ts`](../packages/jobs/tool-jobs/src/
 
 ### `job_output`
 
-Read a background job. Stream jobs return only output since the previous read; final-output jobs return their result after settlement. Every response ends with `[status: ...]`. Reads are non-blocking unless `wait: true`, which waits up to the configured cap.
+Read a background job: output since the previous read for stream jobs, or the result of a finished final-output job.
 
 ```json
 {
@@ -1986,11 +2193,11 @@ Read a background job. Stream jobs return only output since the previous read; f
     },
     "wait": {
       "type": "boolean",
-      "description": "Block until the job reaches a terminal status or the timeout expires. A timed-out wait returns [status: running] and leaves the job alive."
+      "description": "Block until the job finishes or the timeout expires; a timed-out wait leaves the job running. Defaults to false."
     },
     "timeout_ms": {
       "type": "number",
-      "description": "Max wait in milliseconds (only meaningful with wait: true). Defaults to the configured wait timeout; capped by the configured maximum."
+      "description": "Max wait in milliseconds with wait: true. Defaults to and is capped by configuration."
     }
   },
   "required": [
@@ -2361,7 +2568,7 @@ Script-body hooks:
 
 Misused hooks (bad arguments, unknown options, unsupported schemas, tripped caps) throw errors that ALWAYS kill the script — they never dissolve into a per-item `null`.
 
-Constraints: concurrency and total-agent caps apply; no filesystem, network, timers, or Node.js APIs are provided — the agents do the work, the script only coordinates them. The run executes in the foreground: this call returns when the whole script finishes.
+Constraints: concurrency and total-agent caps apply; no filesystem, network, timers, or Node.js APIs are provided — the agents do the work, the script only coordinates them.
 
 ```json
 {
@@ -2427,6 +2634,10 @@ Constraints: concurrency and total-agent caps apply; no filesystem, network, tim
       "type": "object",
       "description": "Optional JSON input exposed to the script as the `args` global (wrap a bare list as a field, e.g. {\"files\": [...]}).",
       "additionalProperties": true
+    },
+    "run_in_background": {
+      "type": "boolean",
+      "description": "Run as a background job: return a job id immediately instead of waiting; the return value arrives with the completion notice."
     }
   },
   "required": [
@@ -2437,6 +2648,23 @@ Constraints: concurrency and total-agent caps apply; no filesystem, network, tim
 ```
 
 Source: [`packages/workflow/tool-workflow/src/index.ts`](../packages/workflow/tool-workflow/src/index.ts)
+
+<a id="qilintool-workspace-dependencies"></a>
+
+## `@qilin/tool-workspace-dependencies`
+
+### `load_workspace_dependencies`
+
+Get absolute paths to bundled Python and library directories, plus bundled Python distribution versions. Node.js and pnpm paths are included when the payload provides them. Python includes numpy, pandas, python-docx, python-pptx, openpyxl, Pillow, lxml, and XlsxWriter. Use these libraries for Office files unless the user or workspace instructions select another environment. When Node.js and pnpm paths are returned, run pnpm with that Node executable and pnpm script path. This does not change PATH or package-manager settings.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/skill/tool-workspace-dependencies/src/index.ts`](../packages/skill/tool-workspace-dependencies/src/index.ts)
 
 <a id="qilintool-web"></a>
 

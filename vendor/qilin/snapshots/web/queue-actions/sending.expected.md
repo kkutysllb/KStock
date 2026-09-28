@@ -1,38 +1,26 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Reply with a one-sentence description" [disabled]
-  - img
   - text: Standard mode
-  - button "Open right sidebar":
-    - img
-- button "System prompt":
-  - img
-  - img
-  - text: System prompt
+  - button "Open right sidebar"
+- button "System prompt"
 - text: Reply with a one-sentence description of event sourcing, then stop. {{clock}}
-- button "Copy":
-  - img
-- button "Context injection @qilin/system-prompt":
-  - img
-  - img
-  - text: Context injection @qilin/system-prompt
-- paragraph: partial
+- button "Copy"
+- button "Edit this message and resend"
 - status: QiLin...
+- button "QiLin... for {{duration}}" [disabled] [expanded]
+- button "Context injection runtime-context"
+- button "Context injection time-context"
+- paragraph: partial
 - list:
   - listitem:
     - text: Queue item to remove
     - status: Sending…
-    - button "Edit queued message" [disabled]:
-      - img
-    - button "Remove queued message" [disabled]:
-      - img
-    - button "Steer queued message" [disabled]:
-      - img
+    - button "Edit queued message" [disabled]
+    - button "Remove queued message" [disabled]
+    - button "Steer queued message" [disabled]
 - textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands":
-  - img
+- button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash":
-  - text: DeepSeek-V4-Flash
-  - img
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
 - button "Stop generating"

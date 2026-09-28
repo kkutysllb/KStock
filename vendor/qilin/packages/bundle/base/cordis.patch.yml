@@ -393,7 +393,7 @@
     - id: spill-policy
       name: '@qilin/spill-policy'
       config:
-        maxInlineBytes: 50000
+        maxInlineTokens: 12500
 
     # Durability checkpoints before each model request and top-level dispatch.
     - id: session-checkpoint-policy
@@ -509,4 +509,4 @@
     # key coming from the credential store below. Thinking defaults are a deployment
     # choice.
     - id: llm-deepseek
-      name: '@qilin/llm-deepseek'
+      name: '@qilin/llm-deepseek-api-key'

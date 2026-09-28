@@ -1,7 +1,7 @@
 {
   "name": "@qilin/client-ui-settings-mcp",
   "description": "MCP servers page in Web Settings: patch-layer CRUD over the mcpServers Remote",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -44,20 +44,20 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^"
+    "@qilin/kylin": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/api-remotes": "workspace:^",
-    "@qilin/client-locale": "workspace:^",
-    "@qilin/client-store": "workspace:^",
-    "@qilin/client-test-runtime": "workspace:^",
-    "@qilin/client-ui-primitives": "workspace:^",
-    "@qilin/client-ui-renderer": "workspace:^",
-    "@qilin/client-ui-settings": "workspace:^",
-    "@qilin/client-ui-slots": "workspace:^",
-    "@qilin/mcp-servers": "workspace:^",
-    "@qilin/typert-protocol": "workspace:^",
+    "@qilin/kylin": "workspace:~",
+    "@qilin/api-remotes": "workspace:*",
+    "@qilin/client-locale": "workspace:*",
+    "@qilin/client-store": "workspace:*",
+    "@qilin/client-test-runtime": "workspace:*",
+    "@qilin/client-ui-primitives": "workspace:*",
+    "@qilin/client-ui-renderer": "workspace:*",
+    "@qilin/client-ui-settings": "workspace:*",
+    "@qilin/client-ui-slots": "workspace:*",
+    "@qilin/mcp-servers": "workspace:*",
+    "@qilin/typert-protocol": "workspace:*",
     "@testing-library/react": "^16.1.0",
     "@types/react": "~18.3.1",
     "react": "^18.2.0",

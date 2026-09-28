@@ -3,7 +3,8 @@ import type { Context } from '@qilin/kylin'
 import type { ImageAttachmentRef } from '@qilin/attachment'
 import type {} from '@qilin/api-remotes/client'
 import type { SessionBinding } from '@qilin/api-session-controller/client'
-import type { ObservableSnapshot } from '@qilin/client-store'
+import type { GroupKey } from '@qilin/client-ui-conversation/client'
+import { createSnapshotStore, type ObservableSnapshot } from '@qilin/client-store'
 import type { SessionId } from '@qilin/session/types'
 import type {} from '@qilin/client-ui-sidebar-right/client'
 import type {} from '@qilin/client-ui-sidebar-browser/client'
@@ -22,7 +23,7 @@ import type {} from '@qilin/client-ui-session/client'
 import type {} from '@qilin/client-ui-settings/client'
 import type {} from '@qilin/client-ui-workspace/client'
 import type {
-  ChatNodeTurnDataInjected, ChatScrollPosition, ChatViewInjected,
+  ChatNodeInjected, ChatScrollPosition, ChatViewInjected,
   TurnTailOwnerProps,
 } from './contract/slots.ts'
 import type { ChatSnapshot } from './contract/snapshot.ts'
@@ -33,24 +34,30 @@ import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { StatsPills } from './chat/StatsPills.tsx'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
 import { en, NS, zh } from './locale.ts'
+import { LinkOpeningRow, type LinkOpeningRowInjected } from './settings/LinkOpeningRow.tsx'
+import { PerformanceUsageRow, type PerformanceUsageRowInjected } from './settings/PerformanceUsageRow.tsx'
 import { TranscriptViewRow, type TranscriptViewRowInjected } from './settings/TranscriptViewRow.tsx'
 import { createChatStore } from './stores.ts'
 import { TranscriptViewPolicy } from './transcript-view.ts'
-import { CHAT_SETTINGS_NAMESPACE, type ChatSettings } from '../chat-settings.ts'
+import { PerformanceUsagePolicy } from './performance-usage.ts'
+import { derivePresentationPolicy } from './presentation-policy.ts'
+import { CHAT_SETTINGS_NAMESPACE, DEFAULT_LINK_OPENING, type ChatSettings, type LinkOpening } from '../chat-settings.ts'
 import { useTurnDataValue } from './chat/use-turn-data.ts'
+import { bindDisclosure } from './chat/use-disclosure.ts'
 
-const CHAT_NODE_INJECT: ChatNodeTurnDataInjected = {
+const CHAT_NODE_INJECT: ChatNodeInjected = {
   hooks: {
-    turnData: (_standard, data) => function useTurnData(key) {
-      return useTurnDataValue(data, key)
+    turnData: (_standard, { turnData }) => function useTurnData(key) {
+      return useTurnDataValue(turnData, key)
     },
+    disclosure: (_standard, { disclosureReset }) => bindDisclosure(disclosureReset),
   },
 }
 
 /** Services required by the Chat target and its presentation registrations. */
 export const inject = [
   'slots', 'sessions', 'uiWorkspace', 'uiSession', 'uiConversation', 'locale',
-  'settingsScope', 'remote', 'remote.session', 'sidebarRight',
+  'configForms', 'remote', 'remote.session', 'sidebarRight',
 ]
 
 /**
@@ -72,7 +79,6 @@ export function apply(ctx: Context): void {
     return source
   }
   registerConversationNodes(ctx)
-  registerChatNodeRenderers(ctx)
   ctx.uiSession.provide({
     hooks: ['chat'],
     resolve: binding => ({ hooks: { chat: chatSource(binding) } }),
@@ -82,10 +88,53 @@ export function apply(ctx: Context): void {
   const t = ctx.locale.bind(NS)
   const chatStore = createChatStore()
   const chatScrollPositions = new Map<SessionId, ChatScrollPosition>()
-  const transcriptView = new TranscriptViewPolicy(
-    ctx.settingsScope.bind<ChatSettings>({ namespace: CHAT_SETTINGS_NAMESPACE }),
+  const chatSettings = ctx.configForms.get<ChatSettings>(CHAT_SETTINGS_NAMESPACE)
+  const transcriptView = new TranscriptViewPolicy(chatSettings)
+  const presentation = derivePresentationPolicy(transcriptView.mode)
+  const performancePolicy = new PerformanceUsagePolicy(chatSettings)
+  ctx.effect(() => () => { transcriptView.dispose(); performancePolicy.dispose() })
+  const performanceUsage = performancePolicy.mode
+  registerChatNodeRenderers(ctx, performanceUsage, presentation)
+  // The local link destination stays usable in front of persistence: writes
+  // ride the scope, whose accepted section reconciles the local choice.
+  const linkOpening = createSnapshotStore<LinkOpening>(
+    chatSettings.getSnapshot().value?.linkOpening ?? DEFAULT_LINK_OPENING,
   )
-
+  ctx.effect(() => chatSettings.subscribe(() => {
+    const accepted = chatSettings.getSnapshot().value?.linkOpening
+    if (accepted !== undefined) linkOpening.set(accepted)
+  }))
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'link-opening',
+    order: 14,
+    locale: NS,
+    inject: (): LinkOpeningRowInjected => ({
+      hooks: {
+        linkOpening,
+        browserAvailable: {
+          getSnapshot: () => ctx.get('sidebarRightTabs')?.get('browser') !== undefined,
+          subscribe: listener => ctx.get('sidebarRightTabs')?.subscribe(listener) ?? (() => {}),
+        },
+      },
+      setLinkOpening: (destination) => {
+        linkOpening.set(destination)
+        void chatSettings.set('linkOpening', destination).catch((_error: unknown) => {
+          // The local choice remains usable when persistence is unavailable.
+        })
+      },
+    }),
+  }, LinkOpeningRow))
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'performance-usage',
+    order: 13,
+    locale: NS,
+    inject: (): PerformanceUsageRowInjected => ({
+      hooks: { performanceUsage },
+      setPerformanceUsage: (mode) => { performancePolicy.setMode(mode) },
+    }),
+  }, PerformanceUsageRow))
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
     id: 'transcript-view',
@@ -114,11 +163,14 @@ export function apply(ctx: Context): void {
         if (binding === undefined) throw new Error(`ui-chat: unknown session "${sessionId}"`)
         const session = binding.session
         const chat = chatSource(binding)
+        const conversation = ctx.uiConversation.binding(binding)
         return {
-          hooks: { transcriptView: transcriptView.mode },
+          hooks: { presentation },
           keyedHooks: {
             chatNode: key => chat.getSnapshot().nodes.source(key),
             chatNodeProcess: key => chat.getSnapshot().nodes.processSource(key),
+            chatGroup: key => conversation.snapshot.getSnapshot()
+              .views.grouped('chat')?.groupSource(key as GroupKey),
           },
           fileMentions: (owner: TurnTailOwnerProps) => ctx.get('chatFileMentions')?.forClosing(owner, sessionId),
           // A tool card's inspect action opens the Sidebar's ledger tab,
@@ -151,7 +203,7 @@ export function apply(ctx: Context): void {
             ctx.get('inputTriggers')?.sessionOf(scope).openReference('skill', { ref: `/${name}` })
           },
           openExternalLink: (url) => {
-            if (ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
+            if (linkOpening.getSnapshot() === 'sidebar' && ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
               // KStock patch: X-Frame-Options / frame-ancestors refusals still
               // fire the iframe load event, so the embedded Browser renders a
               // blank frame with no failure notice. Ask the KStock host route
@@ -188,6 +240,11 @@ export function apply(ctx: Context): void {
                 // Fork or child-title failure leaves the source view unchanged.
               })
           },
+          editUserMessage: (text) => {
+            // SessionId-explicit conversation route (like imageUrl): avoids a
+            // scope-addressed service inject that cordis would reject here.
+            ctx.uiConversation.fillDraft(sessionId, text)
+          },
         }
       },
     }, ChatView)
@@ -197,6 +254,7 @@ export function apply(ctx: Context): void {
   ctx.slots.inject('conversation.composer.dock', () =>
     ctx.slots.register({
       name: 'conversation.composer.dock', id: 'stats', order: 0, locale: NS,
+      inject: () => ({ hooks: { performanceUsage } }),
     }, StatsPills))
 
   ctx.slots.inject('conversation.approval.detail', () =>

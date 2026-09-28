@@ -48,7 +48,7 @@ async function bench() {
   ctx.provide('workspaces', {
     list: {
       getSnapshot: () => ({
-        items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
+        items: [], archivedSessionIds: [], pinnedSessionIds: [], state: 'idle', phase: 'ready', error: null,
       }),
       subscribe,
     },
@@ -63,7 +63,7 @@ async function bench() {
     list: {
       getSnapshot: () => ({
         ids: [], byId: {}, current: undefined, phase: 'ready',
-        subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
+        projectionsBySession: {}, currentAddress: undefined,
       }),
       subscribe,
     },
@@ -74,13 +74,20 @@ async function bench() {
     searchResultLimit: 20,
     binding,
     subagentAddress: vi.fn(() => undefined),
-    refreshSubagents: vi.fn(() => Promise.resolve()),
+    refreshProjections: vi.fn(() => Promise.resolve()),
     fork,
   } as never)
   const pickDirectory = vi.fn(() => Promise.resolve({ ok: true as const, value: '/projects/picked' }))
   const directoryPicker = { pick: pickDirectory }
   Object.assign(new TestRemote(ctx), { directoryPicker })
   ctx.provide('remote.directoryPicker', directoryPicker as never)
+  const registerShortcut = vi.fn(() => () => {})
+  ctx.provide('shortcuts', {
+    register: registerShortcut,
+    registerFixed: registerShortcut,
+    observeFixedInput: vi.fn(() => () => {}),
+    catalog: { getSnapshot: () => [], subscribe },
+  } as never)
   const locale = new LocaleRuntime(ctx)
   // These specs assert the shipped Chinese copy. There is no jsdom `window`
   // in this lane, so browser-language detection never runs and the locale
@@ -89,7 +96,7 @@ async function bench() {
   ctx.provide('locale', locale)
   return {
     ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, rename,
-    retain, using, selectPanel, search, renameSession, binding, fork, pickDirectory,
+    retain, using, selectPanel, search, renameSession, binding, fork, pickDirectory, registerShortcut,
   }
 }
 
@@ -108,7 +115,7 @@ describe('ui-workspace apply', () => {
 
   it('declares the services it drives', () => {
     expect(inject).toEqual([
-      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout',
+      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts',
     ])
   })
 
@@ -161,6 +168,13 @@ describe('ui-workspace apply', () => {
       expect(b.retain).toHaveBeenCalledWith('forked', { source: 'mainView' })
     })
     expect(b.fork).toHaveBeenCalledWith({ sessionId: 'session', increaseTitle: true })
+    // Pin rides the injected callback into the same service the store writes through.
+    const pin = vi.spyOn(b.ctx.uiWorkspace, 'pinSession').mockResolvedValue()
+    const unpin = vi.spyOn(b.ctx.uiWorkspace, 'unpinSession').mockResolvedValue()
+    await browser.pinSession('session' as never)
+    expect(pin).toHaveBeenCalledWith('session')
+    await browser.unpinSession('session' as never)
+    expect(unpin).toHaveBeenCalledWith('session')
     await browser.renameWorkspace('ws' as never, 'renamed')
     expect(b.rename).toHaveBeenCalledWith('ws', 'renamed')
     await browser.createWorkspace({ path: '/tmp/browser-project' })

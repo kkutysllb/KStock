@@ -13,16 +13,24 @@ import type {
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
+  WorkspacePinSessionRequest,
+  WorkspacePinValue,
   WorkspaceRenameRequest,
   WorkspaceUnarchiveSessionRequest,
+  WorkspaceUnpinSessionRequest,
   WorkspaceValue,
   WorkspaceId,
   WorkspaceView,
 } from '../src/types.ts'
-import { RemoteError, type RemoteFailure, type RemoteResult } from '@qilin/typert-protocol'
+import { RemoteError, type RemoteFailure, type RemoteResult, type RemoteStreamHandle } from '@qilin/typert-protocol'
+import { streamHandle } from '@qilin/remote-mock'
 import type { SessionId } from '@qilin/session/types'
 
 const sid = (id: string): SessionId => id as SessionId
+
+/** An idle Host follow generation: this fake answers unary calls only. */
+async function* noFrames(): AsyncGenerator<WorkspaceFollowFrame> {}
+
 const wid = (id: string): WorkspaceId => id as WorkspaceId
 
 function workspace(
@@ -89,6 +97,14 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
     request: WorkspaceUnarchiveSessionRequest,
   ) => Promise<RemoteResult<WorkspaceArchiveValue>> = request =>
     Promise.resolve(remoteOk({ archivedSessionIds: [request.sessionId] }))
+  onPinSession: (
+    request: WorkspacePinSessionRequest,
+  ) => Promise<RemoteResult<WorkspacePinValue>> = request =>
+    Promise.resolve(remoteOk({ pinnedSessionIds: [request.sessionId] }))
+  onUnpinSession: (
+    _request: WorkspaceUnpinSessionRequest,
+  ) => Promise<RemoteResult<WorkspacePinValue>> = () =>
+    Promise.resolve(remoteOk({ pinnedSessionIds: [] }))
 
   create(request: WorkspaceCreateRequest): Promise<RemoteResult<WorkspaceCreateValue>> {
     this.record('create', request)
@@ -125,7 +141,19 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
     return this.onUnarchiveSession(request)
   }
 
-  async *follow(_signal?: AbortSignal): AsyncGenerator<WorkspaceFollowFrame> {}
+  pinSession(request: WorkspacePinSessionRequest): Promise<RemoteResult<WorkspacePinValue>> {
+    this.record('pinSession', request)
+    return this.onPinSession(request)
+  }
+
+  unpinSession(request: WorkspaceUnpinSessionRequest): Promise<RemoteResult<WorkspacePinValue>> {
+    this.record('unpinSession', request)
+    return this.onUnpinSession(request)
+  }
+
+  follow(_signal?: AbortSignal): RemoteStreamHandle<WorkspaceFollowFrame, never> {
+    return streamHandle(noFrames())
+  }
 
   private record(method: string, request: unknown): void {
     this.calls.push({ method, request })
@@ -140,8 +168,9 @@ function baseline(
   model: ClientWorkspaceModel,
   items: readonly WorkspaceView[] = [],
   archivedSessionIds: readonly SessionId[] = [],
+  pinnedSessionIds: readonly SessionId[] = [],
 ): void {
-  model.replaceBaseline({ items, archivedSessionIds })
+  model.replaceBaseline({ items, archivedSessionIds, pinnedSessionIds })
 }
 
 describe('ClientWorkspaceModel', () => {
@@ -445,5 +474,43 @@ describe('ClientWorkspaceModel', () => {
     expect(model.getSnapshot().items).toEqual([])
     model.removeView(wid('gone'))
     expect(model.getSnapshot().items).toEqual([])
+  })
+
+  it('installs the complete pin set from a unary pin and unpin echo', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    baseline(model, [])
+
+    await expect(model.pinSession(sid('first'))).resolves.toMatchObject({ ok: true })
+    expect(remote.calls).toContainEqual({ method: 'pinSession', request: { sessionId: 'first' } })
+    expect(model.getSnapshot().pinnedSessionIds).toEqual([sid('first')])
+
+    remote.onUnpinSession = () => Promise.resolve(remoteOk({ pinnedSessionIds: [] }))
+    await expect(model.unpinSession(sid('first'))).resolves.toMatchObject({ ok: true })
+    expect(remote.calls).toContainEqual({ method: 'unpinSession', request: { sessionId: 'first' } })
+    expect(model.getSnapshot().pinnedSessionIds).toEqual([])
+  })
+
+  it('drops a pin from the local projection when the Session is archived', async () => {
+    const model = modelFor()
+    baseline(model, [], [], [sid('pinned')])
+    await expect(model.archiveSession(sid('pinned'))).resolves.toMatchObject({ ok: true })
+    // The Host drops the pin in the archive write; the local projection must
+    // not show the row archived and pinned at once.
+    expect(model.getSnapshot().pinnedSessionIds).toEqual([])
+  })
+
+  it('lets a pushed pin set supersede an in-flight unary reply', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const pending = deferred<RemoteResult<WorkspacePinValue>>()
+    remote.onPinSession = () => pending.promise
+    const model = modelFor(remote)
+    baseline(model, [])
+
+    const call = model.pinSession(sid('slow'))
+    model.replacePinned([sid('pushed')])
+    pending.resolve(remoteOk({ pinnedSessionIds: [sid('slow')] }))
+    await call
+    expect(model.getSnapshot().pinnedSessionIds).toEqual([sid('pushed')])
   })
 })

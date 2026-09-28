@@ -20,13 +20,20 @@ import type {
 import { inspectRequestPrompt } from '../contract/request-inspection.ts'
 import { inspectSystemPrompt, type SystemPromptState } from '../contract/system-prompt.ts'
 import { ConversationNodeAssembler } from './assembler.ts'
+import type { SessionInputResolver } from '../contract/input.ts'
 import { ConversationEventRegistry } from './event-registry.ts'
 import { HistoricalImageCache } from './historical-images.ts'
+import { ConversationGroupRegistry } from './group-registry.ts'
 import { ConversationViewRegistry } from './view-registry.ts'
 
 /** Observable faces published for one Session's Conversation assembly. */
 export interface ConversationBinding {
   readonly snapshot: ObservableSnapshot<ConversationSnapshot>
+  /**
+   * Identity-stable source of the latest turn number, undefined unless its start is loaded and it remains open.
+   * Turn changes publish synchronously, including without an active View.
+   */
+  readonly openTurn: ObservableSnapshot<number | undefined>
   /**
    * Add one selected target to the Session's monotonic active set.
    * @param target - registered or subsequently registered Conversation target.
@@ -46,6 +53,7 @@ export interface ConversationBinding {
 
 class BoundConversation implements ConversationBinding {
   readonly snapshot: SnapshotStore<ConversationSnapshot>
+  readonly openTurn: SnapshotStore<number | undefined>
   private readonly viewStore: ConversationViewSnapshotStore
   private readonly targetSources = new Map<string, ObservableSnapshot<unknown>>()
   private revision = -1
@@ -58,6 +66,7 @@ class BoundConversation implements ConversationBinding {
   ) {
     this.viewStore = assembler
     this.snapshot = createSnapshotStore(this.currentSnapshot())
+    this.openTurn = createSnapshotStore(assembler.openTurn())
     this.replace(feed.getSnapshot())
     this.disposeFeed = feed.subscribe(() => {
       this.accept(feed.getSnapshot())
@@ -85,6 +94,7 @@ class BoundConversation implements ConversationBinding {
 
   activate(target: string): void {
     if (this.assembler.activateTarget(target)) this.snapshot.set(this.currentSnapshot())
+    this.openTurn.set(this.assembler.openTurn())
   }
 
   rebuild(): void { this.publish(this.assembler.rebuildRegistry()) }
@@ -156,6 +166,7 @@ class BoundConversation implements ConversationBinding {
 
   private flush(): void {
     if (this.assembler.flush()) this.snapshot.set(this.currentSnapshot())
+    this.openTurn.set(this.assembler.openTurn())
   }
 
   private currentSnapshot(): ConversationSnapshot {
@@ -178,6 +189,8 @@ export class UiConversation extends Service {
   readonly events: ConversationEventRegistry
   /** Registry of target View definitions. */
   readonly views: ConversationViewRegistry
+  /** Business grouping rules over already materialized target Nodes. */
+  readonly groups: ConversationGroupRegistry
   private readonly bindings = new WeakMapWithValues<SessionBinding, BindingRecord>()
   private readonly images: HistoricalImageCache
 
@@ -189,6 +202,7 @@ export class UiConversation extends Service {
     super(ctx, 'uiConversation')
     this.events = new ConversationEventRegistry(ctx)
     this.views = new ConversationViewRegistry(ctx)
+    this.groups = new ConversationGroupRegistry(ctx, this.views)
     this.images = new HistoricalImageCache(ctx, sessions)
     const rebuild = (): void => {
       for (const record of this.bindings.values) record.binding.rebuild()
@@ -205,7 +219,9 @@ export class UiConversation extends Service {
     ctx.effect(() => {
       const disposeEvents = this.events.subscribe(scheduleRebuild)
       const disposeViews = this.views.subscribe(scheduleRebuild)
+      const disposeGroups = this.groups.subscribe(scheduleRebuild)
       return () => {
+        disposeGroups()
         disposeViews()
         disposeEvents()
         for (const record of [...this.bindings.values]) this.drop(record, true)
@@ -229,7 +245,7 @@ export class UiConversation extends Service {
     if (current !== undefined) return current.binding
     const binding = new BoundConversation(
       owner.eventSource,
-      new ConversationNodeAssembler(this.events, this.views),
+      new ConversationNodeAssembler(this.events, this.views, this.groups),
     )
     const record: BindingRecord = { source: owner, binding, disposeScope: () => {} }
     this.bindings.set(owner, record)
@@ -260,6 +276,24 @@ export class UiConversation extends Service {
    */
   peekImageUrl(sessionId: SessionId, attachment: ImageAttachmentRef): string | undefined {
     return this.images.peek(sessionId, attachment)
+  }
+
+  /**
+   * Replace one Session's composer draft with `text` — the transcript
+   * "edit this message and resend" entry. Resolves the Session's resident
+   * input shell through the conversation service's input registry; no-op
+   * when the session has no shell. SessionId-explicit, like {@link imageUrl},
+   * so a call from any package needs no scope-addressed service inject.
+   * @param sessionId - target Session.
+   * @param text - full draft text.
+   */
+  fillDraft(sessionId: SessionId, text: string): void {
+    const owner = this.sessions.binding(sessionId)
+    if (owner === undefined) return
+    const conversation = this.ctx.get('conversation') as
+      | { readonly input: SessionInputResolver }
+      | undefined
+    conversation?.input.for(owner.ctx).setDraft(text)
   }
 
   /**

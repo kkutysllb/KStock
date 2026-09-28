@@ -1,7 +1,7 @@
 {
   "name": "@qilin/accounts-local",
   "description": "Local browser accounts for the Web surface: one account file under the harness home, scrypt password hashes, signed HttpOnly session cookies, the /api/auth endpoints, and the transport's account-session gate",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -30,22 +30,22 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/client-connection": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/client-connection": "workspace:*"
   },
   "dependencies": {
-    "@qilin/schemastery": "workspace:^",
-    "@qilin/atomic-write": "workspace:^",
-    "@qilin/credentials": "workspace:^",
-    "@qilin/home-paths": "workspace:^"
+    "@qilin/schemastery": "workspace:~",
+    "@qilin/atomic-write": "workspace:*",
+    "@qilin/credentials": "workspace:*",
+    "@qilin/home-paths": "workspace:*"
   },
   "devDependencies": {
-    "@qilin/kylin": "workspace:^",
-    "@qilin/kylin-plugin-include": "workspace:^",
-    "@qilin/kylin-plugin-loader": "workspace:^",
-    "@qilin/client-connection": "workspace:^",
-    "@qilin/credentials-local": "workspace:^",
-    "@qilin/host-frontend-static": "workspace:^",
-    "@qilin/host-webserver": "workspace:^"
+    "@qilin/kylin": "workspace:~",
+    "@qilin/kylin-plugin-include": "workspace:~",
+    "@qilin/kylin-plugin-loader": "workspace:~",
+    "@qilin/client-connection": "workspace:*",
+    "@qilin/credentials-local": "workspace:*",
+    "@qilin/host-frontend-static": "workspace:*",
+    "@qilin/host-webserver": "workspace:*"
   }
 }

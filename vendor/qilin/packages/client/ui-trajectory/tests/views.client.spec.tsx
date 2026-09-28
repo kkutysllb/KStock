@@ -10,7 +10,7 @@ import type { GlobalStandardProps, StoredEntry } from '@qilin/client-ui-slots'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createElement, type ComponentProps, type FC } from 'react'
-import { bindSnapshotSelector, SlotTestRuntime, stubSettingsScope } from '@qilin/client-test-runtime'
+import { bindSnapshotSelector, SlotTestRuntime, stubConfigForm } from '@qilin/client-test-runtime'
 import {
   EMPTY_CONVERSATION_SNAPSHOT, UiConversation,
 } from '@qilin/client-ui-conversation/client'
@@ -199,13 +199,13 @@ function standaloneDuration(): Pick<
 /** Empty sessions-list hook; breadcrumbs therefore fall back to the raw id. */
 function emptySessions() {
   const store = createSnapshotStore<SessionListState>(
-    { ids: [], byId: {}, phase: 'ready', subagentsByParent: {}, jobsBySession: {} })
+    { ids: [], byId: {}, phase: 'ready', projectionsBySession: {} })
   return bindSnapshotSelector(store)
 }
 
 function emptyWorkspaces() {
   const store = createSnapshotStore<WorkspaceSnapshot>({
-    items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
+    items: [], archivedSessionIds: [], pinnedSessionIds: [], state: 'idle', phase: 'ready', error: null,
   })
   return bindSnapshotSelector(store)
 }
@@ -241,6 +241,8 @@ function standaloneProps(
     draft: '', attachmentIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [],
   })
   const inputActions: InputActions = {
+    captureInsertion: () => ({ start: 0, end: 0, draftRev: 0 }),
+    insertText: () => false,
     setDraft: () => {},
     addAttachments: () => false,
     removeAttachment: () => {},
@@ -298,9 +300,12 @@ async function bench(snapshot = historySnapshot(NODES)) {
   const targetSources: ConversationTargetSources = {
     chat: createSnapshotStore<ChatSnapshot | undefined>(undefined),
     trajectory: trajectoryStore,
+    // The Tool layer's recorded todo history target; this bench renders no todo row.
+    'tool-todo-history': createSnapshotStore<ConversationViewSnapshotMap['tool-todo-history'] | undefined>(undefined),
   }
   const binding: ConversationBinding = {
     snapshot: conversationStore,
+    openTurn: { getSnapshot: () => undefined, subscribe: () => () => {} },
     activate: () => {},
     target: target => targetSources[target],
   }
@@ -322,7 +327,7 @@ async function bench(snapshot = historySnapshot(NODES)) {
   // The locale plugin backs registration-time copy ('locale' in inject); its
   // settings scope needs a connection handle and the forwarded-event port.
   ctx.provide('connection', { api: { settings: {} }, isLoopback: false } as never)
-  ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
+  ctx.provide('configForms', { developerTools: { enabled: createSnapshotStore(true) }, get: () => stubConfigForm().scope } as never)
   await runtime.mount({ inject: [...localeInject], apply: localeApply })
   const provide = vi.spyOn(ctx.uiSession, 'provide')
   const feature = await runtime.mount({ inject: [...inject], apply })
@@ -383,6 +388,8 @@ function mount(
     draft: '', attachmentIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [],
   }))
   const inputActions: InputActions = {
+    captureInsertion: () => ({ start: 0, end: 0, draftRev: 0 }),
+    insertText: () => false,
     setDraft: vi.fn(),
     addAttachments: vi.fn(() => false),
     removeAttachment: vi.fn(),
@@ -1420,7 +1427,7 @@ describe('TrajectoryView state', () => {
       content: [],
       isError: false,
       subCalls: [{
-        callId: 'hidden-child', parentCallId: 'hidden-root', name: 'bash', argsRaw: '{}',
+        phase: 'start' as const, callId: 'hidden-child', parentCallId: 'hidden-root', name: 'bash', argsRaw: '{}',
         turn: 1, step: 1, time: 3, subCalls: [],
       }],
     }, 'hidden-child'],

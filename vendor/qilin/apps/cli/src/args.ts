@@ -70,9 +70,9 @@ function selectProfile(value: string, previous?: string): string {
   return value
 }
 
-function rejectElectronProfile(program: Command, profile: string): void {
+function rejectReservedDesktopProfile(program: Command, profile: string): void {
   if (profile.toLowerCase() === 'desktop') {
-    program.error('error: profile "desktop" is managed exclusively by the Electron application')
+    program.error('error: profile "desktop" belongs to the separate QiLin desktop application, not this repository')
   }
 }
 
@@ -99,6 +99,11 @@ Examples:
   qilin plugin doctor <package|directory>     report one plugin's DSH-era compatibility
   qilin plugin add <package>                  install a plugin into the product profile
   qilin plugin --profile tui add <package>    install a plugin into the tui profile
+  qilin plugin version-exemptions             list the profile's exact-version exemptions
+  qilin plugin allow-version <pkg@ver> --qilin-version <exact> --accept-risk
+                                              allow one rejected plugin/runtime pair
+  qilin plugin revoke-version <pkg@ver> --qilin-version <exact>
+                                              withdraw one exemption
 `
 
 /**
@@ -175,22 +180,22 @@ export function parseQilinArgs(argv: readonly string[], version: string): QilinI
       }
       const profile = options.profile ?? PRODUCT_PROFILE
       if (profile === '') program.error('error: --profile needs a name')
-      rejectElectronProfile(program, profile)
+      rejectReservedDesktopProfile(program, profile)
       resolved = resolveBoot(program, profile, options, args)
     })
 
   if (first === 'plugin') {
-    const plugin = program.command('plugin').description('manage a profile\'s plugins: list them, forward pnpm arguments, or report one plugin\'s DSH-era compatibility')
+    const plugin = program.command('plugin').description('manage a profile\'s plugins: list them, forward pnpm arguments, or grant an exact-version compatibility exemption')
     plugin
       .option('--profile <name>', 'the profile whose plugins to manage (defaults to the product profile; initialized on first use)', selectProfile)
       .allowUnknownOption()
-      .argument('[args...]', 'one of: list, doctor <name|path>; otherwise pnpm arguments forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...)')
+      .argument('[args...]', 'one of: list, doctor <name|path>, version-exemptions, allow-version <package@version> --qilin-version <exact> --accept-risk, revoke-version <package@version> --qilin-version <exact>; otherwise pnpm arguments forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...)')
       .action((args: string[], options: { profile?: string }) => {
         const profile = options.profile ?? PRODUCT_PROFILE
         if (profile === '') program.error('error: --profile needs a name')
-        rejectElectronProfile(plugin, profile)
+        rejectReservedDesktopProfile(plugin, profile)
         if (args.length === 0) {
-          program.error('error: plugin needs a subcommand (list, doctor <name|path>) or pnpm arguments to forward (e.g. add <package>)')
+          program.error('error: plugin needs a subcommand (list, doctor <name|path>, version-exemptions, allow-version <package@version>, revoke-version <package@version>) or pnpm arguments to forward (e.g. add <package>)')
         }
         if (args[0] === 'list' && args.length > 1) program.error('error: plugin list takes no further arguments')
         if (args[0] === 'doctor' && args.length !== 2) {

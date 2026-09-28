@@ -156,6 +156,7 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     // The marker IS the synchronization: the stream is provably parked in the
     // hang (prefix chunks delivered to the loop) before the stop click.
     await expect.poll(() => existsSync(marker), { timeout: 15_000 }).toBe(true)
+    // The Turn-process row announces the running text to assistive technology.
     await expect.poll(
       () => page.getByRole('status').filter({ hasText: 'QiLin...' }).isVisible(),
       { timeout: 10_000 },

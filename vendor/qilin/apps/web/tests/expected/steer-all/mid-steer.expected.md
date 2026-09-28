@@ -1,37 +1,33 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Use the ask_user_question tool to" [disabled]
-  - img
   - text: Standard mode
-  - button "Open right sidebar":
-    - img
-- button "System prompt":
-  - img
-  - img
-  - text: System prompt
+  - button "Open right sidebar"
+- button "System prompt"
 - text: Use the ask_user_question tool to ask me exactly one question with id "checkpoint", question "Ready to continue?", header "Checkpoint", and options labeled "Yes" and "No". After I answer, reply with one short sentence acknowledging my answer and stop. {{clock}}
-- button "Copy":
-  - img
-- button "Context injection @qilin/system-prompt":
-  - img
-  - img
-  - text: Context injection @qilin/system-prompt
-- button "Think The user wants me to ask them a checkpoint question first, then continue with whatever they interject. Let me do exactly that.":
-  - img
-  - img
-  - text: Think The user wants me to ask them a checkpoint question first, then continue with whatever they interject. Let me do exactly that.
+- button "Copy"
+- button "Edit this message and resend"
 - status: QiLin...
+- button "QiLin... for {{duration}}" [disabled] [expanded]
+- button "Context injection runtime-context"
+- button "Context injection time-context"
+- button "Waiting for your action · Ready to continue?"
 - text: "Interjection: include the word BANANA in your final reply."
-- button "Copy":
-  - img
+- button "Copy"
 - text: "Interjection: include the word ORANGE in your final reply."
-- button "Copy":
-  - img
-- textbox "Message or run a task, / commands, @ files or sessions"
-- button "Add files or run commands":
-  - img
-- 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash":
-  - text: DeepSeek-V4-Flash
-  - img
-- button "Stop generating"
+- button "Copy"
+- region "Ready to continue?":
+  - text: Checkpoint
+  - heading "Ready to continue?" [level=2]
+  - button "Collapse the question card" [expanded]
+  - button "Dismiss all questions"
+  - radiogroup:
+    - radio "Yes": 1 Yes
+    - radio "No": 2 No
+    - textbox "Type your answer"
+  - button "Previous question" [disabled]
+  - text: 1 / 1
+  - button "Next question" [disabled]
+  - status
+  - button "Skip"
+  - button "Submit" [disabled]

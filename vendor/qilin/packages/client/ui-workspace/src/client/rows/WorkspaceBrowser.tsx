@@ -170,7 +170,7 @@ function workspaceGroupHalf(e: { clientY: number; currentTarget: HTMLElement }):
 type SessionTreeProps = Pick<
   WorkspaceBrowserProps,
   'useSessionStatus' | 'startSession' | 'open' | 'forkSession'
-  | 'insertWorkspaceBefore' | 't' | 'usePanelInfo'
+  | 'insertWorkspaceBefore' | 't' | 'usePanelInfo' | 'renderSlot'
 > & {
   /** Always-mounted Session list snapshot. */
   list: SessionListState
@@ -192,6 +192,12 @@ type SessionTreeProps = Pick<
   setSessionOrder: (accountKey: string, order: readonly string[]) => void
   /** Registry-global archive set (hidden rows). */
   archivedSessionIds: readonly SessionNode['id'][]
+  /** Registry-global pin set; pinned rows lead their group. */
+  pinnedSessionIds: readonly SessionNode['id'][]
+  /** Pin a session (row menu and hover action). */
+  onSessionPin: (sessionId: SessionNode['id']) => void
+  /** Drop a session's pin. */
+  onSessionUnpin: (sessionId: SessionNode['id']) => void
   /** Open the browser-owned rename dialog for a real Workspace group. */
   onRenameRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
   /** Open the browser-owned delete-confirmation dialog for a real Workspace group. */
@@ -209,12 +215,12 @@ type SessionTreeProps = Pick<
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
 function SessionTree({
   list, useSessionStatus, startSession, open, forkSession, workspaces, ungroupedSessionIds,
-  archivedSessionIds,
+  archivedSessionIds, pinnedSessionIds, onSessionPin, onSessionUnpin,
   workspaceReady, usePanelInfo,
   onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
   insertWorkspaceBefore,
   nestWorkspaces, groupExpansion, setGroupExpanded,
-  setSessionOrder, home, t,
+  setSessionOrder, home, t, renderSlot,
   revealSessionId, onSessionRevealed,
 }: SessionTreeProps) {
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
@@ -262,11 +268,11 @@ function SessionTree({
       .filter(key => groupExpansion[key] ?? ancestorKeys.has(key))
   }, [groupExpansion, parents, workspaces])
   const groups = useMemo(
-    () => deriveGroups(list, workspaces, archivedSessionIds, statuses, {
+    () => deriveGroups(list, workspaces, { pinnedSessionIds, archivedSessionIds }, statuses, {
       expandedGroups,
       ungroupedOrder: ungroupedSessionIds,
     }),
-    [list, workspaces, archivedSessionIds, statuses, expandedGroups, ungroupedSessionIds],
+    [list, workspaces, pinnedSessionIds, archivedSessionIds, statuses, expandedGroups, ungroupedSessionIds],
   )
   useEffect(() => {
     for (let key = revealGroup; key !== undefined; key = parents.get(key)) {
@@ -522,10 +528,13 @@ function SessionTree({
               onRename={onSessionRename}
               onFork={forkSession}
               onArchive={onSessionArchive}
+              onPin={onSessionPin}
+              onUnpin={onSessionUnpin}
               onReveal={node.id === revealSessionId && group.key === revealGroup
                 ? () => { onSessionRevealed(node.id) }
                 : undefined}
               drag={dragProps}
+              renderSlot={renderSlot}
               t={t}
             />
           )
@@ -566,9 +575,10 @@ function SessionTree({
 
 /** The flat "In one list" body: every session is one draggable top-level row. */
 function FlatList({
-  list, sessionIds, useSessionStatus, open, forkSession, onSessionRename, onSessionArchive,
+  list, sessionIds, pinnedSessionIds, useSessionStatus, open, forkSession, onSessionRename, onSessionArchive,
+  onSessionPin, onSessionUnpin,
   usePanelInfo, setSessionOrder,
-  revealSessionId, onSessionRevealed, t,
+  revealSessionId, onSessionRevealed, t, renderSlot,
 }: Pick<
   SessionTreeProps,
   | 'useSessionStatus'
@@ -576,20 +586,24 @@ function FlatList({
   | 'forkSession'
   | 'onSessionRename'
   | 'onSessionArchive'
+  | 'onSessionPin'
+  | 'onSessionUnpin'
   | 'usePanelInfo'
   | 'setSessionOrder'
   | 'revealSessionId'
   | 'onSessionRevealed'
   | 't'
+  | 'renderSlot'
 > & {
   list: SessionListState
   sessionIds: readonly SessionId[]
+  pinnedSessionIds: readonly SessionId[]
 }) {
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
   const statuses = useSessionStatus(s => s)
   const rows = useMemo(
-    () => deriveFlat(list, sessionIds, statuses),
-    [list, sessionIds, statuses],
+    () => deriveFlat(list, sessionIds, pinnedSessionIds, statuses),
+    [list, sessionIds, pinnedSessionIds, statuses],
   )
   const [drag, setDrag] = useState<DragState | null>(null)
   const dropCommitted = useRef(false)
@@ -635,10 +649,12 @@ function FlatList({
               onRename={onSessionRename}
               onFork={forkSession}
               onArchive={onSessionArchive}
+              onPin={onSessionPin}
+              onUnpin={onSessionUnpin}
               onReveal={node.id === revealSessionId
                 ? () => { onSessionRevealed(node.id) }
                 : undefined}
-              flat
+              renderSlot={renderSlot}
               drag={{
                 start: () => {
                   dropCommitted.current = false
@@ -707,7 +723,7 @@ function SearchResults({
       list,
       workspaces,
       query,
-      archivedSessionIds,
+      { archivedSessionIds },
       statuses,
       currentRemote,
       resultLimit,
@@ -778,11 +794,20 @@ export function WorkspaceBrowser({
   deleteWorkspace,
   insertWorkspaceBefore,
   archiveSession,
+  pinSession,
+  unpinSession,
   createWorkspace,
   searchSessions,
   searchResultLimit,
+  requestSearch,
+  requestAddWorkspace,
+  closeAddWorkspace,
+  closeRenameRequest,
+  setDirectoryBusy,
   useDirectoryFlow,
   useHostInfo,
+  useWorkspaceShortcuts,
+  useShortcuts,
   renderSlot,
   t,
 }: WorkspaceBrowserProps) {
@@ -793,6 +818,7 @@ export function WorkspaceBrowser({
   const workspacePhase = useWorkspaces(state => state.phase)
   const workspaceStreamState = useWorkspaces(state => state.state)
   const archivedSessionIds = useWorkspaces(state => state.archivedSessionIds)
+  const pinnedSessionIds = useWorkspaces(state => state.pinnedSessionIds)
   // Live occupancy of this surface's directory-flow hole (the same source the
   // flow reads): a composition without a picking affordance can add nothing.
   const directoryFlowAvailable = useDirectoryFlow(occupied => occupied)
@@ -811,7 +837,7 @@ export function WorkspaceBrowser({
     return list.ids.filter(id => list.byId[id] !== undefined && !accounted.has(id))
   }, [list, workspaces])
   const flatMemberIds = useMemo(
-    () => visibleSessionIds(list, archivedSessionIds),
+    () => visibleSessionIds(list, { archivedSessionIds }),
     [archivedSessionIds, list],
   )
   const orderedWorkspaces = useMemo(() => workspaces.map((workspace) => {
@@ -1064,6 +1090,38 @@ export function WorkspaceBrowser({
     setSessionRenameError(null)
   }
 
+  // Keyboard-command requests arrive through the shared shortcut state; each
+  // consumed request drives the same surface its pointer gesture drives.
+  const shortcutState = useWorkspaceShortcuts(state => state)
+  const addShortcut = useShortcuts(rows => rows.find(row => row.id === 'workspace.add'))
+  const searchShortcut = useShortcuts(rows => rows.find(row => row.id === 'session.search'))
+  useEffect(() => {
+    if (shortcutState.searchRequest === 0) return
+    closeAddWorkspace()
+    setSearchExpanded(true)
+    if (!wide) {
+      setSearchOnExpand(true)
+      expandSidebar()
+    } else searchInput.current?.focus({ preventScroll: true })
+    // Only a new request opens the search: the counter never resets, so listing
+    // the unstable sidebar callbacks re-runs this effect on unrelated renders
+    // and reopens a search the user just closed.
+  }, [shortcutState.searchRequest])
+  useEffect(() => {
+    if (!shortcutState.addRequested) return
+    closeAddWorkspace()
+    setWsPickerOpen(true)
+  }, [closeAddWorkspace, shortcutState.addRequested])
+  useEffect(() => {
+    const target = shortcutState.renameTarget
+    if (target === null) return
+    closeRenameRequest()
+    setSessionRenameTarget({ sessionId: target.sessionId, currentTitle: target.currentTitle })
+    setSessionRenameDraft(target.currentTitle)
+    setSessionRenameError(null)
+  }, [closeRenameRequest, shortcutState.renameTarget])
+  useEffect(() => { setDirectoryBusy(wsPickerOpen) }, [setDirectoryBusy, wsPickerOpen])
+
   // Archive is dialog-free: not destructive (the log and the accounting slot
   // remain), so the menu action commits directly; the row disappears when the
   // archive-set echo lands. Failures are non-fatal console diagnostics, the
@@ -1071,6 +1129,19 @@ export function WorkspaceBrowser({
   const onSessionArchive = (sessionId: SessionNode['id']) => {
     archiveSession(sessionId).catch((reason: unknown) => {
       console.warn('session archive rejected:', reason)
+    })
+  }
+
+  // Pin is a two-sided gesture: the Host call decides the set, and a rejection
+  // is a non-fatal console diagnostic like the other row verbs.
+  const onSessionPin = (sessionId: SessionNode['id']) => {
+    pinSession(sessionId).catch((reason: unknown) => {
+      console.warn('session pin rejected:', reason)
+    })
+  }
+  const onSessionUnpin = (sessionId: SessionNode['id']) => {
+    unpinSession(sessionId).catch((reason: unknown) => {
+      console.warn('session unpin rejected:', reason)
     })
   }
 
@@ -1126,17 +1197,20 @@ export function WorkspaceBrowser({
                 setWsPickerOpen(false)
                 setSearchExpanded(true)
                 searchInput.current?.focus()
+                requestSearch()
               }}
             >
-              <Tooltip label={t('search')} side="bottom" delayMs={500} disabled={searchExpanded}>
+              <Tooltip label={t('search')} shortcutKeys={searchShortcut?.keys} side="bottom" delayMs={500} disabled={searchExpanded}>
                 <button
                   type="button"
                   className={css.searchButton}
                   aria-label={t('search.sessions.aria')}
+                  aria-keyshortcuts={searchShortcut?.aria}
                   aria-expanded={searchExpanded}
                   onClick={() => {
                     setWsPickerOpen(false)
                     setSearchExpanded(true)
+                    requestSearch()
                   }}
                 >
                   <IconSearchOutline16 size={searchExpanded ? 11 : 14} />
@@ -1188,14 +1262,15 @@ export function WorkspaceBrowser({
               picking affordance has nothing to offer here: the region hides the
               button rather than leaving a dead one in the header. */}
           {directoryFlowAvailable && (
-            <Tooltip label={t('workspace.add')} side="bottom" delayMs={500}>
+            <Tooltip label={t('workspace.add')} shortcutKeys={addShortcut?.keys} side="bottom" delayMs={500}>
               <button
                 ref={wsPlusRef}
                 type="button"
                 className={css.iconButton}
                 aria-label={t('workspace.add')}
+                aria-keyshortcuts={addShortcut?.aria}
                 onClick={() => {
-                  setWsPickerOpen(v => !v)
+                  requestAddWorkspace()
                 }}
               >
                 <IconProjectAddOutline16 size={wide ? 16 : 18} />
@@ -1224,16 +1299,13 @@ export function WorkspaceBrowser({
 
       {/* The collapsed rail keeps search as its own 36px control. */}
       {!wide && <div className={css.search}>
-        <Tooltip label={t('search')}>
+        <Tooltip label={t('search')} shortcutKeys={searchShortcut?.keys}>
           <button
             type="button"
             className={css.searchButton}
             aria-label={t('search.sessions.aria')}
-            onClick={() => {
-              setSearchExpanded(true)
-              setSearchOnExpand(true)
-              expandSidebar()
-            }}
+            aria-keyshortcuts={searchShortcut?.aria}
+            onClick={() => { requestSearch() }}
           >
             <IconSearchOutline16 size={18} />
           </button>
@@ -1267,9 +1339,12 @@ export function WorkspaceBrowser({
                 useSessionStatus={useSessionStatus}
                 open={open} forkSession={forkSession}
                 onSessionRename={onSessionRename} onSessionArchive={onSessionArchive}
+                onSessionPin={onSessionPin} onSessionUnpin={onSessionUnpin}
+                pinnedSessionIds={pinnedSessionIds}
                 setSessionOrder={saveSessionOrder}
                 revealSessionId={revealSessionId}
                 onSessionRevealed={acknowledgeSessionReveal}
+                renderSlot={renderSlot}
                 t={t}
               />
             )
@@ -1278,8 +1353,11 @@ export function WorkspaceBrowser({
                 usePanelInfo={usePanelInfo}
                 list={list}
                 useSessionStatus={useSessionStatus}
+                renderSlot={renderSlot}
                 onSessionRename={onSessionRename}
                 onSessionArchive={onSessionArchive}
+                onSessionPin={onSessionPin}
+                onSessionUnpin={onSessionUnpin}
                 forkSession={forkSession}
                 workspaces={orderedWorkspaces}
                 ungroupedSessionIds={orderedUngroupedSessionIds}
@@ -1289,6 +1367,7 @@ export function WorkspaceBrowser({
                 setGroupExpanded={actions.setGroupExpanded}
                 setSessionOrder={saveSessionOrder}
                 archivedSessionIds={archivedSessionIds}
+                pinnedSessionIds={pinnedSessionIds}
                 startSession={startSession}
                 open={open}
                 insertWorkspaceBefore={insertWorkspaceBefore}

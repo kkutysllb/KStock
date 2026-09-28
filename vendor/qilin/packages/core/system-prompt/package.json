@@ -1,7 +1,7 @@
 {
   "name": "@qilin/system-prompt",
   "description": "System prompt assembly registry for the QiLin",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -35,18 +35,18 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@qilin/invariants": "workspace:^",
-    "@qilin/llm": "workspace:^",
-    "@qilin/scope": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/invariants": "workspace:*",
+    "@qilin/llm": "workspace:*",
+    "@qilin/scope": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   },
   "dependencies": {
-    "@qilin/schemastery": "workspace:^"
+    "@qilin/schemastery": "workspace:~"
   },
   "devDependencies": {
-    "@qilin/invariants": "workspace:^",
-    "@qilin/llm": "workspace:^",
-    "@qilin/scope": "workspace:^",
-    "@qilin/kylin": "workspace:^"
+    "@qilin/invariants": "workspace:*",
+    "@qilin/llm": "workspace:*",
+    "@qilin/scope": "workspace:*",
+    "@qilin/kylin": "workspace:~"
   }
 }

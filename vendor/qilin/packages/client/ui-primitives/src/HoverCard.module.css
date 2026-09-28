@@ -27,7 +27,7 @@
 }
 
 .copyable:focus-visible {
-  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
 
@@ -51,4 +51,20 @@
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+/* An inline media anchor stays in the prose flow; the card it opens is a
+ * contained panel rather than the fixed-width session card above. */
+.inline { display: inline; }
+
+.media {
+  --qilin-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --qilin-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+  overflow: auto;
+  padding: 8px;
+  border: 0;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-specific-menu);
+  backdrop-filter: var(--dsw-menu-backdrop-filter);
+  box-shadow: var(--dsw-elevation-panel);
 }

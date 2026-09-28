@@ -23,6 +23,8 @@ The invoking directory is the default workspace root. The `web`, `headless`, `sd
 
 `list` and `doctor` read the profile and never initialize it or run pnpm. `doctor` accepts an installed package name or a package directory and checks the four rules a plugin must satisfy to load here: whether the package builds the DSH-era home itself instead of reading `DSH_HOME`/`QILIN_HOME`, installs an engine package the harness supplies, imports an engine name it never declared as a peer, and injects client module names the compatibility layer cannot map. It prints one finding per line and exits 1 only when a finding blocks activation.
 
+`list` marks a shipped layer the profile owns — the animations bundle the browser templates seed — as `(updatable)`: a copy installed into the profile resolves ahead of the installation's, so `qilin plugin add dsh-animations@latest` or the plugin page's update action moves that layer without a QiLin release.
+
 Install the command itself from the published package (`npm install -g @qilin/cli`) to get `qilin` on `PATH`; the manifest declares `lib/bin.js` as the `qilin` bin and ships only that bundle.
 
 ## App arguments
@@ -41,6 +43,8 @@ qilin --help                          # the launcher's own help
 ## Profiles
 
 A profile directory holds a `package.json` (out-of-tree plugin dependencies plus the profile manifest `qilin.profile` with its ordered `bundles` list) and a `cordis.patch.yml` (the user's own patch layer). `qilin-hmr`, when enabled in YAML, watches the profile manifest and both profile and home patch files, then recomposes all layers through one serialized reload. Without HMR, changes apply on restart. Edits arriving during watcher registration use the same nonfatal reload reporting as later edits. [Plugin Manager](../../packages/boot/plugin-manager/README.md) shares package operations and the profile write lock with `qilin plugin`; package updates retain disabled bundle selections. CLI package commands inherit authentication variables and terminal descriptors, including interactive build approval; service calls retain their scrubbed environment and captured diagnostics.
+
+Installation and profile startup enforce declared qilin peer ranges against the same runtime version `qilin --version` prints. Incompatible plugins require an explicitly acknowledged exact-version exemption, which `qilin plugin allow-version`, `revoke-version`, and `version-exemptions` manage for one profile. The [plugin manager's compatibility reference](../../packages/boot/plugin-manager/README.md#version-compatibility-and-exemptions) documents the commands, persistence, and risks.
 
 The tree composes over an empty root:
 - each bundle's patch in `qilin.profile.bundles` order

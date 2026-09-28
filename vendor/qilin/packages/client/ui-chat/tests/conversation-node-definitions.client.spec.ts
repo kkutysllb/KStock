@@ -22,7 +22,7 @@ import { commandDefinition } from '../src/client/conversation-nodes/command.ts'
 import { compactionDefinition } from '../src/client/conversation-nodes/compaction.ts'
 import { unknownFallbackDefinition } from '../src/client/conversation-nodes/fallback.ts'
 import { nextStepInboxDefinition } from '../src/client/conversation-nodes/inbox.ts'
-import { messageDefinition } from '../src/client/conversation-nodes/message.ts'
+import { developerMessageDefinition, messageDefinition } from '../src/client/conversation-nodes/message.ts'
 import { inspectRequestPrompt } from '@qilin/client-ui-conversation/client'
 import { requestPromptDefinition, systemMessageDefinition } from '../src/client/conversation-nodes/request-prompt.ts'
 import { retryDefinition } from '../src/client/conversation-nodes/retry.ts'
@@ -38,6 +38,7 @@ import type {
 const DEFINITIONS: readonly ConversationNodeDefinition[] = [
   nextStepInboxDefinition,
   messageDefinition,
+  developerMessageDefinition,
   systemMessageDefinition(inspectSystemPrompt),
   requestPromptDefinition(inspectRequestPrompt),
   assistantDefinition,
@@ -208,14 +209,11 @@ function assistantMessage(id: string, text: string) {
 function toolResult(callId: string, text: string, isError = false) {
   return {
     id: `result-${callId}`,
-    role: 'user',
+    role: 'tool',
+    toolCallId: callId,
     source: { kind: 'tool', callId },
-    content: [{
-      type: 'tool-result',
-      toolCallId: callId,
-      content: [{ type: 'text', text }],
-      isError,
-    }],
+    content: [{ type: 'text', text }],
+    isError,
   }
 }
 
@@ -243,6 +241,58 @@ describe('built-in conversation node Definitions', () => {
 
     expect(systemMessageDefinition(inspectSystemPrompt).match(invalidStart.event)).toBeNull()
     expect(systemMessageDefinition(inspectSystemPrompt).update({ state } as never, invalidStart)).toBe(state)
+  })
+
+  it.each(['replay', 'live', 'prepend'] as const)('keeps developer tool changes visible while hiding ordinary Context (%s)', (mode) => {
+    const entries = [
+      at(0, 'request/header', { reason: 'initial', header: {
+        config: { provider: 'test', model: 'test' },
+        tools: ['search', 'read_file'].map(name => ({ name, description: '', parameters: {} })),
+      } }),
+      at(1, 'user/message', {
+        ...textMessage('context', 'workspace context'),
+        source: { kind: 'context' },
+      }, { surfaceOp: 'append' }),
+      at(2, 'developer/message', { turn: 1, step: 1, message: {
+        id: 'developer', role: 'developer', source: { kind: 'tool-registry' },
+        content: [{ type: 'tool-addition', toolName: 'search' }, { type: 'tool-removal', toolName: 'old_search' }],
+      } }, { surfaceOp: 'append' }),
+      at(3, 'request/header', { reason: 'change', header: { config: { provider: 'test', model: 'test' }, tools: [] } }),
+    ]
+    const value = assembler(mode === 'replay' ? entries : [])
+    if (mode === 'live') {
+      for (const entry of entries) {
+        value.append(entry)
+        value.flush()
+      }
+    } else if (mode === 'prepend') {
+      value.replaceWindow(entries.slice(2), true)
+      value.prepend(entries.slice(0, 2), false)
+      value.flush()
+    }
+    const current = snapshot(value)
+    const visible = current.order.map(key => current.nodes.get(key))
+    // QiLin keeps every logged context row visible; the tool-registry update
+    // carries its disclosure content instead of hiding the ordinary context.
+    expect(visible.map(candidate => candidate?.kind)).toEqual(['context', 'context'])
+    const updates = visible.find(candidate => Array.isArray((candidate?.data as { content?: unknown }).content)
+      && ((candidate?.data as { content: { type: string }[] }).content).length > 0
+      && ((candidate?.data as { content: { type: string }[] }).content)[0]?.type === 'tool-addition')
+    expect(updates?.data).toMatchObject({
+      kind: 'context', content: [{ type: 'tool-addition', toolName: 'search' }, { type: 'tool-removal', toolName: 'old_search' }],
+    })
+    expect([...current.nodes.values()].filter(candidate => candidate.kind === 'context')).toHaveLength(2)
+  })
+
+  it('preserves tool removals without a loaded header', () => {
+    const value = assembler([at(1, 'developer/message', { turn: 1, step: 1, message: {
+      id: 'developer', role: 'developer', source: { kind: 'tool-registry' },
+      content: [{ type: 'tool-removal', toolName: 'old_search' }],
+    } }, { surfaceOp: 'append' })], true)
+    const current = snapshot(value)
+    const removal = node(current, 'context')
+    expect(removal?.data).toMatchObject({ content: [{ type: 'tool-removal', toolName: 'old_search' }] })
+    expect(current.order).toContain(removal?.key)
   })
 
   it('keeps ordinary command-only history inactive for the Conversation shell', () => {
@@ -462,8 +512,11 @@ describe('built-in conversation node Definitions', () => {
       at(4, 'step/start', { turn: 1, step: 1 }),
     ])
     const opening = snapshot(value)
+    // The opening-input anchor is derived from a recorded process control, so a
+    // Turn's pre-control rows keep their anchor order. Upstream removes the
+    // context row from the visible order instead (infrastructure-row filter).
     expect(opening.order.map(key => opening.nodes.get(key)?.kind)).toEqual([
-      'user', 'context',
+      'context', 'user',
     ])
 
     value.append(at(5, 'assistant/live-chunk', {
@@ -878,7 +931,8 @@ describe('built-in conversation node Definitions', () => {
       }, { surfaceOp: 'append' }),
     ])
     const toolOnlySnapshot = snapshot(toolOnlyValue)
-    expect(toolOnlySnapshot.order).toEqual([])
+    expect(toolOnlySnapshot.order.map(key => toolOnlySnapshot.nodes.get(key)?.kind)).toEqual(['tool-call'])
+    expect(node(toolOnlySnapshot, 'tool-call')?.data).toMatchObject({ root: { phase: 'preparing' } })
     expect(node(toolOnlySnapshot, 'assistant-step')?.visibility).toBe('hidden')
     expect(toolOnlySnapshot.legacy.nodes).toMatchObject([{
       kind: 'assistant',
@@ -987,8 +1041,6 @@ describe('built-in conversation node Definitions', () => {
       })
       const tail = node(view, 'turn-tail')?.data as TurnTailChatData
       expect(tail.turn).toBe(1)
-      expect(tail.ttftMs).toBeUndefined()
-      expect(tail.tokensPerSecond).toBeUndefined()
     }
   })
 
@@ -1912,7 +1964,7 @@ describe('built-in conversation node Definitions', () => {
       }),
       at(6, 'user/message', {
         ...textMessage('compacted', 'summary'),
-        source: { kind: 'plugin', plugin: 'compact' },
+        source: { kind: 'compact-checkpoint' },
       }, { surfaceOp: { op: 'replace', startSeq: 4, endSeq: 4 } }),
       at(7, 'request/header', {
         reason: 'series',
@@ -2181,8 +2233,7 @@ describe('built-in conversation node Definitions', () => {
       at(13, 'user/message', {
         ...textMessage('manual-checkpoint', 'checkpoint'),
         source: {
-          kind: 'plugin',
-          plugin: 'compact',
+          kind: 'compact-checkpoint',
           compactionId: 'manual-1',
           sourceCommandId: 'command-1',
         },
@@ -2206,7 +2257,7 @@ describe('built-in conversation node Definitions', () => {
       }),
       at(22, 'user/message', {
         ...textMessage('automatic-checkpoint', 'checkpoint'),
-        source: { kind: 'plugin', plugin: 'compact', compactionId: 'automatic-1' },
+        source: { kind: 'compact-checkpoint', compactionId: 'automatic-1' },
       }, { surfaceOp: { op: 'replace', startSeq: 3, endSeq: 4 } }),
       at(23, 'compaction/end', { compactionId: 'automatic-1', turn: null }),
     ])
@@ -2225,7 +2276,7 @@ describe('built-in conversation node Definitions', () => {
     const value = assembler([
       at(13, 'user/message', {
         ...textMessage('checkpoint', 'checkpoint'),
-        source: { kind: 'plugin', plugin: 'compact', compactionId: 'compact-1' },
+        source: { kind: 'compact-checkpoint', compactionId: 'compact-1' },
       }, { surfaceOp: { op: 'replace', startSeq: 1, endSeq: 8 } }),
     ], true)
     const before = node(snapshot(value), 'compaction')
@@ -2266,7 +2317,7 @@ describe('built-in conversation node Definitions', () => {
       }),
       at(11, 'user/message', {
         ...textMessage('checkpoint-windowed', 'checkpoint'),
-        source: { kind: 'plugin', plugin: 'compact', compactionId: 'compact-windowed' },
+        source: { kind: 'compact-checkpoint', compactionId: 'compact-windowed' },
       }, { surfaceOp: { op: 'replace', startSeq: 1, endSeq: 3 } }),
     ], true)
 
@@ -2290,7 +2341,7 @@ describe('built-in conversation node Definitions', () => {
       }),
       at(22, 'user/message', {
         ...textMessage('legacy-checkpoint', 'checkpoint'),
-        source: { kind: 'plugin', plugin: 'compact' },
+        source: { kind: 'compact-checkpoint' },
       }, { surfaceOp: { op: 'replace', startSeq: 1, endSeq: 3 } }),
       at(23, 'compaction/end', { turn: null }),
     ], true)
@@ -2496,8 +2547,7 @@ describe('built-in conversation node Definitions', () => {
       at(21, 'user/message', {
         ...textMessage('manual-checkpoint', 'checkpoint'),
         source: {
-          kind: 'plugin',
-          plugin: 'compact',
+          kind: 'compact-checkpoint',
           compactionId: 'manual-1',
           sourceCommandId: 'command-1',
         },

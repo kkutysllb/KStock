@@ -1,19 +1,24 @@
 // Cloning the anchor preserves its layout context. Fixed positioning lets the
-// bubble escape ancestor overflow clipping without a portal.
+// bubble escape ancestor overflow clipping; the optional portal also escapes
+// stacking contexts that would cap the bubble's z-index.
 
 import { cloneElement, createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { ShortcutKeys } from './ShortcutKeys.tsx'
 import type { FocusEventHandler, MouseEventHandler, MutableRefObject, ReactElement, Ref } from 'react'
+// Tooltips take the wide answer — any key returns to the keyboard. Focus rings read the
+// narrower `data-input-modality` attribute the same module publishes.
+import { pointerModality } from './input-modality.ts'
 import css from './Tooltip.module.css'
 
 /** Bubble placement relative to the anchor. */
 export type TooltipSide = 'right' | 'bottom' | 'top'
 
 /**
- * Suppression channel from a tooltip to the tooltips above it: a tooltip hands
- * this setter to its own descendants, and a visible descendant bubble calls it
- * so the ancestor withdraws its bubble for as long as the descendant shows one.
+ * Suppression channel for enclosing tooltip and hover-card anchors: a visible
+ * tooltip within an anchor withdraws the enclosing preview while its bubble is shown.
  */
-const TooltipSuppression = createContext<((suppressed: boolean) => void) | null>(null)
+export const TooltipSuppression = createContext<((suppressed: boolean) => void) | null>(null)
 
 /** Props Tooltip injects into its anchor child; the child's own handlers are chained ahead of the tooltip's. */
 interface AnchorProps {
@@ -29,16 +34,19 @@ type TooltipLabel = string | (() => string)
 /**
  * Attach a hover/focus tooltip to an anchor element.
  * @param props.label - bubble text, or a resolver evaluated only while the bubble is visible.
+ * @param props.shortcutKeys - effective key labels rendered as platform-formatted keycaps after optional text.
  * @param props.side - placement relative to the anchor (default 'right').
  * @param props.delayMs - hover delay in milliseconds; keyboard focus remains immediate.
  * @param props.disabled - suppress the bubble while true; the anchor renders identically so
  * toggling never remounts it (which would cut its CSS transitions).
+ * @param props.portal - render the bubble under document.body, so an ancestor's clipping or its
+ * stacking context can neither clip the bubble nor paint over it.
  * @param props.maxWidth - bubble width cap in pixels, for labels long enough that the default
  * half-viewport cap would render a slab wider than the surface the anchor sits on.
  * @param props.children - a single anchor element; its own ref (callback or object) is forwarded alongside the tooltip's.
  * @returns the cloned anchor plus a fixed-position bubble while hovered/focused.
  */
-export function Tooltip({ label, side = 'right', delayMs = 0, disabled = false, maxWidth, children }: { label: TooltipLabel; side?: TooltipSide; delayMs?: number; disabled?: boolean; maxWidth?: number; children: ReactElement<AnchorProps> }) {
+export function Tooltip({ label, shortcutKeys, side = 'right', delayMs = 0, disabled = false, portal = false, maxWidth, children }: { label: TooltipLabel; shortcutKeys?: readonly string[] | undefined; side?: TooltipSide; delayMs?: number; disabled?: boolean; portal?: boolean; maxWidth?: number; children: ReactElement<AnchorProps> }) {
   const anchor = useRef<HTMLElement | null>(null)
   // React 18 keeps the element's ref outside props; forward it so wrapping an
   // anchor in Tooltip never silently severs the owner's ref.
@@ -162,26 +170,33 @@ export function Tooltip({ label, side = 'right', delayMs = 0, disabled = false, 
     if (!triggers.current.hover && !triggers.current.focus) withdraw()
   }
 
+  const bubbleNode = visible && !suppressed && (
+    <span
+      ref={bubble}
+      className={css.bubble}
+      data-side={placement}
+      data-portal={portal || undefined}
+      data-has-shortcut={shortcutKeys?.length ? true : undefined}
+      style={{ left: pos.x, top: y, ...maxWidth === undefined ? {} : { maxWidth } }}
+      role="tooltip"
+      aria-label={shortcutKeys?.length ? [resolvedLabel, shortcutKeys.join(' ')].filter(Boolean).join(' ') : undefined}
+    >
+      {resolvedLabel && <span className={css.label}>{resolvedLabel}</span>}
+      {shortcutKeys !== undefined && shortcutKeys.length > 0 && <ShortcutKeys keys={shortcutKeys} variant="tooltip" />}
+    </span>
+  )
   return (
     <TooltipSuppression.Provider value={setSuppressed}>
       {cloneElement(children, {
         ref: mergedRef,
         onMouseEnter: (e) => { children.props.onMouseEnter?.(e); triggers.current.hover = true; showAfterHoverDelay() },
         onMouseLeave: (e) => { children.props.onMouseLeave?.(e); triggers.current.hover = false; cancelShow(); withdraw() },
-        onFocus: (e) => { children.props.onFocus?.(e); triggers.current.focus = true; cancelShow(); show() },
+        // Pointer focus is silent: after a mouse selection a closing menu refocuses
+        // its trigger, and that programmatic return must not raise the bubble.
+        onFocus: (e) => { children.props.onFocus?.(e); if (pointerModality()) return; triggers.current.focus = true; cancelShow(); show() },
         onBlur: (e) => { children.props.onBlur?.(e); triggers.current.focus = false; hide() },
       })}
-      {visible && !suppressed && (
-        <span
-          ref={bubble}
-          className={css.bubble}
-          data-side={placement}
-          style={{ left: pos.x, top: y, ...maxWidth === undefined ? {} : { maxWidth } }}
-          role="tooltip"
-        >
-          {resolvedLabel}
-        </span>
-      )}
+      {portal ? createPortal(bubbleNode, document.body) : bubbleNode}
     </TooltipSuppression.Provider>
   )
 }

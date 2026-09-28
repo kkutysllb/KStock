@@ -1,11 +1,11 @@
-import { useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { useMemo, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
   CodeBlock, DiffBlock, DisclosureRow, IconInspectOutline12, ReadBlock, SearchBlock, StateDot, TerminalBlock, WebBlock,
   diffTotals,
 } from '@qilin/client-ui-primitives'
 import type { PropsRenderSlots, TranslateNS } from '@qilin/client-ui-slots'
-import type { OpenFileOptions } from '@qilin/client-ui-chat/client'
+import type { OpenFileOptions, UseDisclosure } from '@qilin/client-ui-chat/client'
 import type { MessageImageLoader } from '@qilin/client-ui-conversation/client'
 import { CHAT_DIFF_MAX_LINES, type DiffCardModel } from '../models/diff-card-model.ts'
 import { CHAT_READ_MAX_LINES, type ReadCardModel } from '../models/read-card-model.ts'
@@ -23,9 +23,12 @@ import {
 } from '../models/tool-call-model.ts'
 import type { WebCardModelProps } from '../models/web-card-model.ts'
 import { AskQuestionCard } from './AskQuestionCard.tsx'
+import { ToolDetails, type ToolDetailsModel } from './ToolDetails.tsx'
 import css from './ToolRow.module.css'
 
 export interface ToolRowProps {
+  /** Subscribe here, where the row owns its expanded body. */
+  useDisclosure: UseDisclosure
   t: TranslateNS<'conversation'>
   variant: ToolRowVariant
   /** Wire tool name for tool-owned styling layered over the generic variant. */
@@ -70,6 +73,8 @@ export interface ToolRowProps {
   loadImage?: MessageImageLoader | undefined
   search?: SearchCardModel | null | undefined
   web?: WebCardModelProps | null | undefined
+  /** Read-only fields/list card derived from a successful recorded result. */
+  details?: ToolDetailsModel | null | undefined
   state: ToolRowState
   /**
    * Filesystem path from tool args; when set with onOpenFile, the summary
@@ -101,6 +106,7 @@ function leadingFor(state: ToolRowState, icon: ReactNode): ReactNode {
  *  summary already describe a settled row). */
 function stateStatus(state: ToolRowState, t: TranslateNS<'conversation'>): string | null {
   switch (state) {
+    case 'preparing': return t('row.preparing')
     case 'running': return t('row.running')
     case 'error': return t('row.failed')
     case 'stopped': return t('row.stopped')
@@ -128,13 +134,17 @@ export function ToolRow({
   loadImage,
   search,
   web,
+  details,
   state,
   filePath,
   filePathLine,
   onOpenFile,
   inspect,
+  useDisclosure,
 }: ToolRowProps) {
-  const [expanded, setExpanded] = useState(false)
+  // The injected disclosure state is the row's whole open state; an enclosing
+  // Turn's collapse resets it.
+  const { expanded, toggle: toggleExpand } = useDisclosure()
   const terminalLabels = useMemo(() => terminalBlockLabels(t), [t])
   const diffLabels = useMemo(() => diffBlockLabels(t), [t])
   const readLabels = useMemo(() => readBlockLabels(t), [t])
@@ -150,11 +160,12 @@ export function ToolRow({
     : null
   const searchBody = search ?? null
   const webBody = web ?? null
+  const detailsBody = details ?? null
   const askQuestionBody = askQuestion ?? null
   const inputRaw = bodyRaw ?? null
   const outputText = output ?? null
-  const card = askQuestionBody ?? terminalBody ?? diffBody ?? readBody ?? imageBody ?? searchBody ?? webBody
-  const expandable = inputRaw !== null || outputText !== null || card !== null
+  const card = askQuestionBody ?? terminalBody ?? diffBody ?? readBody ?? imageBody ?? searchBody ?? webBody ?? detailsBody
+  const expandable = state !== 'preparing' && (inputRaw !== null || outputText !== null || card !== null)
   const open = expanded && expandable
   const bodyText = useMemo(
     () => open && card === null && inputRaw !== null ? formatToolBody(variant, inputRaw) : null,
@@ -163,7 +174,11 @@ export function ToolRow({
   const status = stateStatus(state, t)
   // A failure must replace, not supplement, the normal summary.
   const failureLine = state === 'error' ? errorSummary ?? null : null
-  const summaryText = failureLine ?? terminalBody?.description ?? summary
+  // A receipt card states its recorded status in the body, so the expanded
+  // header drops the status the collapsed summary carried.
+  const normalSummary = terminalBody?.description
+    ?? (open ? detailsBody?.expandedSummary ?? summary : summary)
+  const summaryText = failureLine ?? normalSummary
   // A diff row's collapsed line carries the card's +/- totals (the same
   // numbers the expanded footer prints) so the change size reads without
   // expanding; an explicit summarySuffix (none today on diff rows) wins.
@@ -173,9 +188,6 @@ export function ToolRow({
     return `+${added} -${removed}`
   }, [diffBody])
   const suffix = failureLine === null ? summarySuffix ?? diffStat : null
-  const toggleExpand = () => {
-    setExpanded(v => !v)
-  }
   const openFile = filePath !== undefined && onOpenFile !== undefined && failureLine === null
     ? (event: MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation()
@@ -235,7 +247,7 @@ export function ToolRow({
           </>
         )}
       >
-        <div className={css.bodyWrap}>
+        <div className={clsx(css.bodyWrap, detailsBody !== null && css.detailsBodyWrap)}>
           {askQuestionBody !== null
             ? <AskQuestionCard card={askQuestionBody} />
             : terminalBody !== null
@@ -289,36 +301,38 @@ export function ToolRow({
                       )
                       : webBody !== null
                         ? <WebBlock {...webBody} labels={webLabels} className={css.webBody} />
-                        : (
-                          <>
-                            {variant === 'code' && bodyText !== null && (
-                              <div className={css.bodyScroll}>
-                                <CodeBlock code={bodyText} lang="typescript" copyLabel={t('copy')} copiedLabel={t('copied')} className={css.codeBody} />
-                              </div>
-                            )}
-                            {(cardBody !== null || outputText !== null) && (
-                              <div className={css.ioCard}>
-                                {cardBody !== null && (
-                                  <div className={css.ioSection}>
-                                    <span className={css.ioLabel}>{t('row.input')}</span>
-                                    <span className={css.ioText}>{cardBody}</span>
-                                  </div>
-                                )}
-                                {cardBody !== null && outputText !== null && (
-                                  <span className={css.ioDivider} aria-hidden />
-                                )}
-                                {outputText !== null && (
-                                  <div className={css.ioSection}>
-                                    <span className={css.ioLabel}>{t('row.output')}</span>
-                                    <span className={css.ioText} data-error={state === 'error' || undefined}>
-                                      {outputText}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </>
-                        )}
+                        : detailsBody !== null
+                          ? <ToolDetails model={detailsBody} hasInspect={inspect !== undefined} t={t} onOpenFile={onOpenFile} />
+                          : (
+                            <>
+                              {variant === 'code' && bodyText !== null && (
+                                <div className={css.bodyScroll}>
+                                  <CodeBlock code={bodyText} lang="typescript" copyLabel={t('copy')} copiedLabel={t('copied')} className={css.codeBody} />
+                                </div>
+                              )}
+                              {(cardBody !== null || outputText !== null) && (
+                                <div className={css.ioCard}>
+                                  {cardBody !== null && (
+                                    <div className={css.ioSection}>
+                                      <span className={css.ioLabel}>{t('row.input')}</span>
+                                      <span className={css.ioText}>{cardBody}</span>
+                                    </div>
+                                  )}
+                                  {cardBody !== null && outputText !== null && (
+                                    <span className={css.ioDivider} aria-hidden />
+                                  )}
+                                  {outputText !== null && (
+                                    <div className={css.ioSection}>
+                                      <span className={css.ioLabel}>{t('row.output')}</span>
+                                      <span className={css.ioText} data-error={state === 'error' || undefined}>
+                                        {outputText}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          )}
           {inspect !== undefined && (
             <button
               type="button"

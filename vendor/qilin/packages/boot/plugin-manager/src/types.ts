@@ -5,12 +5,23 @@ export type { PluginEntryId } from '@qilin/host-plugin-inventory/types'
 import type { PluginEntryId } from '@qilin/host-plugin-inventory/types'
 
 /** Reasons a profile control cannot modify its target. */
-export type ReadOnlyReason = 'management-required' | 'unaddressable'
+export type ReadOnlyReason = 'management-required' | 'unaddressable' | 'shipped-layer'
+
+/** A package whose declared qilin peers reject the running runtime version, without an exemption for the exact pair. */
+export interface IncompatiblePlugin {
+  name: string
+  version: string
+  runtimeVersion: string
+  /** Only the qilin peer ranges the running version does not satisfy. */
+  peers: Record<string, string>
+}
 
 /** Localizable management failure and optional external diagnostic. */
 export interface ManagementError {
-  code: ReadOnlyReason | 'unknown-plugin' | 'invalid-spec' | 'ambiguous-install' | 'not-bundle' | 'not-removable' | 'stop-profile' | 'bundle-in-use' | 'stale-approval' | 'operation-error'
+  code: ReadOnlyReason | 'unknown-plugin' | 'invalid-spec' | 'ambiguous-install' | 'not-bundle' | 'not-removable' | 'stop-profile' | 'bundle-in-use' | 'stale-approval' | 'incompatible-version' | 'operation-error'
   diagnostic?: string
+  /** Present with `incompatible-version`: the packages the running runtime version rejects. */
+  incompatible?: IncompatiblePlugin[]
 }
 
 /** One running-profile entry and its persistent control availability. */
@@ -43,6 +54,11 @@ export interface BundleInfo {
    * held by the installation's dependencies, selected by no shipped template, and never removable.
    */
   optional: boolean
+  /**
+   * Whether an installed copy of this layer resolves ahead of the installation's, so the layer can be upgraded in
+   * place: a bundle the profile installed, or a shipped bundle whose resolution the profile owns.
+   */
+  updatable: boolean
   removable: boolean
   readOnlyReason?: ReadOnlyReason
   error?: ManagementError
@@ -50,6 +66,17 @@ export interface BundleInfo {
   rows: BundleRowInfo[]
   /** Ids of rows the bundle's patch changes without declaring them: the built-in rows it configures or disables. */
   overrides: string[]
+}
+
+/** A registry to install from: an http(s) URL, or null for the one pnpm's own configuration names. */
+export type Registry = string | null
+
+/** The registries the manager asks: the configured first one, its fallbacks in order, and what pnpm's own configuration names. */
+export interface PluginRegistries {
+  readonly registry: Registry
+  readonly fallbackRegistries: readonly string[]
+  /** The URL pnpm's own configuration names in the profile, read from pnpm; null when it could not be read. */
+  readonly resolved: string | null
 }
 
 /** How a pnpm run failed, read off how it ended and what it printed. */
@@ -73,6 +100,8 @@ export interface PackageResult {
   logPath: string
   /** Present when the run failed: what kind of failure its exit and output describe. */
   kind?: PluginInstallFailureKind
+  /** Present when a compatibility check refused the run: the packages the running runtime version rejects. */
+  incompatible?: IncompatiblePlugin[]
 }
 
 /** Persisted change and independently observed application outcome. */
@@ -94,6 +123,13 @@ export interface ChangeResult {
   pendingBuilds?: string[]
   /** Package script permissions saved before this installation attempt. */
   approvedBuilds?: string[]
+  /** The registries the installation asked, in order; `packageResult` is the last one's run. */
+  registries?: Registry[]
+  /**
+   * What the last failed run could not reach or get an answer from: the registry it asked, or the host a git or
+   * tarball spec is fetched from, which no registry stands in for; absent for a failure neither explains.
+   */
+  failedAt?: 'registry' | 'spec-host'
 }
 
 /** Identifies one installation from its start to its settlement, including its log chunks and cancellation. */
@@ -105,6 +141,14 @@ export interface InstallBundleOptions {
   requestId?: PluginInstallRequestId
   /** Explicitly allow these pending packages' scripts for this profile, then install; a name no longer pending refuses the call. */
   approvedBuilds?: string[]
+  /** The registry asked first; absent, the configured one. The configured fallbacks follow while a registry is unreachable or stale. */
+  registry?: Registry
+}
+
+/** Where an inspection asks. */
+export interface InspectOptions {
+  /** The registry asked first; absent, the configured one. */
+  readonly registry?: Registry
 }
 
 /** The form one install spec takes, in pnpm's vocabulary. */
@@ -135,18 +179,26 @@ export type PluginSpecInspection =
     readonly description?: string
     /** Whether the package declares a bundle patch; null when the spec's form does not say. */
     readonly bundle: boolean | null
+    /** The registry that answered for a name, and for the other forms the one an install of the spec asks first. */
+    readonly registry: Registry
+    /** The host a git spec or a tarball URL is fetched from, which no registry stands in for. */
+    readonly host?: string
   }
   | {
     readonly status: 'refused'
     readonly problem: PluginInspectProblem
     /** What pnpm, the registry, or the file system said. */
     readonly reason: string
+    /** The registries asked, in order, when the refusal came from asking them; `reason` is the last one's. */
+    readonly registries?: Registry[]
   }
 
-/** The Host phase of one installation, before its install call settles. */
+/** The Host phase of one installation, before its install call settles; `installing` is announced once per registry asked. */
 export interface PluginInstallProgress {
   readonly requestId: PluginInstallRequestId
   readonly phase: 'installing' | 'cancelling' | 'applying'
+  /** With `installing`: the registry this attempt asks, its one-based position, and how many the installation may ask. */
+  readonly attempt?: { readonly registry: Registry; readonly index: number; readonly total: number }
 }
 
 /** Cancellation is confirmed only after process exit and file restoration. */
@@ -233,9 +285,10 @@ declare module '@qilin/kylin' {
      */
     'plugin-manager/install-log'(chunk: PluginInstallLogChunk): void
     /**
-     * An installation moved between its Host phases.
+     * An installation moved between its Host phases. `installing` is announced once per registry the
+     * installation asks, with the attempt's registry and position; `cancelling` and `applying` once.
      * @mode emit
-     * @param progress - the installation's request id and phase.
+     * @param progress - the installation's request id and phase, with the attempt while installing.
      */
     'plugin-manager/install-state'(progress: PluginInstallProgress): void
   }
