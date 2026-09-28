@@ -64,6 +64,10 @@ button { color: inherit; }
 
 .brand-mark { gap: 10px; }
 
+/* 落地页商标是上游 QiLin 朱印（qilin-seal.svg，自带印色）：把旧 K 图标的
+   绿色光晕换成暖色，auth 页旧图标（.auth-brand .logo-mark.compact）不受影响。 */
+.brand-mark .logo-mark { filter: drop-shadow(0 8px 18px rgba(162, 53, 38, 0.3)); }
+
 .logo-mark { width: 30px;
   height: 30px;
   flex: 0 0 auto;

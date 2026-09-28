@@ -123,6 +123,15 @@ class Verifier:
                           "source kstock landing page")
         self.require_path(root / "kstock" / "web" / "public" / "kstock-auth.html",
                           "source kstock auth page")
+        # 落地页左上商标 = 上游 QiLin 印章（vendor/qilin packages/client/ui-brand
+        # 的 Seal 几何与字形）：资产须在位，落地页须引用它而非旧项目图标。
+        self.require_path(root / "kstock" / "web" / "public" / "qilin-seal.svg",
+                          "source kstock landing seal asset")
+        self.require_file_contains(
+            root / "kstock" / "web" / "public" / "kstock-landing.html",
+            "source kstock landing seal mark",
+            ["/kstock/qilin-seal.svg"],
+        )
 
         # 技能随 preset 分发（cordis 模式）：bundle patch 注册 KStock preset
         # root（KSTOCK_PRESETS_DIR），技能绑定在各 preset 的 skill-filesystem

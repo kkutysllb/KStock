@@ -20,6 +20,8 @@ done
 pnpm -C kstock/quant test
 # accounts 包 1.x 账户迁移单测（bcrypt 兼容 / 按需导入 / 登录迁移分支）。
 pnpm -C kstock/accounts test
+# 品牌层桌面窗口几何回归（macOS 双行头部 10px 下移 / 折叠轨避让）。
+pnpm -C kstock/client-brand test
 
 # Electron 壳：主进程打包 + 类型检查。
 pnpm -C apps/desktop build:electron-main
