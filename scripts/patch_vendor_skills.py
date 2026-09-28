@@ -1515,6 +1515,33 @@ def _fix_qilin_verify_closure_glob(text: str) -> str | None:
     return patched
 
 
+# ── 补丁 23：品牌版本徽章改用 KStock 桌面端版本 ──
+# 引擎在客户端构建期把 QILIN_CLIENT_VERSION（= 引擎仓库版本，如 3.0.5）
+# 烤进 ui-sidebar 的品牌徽章，侧栏词标旁会挂出引擎版本号。KStock 的版本
+# 事实源是 apps/desktop/package.json（发布脚本升版），补丁为
+# repositoryClientBuildEnvironment 增加 KSTOCK_CLIENT_VERSION 覆盖口：
+# scripts/qilin-pnpm.sh 统一从桌面端清单注入「桌面端 vX.Y.Z」，未设置时
+# 行为与上游逐字一致（?? 回落），official 构建面不动。
+_VERIFY_CLOSURE_CLIENT_ENV_REL = "qilin/scripts/client-build-environment.ts"
+_KSTOCK_CLIENT_VERSION_MARKER = "KStock patch: 桌面端版本徽章"
+_KSTOCK_CLIENT_VERSION_ANCHOR = """    ...(dirty === true ? { QILIN_CLIENT_GIT_DIRTY: 'true' } : {}),
+    QILIN_CLIENT_VERSION: repositoryVersion(root),"""
+_KSTOCK_CLIENT_VERSION_REPLACEMENT = """    ...(dirty === true ? { QILIN_CLIENT_GIT_DIRTY: 'true' } : {}),
+    // KStock patch: 桌面端版本徽章——KSTOCK_CLIENT_VERSION 由
+    // scripts/qilin-pnpm.sh 从 apps/desktop/package.json 注入（桌面端 vX.Y.Z），
+    // 未设置时回落引擎仓库版本，行为与上游一致。
+    QILIN_CLIENT_VERSION: environment.KSTOCK_CLIENT_VERSION ?? repositoryVersion(root),"""
+
+
+def _fix_kstock_client_version_badge(text: str) -> str | None:
+    """品牌徽章版本允许 KSTOCK_CLIENT_VERSION 覆盖；已修/锚点失配返回 None。"""
+    if _KSTOCK_CLIENT_VERSION_MARKER in text:
+        return None
+    if _KSTOCK_CLIENT_VERSION_ANCHOR not in text:
+        return None
+    return text.replace(_KSTOCK_CLIENT_VERSION_ANCHOR, _KSTOCK_CLIENT_VERSION_REPLACEMENT, 1)
+
+
 # ── 补丁 16：kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界）──
 # 实测（agent 任务报告）：TushareClient.__init__ 无条件 ts.set_token(token)，
 # tushare 官方实现固定写 ~/tk.csv（HOME 根，工作区沙箱写边界之外）→ 被
@@ -2115,6 +2142,10 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     verify_closure = REPO_ROOT / "vendor" / "qilin" / "scripts" / "verify-runtime-closure.ts"
     if _patch_engine_file(verify_closure, _VERIFY_CLOSURE_REL, _VERIFY_CLOSURE_MARKER, _fix_qilin_verify_closure_glob):
         changed.append(_VERIFY_CLOSURE_REL)
+    # qilin 客户端构建环境的桌面端版本徽章覆盖口（补丁 23）。
+    client_env = REPO_ROOT / "vendor" / "qilin" / "scripts" / "client-build-environment.ts"
+    if _patch_engine_file(client_env, _VERIFY_CLOSURE_CLIENT_ENV_REL, _KSTOCK_CLIENT_VERSION_MARKER, _fix_kstock_client_version_badge):
+        changed.append(_VERIFY_CLOSURE_CLIENT_ENV_REL)
     # kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界，补丁 16）。
     for rel_path in _TUSHARE_SET_TOKEN_RELS:
         target = vendor_root / rel_path

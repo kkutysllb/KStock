@@ -47,4 +47,13 @@ cd "$REPO_ROOT/vendor/qilin"
 # 我们的流程总是显式 install，自检只带来这类副作用。
 export pnpm_config_verify_deps_before_run=false
 
+# KStock 桌面端版本徽章：引擎客户端构建期把 QILIN_CLIENT_VERSION 烤进
+# ui-sidebar 的品牌徽章（补丁 23 提供 KSTOCK_CLIENT_VERSION 覆盖口）。
+# 版本事实源是 apps/desktop/package.json（build-release.sh 升版），此处
+# 统一注入「桌面端 vX.Y.Z」，所有引擎构建路径自动随发布版本更新。
+if [ -f "$REPO_ROOT/apps/desktop/package.json" ]; then
+  KSTOCK_DESKTOP_VERSION="$(node -p "require('$REPO_ROOT/apps/desktop/package.json').version")"
+  export KSTOCK_CLIENT_VERSION="${KSTOCK_CLIENT_VERSION:-桌面端 v$KSTOCK_DESKTOP_VERSION}"
+fi
+
 exec node "$PNPM_CJS" "$@"
