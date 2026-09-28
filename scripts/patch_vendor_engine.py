@@ -22,20 +22,16 @@ VENDOR = REPO_ROOT / "vendor" / "qilin"
 
 SETTINGS_ROOT = "packages/client/ui-settings-general/src/client/SettingsRoot.tsx"
 
-# 旧导入块的公共锚点：上游重构导入分组时只需更新 OLD_IMPORTS/NEW_IMPORTS。
-OLD_IMPORTS = """  ConnectionIndicator,
-  IconAgentPresetOutline16, IconArchiveOutline20, IconChevronLeftOutline14,
-  IconCloseOutline16, IconDataOutline16, IconPersonalizationOutline16,
-  IconQuestionOutline14, IconSettingsOutline16,
-} from '@qilin/client-ui-primitives'"""
+# 只锚定「值导入块闭括号 → 紧随的 type 导入行」这一收尾序列——上游在块内
+# 新增/重排导入（3.0.5 在图标行尾加了 useModalLayer）时不再失配；KStock 的
+# 5 个分区图标追加在闭括号之前，不受块内顺序影响。
+OLD_IMPORTS = """} from '@qilin/client-ui-primitives'
+import type { ConnectionIndicatorState } from '@qilin/client-ui-primitives'"""
 
-NEW_IMPORTS = """  ConnectionIndicator,
-  IconAgentPresetOutline16, IconApiOutline14, IconArchiveOutline20,
-  IconChevronLeftOutline14, IconCloseOutline16, IconDatabaseOutline16,
-  IconDataOutline16, IconGaugeOutline16, IconPanelLeftOutline16,
-  IconPersonalizationOutline16, IconQuestionOutline14, IconSettingsOutline16,
-  IconSkillOutline16,
-} from '@qilin/client-ui-primitives'"""
+NEW_IMPORTS = """  IconApiOutline14, IconDatabaseOutline16, IconGaugeOutline16,
+  IconPanelLeftOutline16, IconSkillOutline16,
+} from '@qilin/client-ui-primitives'
+import type { ConnectionIndicatorState } from '@qilin/client-ui-primitives'"""
 
 OLD_NAVICON = """  if (id === 'about') return <IconQuestionOutline14 className={css.navIcon} size={16} />
   return <IconSettingsOutline16 className={css.navIcon} size={16} />"""

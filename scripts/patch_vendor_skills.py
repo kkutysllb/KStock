@@ -64,6 +64,7 @@ KStock 对上游技能包的全部本地修复：同步完成后自动重放，�
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -865,6 +866,30 @@ def _patch_file(path: Path, name: str, apply_fn) -> bool:
     return True
 
 
+# 本次执行中「锚点失配」的引擎补丁（相对 REPO_ROOT 的路径）；main() 据此非零退出。
+_ENGINE_PATCH_FAILURES: list[str] = []
+
+
+def _patch_engine_file(path: Path, rel_path: str, marker: str, apply_fn) -> bool:
+    """引擎源码补丁重放：已应用=静默跳过；锚点失配=记入失败清单。
+
+    与 patch_vendor_engine.py 的 fail-loud 口径一致——宁可构建失败，
+    也不要悄悄丢掉本地定制（补丁 14/15/21/22 都是这样丢过或差点丢掉的）。
+    """
+    if not path.exists():
+        _ENGINE_PATCH_FAILURES.append(f"{rel_path}（目标文件缺失）")
+        return False
+    text = path.read_text(encoding="utf-8")
+    if marker in text:
+        return False
+    patched = apply_fn(text)
+    if patched is None or patched == text:
+        _ENGINE_PATCH_FAILURES.append(rel_path)
+        return False
+    path.write_text(patched, encoding="utf-8")
+    return True
+
+
 def _fix_ts_bug(text: str) -> str | None:
     """修复 ts import bug；已修复返回 None（幂等跳过）。"""
     if not _TS_FALLBACK_PATTERN.search(text) and not _TS_USE_PATTERN.search(text):
@@ -1391,18 +1416,20 @@ def _fix_qilin_lefthook_optional(text: str) -> str | None:
 # /kstock-api/frame-check（kstock/quant 的 Node 侧 HEAD 预检响应头），
 # 不可嵌直接 window.open 外部（壳转系统浏览器），预检失败退回内嵌尝试
 # （宽松降级，与 frame-check 模块口径一致）。非 kstock profile 下该路由
-# 404 → catch → 内嵌，行为与上游一致。锚点失配静默跳过。
+# 404 → catch → 内嵌，行为与上游一致。锚点失配 fail-loud（见 `_patch_engine_file`）。
 _UI_CHAT_APPLY_REL = "qilin/packages/client/ui-chat/src/client/apply.ts"
 _UI_CHAT_PREFLIGHT_MARKER = "KStock patch: X-Frame-Options"
+# 3.0.5 起外链条件多了 linkOpening 侧栏偏好判定——锚点随之更新，
+# 替换体必须原样保留该条件，否则会改掉上游「外链在侧栏打开」的用户偏好。
 _UI_CHAT_OPEN_LINK_ANCHOR = """          openExternalLink: (url) => {
-            if (ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
+            if (linkOpening.getSnapshot() === 'sidebar' && ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
               ctx.sidebarRight.openTab('browser', { params: { url } })
             } else {
               window.open(url, '_blank', 'noopener,noreferrer')
             }
           },"""
 _UI_CHAT_OPEN_LINK_REPLACEMENT = """          openExternalLink: (url) => {
-            if (ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
+            if (linkOpening.getSnapshot() === 'sidebar' && ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
               // KStock patch: X-Frame-Options / frame-ancestors refusals still
               // fire the iframe load event, so the embedded Browser renders a
               // blank frame with no failure notice. Ask the KStock host route
@@ -1428,6 +1455,34 @@ def _fix_qilin_chat_link_preflight(text: str) -> str | None:
     if _UI_CHAT_OPEN_LINK_ANCHOR not in text:
         return None
     return text.replace(_UI_CHAT_OPEN_LINK_ANCHOR, _UI_CHAT_OPEN_LINK_REPLACEMENT, 1)
+
+
+# ── 补丁 22：verify-runtime-closure 的 preset glob 回退 + 覆盖 KStock 自有预设 ──
+# 上游 b1696f535b 把 glob 改为 packages/bundle/web-app/presets/*.patch.yml，而该目录
+# 在 3.0.5 既未入库也不在工作树 → globSync 返回 [] → failures 非空 → exit 1。该门禁
+# 是 build-exe-for-python-sdk 流水线首步，也是 build-runtime-bundle.sh 的必经步，
+# 因此不修会让两条打包路径同时中断。回退到 shipped 预设形态，并把 kstock/presets
+# 一并纳入校验（产品态 includeShippedRoot=false，真正随包发的是这 7 个）。
+# 已验证：KStock 预设引用的 25 个包名全部是 python/sdk-runtime 的直接 workspace 依赖
+# → 纳入后不会误报。
+_VERIFY_CLOSURE_REL = "qilin/scripts/verify-runtime-closure.ts"
+_VERIFY_CLOSURE_MARKER = "KStock patch: preset glob 回退"
+_VERIFY_CLOSURE_ANCHOR = "const AGENT_PRESET_GLOB = 'packages/bundle/web-app/presets/*.patch.yml'"
+_VERIFY_CLOSURE_REPLACEMENT = (
+    "// KStock patch: preset glob 回退 + 覆盖 KStock 自有预设——上游指向的 bundle presets\n"
+    "// 目录不存在，会让本门禁以 exit 1 空转失败；kstock/presets 是产品态真正随包发的那批。\n"
+    "const AGENT_PRESET_GLOB = '{packages/preset/agent-presets/presets/*/agent.cordis.yml,"
+    "../../kstock/presets/*/agent.cordis.yml}'"
+)
+
+
+def _fix_qilin_verify_closure_glob(text: str) -> str | None:
+    """verify-runtime-closure 的 preset glob 回退；已修/锚点失配返回 None。"""
+    if _VERIFY_CLOSURE_MARKER in text:
+        return None
+    if _VERIFY_CLOSURE_ANCHOR not in text:
+        return None
+    return text.replace(_VERIFY_CLOSURE_ANCHOR, _VERIFY_CLOSURE_REPLACEMENT, 1)
 
 
 # ── 补丁 16：kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界）──
@@ -2016,19 +2071,20 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
         changed.append(rel_path)
     # qilin 引擎打包脚本（Windows staging 修复，补丁 14）。
     qilin_script = REPO_ROOT / "vendor" / "qilin" / "scripts" / "build-exe-for-python-sdk.ts"
-    if qilin_script.exists():
-        if _patch_file(qilin_script, _QIILIN_EXE_SCRIPT_REL, _fix_qilin_staging_scope):
-            changed.append(_QIILIN_EXE_SCRIPT_REL)
+    if _patch_engine_file(qilin_script, _QIILIN_EXE_SCRIPT_REL, _REPAIR_MARKER, _fix_qilin_staging_scope):
+        changed.append(_QIILIN_EXE_SCRIPT_REL)
     # qilin git hooks 安装脚本（production 安装容忍缺 lefthook，补丁 15）。
     lefthook_script = REPO_ROOT / "vendor" / "qilin" / "scripts" / "install-lefthook.mjs"
-    if lefthook_script.exists():
-        if _patch_file(lefthook_script, _LEFTHOOK_SCRIPT_REL, _fix_qilin_lefthook_optional):
-            changed.append(_LEFTHOOK_SCRIPT_REL)
+    if _patch_engine_file(lefthook_script, _LEFTHOOK_SCRIPT_REL, _LEFTHOOK_MARKER, _fix_qilin_lefthook_optional):
+        changed.append(_LEFTHOOK_SCRIPT_REL)
     # qilin ui-chat 外链宿主预检（内嵌浏览器白屏修复，补丁 21）。
     ui_chat_apply = REPO_ROOT / "vendor" / "qilin" / "packages" / "client" / "ui-chat" / "src" / "client" / "apply.ts"
-    if ui_chat_apply.exists():
-        if _patch_file(ui_chat_apply, _UI_CHAT_APPLY_REL, _fix_qilin_chat_link_preflight):
-            changed.append(_UI_CHAT_APPLY_REL)
+    if _patch_engine_file(ui_chat_apply, _UI_CHAT_APPLY_REL, _UI_CHAT_PREFLIGHT_MARKER, _fix_qilin_chat_link_preflight):
+        changed.append(_UI_CHAT_APPLY_REL)
+    # qilin runtime 闭包门禁的 preset glob 回退（补丁 22）。
+    verify_closure = REPO_ROOT / "vendor" / "qilin" / "scripts" / "verify-runtime-closure.ts"
+    if _patch_engine_file(verify_closure, _VERIFY_CLOSURE_REL, _VERIFY_CLOSURE_MARKER, _fix_qilin_verify_closure_glob):
+        changed.append(_VERIFY_CLOSURE_REL)
     # kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界，补丁 16）。
     for rel_path in _TUSHARE_SET_TOKEN_RELS:
         target = vendor_root / rel_path
@@ -2080,6 +2136,11 @@ def main() -> None:
             print(f"  - {rel_path}")
     else:
         print("技能补丁均已就绪，无需改动。")
+    if _ENGINE_PATCH_FAILURES:
+        print("✗ 引擎补丁锚点失配（本地定制未重放，上游可能重构了该处）：", file=sys.stderr)
+        for rel_path in _ENGINE_PATCH_FAILURES:
+            print(f"  - vendor/{rel_path}", file=sys.stderr)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
