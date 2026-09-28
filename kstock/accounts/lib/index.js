@@ -95,7 +95,7 @@ function isRecord(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 //#endregion
-//#region ../../node_modules/.pnpm/bcryptjs@3.0.3/node_modules/bcryptjs/index.js
+//#region ../node_modules/.pnpm/bcryptjs@3.0.3/node_modules/bcryptjs/index.js
 /**
 * The random implementation to use as a fallback.
 * @type {?function(number):!Array.<number>}
