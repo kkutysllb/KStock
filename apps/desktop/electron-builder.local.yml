@@ -1,0 +1,15 @@
+# 本地离线打包覆盖配置（不替换 electron-builder.yml）。
+#
+# 背景：electron-builder.yml 里 publish.provider: github 即便配合
+# `--publish never`，在没有 release 产物的首次构建时仍会去
+# github.com 拉 release 信息（实测 connect ETIMEDOUT 20.205.243.166:443，
+# 而 api.github.com 可达），导致本地离线打包失败。
+#
+# 这里用 extends 继承主配置，仅把 publish 置空，使本地构建完全不触网。
+# 上传 GitHub Release 仍由 CI（.github/workflows/release.yml）按
+# electron-builder.yml 执行，本文件不参与 CI。
+#
+# 用法（注意：不要再传 --publish，CLI 优先级会压掉这里的 null）：
+#   node scripts/run.mjs electron-builder --config electron-builder.local.yml
+extends: ./electron-builder.yml
+publish: null

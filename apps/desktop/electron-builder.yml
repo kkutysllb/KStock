@@ -30,13 +30,22 @@ files:
   - "!**/*.map"
   - "!**/*.ts"
 
-# 内置引擎分发束（scripts/build-engine-bundle.sh 产物），运行时位于
-# resources/engine：kstock-engine 单文件可执行 + plugins/（KStock 插件包，
-# 首启 profile 引导的链接目标）+ skills/（KSTOCK_SKILLS_DIR 挂载）。
+# 内置引擎分发束（scripts/build-runtime-bundle.sh 产物）：
+#   kstock-runtime.tar.gz  麒麟 runtime 闭包（symlink-free node_modules +
+#                          runtime-bootstrap.mjs 入口 + office kit 随
+#                          node_modules 按平台分发）。桌面壳首启解压到
+#                          ~/.kstock/runtime，用 Electron 内置 Node 直跑
+#                          （ELECTRON_RUN_AS_NODE=1）。单文件压缩随包，
+#                          规避数万散文件的复制/签名/公证扫描。
+#   engine/plugins         KStock 插件包（首启 profile 引导的链接目标）
+#   engine/presets         KStock agent preset 目录（含随行技能目录）
 extraResources:
-  - from: ../../dist-exe
-    to: engine
-    filter: ["**/*"]
+  - from: ../../staging/kstock-runtime.tar.gz
+    to: kstock-runtime.tar.gz
+  - from: ../../staging/plugins
+    to: engine/plugins
+  - from: ../../staging/presets
+    to: engine/presets
 
 mac:
   category: public.app-category.finance

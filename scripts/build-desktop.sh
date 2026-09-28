@@ -44,16 +44,32 @@ esac
 # ── electron-builder 构建（macOS 重试 3 次应对 notarize 偶发失败）──────
 # Apple notarization 服务偶发 HTTP 500，重试可显著降低发布失败率。
 # Linux/Windows 无此问题，单次执行即可。
+#
+# 本地离线构建：electron-builder.yml 的 publish.provider=github 即便配合
+# `--publish never`，在没有 release 产物的机器上仍会去 github.com 拉 release
+# 信息（实测 connect ETIMEDOUT 20.205.243.166:443 而 api.github.com 可达），
+# 于是三次尝试各等 30s 退避后整体失败。设 KSTOCK_OFFLINE_BUILD=1 即改用
+# apps/desktop/electron-builder.local.yml（extends 主配置 + publish: null），
+# 完全不触网。CI 不设该变量，仍走主配置 + GitHub 上传。
 MAX_ATTEMPTS=1
 case "$(uname -s)" in
   Darwin) MAX_ATTEMPTS=3 ;;
 esac
 
+BUILD_CONFIG="electron-builder.yml"
+if [ "${KSTOCK_OFFLINE_BUILD:-0}" = "1" ]; then
+  BUILD_CONFIG="electron-builder.local.yml"
+  echo "==> 离线构建模式：使用 $BUILD_CONFIG（publish 已禁用，不触网）"
+fi
+
 ATTEMPT=0
 until [ $ATTEMPT -ge $MAX_ATTEMPTS ]; do
   ATTEMPT=$((ATTEMPT + 1))
   echo "==> electron-builder 构建（attempt ${ATTEMPT}/${MAX_ATTEMPTS}）"
-  if pnpm run electron:build; then
+  # 不用 `pnpm run electron:build -- <args>` 转发参数：pnpm 对含空串参数的
+  # 脚本调用有已知转义问题。electron-builder 自身读 ELECTRON_BUILDER_CONFIG
+  # （相对 apps/desktop 解析），比 CLI 转发稳。
+  if ELECTRON_BUILDER_CONFIG="$BUILD_CONFIG" pnpm run electron:build; then
     echo "==> 桌面端构建成功"
     exit 0
   fi

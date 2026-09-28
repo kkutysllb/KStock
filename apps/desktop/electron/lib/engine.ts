@@ -1,9 +1,11 @@
 /**
- * 内置引擎子进程管理（2.0：QiLin 3.x 引擎单进程托管）。
+ * 内置引擎子进程管理（2.0：QiLin 3.x 引擎单进程托管，运行时闭包形态）。
  *
- * 发布包在 ``resources/engine/`` 内置引擎单文件可执行（上游
- * build-exe-for-python-sdk 产物，自带 Node 运行时与全部插件依赖）。
- * 桌面端启动时以 ``--profile kstock`` 拉起唯一引擎进程（监听 18001）。
+ * 发布包内置 ``resources/kstock-runtime.tar.gz``（麒麟 runtime 闭包：
+ * symlink-free node_modules + runtime-bootstrap.mjs 入口 + office kit），
+ * 首启解压到 ``~/.kstock/runtime``，以 Electron 内置 Node
+ * （``ELECTRON_RUN_AS_NODE=1``）直跑闭包入口，以 ``--profile kstock``
+ * 拉起唯一引擎进程（监听 18001）。
  * stdout 的 token URL（``/workspace?token=...``）仅作就绪信号与日志诊断，
  * 主窗口加载不带 token 的 /workspace，由引擎账户门引导注册/登录；
  * 退出或更新安装前联动终止整个进程树。
@@ -22,7 +24,9 @@ import {
   openSync,
   readFileSync,
   readlinkSync,
+  renameSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -290,14 +294,65 @@ function legacySecretsEnvironment(): Record<string, string> {
 /**
  * 解析引擎启动方式，按优先级：
  *
- * 1. 打包态 ``resources/engine/kstock-engine(.exe)``（electron-builder
- *    extraResources 注入；build-engine-bundle.sh 产物，文件名固定）。
- * 2. 开发态 ``<repo>/dist-exe/kstock-engine(.exe)``（同一构建脚本的本地产物）。
+ * 1. 打包态：内置运行时闭包（``resources/kstock-runtime.tar.gz``，由
+ *    scripts/build-runtime-bundle.sh 产出）。首启解压到 ``~/.kstock/runtime``，
+ *    用 Electron 内置 Node（``ELECTRON_RUN_AS_NODE=1``）直跑闭包入口
+ *    runtime-bootstrap.mjs。闭包 symlink-free，无 workspace pnpm 布局的
+ *    ESM 解析问题；引擎不自带 Node 基座与跨平台 prebuilds 死重。
+ * 2. 开发态 ``<repo>/dist-exe/kstock-engine(.exe)``（旧单文件产物，仅存量
+ *    开发机兼容；新流程已不再产出）。
  * 3. dev 兜底：系统 Node（≥22.5）直接跑上游 CLI 源码（vendor/qilin），
- *    无需先构建引擎单文件。
+ *    无需构建任何引擎产物。
  *
- * 打包态任何路径缺失都抛错指引重装；dev 态兜底失败指引跑引擎构建。
+ * 打包态闭包缺失抛错指引重装；dev 态兜底失败指引跑引擎构建。
  */
+/**
+ * 内置运行时闭包解压目录。
+ */
+function runtimeDirectory(): string {
+  return join(appDataDirectory(), "runtime");
+}
+
+/**
+ * 确保内置运行时闭包已解压（幂等，参照 KCoder ensureBundledRuntime）。
+ *
+ * 以 tar 的 ``size:mtime`` 指纹作为版本标记写入 ``.runtime-stamp``：
+ * 换安装包（内容变化）即自动重解压，同包幂等跳过。解压先落临时目录
+ * 再原子换名，中断不留半成品。tar 在 macOS/Linux/Windows 10+ 均系统
+ * 自带（bsdtar 兼容 -xzf）。
+ */
+function ensureRuntimeExtracted(tarPath: string): string {
+  const dest = runtimeDirectory();
+  const stampOf = (p: string) => {
+    const st = statSync(p);
+    return `${st.size}:${Math.trunc(st.mtimeMs)}`;
+  };
+  const entry = join(dest, "runtime-bootstrap.mjs");
+  if (existsSync(entry)) {
+    try {
+      if (readFileSync(join(dest, ".runtime-stamp"), "utf8") === stampOf(tarPath)) {
+        return dest;
+      }
+    } catch {
+      /* 指纹缺失，重新解压 */
+    }
+  }
+  logMain("内置运行时闭包解压中（首次启动/更新后一次）…");
+  const tmp = `${dest}.tmp-${process.pid}`;
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(tmp, { recursive: true });
+  const res = spawnSync("tar", ["-xzf", tarPath, "-C", tmp], { timeout: 300_000, windowsHide: true });
+  if (res.status !== 0 || !existsSync(join(tmp, "runtime-bootstrap.mjs"))) {
+    rmSync(tmp, { recursive: true, force: true });
+    throw new Error(`内置运行时解压失败：${res.stderr?.toString() || `tar exit ${res.status}`}`);
+  }
+  writeFileSync(join(tmp, ".runtime-stamp"), stampOf(tarPath));
+  rmSync(dest, { recursive: true, force: true });
+  renameSync(tmp, dest);
+  logMain(`内置运行时就绪：${dest}`);
+  return dest;
+}
+
 /**
  * 单文件引擎冒烟：`--help` 退出码为 0 视为可用。
  *
@@ -331,6 +386,23 @@ function resolveEngineLaunch(): EngineLaunchSpec {
     // 1.x 迁移：老 secrets.env 的数据源凭据注入引擎环境（不覆盖已有键）。
     ...legacySecretsEnvironment(),
   };
+
+  // 打包态：内置运行时闭包优先（2.0 新架构）。缺失时才落到旧单文件
+  // 分支（存量安装包兼容），都没有则走函数尾部统一报错。
+  const bundledRuntimeTar =
+    app.isPackaged || existsSync(join(process.resourcesPath, "kstock-runtime.tar.gz"))
+      ? join(process.resourcesPath, "kstock-runtime.tar.gz")
+      : null;
+  if (bundledRuntimeTar !== null && existsSync(bundledRuntimeTar)) {
+    const runtimeDir = ensureRuntimeExtracted(bundledRuntimeTar);
+    return {
+      command: process.execPath,
+      args: ["--expose-internals", join(runtimeDir, "runtime-bootstrap.mjs"), ...ENGINE_ARGS],
+      cwd: runtimeDir,
+      env: { ...baseEnv, ELECTRON_RUN_AS_NODE: "1" },
+      label: "bundled engine (electron node + runtime closure)",
+    };
+  }
 
   const bundled = join(process.resourcesPath, "engine", exeName);
   if (existsSync(bundled)) {
