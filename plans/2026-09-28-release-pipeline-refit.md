@@ -1142,3 +1142,22 @@ spctl + stapler 过，V1–V6/V8 全绿）。唯一红是 V7 门禁自身语义�
 app-update.yml 本就不写 publisherName（NSIS 侧字段），「缺字段」非事故、「写错 CN」才是
 （KCoder 事故形态）→ 语义校准为「缺省合规、出现须 = 证书 CN」。本轮起跑前另补交
 kstock/quant/lib 产物（入库构建产物随源码，close() 提交漏带——脏树被发布门正确拦截）。
+
+**第 5 轮 —— 全链打通（tag `424e8abd`，run 36428923164，2026-09-28 晚）**：
+四 job 全绿——ubuntu 11m29s、windows 11m26s、macos 17m12s（含签名 + 公证）、
+publish 2m06s。GitHub Release **v2.0.0-rc.1** 创建成功，11 资产（mac zip/dmg +
+blockmap×2、nsis exe + blockmap、deb、rpm、latest-mac.yml / latest.yml /
+latest-linux.yml），正文取 `release/v2.0.0-rc.1.md`，`verify_release_assets`
+yml↔资源名交叉比对通过。
+
+**R6.1 八项验收**：① 三 build job 全绿 ✅；② 引擎引导步日志含 verify-runtime-closure ✅；
+③ 三平台 `verify-desktop-artifacts: OK`（各出现于 check-release 尾步与工作流独立门禁步）✅；
+④ mac 非 adhoc + TeamIdentifier + spctl + stapler validate ✅（V5 实测）；⑤ Windows 产物
+无 publisherName 污染 ✅（V7-win 实测）；⑥ Release 正文 = 发布说明文件 ✅；⑦ 资产完整性 ✅
+（verify_release_assets 过 + 11 资产清点）；⑧ 单平台补跑 —— `gh run rerun --failed` 为
+GitHub 原生能力，`workflow_dispatch(tag)` 路径已结构性就绪（ref 适配已核对），真实补跑演练
+留待下一次单平台失败或 v2.0.0 前 dispatch 冒烟 ⏳。
+
+**五轮红路径总战果（九处全修死）**：bash 3.2 `$VAR`+中文并名、win POSIX 路径 require、
+electron@44 无 postinstall、run_checks 裸 python、CI 证书不进钥匙串、CSC_NAME 前缀、
+quant SQLite 句柄不关、preset 技能不发布、V7 语义过严。
