@@ -1001,3 +1001,29 @@ secrets 清单与注入范围（§3）、不可变 tag SOP（§4）、决策登�
 **R0.3 回滚锚点**：`e6547774`（分支 `refit/release-pipeline` 自 main 该点开出；
 远端 `origin/main` = `d1eef9f7` 为其祖先，本地领先 21 提交未推送，pull 无内容）。
 暂存纪律：按路径 `git add`，禁用 `git add -A`。
+
+### R1 — 本地链路修复（2026-09-28 晚执行完毕）
+
+**改动**：R1.1 去 `pyproject.toml`/`uv.lock`/`need_cmd uv`/`uv lock`；R1.2 `export REPO_SLUG`；
+R1.3 发布说明前置门 + `--allow-missing-notes`（门在 dry-run 退出后、confirm 前）；
+R1.5 `check-release.sh` 切 `build-runtime-bundle.sh`、`build-desktop.sh` 断言改 staging 三件套、
+`check-ci.sh` dist-exe 冒烟改闭包结构断言（重门留发布链，契约 RR7）、`presign-engine-macos.sh`
+默认目录/注释切闭包、`verify_package_resources.py` docstring 更新 + 必查清单裁决
+（`build-engine-bundle.sh` 退出、`build-runtime-bundle.sh` 进入）、`electron-builder.yml:65`
+预签主体注释同步；R1.6 预签分支加 `uname` 守卫（非 Darwin 不碰预签脚本）+ 发布门
+fail-closed（macOS 无身份 die）；R1.4 修 `docs/发布说明.md` 两处失实表述。
+
+**验收（红绿实录）**：
+- `bash -n` 六脚本全过；`./build-release.sh v9.9.9 --dry-run --force --no-fetch --branch refit/release-pipeline`
+  exit=0、打印完整计划（`Repo: kkutysllb/KStock` 佐证 R1.2）、无文件改动、无 v9.9.9 tag；
+- R1.3 红：无 `release/v9.9.9.md` → exit=1 +「缺发布说明」提示；绿：有说明 → 过门到
+  confirm 中止（非 TTY），输出无「缺发布说明」；`--allow-missing-notes` 旁路可用；
+- R1.5 红：`extraResources` 回改 `../../dist-exe` → `[FAIL] source electron-builder extraResources`
+  exit=1；还原复绿 exit=0；
+- R1.6②：`env -u APPLE_SIGNING_IDENTITY bash scripts/check-release.sh` → 发布门 die ✓；
+  ① 本地无身份 `build-runtime-bundle.sh` 可跑（当日两次端到端 exit 0 佐证）；③ 非 Darwin
+  分支由 `uname` 守卫隔开（bash -n + 分支结构核对）；
+- `bash scripts/check-ci.sh` 全量回归（见提交前输出）。
+
+**偏差记录**：check-ci 的冒烟改为「闭包入口在位」结构断言而非计划原文的 Electron node
+`--help`——完整冒烟已内建于 `build-runtime-bundle.sh`，重门只进发布链（RR7），避免轻量门变重。

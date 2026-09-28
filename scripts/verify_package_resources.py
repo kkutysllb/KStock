@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """Verify KStock desktop packaging resources (2.0 engine bundle).
 
-The source-only mode validates the contract between the engine bundle script,
+The source-only mode validates the contract between the runtime bundle script,
 the KStock plugin packages and electron-builder before a release tag is created.
-The default product mode validates the built ``dist-exe/`` directory before
+The default product mode validates the built ``staging/`` runtime closure before
 electron-builder packaging.
 """
 
@@ -90,7 +90,9 @@ class Verifier:
                           "source vendor/qilin engine CLI")
         self.require_path(root / "vendor" / "qilin" / "scripts" / "build-exe-for-python-sdk.ts",
                           "source upstream exe build script")
-        self.require_path(root / "scripts" / "build-engine-bundle.sh", "source engine bundle script")
+        # 旧 SEA 单文件引擎（dist-exe）已退役（A1 决策）：build-engine-bundle.sh
+        # 退出必查清单，仅保留作新旧形态回归对比手动用（发布契约 §5 裁决）。
+        self.require_path(root / "scripts" / "build-runtime-bundle.sh", "source runtime bundle script")
         self.require_path(root / "scripts" / "qilin-pnpm.sh", "source pinned pnpm wrapper")
         self.require_path(root / "vendor" / "skills", "source vendor/skills")
 

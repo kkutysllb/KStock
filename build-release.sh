@@ -15,6 +15,9 @@ EXPECTED_BRANCH="main"
 RELEASE_WORKFLOW="release.yml"
 RELEASE_LOG_DIR=".release-logs"
 REPO_SLUG=""
+# verify_release_assets 的 Python 段按环境变量读它（os.environ.get("REPO_SLUG")）；
+# 不导出则 Python 取空串，现状靠 gh 的 cwd 推断侥幸可用——显式导出不依赖运气。
+export REPO_SLUG
 
 PUSH=true
 WATCH=true
@@ -25,20 +28,20 @@ SKIP_LOCK=false
 NO_COMMIT=false
 NO_TAG=false
 ALLOW_DIRTY=false
+ALLOW_MISSING_NOTES=false
 NO_FETCH=false
 RESUME=false
 DELETE_TAG=false
 WATCH_LATEST=false
 
+# 2.0 起无 Python 工程（原 pyproject.toml / uv.lock 已随 1.x 网关退役）。
 VERSION_FILES=(
   "package.json"
   "apps/desktop/package.json"
-  "pyproject.toml"
 )
 
 LOCK_FILES=(
   "pnpm-lock.yaml"
-  "uv.lock"
 )
 
 usage() {
@@ -67,6 +70,7 @@ Options:
   --no-commit         Update files and run checks, but do not commit.
   --no-tag            Do not create a tag.
   --allow-dirty       Allow starting from a dirty worktree. Alias: --force.
+  --allow-missing-notes  Skip the release/<tag>.md requirement.
   --no-fetch          Do not fetch remote tags before checking conflicts.
   --delete-tag        Delete local and remote tag, then exit.
   --remote <name>     Git remote. Default: origin.
@@ -179,6 +183,7 @@ parse_args() {
       --no-commit) NO_COMMIT=true ;;
       --no-tag) NO_TAG=true ;;
       --force|--allow-dirty) ALLOW_DIRTY=true ;;
+      --allow-missing-notes) ALLOW_MISSING_NOTES=true ;;
       --no-fetch) NO_FETCH=true ;;
       --delete-tag) DELETE_TAG=true ;;
       --remote) [[ $# -ge 2 ]] || die "--remote requires a value"; REMOTE="$2"; shift ;;
@@ -317,7 +322,6 @@ update_versions() {
   log "Updating version files to $VERSION"
   python3 - "$VERSION" <<'PY'
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -336,16 +340,7 @@ for path in json_files:
     else:
         print(f"unchanged {path}: {version}")
 
-for path in [Path("pyproject.toml")]:
-    text = path.read_text(encoding="utf-8")
-    new_text, count = re.subn(r'^version = "[^"]*"', f'version = "{version}"', text, count=1, flags=re.MULTILINE)
-    if count != 1:
-        raise SystemExit(f"Could not update version in {path}")
-    if new_text != text:
-        path.write_text(new_text, encoding="utf-8")
-        print(f"updated {path}: {version}")
-    else:
-        print(f"unchanged {path}: {version}")
+# 2.0 起无 Python 工程：原 pyproject.toml 的 version 行更新已随 1.x 网关退役。
 PY
 }
 
@@ -355,10 +350,8 @@ refresh_lockfiles() {
     return 0
   fi
   ensure_pnpm_compatible
-  need_cmd uv
   log "Refreshing lockfiles"
   run pnpm install --lockfile-only --ignore-scripts
-  run uv lock
 }
 
 run_checks() {
@@ -620,6 +613,11 @@ main() {
     verify_release_assets
     log "Release lifecycle complete for $TAG"
     exit 0
+  fi
+  # 发布说明前置门：GitHub Release 正文以 release/<tag>.md 为准，
+  # 缺失时说明会静默退化成提交列表——这里在确认前提前拦住。
+  if [[ ! -f "release/$TAG.md" && "$ALLOW_MISSING_NOTES" != true ]]; then
+    die "缺发布说明 release/$TAG.md（约定见 release/README.md）。GitHub Release 正文以它为准；确要跳过请加 --allow-missing-notes。"
   fi
   confirm "Proceed with release $TAG?" || die "Release aborted"
 

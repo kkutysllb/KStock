@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# 本地打包用：对 dist-exe/ 整棵引擎分发树做 Developer ID 预签。
+# 本地打包用：对运行时闭包（staging/kstock-runtime）整棵树做 Developer ID 预签。
 #
-# 为什么需要独立于 build-engine-bundle.sh 的第 5 步：
-#   该步只签 dist-exe/ 顶层的 Mach-O（kstock-engine / -rg / -spawn-helper），
-#   但 office sidecar（dist-exe/kstock-engine-office/）中含有完整未签名的
-#   LibreOfficeDev.app —— 2800+ 文件、近 500 个 Mach-O。electron-builder 对
+# 为什么需要（独立于 electron-builder 的签名步骤）：
+#   闭包内含完整未签名的 LibreOfficeDev.app —— 2800+ 文件、近 500 个 Mach-O
+#   （另有 node-pty prebuilds、sharp、koffi、rg 等）。electron-builder 对
 #   extraResources 不做递归签名（mac.extraResources 无签名语义），因此这些
 #   二进制会以"未签名嵌套代码"形态进入 KStock.app，触发 notarytool 的
 #   "not signed at all" HARDFAIL。
@@ -14,19 +13,19 @@
 #
 # 用法:
 #   APPLE_SIGNING_IDENTITY="Developer ID Application: Bing Li (DHV5D72JNF)" \
-#     bash scripts/local/presign-engine-macos.sh [dist-exe 目录]
+#     bash scripts/local/presign-engine-macos.sh [闭包目录]
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 ROOT="$(pwd)"
-OUT_DIR="${1:-$ROOT/dist-exe}"
+OUT_DIR="${1:-$ROOT/staging/kstock-runtime}"
 DEV_ID="${APPLE_SIGNING_IDENTITY:-}"
 
 if [ -z "$DEV_ID" ]; then
   echo "!! 需要 APPLE_SIGNING_IDENTITY（如 'Developer ID Application: Bing Li (DHV5D72JNF)'）" >&2
   exit 1
 fi
-[ -d "$OUT_DIR" ] || { echo "!! 目录不存在：$OUT_DIR（先跑 scripts/build-engine-bundle.sh）" >&2; exit 1; }
+[ -d "$OUT_DIR" ] || { echo "!! 目录不存在：$OUT_DIR（先跑 scripts/build-runtime-bundle.sh）" >&2; exit 1; }
 
 ENTITLEMENTS="$ROOT/scripts/local/entitlements-nested.plist"
 [ -f "$ENTITLEMENTS" ] || { echo "!! 缺 entitlements: $ENTITLEMENTS" >&2; exit 1; }

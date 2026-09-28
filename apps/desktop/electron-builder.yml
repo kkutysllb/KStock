@@ -62,7 +62,8 @@ mac:
   #   CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac
   # 公证（notarization）：electron-builder 在 APPLE_ID /
   # APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 三个环境变量齐全时自动公证。
-  # 引擎 Mach-O 的预签由 build-engine-bundle.sh 负责（APPLE_SIGNING_IDENTITY）。
+  # 闭包内 Mach-O 的预签由 build-runtime-bundle.sh → presign-engine-macos.sh
+  # 负责（APPLE_SIGNING_IDENTITY，整棵闭包树深→浅签名）。
 
 dmg:
   title: "${productName} ${version}"

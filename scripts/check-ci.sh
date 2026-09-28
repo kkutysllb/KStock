@@ -38,8 +38,12 @@ scripts/python.sh scripts/verify_skill_pack.py
 # 重渲染漂移校验（能发现「改了设计源却忘了重出资产」）。
 scripts/python.sh docs/design/icon-refresh/build_assets.py --check
 
-# 引擎单文件冒烟（产物存在时）：--help 快速失败验证可执行完整性。
-# 完整启动冒烟由发布流水线的引擎束构建 + 桌面打包覆盖。
-if [ -f dist-exe/kstock-engine ]; then
-  dist-exe/kstock-engine --help > /dev/null
+# 闭包形态冒烟（产物存在时）：只做入口在位的结构断言，保持轻量——
+# 完整冒烟（Electron node ABI + 入口 --help 起服）由 build-runtime-bundle.sh
+# 自带，发布链在 check-release.sh 里跑到它；重门只进发布链（发布契约 RR7）。
+if [ -d staging/kstock-runtime ]; then
+  [ -f staging/kstock-runtime/runtime-bootstrap.mjs ] || {
+    echo "staging/kstock-runtime 缺 runtime-bootstrap.mjs 入口" >&2
+    exit 1
+  }
 fi
