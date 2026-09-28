@@ -145,6 +145,7 @@ ls -la "$STAGING" | grep -vE "^total|\.$"
 # ── 7. 收尾：恢复引擎工作区依赖（pnpm deploy --prod 副作用）─────────
 # deploy 会把工作区状态置为 production 并剪掉部分 workspace 包的
 # node_modules（实机两次复现：apps/cli/node_modules 整体消失，dev 引擎
-# 源码直跑随即 ERR_MODULE_NOT_FOUND 'commander'）。store 命中，代价秒级。
+# 源码直跑随即 ERR_MODULE_NOT_FOUND 'commander'）。恢复会重排 modules
+# 目录，pnpm 无 TTY 时会弹确认中止——CI=true 自动确认。store 命中，秒级。
 log "恢复引擎工作区依赖（deploy 剪枝回滚）"
-"$REPO_ROOT/scripts/qilin-pnpm.sh" install --frozen-lockfile >/dev/null
+CI=true "$REPO_ROOT/scripts/qilin-pnpm.sh" install --frozen-lockfile >/dev/null

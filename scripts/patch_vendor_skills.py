@@ -1542,6 +1542,32 @@ def _fix_kstock_client_version_badge(text: str) -> str | None:
     return text.replace(_KSTOCK_CLIENT_VERSION_ANCHOR, _KSTOCK_CLIENT_VERSION_REPLACEMENT, 1)
 
 
+# ── 补丁 24：侧栏品牌行与红绿灯拆成两行（对齐 KCoder 头部布局）──
+# 上游 darwin 桌面态把 logoRow 以 margin-top:-12px 拉进 topStrip（52px 拖拽
+# 条，红绿灯落位其中），品牌徽章与红绿灯挤在同一排。KStock 侧栏左上是
+# 品牌区，叠灯后拥挤且遮挡；去掉上提规则，让灯条独占一行、品牌行保持
+# 自然行距在其下——与 KCoder 桌面端头部一致。
+_SIDEBAR_TOPSTRIP_CSS_REL = "qilin/packages/client/ui-sidebar/src/client/SidebarRoot.module.css"
+_SIDEBAR_TOPSTRIP_MARKER = "KStock patch: 品牌行不再上提"
+_SIDEBAR_TOPSTRIP_ANCHOR = """.topStrip + .logoRow {
+  margin-top: -12px;
+}"""
+_SIDEBAR_TOPSTRIP_REPLACEMENT = """/*
+ * KStock patch: 品牌行不再上提——topStrip（窗口拖拽条 + 红绿灯落位带）
+ * 独占一行，logoRow 保持自然行距在其下（对齐 KCoder 桌面端头部布局），
+ * 避免品牌徽章与红绿灯同排拥挤。
+ */"""
+
+
+def _fix_sidebar_topstrip_logo_overlap(text: str) -> str | None:
+    """侧栏品牌行与红绿灯拆行；已修/锚点失配返回 None。"""
+    if _SIDEBAR_TOPSTRIP_MARKER in text:
+        return None
+    if _SIDEBAR_TOPSTRIP_ANCHOR not in text:
+        return None
+    return text.replace(_SIDEBAR_TOPSTRIP_ANCHOR, _SIDEBAR_TOPSTRIP_REPLACEMENT, 1)
+
+
 # ── 补丁 16：kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界）──
 # 实测（agent 任务报告）：TushareClient.__init__ 无条件 ts.set_token(token)，
 # tushare 官方实现固定写 ~/tk.csv（HOME 根，工作区沙箱写边界之外）→ 被
@@ -2146,6 +2172,10 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     client_env = REPO_ROOT / "vendor" / "qilin" / "scripts" / "client-build-environment.ts"
     if _patch_engine_file(client_env, _VERIFY_CLOSURE_CLIENT_ENV_REL, _KSTOCK_CLIENT_VERSION_MARKER, _fix_kstock_client_version_badge):
         changed.append(_VERIFY_CLOSURE_CLIENT_ENV_REL)
+    # qilin 侧栏品牌行与红绿灯拆行（补丁 24）。
+    sidebar_css = REPO_ROOT / "vendor" / "qilin" / "packages" / "client" / "ui-sidebar" / "src" / "client" / "SidebarRoot.module.css"
+    if _patch_engine_file(sidebar_css, _SIDEBAR_TOPSTRIP_CSS_REL, _SIDEBAR_TOPSTRIP_MARKER, _fix_sidebar_topstrip_logo_overlap):
+        changed.append(_SIDEBAR_TOPSTRIP_CSS_REL)
     # kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界，补丁 16）。
     for rel_path in _TUSHARE_SET_TOKEN_RELS:
         target = vendor_root / rel_path
