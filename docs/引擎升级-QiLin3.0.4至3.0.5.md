@@ -739,26 +739,26 @@ KSTOCK_OFFLINE_BUILD=1 pnpm dev:desktop     # 或先 build-runtime-bundle.sh 再
 
 ---
 
-## 8. 总验收清单
+## 8. 总验收清单（2026-09-28 执行勾选）
 
-- [ ] 在飞改动已独立提交，工作树干净（P0）
-- [ ] B1/B2/B3/B4 四项修复完成，红路径验证通过（P1；B4 的验收为「N ≥ 11 且无 failures」）
-- [ ] `upstream.lock.json` → `d456452786` / `3.0.5`；`vendor/qilin` 快照 = 上游工作树（P2）
-- [ ] 6 处本地定制锚点全部存活（P2 T2.3 五命令）
-- [ ] `install --frozen-lockfile` / `run build` / `run verify-runtime-closure` 通过（P3）
-- [ ] `vendor/qilin/apps/cli/node_modules/dsh-animations` 存在（P3 T3.4）
-- [ ] **产物闭包含 `dsh-animations`（package.json + skills/manifest.json 8 项 + cordis.patch.yml + entry.js + lib/client.js）**（P3 T3.5）
-- [ ] 引擎面：`schedule`/`ui-schedule` 已下架，`time-context` 保留（P4 T4.1）
-- [ ] profile 层：新 profile 与存量 profile 都带 `dsh-animations`，迁移幂等（P4 T4.2）
-- [ ] 侧边栏撞序已消歧（P4 T4.3）＋ 自愈脚本同步（P4 T4.4）
-- [ ] 构建门禁（动画通道 T4.5；预设装配 T1.5 + T5.4 验证）落地并红路径验证
-- [ ] `kstock/pnpm-workspace.yaml` 补齐成员（P5）
-- [ ] `check-ci.sh` 全绿（P6）
-- [ ] 会话迁移预检完成 + 用户数据已备份（P6 T6.2）
-- [ ] 引擎独立冒烟通过（无 bundle 解析错误 + 8 技能注册日志 + logo 探针）（P6 T6.3）
-- [ ] 桌面端 13 项逐屏冒烟通过（P6 T6.4）
-- [ ] Office kit 0.1.0 的闭包体积 / 公证耗时已实测（R7）
-- [ ] 文档回写完成（P7）
+- [x] 在飞改动已独立提交，工作树干净（P0）——`5f1f9ba0`（含 kstock lib 产物对齐）
+- [x] B1/B2/B3/B4 四项修复完成，红路径验证通过（P1；B4 验收「N ≥ 11 且无 failures」→ 实测 **11 presets / 144 packages**）
+- [x] `upstream.lock.json` → `d456452786` / `3.0.5`；`vendor/qilin` 快照 = 上游工作树（P2，3733 文件 +366k/−118k）
+- [x] 6 处本地定制锚点全部存活（P2 T2.3 五命令 → 1/1/2/1/1）
+- [x] `install --frozen-lockfile` / `run build` / `run verify-runtime-closure` 通过（P3）
+- [x] `vendor/qilin/apps/cli/node_modules/dsh-animations` 存在（P3 T3.4，1.2.3 / 8 技能）
+- [x] **产物闭包含 `dsh-animations`（package.json + skills/manifest.json 8 项 + cordis.patch.yml + entry.js + lib/client.js）**（P3 T3.5，113 个 HTML；E4.9 红路径验证门禁有效）
+- [x] 引擎面：`schedule`/`ui-schedule` 已下架，`time-context` 保留（P4 T4.1）
+- [x] profile 层：新 profile 与存量 profile 都带 `dsh-animations`，迁移幂等（P4 T4.2；单测 5/5 + 自愈脚本备份清单实测）
+- [x] 侧边栏撞序已消歧（P4 T4.3 automation order 110）＋ 自愈脚本同步（P4 T4.4）
+- [x] 构建门禁（动画通道 T4.5；预设装配 T1.5 + T5.4 验证）落地并红路径验证（E4.9：改名 manifest → exit 1 → 还原 → exit 0）
+- [x] `kstock/pnpm-workspace.yaml` 补齐成员（P5，news-ui / chan-ui）
+- [x] `check-ci.sh` 全绿（P6，exit 0；含新门禁两条 [OK]）
+- [x] 会话迁移预检完成 + 用户数据已备份（P6 T6.2；83/94 发布 v4，11 个 write_locked 留 v3 待写打开自迁移——活跃旧实例持有，S8 保守口径）
+- [x] 引擎独立冒烟通过（无 bundle 解析错误 + 8 技能注册日志 + logo 200 / workspace 302 / reports 200）（P6 T6.3；隔离 home:18011）
+- [ ] 桌面端 13 项逐屏冒烟通过（P6 T6.4）——**待人工逐屏验证**（见执行记录遗留项）
+- [ ] Office kit 0.1.0 的闭包体积已实测（147M）/ 公证耗时未测（R7）——公证在 A5 发布窗口实测
+- [x] 文档回写完成（P7）
 
 ---
 
