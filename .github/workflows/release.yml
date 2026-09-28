@@ -85,6 +85,9 @@ jobs:
         if: runner.os != 'macOS'
         timeout-minutes: 90
         run: bash scripts/check-release.sh
+      # 产物层门禁（V1–V7，契约 §2）：与 check-release.sh 末尾同一文件（同源）。
+      - name: 产物层门禁
+        run: bash scripts/verify-desktop-artifacts.sh apps/desktop/release
       - name: 收集安装包
         run: |
           mkdir -p dist-release

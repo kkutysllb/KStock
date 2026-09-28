@@ -28,3 +28,5 @@ bash scripts/check-ci.sh
 bash scripts/build-runtime-bundle.sh
 scripts/python.sh scripts/verify_package_resources.py
 bash scripts/build-desktop.sh
+# 产物层门禁电池（V1–V7）：与 CI 收集产物前调用的是同一文件。
+bash scripts/verify-desktop-artifacts.sh apps/desktop/release

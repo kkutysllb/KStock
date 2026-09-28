@@ -1065,3 +1065,29 @@ electron-builder（主配置、keychain 自动发现签名），日志
 即门前失败），`notarize: true` 保留（凭据齐备时正常公证），产物层 V5（R4）作事后
 兜底；契约 §3 规则 2 已同步为双防线口径。红路径复跑：无凭据 `bash scripts/build-desktop.sh`
 秒级 die（缺 APPLE_ID 指名报错）。
+
+### R4 — 产物层门禁电池（2026-09-28 晚执行完毕）
+
+**改动**：新建 `scripts/verify-desktop-artifacts.sh`（V1–V7 全硬门，逐项收集 + 指名报错，
+macOS 项非 Darwin 打印 skip；断言对象自动识别 *.app / win-unpacked / linux-unpacked）。
+V1 包内闭包在位；V2 闭包结构（tar 流式列目录断言入口 + dsh-animations 两件）；
+V3 随包对账（staging ↔ 包内 engine/plugins、engine/presets 双向逐项）；V4 Electron-node
+冒烟（ABI + 包内入口 --help，真机解释器路径）；V5 签名公证（拒 adhoc、TeamIdentifier、
+spctl、stapler validate）；V6 更新元数据齐全 + url/path ∈ 资源名；V7 publisherName
+平台边界（非 macOS 不得带、macOS 须等于本机证书 CN）。
+R4.2 同源接线：`check-release.sh` 末尾 + `release.yml` 收集产物前，同一文件两处调用。
+
+**脚本自纠（基线跑抓到三个自身 bug，红路径文化的连带收益）**：① `pipefail + grep -q`
+管道早收口 → printf 吃 SIGPIPE → V2 假红，改 here-string；② BSD sed 不认 `\s` → V6 url
+解析带前导空格假红，改 `[[:space:]]`；③ 无证书时 V7 假绿，改「读不到证书 CN 即红」。
+
+**红路径实录（五条全中，各自指名道姓）**：
+- ① 缺 `latest-mac.yml` → `V6 缺更新元数据 latest-mac.yml`；
+- ② 闭包换空 tar → `V2 闭包 tar 无法列出` + `V4 ABI 冒烟未通过` + `V4 入口 --help 未通过`；
+- ③ 删 `engine/plugins/quant` → `V3 包内缺 engine/plugins/quant（仓库有、包里无）`；
+- ④ 真包（keychain 签名、未公证）→ `V5 spctl 评估未通过` + `V5 公证票据未随包`；
+- ⑤ Windows 产物写入 `publisherName` → `V7 非 macOS 产物的 app-update.yml 不得带
+  publisherName（mac 证书污染）`。
+基线绿项：V1/V2/V3/V4/V6 全绿（真闭包 symlink 夹具 + 13 plugins / 8 presets 对账过）。
+V5/V7 的「全绿」需真实签名 + 公证产物，留待 R6 演练（本地 keychain 构建无公证票据、
+无 publisherName，红属预期）。
