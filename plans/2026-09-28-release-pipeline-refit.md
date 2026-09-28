@@ -1027,3 +1027,41 @@ fail-closed（macOS 无身份 die）；R1.4 修 `docs/发布说明.md` 两处失
 
 **偏差记录**：check-ci 的冒烟改为「闭包入口在位」结构断言而非计划原文的 Electron node
 `--help`——完整冒烟已内建于 `build-runtime-bundle.sh`，重门只进发布链（RR7），避免轻量门变重。
+
+### R2 + R3 — CI 结构、引擎引导与平台化签名（2026-09-28 晚执行完毕）
+
+> R2.6 的注释口径（「仅 macOS 注入凭据」）以 R3.2 为前提，两者落在同一构建步上，
+> 合并执行避免 workflow 出现自相矛盾的中间态。
+
+**改动**：R2.1 引擎引导步（`qilin-pnpm install/build/verify-runtime-closure`，30min 上限）；
+R2.2 publish job 补 `actions/checkout`（G1 致命项，按计划决定全量 checkout 不用 sparse）+
+正文取 `${INPUTS_TAG:-$GITHUB_REF_NAME}` 兼容 dispatch 补跑；R2.3 `workflow_dispatch(tag)` +
+所有 checkout `ref: inputs.tag || github.ref` + `concurrency: release-<tag>` 串行防覆盖；
+R2.4 runner 固定 `ubuntu-22.04`；R2.6 注释按闭包预签主体重写；R3.1 `mac.notarize: true`
+（fail-closed）+ `electron-builder.local.yml` 补 `mac.notarize: false`；R3.2 签名凭据拆入
+macOS-only 步（`if: runner.os == 'macOS'` / `!= 'macOS'` 两步，非 mac 步零 env）；
+R3.3 签名 fallback 显式化（`KSTOCK_UNSIGNED_BUILD=1`），未签名构建自动切 local 配置。
+
+**执行中修正的两处计划偏差**：
+1. R2.4 原文「pnpm/action-setup 显式给 `version: 9.15.0`」**不可行**——根
+   `package.json` 已有 `packageManager: pnpm@9.15.0`，双指定会报
+   "Multiple versions of pnpm specified"。钉版留在 `packageManager` 单一来源，
+   action 不带 version 输入；
+2. R3.1/R3.3 交互：`notarize: true` 会让未签名本地构建无法通过主配置 →
+   `KSTOCK_UNSIGNED_BUILD=1`（及 `KSTOCK_OFFLINE_BUILD=1`）切 `electron-builder.local.yml`
+   （`notarize: false`），与 `build-signed-macos.sh` 的手动 notarytool 流水线
+   （坑 4：不用 electron-builder 内置公证）兼容。
+
+**验收**：js-yaml 解析三份 YAML 全过；workflow 结构断言 11/11（checkout×2、dispatch+tag、
+引擎引导、ubuntu-22.04、pnpm 单一来源、secrets 仅 macOS 步、非 mac 步零 env、publish
+checkout+body_path、concurrency、notarize 双配置）；`bash -n build-desktop.sh`。
+
+**R3.1 红路径实跑记录（暴露重大发现，红路径文化的价值实证）**：无凭据直跑
+electron-builder（主配置、keychain 自动发现签名），日志
+`skipped macOS notarization reason=\`notarize\` options were unable to be generated`
+后**照常出包 dmg/zip 并 exit 0**——`notarize: true` 对 electron-builder 26.15.3
+**不构成 fail-closed**，R3.1 原始假设不成立。处置：fail-closed 落到自有发布门
+（`check-release.sh` 与 `build-desktop.sh` 均查 macOS 发布配置的凭据齐备，任一缺失
+即门前失败），`notarize: true` 保留（凭据齐备时正常公证），产物层 V5（R4）作事后
+兜底；契约 §3 规则 2 已同步为双防线口径。红路径复跑：无凭据 `bash scripts/build-desktop.sh`
+秒级 die（缺 APPLE_ID 指名报错）。

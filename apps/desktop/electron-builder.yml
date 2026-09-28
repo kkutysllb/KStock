@@ -57,13 +57,18 @@ mac:
   gatekeeperAssess: false
   entitlements: build/Entitlements.plist
   entitlementsInherit: build/Entitlements.plist
-  # 代码签名在 CSC_LINK（base64 .p12）+ CSC_KEY_PASSWORD 存在时自动启用
-  # （GitHub Actions secrets 注入）。本地未签名构建用：
-  #   CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac
-  # 公证（notarization）：electron-builder 在 APPLE_ID /
-  # APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID 三个环境变量齐全时自动公证。
-  # 闭包内 Mach-O 的预签由 build-runtime-bundle.sh → presign-engine-macos.sh
-  # 负责（APPLE_SIGNING_IDENTITY，整棵闭包树深→浅签名）。
+  # 代码签名：CSC_LINK（base64 .p12）+ CSC_KEY_PASSWORD（CI secrets 注入，
+  # 仅 macOS 步）。闭包内 Mach-O 的预签由 build-runtime-bundle.sh →
+  # presign-engine-macos.sh 负责（APPLE_SIGNING_IDENTITY，整棵闭包树深→浅签名）。
+  #
+  # 公证（notarization）：notarize: true——凭据齐备时走 electron-builder 内置公证。
+  # 注意（红路径实测）：electron-builder 26 生成不了 notarize 选项时会**跳过公证
+  # 并继续出包**（skipped … options were unable to be generated，exit 0），所以
+  # fail-closed 不靠它：发布门（check-release.sh / build-desktop.sh 的凭据检查）
+  # 前置拦截，产物层 V5（stapler validate / 拒 adhoc）事后兜底。
+  # 本地未签名/离线构建走 electron-builder.local.yml（notarize: false），
+  # 或 KSTOCK_UNSIGNED_BUILD=1 bash scripts/build-desktop.sh。
+  notarize: true
 
 dmg:
   title: "${productName} ${version}"

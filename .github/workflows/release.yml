@@ -8,6 +8,11 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要构建发布的 tag（如 v2.0.0，须已推送）"
+        required: true
 
 # 最小权限：默认只读；仅 publish job 声明 contents: write（创建 Release 需要）。
 # build 矩阵只构建和上传 artifact，不需要写权限——顶层收窄避免单个 runner
@@ -15,43 +20,70 @@ on:
 permissions:
   contents: read
 
+# 同一 tag 的发布串行（cancel-in-progress: false），避免并发互相覆盖 Release 资产。
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: 构建 ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # ubuntu-22.04：glibc 更老，deb 兼容性更好（KCoder 同款）。
+        os: [ubuntu-22.04, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # workflow_dispatch(tag) 补跑时检出指定 tag；push:tags 时用触发 ref。
+          ref: ${{ inputs.tag || github.ref }}
+      # pnpm 版本钉在根 package.json 的 packageManager（pnpm@9.15.0）——单一
+      # 事实源；此处再给 version 输入会报 "Multiple versions of pnpm specified"。
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
       - run: pnpm install --frozen-lockfile
-      - name: 校验并构建（check-release.sh：CI 门禁 + 引擎分发束 + 桌面打包）
+      # vendor/qilin 不在根 workspace（根 pnpm-workspace.yaml 只有 apps/*、
+      # kstock/*），全新 runner 必须显式引导引擎依赖与产物，否则闭包构建
+      # 第一步就断（G2）。引擎侧 pnpm 由 scripts/qilin-pnpm.sh 钉版 11.7.0。
+      - name: 引擎依赖与产物引导
+        timeout-minutes: 30
+        run: |
+          scripts/qilin-pnpm.sh install --frozen-lockfile
+          scripts/qilin-pnpm.sh run build
+          scripts/qilin-pnpm.sh run verify-runtime-closure
+      # macOS 双层签名 + 公证，凭据**仅 macOS 步注入**（平台化注入）：
+      # 1) 闭包 Mach-O 预签：build-runtime-bundle.sh → presign-engine-macos.sh
+      #    （APPLE_SIGNING_IDENTITY）。electron-builder 不递归签 extraResources，
+      #    未预签的闭包（LibreOffice dylibs、node-pty prebuilds 等）会触发
+      #    notarytool "not signed at all" HARDFAIL。
+      # 2) .app 外壳签名：CSC_LINK（base64 .p12）+ CSC_KEY_PASSWORD。
+      # 3) 公证：electron-builder.yml 的 mac.notarize: true——凭据缺失即构建
+      #    失败，杜绝「静默出未公证包 → 用户被 Gatekeeper 拦」。
+      - name: 打包（macOS：签名 + 公证）
+        if: runner.os == 'macOS'
         timeout-minutes: 90
         env:
-          # macOS 双层签名 + 公证（两层签名密钥分工不同）：
-          # 1) 引擎预签：build-engine-bundle.sh 读取 APPLE_SIGNING_IDENTITY
-          #    （格式 "Developer ID Application: 名字 (TeamID)"），用 codesign
-          #    预签引擎 Mach-O 二进制（kstock-engine{,-rg,-spawn-helper}）。
-          #    electron-builder 不会递归签 extraResources，未预签会导致
-          #    Apple 公证 HARDFAIL。
-          # 2) .app 外壳签名：electron-builder 原生读取 CSC_LINK（base64 .p12）+
-          #    CSC_KEY_PASSWORD，签 KStock.app 主体。
-          # 3) 公证：electron-builder 在 APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD /
-          #    APPLE_TEAM_ID 三者齐全时自动提交 notarytool 公证。
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PWD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/check-release.sh
+      # 刻意不声明 env：曾把 macOS 证书全局注入所有平台，导致 Windows Setup exe
+      # 被 Apple Developer ID 证书签名（Authenticode NotValid）→ electron-updater
+      # 校验失败拒更新，且 app-update.yml 被写入 mac 证书 CN 作 publisherName
+      # （双重失败）。KCoder 已踩过同一坑；产物层 V7 断言钉死这条。
+      - name: 打包（Windows / Linux：不注入任何签名变量）
+        if: runner.os != 'macOS'
+        timeout-minutes: 90
         run: bash scripts/check-release.sh
       - name: 收集安装包
         run: |
@@ -76,10 +108,16 @@ jobs:
   publish:
     name: 发布 GitHub Release
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
+      # 必须 checkout（G1 修复）：publish_release_notes.sh 在 scripts/ 下、正文
+      # 取 release/<tag>.md——此前缺 checkout，下次推 tag 就在这里炸；且
+      # push:tags 的 workflow 取自 tag commit，缺陷不可原地修（须 delete-tag 重发）。
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist-release
@@ -87,7 +125,9 @@ jobs:
       - name: 列出安装包
         run: ls -lh dist-release
       - name: 生成发布说明（release/<tag>.md，转绝对链接并回填发布日期）
-        run: bash scripts/publish_release_notes.sh "$GITHUB_REF_NAME" release-notes.md
+        env:
+          INPUTS_TAG: ${{ inputs.tag }}
+        run: bash scripts/publish_release_notes.sh "${INPUTS_TAG:-$GITHUB_REF_NAME}" release-notes.md
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: dist-release/**

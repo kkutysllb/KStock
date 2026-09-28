@@ -13,3 +13,10 @@
 #   node scripts/run.mjs electron-builder --config electron-builder.local.yml
 extends: ./electron-builder.yml
 publish: null
+
+mac:
+  # 本地/离线构建与手动公证流水线（scripts/local/build-signed-macos.sh 自己调
+  # notarytool 提交 + staple）不经 electron-builder 内置公证：置 false 免得
+  # 凭据缺失时本地构建被主配置的 notarize: true 拦住，也避开其偶发假失败。
+  # 发布链（CI）仍走主配置的 fail-closed 公证。
+  notarize: false
