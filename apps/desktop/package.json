@@ -15,7 +15,8 @@
   "scripts": {
     "build:electron-main": "esbuild electron/main.ts --bundle --platform=node --format=cjs --outdir=dist-electron --out-extension:.js=.cjs --external:electron --external:electron-updater",
     "electron:dev": "pnpm build:electron-main && node scripts/run.mjs electron .",
-    "electron:build": "pnpm build:electron-main && node scripts/run.mjs electron-builder --publish never"
+    "electron:build": "pnpm build:electron-main && node scripts/run.mjs electron-builder --publish never",
+    "test": "node --import tsx/esm --test electron/lib/*.test.ts"
   },
   "dependencies": {
     "electron-updater": "^6.3.9"
@@ -25,6 +26,7 @@
     "electron-builder": "^26.15.3",
     "esbuild": "^0.24.0",
     "@types/node": "^22.7.4",
+    "tsx": "^4.22.4",
     "typescript": "^5.5.4"
   }
 }

@@ -218,7 +218,9 @@ export function apply(ctx: ClientContext): void {
         const disposeIcon = ctx.slots.register({
           name: 'sidebar.panellist',
           id: PANEL_ID,
-          order: 120,
+          // 引擎内置动效技能库面板（dsh-animations 的 anim-panel）也是 order: 120，
+          // 而槽契约是「升序、平序按注册顺序」——平序不稳定，这里让定时任务排在其前。
+          order: 110,
           label: () => t('nav'),
           locale: NS,
         }, PanelIcon)
