@@ -1091,3 +1091,18 @@ R4.2 同源接线：`check-release.sh` 末尾 + `release.yml` 收集产物前，
 基线绿项：V1/V2/V3/V4/V6 全绿（真闭包 symlink 夹具 + 13 plugins / 8 presets 对账过）。
 V5/V7 的「全绿」需真实签名 + 公证产物，留待 R6 演练（本地 keychain 构建无公证票据、
 无 publisherName，红属预期）。
+
+### R5 — 自动更新加固（2026-09-28 晚执行完毕）
+
+**改动**：R5.1 `installUpdate` 的 `quitAndInstall` 加 try/catch——失败弹错误框并保留
+「重试」入口（复用 `showBox` + `checkForUpdatesInteractive`，不引入新状态机）；
+R5.2 启动检查改「打包态 + 延迟 8s + 单次」，避开引擎冷启动 IO 峰值；
+R5.3 feed 单一来源按契约决策 (b) 落地——保留 `setFeedURL` 硬编码，新增门禁
+**V8**：`app-update.yml` 的 `owner/repo` 必须与 `updater.ts` 硬编码一致（契约 §2 已
+登记 V8 行）。R5.4 预发布通道按契约默认不开，仅登记不动代码。
+
+**验收**：`tsc -p electron/tsconfig.json --noEmit` 过；`bash -n` 过；V8 红绿双证——
+真包 `app-update.yml` 一致绿（kkutysllb/KStock），夹具篡改 owner 即红
+（`feed 双源不一致：app-update.yml(wrong-owner/KStock) ≠ updater.ts(kkutysllb/KStock)`）。
+`quitAndInstall` 兜底为异常路径，静态实现 + 类型检查为证，真实失败演练归入 R6.2
+自动更新真机验证。

@@ -199,6 +199,21 @@ else
   fi
 fi
 
+# ── V8 feed 单一来源：app-update.yml 的 owner/repo 与 updater.ts 硬编码一致 ─
+if [ -f "$AU" ]; then
+  code_owner="$(sed -n "s/.*owner:[[:space:]]*[\"']\([^\"']*\)[\"'].*/\1/p" "$ROOT/apps/desktop/electron/lib/updater.ts" | head -1)"
+  code_repo="$(sed -n "s/.*repo:[[:space:]]*[\"']\([^\"']*\)[\"'].*/\1/p" "$ROOT/apps/desktop/electron/lib/updater.ts" | head -1)"
+  yml_owner="$(sed -n 's/^owner:[[:space:]]*//p' "$AU" | head -1 | tr -d '"'\''')"
+  yml_repo="$(sed -n 's/^repo:[[:space:]]*//p' "$AU" | head -1 | tr -d '"'\''')"
+  if [ -z "$code_owner" ] || [ -z "$code_repo" ]; then
+    bad "V8 未能从 updater.ts 解析 setFeedURL 的 owner/repo（feed 断言失效）"
+  elif [ "$yml_owner" != "$code_owner" ] || [ "$yml_repo" != "$code_repo" ]; then
+    bad "V8 feed 双源不一致：app-update.yml($yml_owner/$yml_repo) ≠ updater.ts($code_owner/$code_repo)"
+  else
+    ok "V8 feed 单一来源一致（$code_owner/$code_repo）"
+  fi
+fi
+
 echo
 if [ "$FAIL" -ne 0 ]; then
   echo "verify-desktop-artifacts: FAILED（见上方 [FAIL] 条目）" >&2

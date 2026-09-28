@@ -123,7 +123,25 @@ async function installUpdate(): Promise<void> {
     }
   }
   setTimeout(() => {
-    autoUpdater.quitAndInstall(false, true);
+    try {
+      autoUpdater.quitAndInstall(false, true);
+    } catch (error) {
+      // quitAndInstall 失败（安装器缺失 / 文件被占用 / 权限不足）必须让用户
+      // 看见并保留重试路径；否则只剩一条 unhandled 异常，用户以为「点了没反应」。
+      const message = error instanceof Error ? error.message : String(error);
+      logMain(`[updater] quitAndInstall 失败：${message}`);
+      void showBox(getMainWindow(), {
+        type: "error",
+        title: "安装更新失败",
+        message: `安装更新失败：${message}`,
+        detail: "可重试，或从 GitHub Releases 手动下载安装包。",
+        buttons: ["重试", "知道了"],
+        defaultId: 0,
+        cancelId: 1,
+      }).then((result) => {
+        if (result.response === 0) void checkForUpdatesInteractive(getMainWindow() ?? undefined);
+      });
+    }
   }, 200);
 }
 
@@ -238,8 +256,11 @@ export function initUpdater(): void {
     notification.show();
   });
 
-  // 启动后台静默检查（打包态）。失败静默——日志已记录。
+  // 启动后台静默检查（打包态）：延迟 8s 避开引擎冷启动的 IO 峰值，只做一次。
+  // 失败静默——日志已记录。
   if (app.isPackaged) {
-    autoUpdater.checkForUpdates().catch(() => {});
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch(() => {});
+    }, 8_000);
   }
 }
