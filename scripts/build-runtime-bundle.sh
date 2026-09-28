@@ -31,6 +31,12 @@ die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 log "重放引擎本地补丁（patch_vendor_engine，幂等）"
 "$ROOT/scripts/python.sh" "$ROOT/scripts/patch_vendor_engine.py"
 
+# preset 随行技能是 gitignore 的生成物（kstock/presets/*/skills/），语料源在
+# vendor/skills/public，由 patch_vendor_skills 按 skills.manifest.json 镜像
+# 发布——全新 runner 缺这步会让打包断言「presets carry skill directories」红。
+log "发布 preset 随行技能（patch_vendor_skills，幂等）"
+"$ROOT/scripts/python.sh" "$ROOT/scripts/patch_vendor_skills.py"
+
 log "构建 KStock 插件包"
 for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui chan-ui automation; do
   if [ ! -d "$ROOT/kstock/$pkg/node_modules" ]; then

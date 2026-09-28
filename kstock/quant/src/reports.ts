@@ -50,6 +50,11 @@ export class ReportsStore {
     this.initialize()
   }
 
+  /** 释放 SQLite 句柄：删除临时库（Windows 文件锁）前必须先关。 */
+  close(): void {
+    this.db.close()
+  }
+
   private initialize(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS report_library (

@@ -71,12 +71,17 @@ jobs:
         timeout-minutes: 90
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PWD }}
+          MAC_CERTIFICATE: ${{ secrets.MAC_CERTIFICATE }}
+          MAC_CERTIFICATE_PWD: ${{ secrets.MAC_CERTIFICATE_PWD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: bash scripts/check-release.sh
+        # 证书先导入专用钥匙串（CSC_KEYCHAIN + CSC_NAME 路线）：codesign 闭包
+        # 预签与 electron-builder .app 签名共用该身份；CSC_LINK 的临时钥匙串
+        # 分支有上游缺陷（坑 3），此处刻意不注入。
+        run: |
+          source scripts/ensure-macos-keychain.sh
+          bash scripts/check-release.sh
       # 刻意不声明 env：曾把 macOS 证书全局注入所有平台，导致 Windows Setup exe
       # 被 Apple Developer ID 证书签名（Authenticode NotValid）→ electron-updater
       # 校验失败拒更新，且 app-update.yml 被写入 mac 证书 CN 作 publisherName

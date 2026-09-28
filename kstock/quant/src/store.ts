@@ -95,6 +95,11 @@ export class LibraryStore {
     this.initialize()
   }
 
+  /** 释放 SQLite 句柄：删除临时库（Windows 文件锁）前必须先关。 */
+  close(): void {
+    this.db.close()
+  }
+
   private initialize(): void {
     const c = this.config
     const key = `${c.key}_id`

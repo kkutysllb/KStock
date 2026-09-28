@@ -27,7 +27,17 @@ before(() => {
 })
 
 after(() => {
+  strategies.close()
+  reports.close()
   rmSync(root, { recursive: true, force: true })
+})
+
+test('close() 释放 SQLite 句柄（Windows 文件锁下删临时库的前提）', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'kstock-quant-close-'))
+  const store = strategyStore(temp)
+  store.close()
+  assert.throws(() => store.listVersions('kstock-local', 'stg_none'), /not open|closed/i)
+  rmSync(temp, { recursive: true, force: true })
 })
 
 test('策略库：创建 → 版本链乐观并发 → 运行记录与附件', () => {

@@ -1106,3 +1106,26 @@ R5.3 feed 单一来源按契约决策 (b) 落地——保留 `setFeedURL` 硬编
 （`feed 双源不一致：app-update.yml(wrong-owner/KStock) ≠ updater.ts(kkutysllb/KStock)`）。
 `quitAndInstall` 兜底为异常路径，静态实现 + 类型检查为证，真实失败演练归入 R6.2
 自动更新真机验证。
+
+### R6.1 演练实录（v2.0.0-rc.1，2026-09-28 晚，两轮红路径）
+
+**第 1 轮**（tag `f6256e9e`，run 36410408679）：本地段全过；CI 三平台红，三种 CI 环境差异：
+① mac（bash 3.2）`$VAR` 后跟中文标点并进变量名（`qilin-pnpm.sh:19 $PNPM_CJS，`）→ 全链 22 处
+花括号化；② win 版本注入 `require('$REPO_ROOT/…')` POSIX 路径喂 Windows node → cd + 相对
+require；③ ubuntu **electron@44 已无 scripts 字段**（无 postinstall）→ 定位前幂等补跑
+`install.js`。另有本地门禁裸 `python` 遗留（run_checks）→ 切 `scripts/python.sh`。
+按 SOP：修 main → `--delete-tag` → 重打同名 tag。
+
+**第 2 轮**（tag `57e5cf02`，run 36419660420）：引擎引导三平台全过（上轮三修生效）；打包段
+再红，三种更深层问题：
+① mac `预签闭包 Mach-O → no identity found`——CI 证书从未进钥匙串（CSC_LINK 只给
+electron-builder 且其临时钥匙串分支有坑 3）→ 新增 `scripts/ensure-macos-keychain.sh`
+（导入 p12 专用钥匙串 + 导出 `CSC_KEYCHAIN`/`CSC_NAME`，workflow 弃 CSC_LINK）；
+② win `kstock/quant` 测试 `after()` 删临时库 EPERM——`DatabaseSync` 句柄未关 →
+`LibraryStore`/`ReportsStore` 补 `close()`，测试关句柄后再删，新增句柄释放回归用例；
+③ ubuntu `No SKILL.md under any preset`——`kstock/presets/*/skills/` 是 gitignore
+生成物（由 `patch_vendor_skills.py` 从 `vendor/skills/public` 镜像发布），CI 链路从未跑
+→ `build-runtime-bundle.sh` 补该步（幂等）。
+验收：quant 测试 4/4（含 close 回归）、tsc 0 错、product verify exit 0、keychain 脚本
+source 冒烟（本地身份可见走跳过分支、CSC_LINK 保持 unset）、YAML 解析过、
+`$VAR`+多字节残留 0、技能发布步幂等绿。
