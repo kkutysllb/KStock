@@ -11,5 +11,7 @@ packages:
   - "quant-factors"
   - "quant-selections"
   - "quant-reports"
+  - "news-ui"
+  - "chan-ui"
 allowBuilds:
   esbuild: true
