@@ -6,7 +6,7 @@
  */
 import { globSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { isCordisGroupEntry, loadCordisYaml, presetDefinitions } from './cordis-yaml.ts'
 
@@ -95,7 +95,11 @@ export async function verifyRuntimeClosure(
 
   return {
     failures,
-    presetCount: (await Promise.all(presetPaths.map(async path => presetDefinitions(loadCordisYaml(await readFile(resolve(root, path), 'utf8'))).length))).reduce((a, b) => a + b, 0),
+    presetCount: (await Promise.all(presetPaths.map(async path => {
+      const document = loadCordisYaml(await readFile(resolve(root, path), 'utf8'))
+      const definitions = presetDefinitions(document)
+      return definitions.length > 0 ? definitions.length : (Array.isArray(document) ? 1 : 0)
+    }))).reduce((a, b) => a + b, 0),
     workspacePackageCount: queue.length,
   }
 }
@@ -132,7 +136,13 @@ async function missingPresetPlugins(
       failures.push(`${presetPath}: preset root must be a Loader entry array`)
       continue
     }
-    for (const definition of presetDefinitions(document)) {
+    // KStock patch: 3.0.5 起「组合文件本身即 preset」——presetDefinitions 提不出
+    // @qilin/agent-preset 包装行时，回退为整文件 = 单 preset 定义（id=目录名），
+    // 否则定义数为 0，本门禁对产品预设空转假绿。
+    const definitions = presetDefinitions(document).length > 0
+      ? presetDefinitions(document)
+      : (Array.isArray(document) ? [{ id: basename(dirname(presetPath)), plugins: document }] : [])
+    for (const definition of definitions) {
       for (const target of targets) {
         const processPlatform = processPlatformForTarget(target)
         for (const plugin of activeBarePluginPackages(definition.plugins, processPlatform)) {

@@ -107,10 +107,14 @@ echo "    入口 OK"
 # sharp、koffi、rg 全部中招）。打 tar 前对整棵闭包树深→浅预签。
 # （KCoder 同款前置：其 release.sh 签名阶段即递归签内置运行时树。）
 if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
-  die "需要 APPLE_SIGNING_IDENTITY（Developer ID 预签闭包，公证硬性要求）"
+  # 未设身份 = 本地开发闭包（不经公证分发）。预签只是公证前置，不是
+  # 运行前置；发布窗口（check-release.sh / CI）必须携带身份，届时此分支
+  # 不生效、codesign 任何失败仍会响亮中止。
+  log "未设 APPLE_SIGNING_IDENTITY——跳过 Developer ID 预签（本地开发闭包，不公证）"
+else
+  log "预签闭包内全部 Mach-O（含嵌套 LibreOfficeDev.app）"
+  bash "$ROOT/scripts/local/presign-engine-macos.sh" "$CLOSURE"
 fi
-log "预签闭包内全部 Mach-O（含嵌套 LibreOfficeDev.app）"
-bash "$ROOT/scripts/local/presign-engine-macos.sh" "$CLOSURE"
 
 # ── 5. office kit 平台断言 ──────────────────────────────────────────
 case "$(uname)-$(uname -m)" in

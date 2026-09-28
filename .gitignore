@@ -78,3 +78,6 @@ kstock/presets/*/skills/
 /reports/
 .dsh/
 staging/
+
+# 构建缓存标记目录（pnpm/CACHEDIR.TAG）
+.build/

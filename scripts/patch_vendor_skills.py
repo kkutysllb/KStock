@@ -1457,32 +1457,62 @@ def _fix_qilin_chat_link_preflight(text: str) -> str | None:
     return text.replace(_UI_CHAT_OPEN_LINK_ANCHOR, _UI_CHAT_OPEN_LINK_REPLACEMENT, 1)
 
 
-# ── 补丁 22：verify-runtime-closure 的 preset glob 回退 + 覆盖 KStock 自有预设 ──
+# ── 补丁 22：verify-runtime-closure 的 preset 门禁 3.0.5 适配 ──
 # 上游 b1696f535b 把 glob 改为 packages/bundle/web-app/presets/*.patch.yml，而该目录
-# 在 3.0.5 既未入库也不在工作树 → globSync 返回 [] → failures 非空 → exit 1。该门禁
-# 是 build-exe-for-python-sdk 流水线首步，也是 build-runtime-bundle.sh 的必经步，
-# 因此不修会让两条打包路径同时中断。回退到 shipped 预设形态，并把 kstock/presets
-# 一并纳入校验（产品态 includeShippedRoot=false，真正随包发的是这 7 个）。
-# 已验证：KStock 预设引用的 25 个包名全部是 python/sdk-runtime 的直接 workspace 依赖
-# → 纳入后不会误报。
+# 在 3.0.5 既未入库也不在工作树 → globSync 返回 [] → failures 非空 → exit 1，两条打包
+# 路径同时中断。但只把 glob 指回 agent.cordis.yml 还不够：3.0.5 起「组合文件本身即
+# preset」（顶层每行即插件行，id=目录名，见 agent-presets/metadata.ts 的 JSDoc），
+# presetDefinitions 提不出 @qilin/agent-preset 包装行 → 定义数为 0，门禁空转假绿。
+# 因此四段一并修：glob 指回 shipped 形态并纳入 kstock/presets；path 导入补
+# basename/dirname；校验循环对无包装行的文件回退「整文件 = 单 preset 定义」；
+# presetCount 同口径。已验证：KStock 预设引用的包名全部是 python/sdk-runtime 的
+# 直接 workspace 依赖 → 纳入后不会误报。
 _VERIFY_CLOSURE_REL = "qilin/scripts/verify-runtime-closure.ts"
 _VERIFY_CLOSURE_MARKER = "KStock patch: preset glob 回退"
-_VERIFY_CLOSURE_ANCHOR = "const AGENT_PRESET_GLOB = 'packages/bundle/web-app/presets/*.patch.yml'"
-_VERIFY_CLOSURE_REPLACEMENT = (
+_VERIFY_CLOSURE_GLOB_ANCHOR = "const AGENT_PRESET_GLOB = 'packages/bundle/web-app/presets/*.patch.yml'"
+_VERIFY_CLOSURE_GLOB_REPLACEMENT = (
     "// KStock patch: preset glob 回退 + 覆盖 KStock 自有预设——上游指向的 bundle presets\n"
     "// 目录不存在，会让本门禁以 exit 1 空转失败；kstock/presets 是产品态真正随包发的那批。\n"
     "const AGENT_PRESET_GLOB = '{packages/preset/agent-presets/presets/*/agent.cordis.yml,"
     "../../kstock/presets/*/agent.cordis.yml}'"
 )
+_VERIFY_CLOSURE_PATH_ANCHOR = "import { resolve } from 'node:path'"
+_VERIFY_CLOSURE_PATH_REPLACEMENT = "import { basename, dirname, resolve } from 'node:path'"
+_VERIFY_CLOSURE_LOOP_ANCHOR = "    for (const definition of presetDefinitions(document)) {"
+_VERIFY_CLOSURE_LOOP_REPLACEMENT = """    // KStock patch: 3.0.5 起「组合文件本身即 preset」——presetDefinitions 提不出
+    // @qilin/agent-preset 包装行时，回退为整文件 = 单 preset 定义（id=目录名），
+    // 否则定义数为 0，本门禁对产品预设空转假绿。
+    const definitions = presetDefinitions(document).length > 0
+      ? presetDefinitions(document)
+      : (Array.isArray(document) ? [{ id: basename(dirname(presetPath)), plugins: document }] : [])
+    for (const definition of definitions) {"""
+_VERIFY_CLOSURE_COUNT_ANCHOR = (
+    "    presetCount: (await Promise.all(presetPaths.map(async path => "
+    "presetDefinitions(loadCordisYaml(await readFile(resolve(root, path), 'utf8'))).length))"
+    ").reduce((a, b) => a + b, 0),"
+)
+_VERIFY_CLOSURE_COUNT_REPLACEMENT = """    presetCount: (await Promise.all(presetPaths.map(async path => {
+      const document = loadCordisYaml(await readFile(resolve(root, path), 'utf8'))
+      const definitions = presetDefinitions(document)
+      return definitions.length > 0 ? definitions.length : (Array.isArray(document) ? 1 : 0)
+    }))).reduce((a, b) => a + b, 0),"""
 
 
 def _fix_qilin_verify_closure_glob(text: str) -> str | None:
-    """verify-runtime-closure 的 preset glob 回退；已修/锚点失配返回 None。"""
+    """verify-runtime-closure 的 preset 门禁 3.0.5 适配；已修/锚点失配返回 None。"""
     if _VERIFY_CLOSURE_MARKER in text:
         return None
-    if _VERIFY_CLOSURE_ANCHOR not in text:
-        return None
-    return text.replace(_VERIFY_CLOSURE_ANCHOR, _VERIFY_CLOSURE_REPLACEMENT, 1)
+    patched = text
+    for anchor, replacement in (
+        (_VERIFY_CLOSURE_GLOB_ANCHOR, _VERIFY_CLOSURE_GLOB_REPLACEMENT),
+        (_VERIFY_CLOSURE_PATH_ANCHOR, _VERIFY_CLOSURE_PATH_REPLACEMENT),
+        (_VERIFY_CLOSURE_LOOP_ANCHOR, _VERIFY_CLOSURE_LOOP_REPLACEMENT),
+        (_VERIFY_CLOSURE_COUNT_ANCHOR, _VERIFY_CLOSURE_COUNT_REPLACEMENT),
+    ):
+        if anchor not in patched:
+            return None
+        patched = patched.replace(anchor, replacement, 1)
+    return patched
 
 
 # ── 补丁 16：kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界）──
