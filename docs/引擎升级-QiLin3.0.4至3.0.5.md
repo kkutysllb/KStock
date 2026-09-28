@@ -877,3 +877,9 @@ KStock 已存在上次升级遗留的同名分支 `upgrade/qilin-3.0.5`（`43931
 - 闭包内 dsh-animations 实测 113 个 HTML（计划估算 108；非门禁项）。
 - 首次启动新构建会按 tar 指纹自动刷新 `~/.kstock/runtime` 并把 profile bundles 迁到四元素——两者都在引擎 spawn 前完成，无 R6 窗口（engine.ts `ensureRuntimeExtracted` + `ensureKstockProfile`）。
 - 发布链路改造（R0–R7）见 [plans/2026-09-28-release-pipeline-refit.md](../plans/2026-09-28-release-pipeline-refit.md)，A5 独立窗口执行。
+
+### 真机反馈适配（2026-09-28 下午）
+
+| 现象 | 根因 | 处置 |
+|---|---|---|
+| 升级后每个工作区下多出与工作区同名的会话行 | 冷行会话的 `sessionListMetadata` 投影缓存是 v3 时代身份（87 条），v4 迁移后按版本键失配；host 回退 `blank: seq === 0` 把「创建后从未发消息」的空白会话误判为普通会话展示 | 这些会话零内容（0 用户消息/无标题/仅初始化事件），经 `scripts/local/purge-blank-sessions.mjs` 清除 5 个并同步修剪 `workspace.json` 成员引用（两级备份于 `~/.kstock/backup-purged-blank-sessions-2026-09-28T*`）。未来空白会话由 3.0.5 运行时重建的 v4 投影缓存正常隐藏，不复发 |
