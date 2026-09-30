@@ -21,10 +21,7 @@ a { color: inherit; }
 button, input, select, textarea { font: inherit; }
 button { color: inherit; }
 
-/* 品牌徽标：rounded square + K 三笔，颜色随主题集中控制 */
-.logo-mark rect { fill: #2fc197; }
-.logo-mark .logo-stem, .logo-mark .logo-arm { fill: #062d23; }
-.logo-mark .logo-line { stroke: #062d23; }
+/* 品牌徽标 = 上游 QiLin 朱印（qilin-seal.svg 自带印色）：此处只管尺寸与光晕。 */
 .logo-mark.compact { width: 24px; height: 24px; }
 .logo-mark { width: 30px; height: 30px; }
 
@@ -64,8 +61,8 @@ button { color: inherit; }
 
 .brand-mark { gap: 10px; }
 
-/* 落地页商标是上游 QiLin 朱印（qilin-seal.svg，自带印色）：把旧 K 图标的
-   绿色光晕换成暖色，auth 页旧图标（.auth-brand .logo-mark.compact）不受影响。 */
+/* 落地页与 auth 页的商标同为上游 QiLin 朱印（qilin-seal.svg，自带印色）：
+   导航行给暖色光晕；auth 页尺寸小，由 .auth-brand 覆盖为无光晕。 */
 .brand-mark .logo-mark { filter: drop-shadow(0 8px 18px rgba(162, 53, 38, 0.3)); }
 
 .logo-mark { width: 30px;
@@ -75,19 +72,6 @@ button { color: inherit; }
 
 .logo-mark.compact { width: 24px;
   height: 24px; }
-
-.logo-mark rect { fill: #111a1e;
-  stroke: rgba(49, 199, 162, 0.42); }
-
-.logo-stem { fill: #31c7a2; }
-
-.logo-arm { fill: #f4f7f8; }
-
-.logo-line { fill: none;
-  stroke: #f2b74c;
-  stroke-width: 4;
-  stroke-linecap: round;
-  stroke-linejoin: round; }
 
 .brand-mark strong, .sidebar-title strong { font-size: 15px; }
 

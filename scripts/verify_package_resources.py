@@ -151,13 +151,19 @@ class Verifier:
                           "source kstock landing page")
         self.require_path(root / "kstock" / "web" / "public" / "kstock-auth.html",
                           "source kstock auth page")
-        # 落地页左上商标 = 上游 QiLin 印章（vendor/qilin packages/client/ui-brand
-        # 的 Seal 几何与字形）：资产须在位，落地页须引用它而非旧项目图标。
+        # 落地页与登录/初始化页左上商标 = 上游 QiLin 印章（vendor/qilin
+        # packages/client/ui-brand 的 Seal 几何与字形）：资产须在位，两页都须
+        # 引用它而非旧项目图标（auth 页的旧内联 K 图标已退役）。
         self.require_path(root / "kstock" / "web" / "public" / "qilin-seal.svg",
                           "source kstock landing seal asset")
         self.require_file_contains(
             root / "kstock" / "web" / "public" / "kstock-landing.html",
             "source kstock landing seal mark",
+            ["/kstock/qilin-seal.svg"],
+        )
+        self.require_file_contains(
+            root / "kstock" / "web" / "public" / "kstock-auth.html",
+            "source kstock auth seal mark",
             ["/kstock/qilin-seal.svg"],
         )
 
