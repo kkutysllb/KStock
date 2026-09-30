@@ -7,8 +7,10 @@ import { test } from 'node:test'
 const sourcePath = resolve(dirname(fileURLToPath(import.meta.url)), '../src/client/windowChrome.ts')
 const source = readFileSync(sourcePath, 'utf8')
 const macosCss = source.match(/const MACOS_TRAFFIC_LIGHTS_CSS = `([\s\S]*?)`/)?.[1]
+const windowsCss = source.match(/const WINDOWS_TITLEBAR_CSS = `([\s\S]*?)`/)?.[1]
 
 assert.ok(macosCss, 'macOS traffic-light CSS should be declared')
+assert.ok(windowsCss, 'Windows titlebar CSS should be declared')
 
 const rules = [...macosCss.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, selector, body]) => ({
   selector: selector.trim(),
@@ -69,4 +71,29 @@ test('折叠轨按钮留在流内（rail 展开控件不上浮）', () => {
   const railToggle = ruleBody('#root', '[class*="collapsed"]', '[class*="toggle"]')
   assert.match(railToggle, /position: relative;/)
   assert.doesNotMatch(railToggle, /position: absolute;/)
+})
+
+test('Windows 顶栏带固定 48px，与壳 titleBarOverlay 高度对齐', () => {
+  const logoRow = windowsCss.match(/#root \[class\*="logoRow"\]\s*\{([^}]*)\}/)?.[1]
+  assert.ok(logoRow, 'Windows 品牌行规则应存在')
+  assert.match(logoRow, /height: 48px;/)
+})
+
+test('Windows 不再用上游不存在的 headerRight 选择器留白（旧实现从未命中）', () => {
+  // 3.0.5 引擎里已无 headerRight 类：`:has(> [class*="headerRight"])` 恒不匹配，
+  // 写死的 138px 让位是死代码——右上控件被系统按钮簇压住就是这么来的。
+  assert.doesNotMatch(windowsCss, /headerRight/)
+  assert.doesNotMatch(windowsCss, /padding-right:\s*138px/)
+})
+
+test('按钮簇让位走实测位移：WCO 实测 + 138×缩放回落 + 同层只动最右者', () => {
+  assert.match(source, /export function applyCaptionAvoidance\(\)/)
+  // WCO 变量在本版 Electron 上会失效（按钮簇在屏上仍报整窗宽），只能当参考值
+  assert.match(source, /env\(titlebar-area-width,100vw\)/)
+  assert.match(source, /CAPTION_BUTTONS_WIDTH \* \(window\.devicePixelRatio \|\| 1\)/)
+  // 取样命中测试定位越界控件；同层只位移最右者，避免 flex 行内累计位移
+  assert.match(source, /document\.elementsFromPoint\(/)
+  assert.match(source, /const rightmost = new Map<HTMLElement, HTMLElement>\(\)/)
+  // 每轮先复位，避免窗口缩放/布局切换后残留旧位移
+  assert.match(source, /for \(const \[element, base\] of applied\) element\.style\.marginRight = base/)
 })
