@@ -30,7 +30,8 @@ PATCH_FILE="kstock/web/cordis.patch.yml"
 ROW_PAIRS="$(awk '/^    - id: /{id=$3} /^      name: /{if (id != "") {print id "\t" $2; id=""}}' "$PATCH_FILE")"
 REPO_ROOT="$(pwd)"
 
-python3 - "$PROFILE_DIR" "$REPO_ROOT" "$ROW_PAIRS" <<'EOF'
+# python3 走仓库统一解析器（Windows 的 python3 常是 Store 桩：存在但一跑就退出）。
+scripts/python.sh - "$PROFILE_DIR" "$REPO_ROOT" "$ROW_PAIRS" <<'EOF'
 import json, os, sys
 
 # Windows 的 Python 默认按本地编码（GBK）读写文件，而 profile 清单与
@@ -65,16 +66,27 @@ for line in row_pairs.splitlines():
         continue
     link = 'link:' + os.path.join(repo_root, 'kstock', dir_name)
     link_target = os.path.join(profile_dir, 'node_modules', name)
-    # 只看「是不是符号链接」不够：跑过一次安装包后，profile 的链接会被改指
-    # resources/engine/plugins（同 profile 被两个实例共用），此时清单里的
-    # link: 值仍是仓库路径——只比清单值会在 dev 里静默加载安装版插件。必须比对指向。
+    # 已登记判定要同时看两件事，缺一都会误判：
+    # a) 清单值：跑过一次安装包后，profile 的链接会被改指
+    #    resources/engine/plugins（两个实例共用同一 ~/.kstock），而清单里的 link:
+    #    可能仍是仓库路径——只比清单值会在 dev 里静默加载安装版插件（实测踩到）。
+    # b) 实际指向：必须用 readlink 取自链目标，**不能用 os.path.islink** ——
+    #    junction 在 Windows 上 st_mode 是目录，islink 返回 False（同 shell 侧
+    #    engine.ts 的旧守卫坑），于是判定永远失败、每次都重建链接。
+    src = os.path.join(repo_root, 'kstock', dir_name)
     points_to_repo = False
-    if os.path.islink(link_target):
-        try:
-            points_to_repo = os.path.realpath(link_target) == os.path.realpath(
-                os.path.join(repo_root, 'kstock', dir_name))
-        except OSError:
-            points_to_repo = False
+    try:
+        actual = os.readlink(link_target)
+        # Windows 的 readlink 对 junction 会带 \\?\ 前缀，相对目标要拼回目录，
+        # 再 normcase 消掉盘符/路径大小写差异，否则比对永远不等（每次都重建）。
+        if actual.startswith('\\\\?\\'):
+            actual = actual[4:]
+        if not os.path.isabs(actual):
+            actual = os.path.join(os.path.dirname(link_target), actual)
+        points_to_repo = os.path.normcase(os.path.realpath(actual)) == os.path.normcase(
+            os.path.realpath(src))
+    except OSError:
+        points_to_repo = False
     if deps.get(name) == link and points_to_repo:
         continue
     deps[name] = link
