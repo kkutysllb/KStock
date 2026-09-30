@@ -15,6 +15,12 @@ DIR="${1:-apps/desktop/release}"
 STAGING="$ROOT/staging"
 FAIL=0
 TMP=""
+UNTAR_LOG=""
+
+# 闭包解压必须用与真机同源的 tar（见 scripts/runtime-tar.sh）：Windows 上
+# Electron 解压走 System32 的 bsdtar，用 GNU tar 做门禁会「门禁过、真机起不来」。
+. "$ROOT/scripts/runtime-tar.sh"
+RUNTIME_TAR="$(runtime_tar_bin)"
 
 say()  { printf '%s\n' "$*"; }
 ok()   { printf '[OK]   %s\n' "$*"; }
@@ -22,7 +28,10 @@ skip() { printf '[skip] %s\n' "$*"; }
 bad()  { printf '[FAIL] %s\n' "$*" >&2; FAIL=1; }
 die()  { printf '[FAIL] %s\n' "$*" >&2; exit 1; }
 
-cleanup() { [ -n "$TMP" ] && rm -rf "$TMP"; }
+cleanup() {
+  [ -n "$TMP" ] && rm -rf "$TMP"
+  [ -n "$UNTAR_LOG" ] && rm -f "$UNTAR_LOG"
+}
 trap cleanup EXIT
 
 [ -d "$DIR" ] || die "产物目录不存在：$DIR"
@@ -53,7 +62,7 @@ fi
 
 # ── V2 闭包结构（流式列目录，不整包解压）────────────────────────────
 if [ -f "$TAR" ]; then
-  LISTING="$(tar -tzf "$TAR" 2>/dev/null || true)"
+  LISTING="$("$RUNTIME_TAR" -tzf "$TAR" 2>/dev/null || true)"
   if [ -z "$LISTING" ]; then
     bad "V2 闭包 tar 无法列出（空包或损坏）：$TAR"
   else
@@ -96,9 +105,13 @@ if [ -f "$TAR" ]; then
     bad "V4 未定位到 Electron 二进制（无法做包内闭包冒烟）"
   else
     TMP="$(mktemp -d)"
-    if ! tar -xzf "$TAR" -C "$TMP" 2>/dev/null; then
-      bad "V4 闭包解压失败：$TAR"
+    UNTAR_LOG="$(mktemp)"
+    if ! "$RUNTIME_TAR" -xzf "$TAR" -C "$TMP" 2>"$UNTAR_LOG"; then
+      bad "V4 闭包解压失败（tar: ${RUNTIME_TAR}）：$TAR"
+      sed -n '1,5p' "$UNTAR_LOG" >&2
+      rm -f "$UNTAR_LOG"; UNTAR_LOG=""
     else
+      rm -f "$UNTAR_LOG"; UNTAR_LOG=""
       smoke_ok=1
       if ! ELECTRON_RUN_AS_NODE=1 "$ELECTRON_BIN" "$ROOT/scripts/local/smoke-runtime-closure.cjs" "$TMP" >"$TMP/.abi.log" 2>&1; then
         bad "V4 ABI 冒烟未通过（详见 $TMP/.abi.log 摘要）"

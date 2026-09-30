@@ -151,9 +151,38 @@ if [ -n "$KIT" ]; then
 fi
 
 # ── 6. tar.gz（拷贝时排除 macOS 元数据）─────────────────────────────
-log "打包 kstock-runtime.tar.gz"
+# 打包器必须与运行时解压端同源：Windows 上 Electron 用 System32 的 bsdtar 解压，
+# 而 Git Bash 的 PATH 上是 GNU tar。不同源会让中文名/硬链接被改写成解压端读不出
+# 的形态（根因与实测数据见 scripts/runtime-tar.sh）。
+. "$ROOT/scripts/runtime-tar.sh"
+RUNTIME_TAR="$(runtime_tar_bin)"
+log "打包 kstock-runtime.tar.gz（tar: $RUNTIME_TAR）"
 rm -f "$STAGING/kstock-runtime.tar.gz"
-COPYFILE_DISABLE=1 tar -czf "$STAGING/kstock-runtime.tar.gz" -C "$CLOSURE" .
+COPYFILE_DISABLE=1 "$RUNTIME_TAR" -czf "$STAGING/kstock-runtime.tar.gz" -C "$CLOSURE" .
+
+# 解压端自检（fail loud）：用同一个 tar 回读含中文名 + 硬链接的资源子树，
+# 落盘文件名必须与源逐项一致。不能只看 tar 退出码——GNU tar 默认格式下
+# bsdtar 对**绝大多数**中文名是静默乱码改名（不报错、退出码也可能是 0）。
+PROBE_SRC="$CLOSURE/node_modules/dsh-animations/skills/video-shot-demos/assets"
+if [ -d "$PROBE_SRC" ]; then
+  PROBE_OUT="$(mktemp -d)"
+  if ! COPYFILE_DISABLE=1 "$RUNTIME_TAR" -xzf "$STAGING/kstock-runtime.tar.gz" -C "$PROBE_OUT" \
+       "./node_modules/dsh-animations/skills/video-shot-demos/assets" 2>"$PROBE_OUT/.tar.log"; then
+    sed -n '1,5p' "$PROBE_OUT/.tar.log" >&2
+    rm -rf "$PROBE_OUT"
+    die "闭包无法被运行时解压端解压（tar: ${RUNTIME_TAR}）——中文名/硬链接资源条目报错"
+  fi
+  if ! diff -q \
+      <(cd "$PROBE_SRC" && find . -type f | LC_ALL=C sort) \
+      <(cd "$PROBE_OUT/node_modules/dsh-animations/skills/video-shot-demos/assets" && find . -type f | LC_ALL=C sort) >/dev/null; then
+    rm -rf "$PROBE_OUT"
+    die "闭包解压后文件名与源不一致（编码被改写的征兆）——打包 tar 须与解压端同源"
+  fi
+  PROBE_COUNT="$(cd "$PROBE_SRC" && find . -type f | wc -l | tr -d ' ')"
+  rm -rf "$PROBE_OUT"
+  log "解压端自检通过（${PROBE_COUNT} 个中文名/硬链接资源条目名字一致）"
+fi
+
 TAR_SIZE=$(du -h "$STAGING/kstock-runtime.tar.gz" | cut -f1)
 CLO_SIZE=$(du -sh "$CLOSURE" | cut -f1)
 log "完成：tar.gz ${TAR_SIZE}（闭包未压缩 ${CLO_SIZE}）"
