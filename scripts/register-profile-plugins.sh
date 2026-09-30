@@ -23,33 +23,59 @@ PATCH_FILE="kstock/web/cordis.patch.yml"
 [ -f "$PROFILE_DIR/package.json" ] || { echo "!! profile 不存在：$PROFILE_DIR" >&2; exit 1; }
 [ -f "$PATCH_FILE" ] || { echo "!! 找不到 $PATCH_FILE" >&2; exit 1; }
 
-# 从产品名单提取 insert 行的 (id, name)：id 行的下一行是 name。
-ROW_IDS="$(awk '/^    - id: /{gsub(/^    - id: |[[:space:]]$/, ""); print}' "$PATCH_FILE")"
+# 从产品名单提取 insert 行的 (id, 包名)：id 行的下一行是 name。
+# 注意：不能按 id 推目录——名单里存在不同构的行（kstock-brand ↔ 目录
+# client-brand），按下推会找不到 kstock/brand 而**静默跳过**该插件，
+# 于是它的链接永远修不回仓库（dev 里静默加载安装版插件的成因之一）。
+ROW_PAIRS="$(awk '/^    - id: /{id=$3} /^      name: /{if (id != "") {print id "\t" $2; id=""}}' "$PATCH_FILE")"
 REPO_ROOT="$(pwd)"
 
-python3 - "$PROFILE_DIR" "$REPO_ROOT" $ROW_IDS <<'EOF'
+python3 - "$PROFILE_DIR" "$REPO_ROOT" "$ROW_PAIRS" <<'EOF'
 import json, os, sys
 
-profile_dir, repo_root, *row_ids = sys.argv[1:]
+# Windows 的 Python 默认按本地编码（GBK）读写文件，而 profile 清单与
+# kstock/*/package.json 都是 UTF-8（含中文）——不显式指定会 UnicodeDecodeError，
+# 侥幸读通也会把清单写成 GBK 让引擎读成乱码。全部显式 encoding='utf-8'。
+profile_dir, repo_root, row_pairs = sys.argv[1:]
 manifest_path = os.path.join(profile_dir, 'package.json')
-manifest = json.load(open(manifest_path))
+with open(manifest_path, encoding='utf-8') as fp:
+    manifest = json.load(fp)
 deps = manifest.get('dependencies', {})
 missing, changed = [], False
 
-# ── 1. 插件依赖与符号链接 ────────────────────────────────────────────
-for row_id in row_ids:
-    # 行 id → 包目录：kstock/<dir>/package.json 的 name 与行 name 一致；
-    # 名单行 id 与目录名同构（kstock-<name> ↔ <name>），直接按目录名核对。
-    dir_name = row_id.removeprefix('kstock-')
-    pkg_file = os.path.join(repo_root, 'kstock', dir_name, 'package.json')
+# 包名 → 仓库目录：按 package.json 的 name 反查，与行 id 的写法解耦。
+dir_by_name = {}
+for entry in sorted(os.listdir(os.path.join(repo_root, 'kstock'))):
+    pkg_file = os.path.join(repo_root, 'kstock', entry, 'package.json')
     if not os.path.isfile(pkg_file):
         continue
-    name = json.load(open(pkg_file)).get('name')
-    if name is None:
+    with open(pkg_file, encoding='utf-8') as fp:
+        pkg_name = json.load(fp).get('name')
+    if pkg_name:
+        dir_by_name[pkg_name] = entry
+
+# ── 1. 插件依赖与符号链接 ────────────────────────────────────────────
+for line in row_pairs.splitlines():
+    if not line.strip():
+        continue
+    row_id, _, raw_name = line.partition('\t')
+    name = raw_name.strip().strip("'")
+    dir_name = dir_by_name.get(name)
+    if dir_name is None:
         continue
     link = 'link:' + os.path.join(repo_root, 'kstock', dir_name)
     link_target = os.path.join(profile_dir, 'node_modules', name)
-    if deps.get(name) == link and os.path.islink(link_target):
+    # 只看「是不是符号链接」不够：跑过一次安装包后，profile 的链接会被改指
+    # resources/engine/plugins（同 profile 被两个实例共用），此时清单里的
+    # link: 值仍是仓库路径——只比清单值会在 dev 里静默加载安装版插件。必须比对指向。
+    points_to_repo = False
+    if os.path.islink(link_target):
+        try:
+            points_to_repo = os.path.realpath(link_target) == os.path.realpath(
+                os.path.join(repo_root, 'kstock', dir_name))
+        except OSError:
+            points_to_repo = False
+    if deps.get(name) == link and points_to_repo:
         continue
     deps[name] = link
     changed = True
@@ -74,7 +100,9 @@ elif ANIMATIONS not in bundles:
 profile['bundles'] = bundles
 
 if changed:
-    json.dump(manifest, open(manifest_path, 'w'), indent=2)
+    # ensure_ascii 保持默认（与脚本既有产物一致，避免无谓的整文件 diff）
+    with open(manifest_path, 'w', encoding='utf-8') as fp:
+        json.dump(manifest, fp, indent=2)
 print('已补登记：' + ('、'.join(missing) if missing else '（无缺失）'))
 print('bundle 叠层：' + '、'.join(bundles))
 EOF
