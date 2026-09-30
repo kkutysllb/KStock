@@ -207,8 +207,14 @@ function captionInsetWidth(): number {
  * （残留 padding 会留出莫名空白），关掉它就贴上了。上游类名是 CSS Modules
  * 哈希产物，写死必然随改版失效（旧版 138px 让位就是这么变成死代码的）。
  *
- * 同层只位移**最右**的那个控件：flex 行里给多个同级同时加外边距会累计位移，
- * 而只动最右者会让整行右侧控件一起左移（行内余量由 filler 吸收）。按钮簇区域
+ * 位移单位是「控制单元」＝命中节点一路向上、仍在按钮簇区域内、仍在顶栏带内、
+ * 且未跨到整行宽度（≥ 半窗）的最外层祖先——整颗胶囊/整个按钮组一起左移。
+ * **不能位移更内层的节点**：初版取最内层，结果给胶囊内部的 `<img>` 与箭头各加了
+ * 外边距（实测 icon +60px / chevron +88px），胶囊被撑开、标签文字被挤没。
+ * 整行（≥ 半窗宽）本身也不位移：那是布局骨架，动它等于把整行外框推开。
+ *
+ * 同层只位移**最右**的那个单元：flex 行里给多个同级同时加外边距会累计位移，
+ * 只动最右者会让整行右侧控件一起左移（行内余量由 filler 吸收）。按钮簇区域
  * 本就被系统绘制的不透明按钮盖住，让出的空间不显示内容，故无视觉代价。
  */
 function avoidCaptionButtons(applied: Map<HTMLElement, string>): void {
@@ -235,13 +241,32 @@ function avoidCaptionButtons(applied: Map<HTMLElement, string>): void {
   }
   if (offenders.size === 0) return
 
-  // 只保留最内层：外层行容器由内层控件带动，否则会把整行外框一起推开
-  const list = [...offenders]
-  const inner = list.filter((el) => !list.some((other) => other !== el && el.contains(other)))
+  // 收敛到控制单元（见上文）：向上直到「出区域 / 出带 / 到整行宽」
+  const half = window.innerWidth / 2
+  const units = new Map<HTMLElement, number>()
+  for (const offender of offenders) {
+    let unit: HTMLElement = offender
+    for (
+      let parent = offender.parentElement;
+      parent !== null && parent !== document.body;
+      parent = parent.parentElement
+    ) {
+      const rect = parent.getBoundingClientRect()
+      const inBand = rect.height > 0 && rect.height <= TITLEBAR_BAND && rect.top <= TITLEBAR_BAND
+      if (!inBand || rect.right <= zoneLeft || rect.width >= half) break
+      unit = parent
+    }
+    const overflow = Math.round(unit.getBoundingClientRect().right - zoneLeft)
+    units.set(unit, Math.max(units.get(unit) ?? 0, overflow))
+  }
 
-  // 同层只取最右者（见上文：flex 行内多元素位移会累计）
+  // 单元之间若仍嵌套，外层带动内层，只留最外层
+  const list = [...units.keys()]
+  const outermost = list.filter((el) => !list.some((other) => other !== el && other.contains(el)))
+
+  // 同层只取最右者（见上文：flex 行内多单元位移会累计）
   const rightmost = new Map<HTMLElement, HTMLElement>()
-  for (const element of inner) {
+  for (const element of outermost) {
     const parent = element.parentElement
     if (parent === null) continue
     const current = rightmost.get(parent)
@@ -254,7 +279,7 @@ function avoidCaptionButtons(applied: Map<HTMLElement, string>): void {
   }
 
   for (const element of rightmost.values()) {
-    const overflow = Math.round(element.getBoundingClientRect().right - zoneLeft)
+    const overflow = units.get(element) ?? 0
     if (overflow <= 0) continue
     applied.set(element, element.style.marginRight)
     element.style.marginRight = `${overflow}px`

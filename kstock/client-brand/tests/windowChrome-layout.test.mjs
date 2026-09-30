@@ -94,6 +94,11 @@ test('按钮簇让位走实测位移：WCO 实测 + 138×缩放回落 + 同层�
   // 取样命中测试定位越界控件；同层只位移最右者，避免 flex 行内累计位移
   assert.match(source, /document\.elementsFromPoint\(/)
   assert.match(source, /const rightmost = new Map<HTMLElement, HTMLElement>\(\)/)
+  // 位移单位须是「最外层窄控件」：初版取最内层，结果给胶囊内部的 <img> 与箭头
+  // 各加了外边距，标签文字被挤没（实机截图：胶囊被撑成空壳）。
+  assert.match(source, /const units = new Map<HTMLElement, number>\(\)/)
+  assert.match(source, /rect\.width >= half\) break/)
+  assert.doesNotMatch(source, /const inner = list\.filter/)
   // 每轮先复位，避免窗口缩放/布局切换后残留旧位移
   assert.match(source, /for \(const \[element, base\] of applied\) element\.style\.marginRight = base/)
 })
