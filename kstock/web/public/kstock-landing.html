@@ -9,12 +9,10 @@
   <title>KStock — A股量化分析 Super Agent</title>
   <link rel="stylesheet" href="/kstock/kstock-pages.css" />
   <link rel="icon" href="/kstock/kstock-logo.svg" type="image/svg+xml" />
-  <!-- 壳配色自报（Electron 无框窗口，消费方见 apps/desktop/electron/lib/chrome.ts）：
-       本页画布恒为暗色，而壳的 WCO 按钮簇底色默认跟随引擎 UI 上报的主题（用户可能
-       是亮色），不自报就会在右上压一整块白。该前缀只切配色、不写持久化。
-       为什么不靠主进程按 URL 判：本页 URL 由引擎路由决定（/ 与
-       /kstock/kstock-landing.html 都可能），写死名单必漏。 -->
-  <script>console.log('__kstock_page_theme__:dark')</script>
+  <!-- 窗口壳适配（Electron 无框窗口）：自报暗色画布 + 打 os-windows 平台类 +
+       写 --kstock-caption-inset，详见 /kstock/kstock-window-chrome.js。落地页右侧
+       有引擎/数据源状态标签，正是靠它让开按钮簇。 -->
+  <script src="/kstock/kstock-window-chrome.js"></script>
 </head>
 <body>
   <main class="landing-shell">

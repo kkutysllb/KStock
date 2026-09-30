@@ -9,6 +9,9 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..")
 const pagesDir = join(repoRoot, "kstock", "web", "public");
 const readPage = (file: string): string => readFileSync(join(pagesDir, file), "utf8");
 
+/** 静态页的窗口壳适配脚本（自报底色 + os-windows + 按钮簇宽度）。 */
+const shellScript = readPage("kstock-window-chrome.js");
+
 /**
  * 登录页的白块事故（用户截图）：壳按 URL 判自有暗色页，而真实登录 URL 是引擎
  * 路由 /login?next=…，名单里只有 /kstock/kstock-auth.html，于是 overlay 一直用
@@ -16,9 +19,30 @@ const readPage = (file: string): string => readFileSync(join(pagesDir, file), "u
  * 判据钉住，任一侧漂移即失败。
  */
 test("自有静态页自报暗色底色（壳消费同一前缀）", () => {
+  assert.match(shellScript, new RegExp(`${PAGE_THEME_PREFIX}dark`), "适配脚本应自报暗色");
   for (const page of ["kstock-auth.html", "kstock-landing.html"]) {
-    assert.match(readPage(page), new RegExp(`${PAGE_THEME_PREFIX}dark`), `${page} 应自报暗色`);
+    assert.match(readPage(page), /kstock-window-chrome\.js/, `${page} 应加载壳适配脚本`);
   }
+});
+
+/**
+ * 落地页状态标签被按钮簇遮住的事故：CSS 里所有「给窗控让位」的规则都以
+ * `.os-windows` 为前缀，而全仓库没有任何代码设置这个类——整组规则是死代码。
+ * 这里把「谁来设置」与「CSS 如何消费」两端都钉住。
+ */
+test("静态页打上 os-windows 平台类（CSS 让位规则全靠它生效）", () => {
+  assert.match(shellScript, /classList\.add\('os-windows'\)/);
+  const css = readPage("kstock-pages.css");
+  assert.match(css, /\.os-windows \.landing-nav/);
+  assert.match(css, /\.os-windows \.titlebar-drag-strip/);
+});
+
+test("让位宽度按实测变量，而不是写死像素（DPI 缩放会变）", () => {
+  const css = readPage("kstock-pages.css");
+  assert.match(shellScript, /--kstock-caption-inset/);
+  assert.match(css, /padding-right: calc\(12px \+ var\(--kstock-caption-inset/);
+  // 写死的 150px 在 125%/150% 缩放下不够，已被变量替换
+  assert.doesNotMatch(css, /padding-right: 150px/);
 });
 
 test("暗色路由覆盖引擎的实际入口（登录/初始化/落地/直连文件）", () => {

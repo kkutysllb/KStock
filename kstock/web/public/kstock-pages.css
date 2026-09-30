@@ -756,8 +756,23 @@ button { color: inherit; }
 
 /* settings / auth 页没有自带 drag 顶栏，顶部盖一条拖拽带。 默认隐藏（macOS 原生标题栏已提供拖拽），仅 Windows 启用； z-index 压在返回按钮（z-index:2）之下，不拦截点击。 */ .titlebar-drag-strip { display: none; }
 
-/* 落地页：左侧收回红绿灯让位（86→28），右侧给窗控让位，logo/按钮整体左移。 */ .os-windows .landing-nav { padding-left: 28px;
-  padding-right: 150px; }
+/* 上面那条只写了「默认隐藏」，此前没有任何规则把它打开（也没有代码设置 .os-windows
+   前缀）——于是登录/初始化页在 Windows 无框窗口下**完全没有可拖拽区域**，窗口移不动。
+   这里补上启用规则：48px 拖拽带，右侧避开按钮簇，z-index 低于返回按钮故不拦截其点击。 */
+.os-windows .titlebar-drag-strip { display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: var(--kstock-caption-inset, 138px);
+  height: 48px;
+  z-index: 1;
+  -webkit-app-region: drag; }
+
+/* 落地页：左侧收回红绿灯让位（86→28），右侧给按钮簇让位，logo/按钮整体左移。
+   右侧宽度取 --kstock-caption-inset（kstock-window-chrome.js 按 WCO 实测写入，
+   失效时回落 138 × 显示缩放）：按钮簇宽度随 DPI 缩放变化，写死像素在非 100% 下会不够。 */
+.os-windows .landing-nav { padding-left: 28px;
+  padding-right: calc(12px + var(--kstock-caption-inset, 138px)); }
 
 /* 登录/注册页：返回按钮左移（无红绿灯让位），拖拽带定位锚点。 */ .auth-shell { position: relative; }
 
