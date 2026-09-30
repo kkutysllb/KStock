@@ -22,6 +22,8 @@ pnpm -C kstock/quant test
 pnpm -C kstock/accounts test
 # 品牌层桌面窗口几何回归（macOS 双行头部 10px 下移 / 折叠轨避让）。
 pnpm -C kstock/client-brand test
+# 壳自有静态页底色契约（登录页按钮簇白块事故的回归门：自报前缀 ↔ 路由覆盖）。
+pnpm -C apps/desktop test
 
 # Electron 壳：主进程打包 + 类型检查。
 pnpm -C apps/desktop build:electron-main

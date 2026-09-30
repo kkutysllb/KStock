@@ -23,6 +23,7 @@ import { app } from "electron";
 import type { BrowserWindow } from "electron";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { PAGE_THEME_PREFIX, isDarkStaticRoute } from "./chrome-pages";
 import { logMain } from "./logger";
 
 /** 标题栏带高（引擎 UI 顶栏带统一 48px，macOS 红绿灯带同款对齐值）。 */
@@ -35,25 +36,6 @@ const THEME_REPORT_PREFIX = "__kstock_theme__:";
 export const TITLEBAR_PAD_RIGHT = 138;
 
 type ChromeTheme = "dark" | "light";
-
-/**
- * KStock 自有静态页（登录 / 落地）：画布恒为暗色（kstock-pages.css 的
- * `.auth-shell` / `.landing-shell` 无明暗分支），而壳 overlay 配色来自引擎 UI
- * 上报的持久化主题——亮色主题用户在登录页会看到一整块白色按钮带压在暗色画布上。
- *
- * 这些页不上报主题，故由主进程按 URL 判定切暗；且**不写持久化**，用户偏好仍归
- * 引擎 UI 的主题上报（否则在登录页退出会把持久化值改成暗色）。
- */
-const DARK_STATIC_PAGES = new Set(["/kstock/kstock-auth.html", "/kstock/kstock-landing.html"]);
-
-/** 该 URL 是否 KStock 的暗色静态页（解析失败按否处理）。 */
-function isDarkStaticPage(url: string): boolean {
-  try {
-    return DARK_STATIC_PAGES.has(new URL(url).pathname);
-  } catch {
-    return false;
-  }
-}
 
 /** 主题 → 壳配色。取值对齐 @kstock/client-brand tokens：底色=画布 token，
  * 符号色=label 系（暗 #d6d8dc 近 label-primary，亮 #5b6b64 = label-secondary）。 */
@@ -129,6 +111,14 @@ export function attachChromeThemeBridge(win: BrowserWindow): void {
   const { webContents } = win;
 
   const onConsoleMessage = (_event: unknown, _level: unknown, message: string): void => {
+    // 自有静态页自报底色：只切配色，不落持久化。
+    if (message.startsWith(PAGE_THEME_PREFIX)) {
+      const pageValue = message.slice(PAGE_THEME_PREFIX.length);
+      if (pageValue !== "dark" && pageValue !== "light") return;
+      logMain(`chrome：页面自报底色 ${pageValue}（不持久化）`);
+      applyChromeTheme(win, pageValue);
+      return;
+    }
     if (!message.startsWith(THEME_REPORT_PREFIX)) return;
     const value = message.slice(THEME_REPORT_PREFIX.length);
     if (value !== "dark" && value !== "light") return;
@@ -139,9 +129,9 @@ export function attachChromeThemeBridge(win: BrowserWindow): void {
 
   webContents.on("console-message", onConsoleMessage);
 
-  // 导航到自有暗色静态页时按页面底色切壳配色（不持久化，见 DARK_STATIC_PAGES）。
+  // 导航到自有暗色静态页时先切壳配色（快路径，见 DARK_STATIC_ROUTES；不持久化）。
   const onDidNavigate = (_event: unknown, url: string): void => {
-    if (!isDarkStaticPage(url)) return;
+    if (!isDarkStaticRoute(url)) return;
     logMain(`chrome：暗色静态页，壳配色切暗（不持久化）：${url}`);
     applyChromeTheme(win, "dark");
   };
