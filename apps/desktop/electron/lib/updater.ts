@@ -48,7 +48,29 @@ function normalizeUpdaterReleaseNotes(info: {
       ? raw
       : raw.map((item) => (typeof item === "string" ? item : item?.note ?? "")).join("\n\n")
   ).trim();
-  return notes || null;
+  if (notes === "") return null;
+  // GitHub provider 的说明来自 Atom feed 的 <content>（渲染后的 HTML）——
+  // 弹窗是纯文本展示，HTML 形态先剥标签解码，否则用户看到满屏 <h1>/<br>。
+  return /<\/?[a-z][^>]*>/i.test(notes) ? htmlToPlain(notes) : notes;
+}
+
+/** HTML → 纯文本：块级标签转行、剥其余标签、解码命名实体、收敛空行。 */
+function htmlToPlain(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|h[1-6]|li|tr|blockquote|pre)>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /**
