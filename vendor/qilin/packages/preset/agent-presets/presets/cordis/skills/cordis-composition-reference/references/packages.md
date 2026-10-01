@@ -67,7 +67,6 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@qilin/client-ui-approval` | no | Approval composer takeover over the scoped Remote Event waterfall |
 | `@qilin/client-ui-attachment` | no | Dynamic attachment presentation plugin for conversation input, message-image, and trajectory image slots |
 | `@qilin/client-ui-brand` | no | QiLin brand occupants for the Web client's sidebar and conversation-hero brand slots: the 麒麟 seal mark |
-| `@qilin/client-ui-brand-official` | no | Official QiLin brand occupants for the Web client's sidebar slots |
 | `@qilin/client-ui-chat` | no | Chat Conversation target, node definitions, renderers, and details surface |
 | `@qilin/client-ui-commands` | no | Client command surface: global directory cache, '/' source, three command UI kinds, popupSelect registry |
 | `@qilin/client-ui-conversation` | no | Target-neutral Conversation assembly, shell, composer, queue, and view navigation |
@@ -94,6 +93,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@qilin/client-ui-settings-models` | no | Models settings and shared product-onboarding dialogs over existing settings and credential joins |
 | `@qilin/client-ui-settings-plugin-inventory` | no | Read-only Cordis Loader inventory tab in Web Plugins settings |
 | `@qilin/client-ui-settings-plugins` | no | Plugins settings section with feature-owned tabs and configurable host-plane plugin cards |
+| `@qilin/client-ui-settings-session-log` | no | General settings control for Session-log upload with DeepSeek API requests |
 | `@qilin/client-ui-settings-skills` | no | Skills page in Web Settings: the current Session's skill catalog grouped by discovery source |
 | `@qilin/client-ui-settings-unarchive-sessions` | no | Archived-session settings page: the registry-global archive set with one Unarchive action per row |
 | `@qilin/client-ui-shortcuts` | no | Keyboard shortcut reference, recording, and local preference editing |
@@ -266,7 +266,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 |---|---|---|
 | `@qilin/commands` | no | Plugin-owned human command registry for QiLin UIs |
 | `@qilin/permission-presets` | yes | User-facing permission presets (ctx.permissionPresets) for the QiLin: one product-level Permissions select bundling the sandbox-mode and approval-policy knobs, written through to their own session events |
-| `@qilin/tool-ask-user` | no | Model-facing ask_user_question tool over the ctx.userQuestions seam |
+| `@qilin/tool-ask-user` | yes | Model-facing ask_user_question tool over the ctx.userQuestions seam |
 | `@qilin/user-approval` | yes | User-approval seam (ctx.approval) for the QiLin: one-shot permission decisions dispatched to composed answerers over the approval/request waterfall, fail-closed by default |
 | `@qilin/user-questions` | no | Abstract user-questions seam (ctx.userQuestions) for asking the human during agent runs |
 
@@ -359,7 +359,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@qilin/session-projection` | no | Session-projection seam: the merge-extensible projection type table, the provider contract, and the ctx.sessionProjections registry serving whole current values of log-derived per-session state |
 | `@qilin/session-projection-cache` | yes | Persisted projection cache (ctx.sessionProjectionCache): durable per-session checkpoint records on the session_projcache storage domain (per-record layout), throttled write-behind, and the cached listing read |
 | `@qilin/session-stats` | no | Whole-log conversation counts and wall times projection (sessionStats) for the QiLin |
-| `@qilin/session-telemetry-otel` | yes | OpenTelemetry backend for the QiLin telemetry seam: hands captured session records to the OTel JS SDK's log pipeline |
+| `@qilin/session-telemetry-otel` | yes | Feedback-authorized Session logs over byte-bounded OpenTelemetry HTTP requests |
 | `@qilin/session-title` | yes | Log-backed session title service and provider registry for the QiLin |
 | `@qilin/session-title-all-prompts-llm` | yes | All-user-messages LLM provider plugin for QiLin session titles |
 | `@qilin/session-title-first-prompt-llm` | yes | First-message LLM provider plugin for QiLin session titles |
@@ -448,6 +448,12 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | Package | Config | Description |
 |---|---|---|
 | `@qilin/subprocess-local` | no | Local-subprocess implementation of the QiLin subprocess seam |
+
+## telemetry
+
+| Package | Config | Description |
+|---|---|---|
+| `@qilin/otel` | no | Cordis service for independent ordinary-event and byte-bounded Session-log OTLP channels |
 
 ## terminal
 

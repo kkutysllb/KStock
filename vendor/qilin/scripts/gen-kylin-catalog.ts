@@ -119,6 +119,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   systemPrompt: 'system-prompt.md',
   jobs: 'jobs.md',
   sessionTelemetry: 'session-telemetry.md',
+  otel: 'otel.md',
   speechController: 'voice-input.md',
   speechToText: 'voice-input.md',
   agentTeams: 'agent-team.md',
@@ -158,6 +159,7 @@ export const SERVICE_PAGE: Record<string, string> = {
  * to a model as `cordis_runtime_inspect what:"client"`).
  */
 export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
+  userQuestionPanels: 'client-side slot-contract accessor (UserQuestionPanels) — packages/client/ui-tool/README.md owns the API',
   invocation: 'not a service: per-call accessor (RemoteInvocation | undefined) the Gateway derives for each Remote call — packages/api/gateway/README.md owns the contract',
   webTerminals: 'client-side terminal view models — packages/api/terminal-controller/README.md owns the API',
   appReady: 'not a service: launcher-provided successful-startup signal — packages/boot/cmdline/README.md owns the launcher contract',
@@ -269,6 +271,9 @@ export const EVENT_WALK_EXEMPTIONS: Record<string, string> = {
  * appear on more than one page.
  */
 export const LINK_MAP: Readonly<Record<string, string>> = {
+  userQuestionPanels: 'client-side slot-contract accessor (UserQuestionPanels) — packages/client/ui-tool/README.md owns the API',
+  ToolCallId: 'core.md',
+  TimedUserQuestionResult: 'user-questions.md',
   WorkspaceChangesSummary: 'deliverables.md',
   WorkspaceFileDiff: 'deliverables.md',
   Reload: 'boot.md',
@@ -762,6 +767,10 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   ClientArtifactBaseline: 'client-modules.md',
   WebBootGraph: 'client-modules.md',
   SessionTelemetryRecord: 'session-telemetry.md',
+  EventLogOptions: 'otel.md',
+  EventLogReporter: 'otel.md',
+  SessionLogOptions: 'otel.md',
+  SessionLogReporter: 'otel.md',
   WorkflowRunInfo: 'workflow.md',
   WorkflowStartRequest: 'workflow.md',
   ProjectionDefinition: 'session-projection.md',

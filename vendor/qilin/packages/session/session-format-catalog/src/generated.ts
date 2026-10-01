@@ -23,12 +23,7 @@ export const sessionFormatCatalogOptions: SessionFormatCatalogOptions = {
     releasedV4SessionFormatCodec,
   ],
   currentEncoder: releasedV4SessionFormatCodec,
-  migrations: [
-    sessionFormatV0ToV1,
-    sessionFormatV1ToV2,
-    sessionFormatV2ToV3,
-    sessionFormatV3ToV4,
-  ],
+  migrations: [sessionFormatV0ToV1, sessionFormatV1ToV2, sessionFormatV2ToV3, sessionFormatV3ToV4],
   restoreCurrent(artifact) {
     const restored = restoreReleasedV4Artifact(artifact, KNOWN_SESSION_EVENT_TYPES)
     validateInstalledCurrentSessionArtifact(restored)

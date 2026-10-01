@@ -1,7 +1,7 @@
 {
   "name": "@qilin/win32-process",
   "description": "Shared low-level Win32 process, stdio, and Job Object primitives",
-  "version": "3.0.5",
+  "version": "3.0.7",
   "publishConfig": {
     "access": "public"
   },
@@ -34,7 +34,7 @@
   },
   "dependencies": {
     "@qilin/lazy-require": "workspace:*",
-    "koffi": "^3.1.0"
+    "koffi": "3.1.1"
   },
   "devDependencies": {
     "@qilin/kylin": "workspace:~"

@@ -51,6 +51,7 @@ const IDLE_INSTALL: InstallState = {
 
 const READY: PluginManagerState = {
   status: 'ready',
+  refreshStatus: 'idle',
   packages: [],
   busy: [],
   notice: null,
@@ -106,25 +107,26 @@ function renderTab(
     useGithubMirror: vi.fn(),
   }
   const configurations = createSnapshotStore<{ view?: { namespaces: readonly { ns: string }[] } }>({ view: { namespaces } })
+  const configForm = vi.fn(() => ({
+    getSnapshot: () => ({ status: 'ready', value: {}, base: undefined, user: undefined, revision: 1, writable: true, mode: 'host' }),
+    mutate: vi.fn(),
+  }))
   const props = {
     t,
     ...actions,
-    configForm: vi.fn(() => ({
-      getSnapshot: () => ({ status: 'ready', value: {}, base: undefined, user: undefined, revision: 1, writable: true, mode: 'host' }),
-      mutate: vi.fn(),
-    })),
+    configForm,
     ...extra,
     usePluginManager: bindSnapshotSelector(store),
     useConfigLedger: bindSnapshotSelector(ledger),
     useConfigurations: bindSnapshotSelector(configurations),
     renderSlot: (name: string, owner: { view: 'summary' | 'page'; form?: unknown }, opts: { only?: string; entryKey?: string }) =>
       bodies[`${name}:${opts.only ?? opts.entryKey ?? ''}`]?.(owner.view, owner) ?? null,
-  } as unknown as PluginManagerPageProps
+  } as PluginManagerPageProps
   const { rerender } = render(<PluginManagerPage {...props} />)
   return {
     store,
     actions,
-    configForm: props.configForm as unknown as ReturnType<typeof vi.fn>,
+    configForm,
     set: (next: Partial<PluginManagerState>) => { act(() => { store.set({ ...store.getSnapshot(), ...next }) }) },
     setLanguage: (dict: typeof en) => { rerender(<PluginManagerPage {...props} t={translate(dict)} />) },
   }
@@ -395,6 +397,25 @@ describe('PluginManagerPage', () => {
     expect(actions.openInstall).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps a refresh failure off the page toast, spins the refresh control, and words the inline failure', () => {
+    const { set } = renderTab({ notice: { kind: 'refresh-failed', seq: 1 } })
+    // The overlay toast owns the refresh failure; the page toast stays empty.
+    expect(screen.queryByRole('alert')).toBeNull()
+    // While the manual refresh spins, the refresh control is busy and disabled.
+    set({ refreshStatus: 'refreshing' })
+    const refresh = screen.getByRole('button', { name: en.refresh })
+    expect(refresh).toHaveProperty('disabled', true)
+    expect(refresh.getAttribute('aria-busy')).toBe('true')
+    // A refreshing page over cached cards suppresses the inline failure block.
+    set({ status: 'error', refreshStatus: 'refreshing' })
+    expect(screen.queryByRole('alert')).toBeNull()
+    // A settled refresh failure without cache words the inline block as the refresh error.
+    set({ refreshStatus: 'failed' })
+    expect(screen.getByRole('alert').textContent).toBe(en.refreshError)
+    fireEvent.click(screen.getByRole('button', { name: en.retry }))
+    expect(screen.getByRole('button', { name: en.refresh })).toHaveProperty('disabled', false)
+  })
+
   it('lists the installed bundles as cards, the installation\'s offered ones as official, and tags a problem the Host reports', () => {
     const { actions } = renderTab({
       packages: [
@@ -626,7 +647,7 @@ describe('PluginManagerPage', () => {
     fireEvent.click(toggle)
     expect(screen.getByRole('button', { name: en.installGuideHide }).getAttribute('aria-expanded')).toBe('true')
     expect(screen.getByText(en.installGuideIdNote)).toBeTruthy()
-    expect(screen.getByText(en.installGuideGitExample)).toBeTruthy()
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: en.installGuideFillAria.replace('{example}', en.installGuideIdExample) }))
     expect(actions.editInstallSpec).toHaveBeenCalledExactlyOnceWith(en.installGuideIdExample)
     fireEvent.click(screen.getByRole('button', { name: en.installGuideHide }))

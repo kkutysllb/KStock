@@ -1,7 +1,7 @@
 {
   "name": "@qilin/client-test-runtime",
   "description": "Browser test runtimes: a jsdom slot bench with test-owned Session and Workspace doubles, and a whole-client tier that boots the web roster through the production bootClient over an endpoint-named Remote mock",
-  "version": "3.0.5",
+  "version": "3.0.7",
   "publishConfig": {
     "access": "public"
   },
@@ -78,7 +78,6 @@
     "@qilin/client-ui-approval": "workspace:*",
     "@qilin/client-ui-attachment": "workspace:*",
     "@qilin/client-ui-brand": "workspace:*",
-    "@qilin/client-ui-brand-official": "workspace:*",
     "@qilin/client-ui-chat": "workspace:*",
     "@qilin/client-ui-commands": "workspace:*",
     "@qilin/client-ui-conversation": "workspace:*",
