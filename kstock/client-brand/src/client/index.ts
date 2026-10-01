@@ -9,6 +9,7 @@ import type { Context as ClientContext } from '@qilin/kylin'
 import type {} from '@qilin/client-ui-conversation/client'
 import type {} from '@qilin/client-ui-sidebar/client'
 import type {} from '@qilin/client-ui-theme/client'
+import { AnimNavIcon } from './AnimNavIcon.tsx'
 import { applyBackgroundCss } from './background.ts'
 import { KStockArtistMark, KStockHeroMark, KStockMark, KStockWordmark } from './Marks.tsx'
 import { KSTOCK_THEME_SOURCE, KSTOCK_TOKENS } from './tokens.ts'
@@ -65,9 +66,22 @@ export function apply(ctx: ClientContext): void {
     const disposeAbout = ctx.slots.inject('settings.about.mark', () =>
       ctx.slots.register({ name: 'settings.about.mark' }, KStockArtistMark),
     )
+    // 动效技能库入口置顶（遮蔽条目）：dsh-animations 的 anim-panel 入口
+    // order:120（夹在选股库与报告库之间），产品口径要求它与「自动化任务」
+    // （引擎 ui-schedule 任务页，order:10）同处菜单最上。list 槽同 id 同
+    // cell，priority 更低者渲染（同 priority 抛错 fail-loud）——priority:-1
+    // 遮蔽原条目、order:20 落位第二；面板本体（main keyed 同 id）不受影响，
+    // 点击接线 layout.selectPanel('anim-panel') 不变。
+    const disposeAnimNavPinned = ctx.slots.inject('sidebar.panellist', () =>
+      ctx.slots.register(
+        { name: 'sidebar.panellist', id: 'anim-panel', order: 20, priority: -1, label: '动效技能库' },
+        AnimNavIcon,
+      ),
+    )
     const disposeLocale = applyBrandLocale(ctx)
     return () => {
       disposeLocale()
+      disposeAnimNavPinned()
       disposeAbout()
       disposeMarks()
       disposeThemeWatcher()

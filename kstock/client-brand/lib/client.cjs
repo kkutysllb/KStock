@@ -4,8 +4,31 @@ window.__ModuleLoader__.load({
 		var module = { exports: {} };
 		var exports = module.exports;
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
-		let react = require("react");
 		let react_jsx_runtime = require("react/jsx-runtime");
+		let react = require("react");
+		//#region src/client/AnimNavIcon.tsx
+		/**
+		* 动效技能库侧栏入口图标（anim-panel 遮蔽条目用）。
+		*
+		* 与 dsh-animations `lib/client.js` 的 `PanelIcon`（MIT，自家包）同款
+		* sparkle——被遮蔽的原条目不再渲染，入口视觉零变化；尺寸/激活态由
+		* 侧栏按 `SidebarPanelIconOwnerProps` 传入（同 TaskManagerIcon 模式）。
+		*/
+		function AnimNavIcon({ size }) {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("svg", {
+				width: size,
+				height: size,
+				viewBox: "0 0 24 24",
+				fill: "none",
+				stroke: "currentColor",
+				strokeWidth: 2,
+				strokeLinecap: "round",
+				strokeLinejoin: "round",
+				"aria-hidden": "true",
+				children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("path", { d: "m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 0-1.3-1.3Z" })
+			});
+		}
+		//#endregion
 		//#region src/client/background.ts
 		/**
 		* KStock 环境背景：还原 1.x 桌面端的全局五层渐变网格背景
@@ -961,9 +984,17 @@ body [class*="navBack"] {
 					yield ctx.slots.register({ name: "conversation.hero.brand.mark" }, KStockHeroMark);
 				})));
 				const disposeAbout = ctx.slots.inject("settings.about.mark", () => ctx.slots.register({ name: "settings.about.mark" }, KStockArtistMark));
+				const disposeAnimNavPinned = ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({
+					name: "sidebar.panellist",
+					id: "anim-panel",
+					order: 20,
+					priority: -1,
+					label: "动效技能库"
+				}, AnimNavIcon));
 				const disposeLocale = applyBrandLocale(ctx);
 				return () => {
 					disposeLocale();
+					disposeAnimNavPinned();
 					disposeAbout();
 					disposeMarks();
 					disposeThemeWatcher();
