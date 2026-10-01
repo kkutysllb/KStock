@@ -151,7 +151,9 @@ fi
 # 的形态（根因与实测数据见 scripts/runtime-tar.sh）。
 . "$ROOT/scripts/runtime-tar.sh"
 RUNTIME_TAR="$(runtime_tar_bin)"
-log "打包 kstock-runtime.tar.gz（tar: $RUNTIME_TAR）"
+# ${RUNTIME_TAR} 必须花括号：非 UTF-8 locale 的 bash 会把紧随的全角「）」首字节
+# 当作变量名字符（CI 实测：RUNTIME_TAR\xef: unbound variable），括号展开无歧义。
+log "打包 kstock-runtime.tar.gz（tar: ${RUNTIME_TAR}）"
 rm -f "$STAGING/kstock-runtime.tar.gz"
 COPYFILE_DISABLE=1 "$RUNTIME_TAR" -czf "$STAGING/kstock-runtime.tar.gz" -C "$CLOSURE" .
 
