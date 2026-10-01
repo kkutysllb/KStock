@@ -1,7 +1,7 @@
 {
   "name": "kstock",
   "private": true,
-  "version": "2.0.0-rc.1",
+  "version": "2.0.0-rc.2",
   "description": "KStock — A股量化分析 Super Agent（QiLin 3.x 引擎插件形态）",
   "packageManager": "pnpm@9.15.0",
   "workspaces": [
