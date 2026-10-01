@@ -27,6 +27,10 @@ ANIMATIONS_REQUIRED_FILES = (
 )
 ANIMATIONS_SKILL_COUNT = 8
 
+# 3.0.7 起的定时任务承载：引擎原生调度三件套撤入该 bundle（OPTIONAL_BUNDLES
+# 第四项），profile bundles 显式挂载；@kstock/automation 退役（D3 方向反转）。
+SCHEDULE_BUNDLE = "@qilin/experimental-schedule-bundle"
+
 
 @dataclass
 class Check:
@@ -310,7 +314,7 @@ class Verifier:
                 self.fail("product closure engine version",
                           f".runtime-version={version!r} != vendor/qilin package.json {vendor_version!r}")
 
-        for pkg in ("accounts", "automation", "chan-ui", "client-brand", "datasources-ui",
+        for pkg in ("accounts", "chan-ui", "client-brand", "datasources-ui",
                     "news-ui", "presets-ui", "quant", "quant-factors", "quant-reports",
                     "quant-selections", "quant-strategies", "web"):
             pkg_dir = self.repo_root / "staging" / "plugins" / pkg
@@ -349,17 +353,30 @@ class Verifier:
         包，对非 workspace 依赖不可见），因此这道闸门必须做实。
         """
         root = self.repo_root
-        # 1) 源码锚点：壳把它写进 profile bundles；patch 下架了引擎日程三件套
+        # 1) 源码锚点：壳把动效层与引擎原生调度层（3.0.7 起的定时任务承载）
+        #    都写进 profile bundles；组合面（cordis.patch.yml）不再出现任何
+        #    调度下架行或已退役插件行（D3 方向反转的断言面）
         self.require_file_contains(
             root / "apps" / "desktop" / "electron" / "lib" / "profile-bundles.ts",
             "source animations bundle layer",
             [ANIMATIONS_PACKAGE, "PROFILE_BUNDLES"],
         )
         self.require_file_contains(
-            root / "kstock" / "web" / "cordis.patch.yml",
-            "source engine schedule capability disabled",
-            ["id: schedule", "id: ui-schedule", "disabled: true"],
+            root / "apps" / "desktop" / "electron" / "lib" / "profile-bundles.ts",
+            "source engine schedule bundle layer",
+            [SCHEDULE_BUNDLE, "withScheduleBundle"],
         )
+        patch_yml = root / "kstock" / "web" / "cordis.patch.yml"
+        if not patch_yml.is_file():
+            self.fail("source engine schedule capability retired", f"Missing: {patch_yml}")
+        else:
+            text = patch_yml.read_text(encoding="utf-8")
+            retired = [m for m in ("id: schedule", "id: ui-schedule", "kstock-automation") if m in text]
+            if retired:
+                self.fail("source engine schedule capability retired",
+                          f"Retired markers still present in cordis.patch.yml: {retired}")
+            else:
+                self.pass_("source engine schedule capability retired")
         if self.source_only:
             return
         # 2) 产物锚点：闭包（或 SEA 的 staging）里必须有该包全量
