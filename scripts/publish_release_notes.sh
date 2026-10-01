@@ -6,7 +6,7 @@
 # - 源文件：release/<tag>.md；约定首部写「> 状态：待发布 · Tag：`vX.Y.Z`」，
 #   发布时本脚本自动把该行替换为发布日期（Asia/Shanghai）。
 # - 相对链接转 GitHub 绝对链接：版本互链 → /releases/tag/，docs/发布说明.md → /blob/main/。
-# - 兜底：源文件缺失时回退 tag annotated message（build-release.sh 注入的提交摘要）。
+# - 兜底：源文件缺失时回退 tag annotated message（annotated tag 的提交摘要）。
 # - 尾部附仓库归档指引 + 与上一版本的 Full Changelog 对比链接。
 #
 # CI（release.yml publish job）生成后经 softprops/action-gh-release 的 body_path 消费；

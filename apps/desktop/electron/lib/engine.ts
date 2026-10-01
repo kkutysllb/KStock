@@ -317,8 +317,8 @@ function legacySecretsEnvironment(): Record<string, string> {
  *    用 Electron 内置 Node（``ELECTRON_RUN_AS_NODE=1``）直跑闭包入口
  *    runtime-bootstrap.mjs。闭包 symlink-free，无 workspace pnpm 布局的
  *    ESM 解析问题；引擎不自带 Node 基座与跨平台 prebuilds 死重。
- * 2. 开发态 ``<repo>/dist-exe/kstock-engine(.exe)``（旧单文件产物，仅存量
- *    开发机兼容；新流程已不再产出）。
+ * 2. 开发态 ``<repo>/dist-exe/kstock-engine(.exe)``（scripts/build-engine-bundle.sh
+ *    产出的 SEA 单文件，dev 首选引擎形态——优先于源码直跑，免装依赖）。
  * 3. dev 兜底：系统 Node（≥22.5）直接跑上游 CLI 源码（vendor/qilin），
  *    无需构建任何引擎产物。
  *

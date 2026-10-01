@@ -16,5 +16,10 @@
     "check:ci": "bash scripts/check-ci.sh",
     "check:release": "bash scripts/check-release.sh",
     "sync:upstream": "python3 scripts/sync_upstreams.py"
+  },
+  "pnpm": {
+    "overrides": {
+      "js-yaml@<4.3.2": ">=4.3.2"
+    }
   }
 }
