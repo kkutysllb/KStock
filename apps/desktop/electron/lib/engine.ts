@@ -33,7 +33,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { homedir, platform } from "node:os";
 import { ensureEnginePythonDeps, enginePythonPath } from "./deps";
-import { PROFILE_BUNDLES, withAnimationsBundle } from "./profile-bundles";
+import { PROFILE_BUNDLES, withAnimationsBundle, withScheduleBundle } from "./profile-bundles";
 import { logMain } from "./logger";
 
 /**
@@ -123,7 +123,7 @@ export function ensureKstockProfile(): string {
       const deps = existing.dependencies ?? {};
       const bundles = existing.qilin?.profile?.bundles ?? [];
       const staleDeps = packages.some(([name, dir]) => deps[name] !== `link:${join(pluginRoot, dir)}`);
-      const nextBundles = withAnimationsBundle(bundles);
+      const nextBundles = withScheduleBundle(withAnimationsBundle(bundles));
       const staleBundles = nextBundles !== bundles;
       if (staleDeps || staleBundles) {
         if (staleDeps) existing.dependencies = dependencies;
@@ -136,7 +136,7 @@ export function ensureKstockProfile(): string {
         writeFileSync(manifestPath, `${JSON.stringify(existing, null, 2)}\n`);
         logMain(`kstock profile 已更新（${[
           staleDeps ? "插件依赖" : "",
-          staleBundles ? "动效技能库层" : "",
+          staleBundles ? "动效技能库层 / 调度 bundle 层" : "",
         ].filter(Boolean).join(" / ")}）`);
       }
     } catch (error) {
@@ -188,6 +188,10 @@ export function ensureKstockProfile(): string {
       );
     }
   }
+  // 退役插件的残留链接清理：3.0.7 起定时任务改用引擎原生调度 bundle，
+  // @kstock/automation 不再装载；旧装机 profile 里可能残留指向已删目录的链接。
+  const retiredAutomationLink = join(modulesDir, "automation");
+  if (existsSync(retiredAutomationLink)) rmSync(retiredAutomationLink, { force: true });
   return profileDir;
 }
 
