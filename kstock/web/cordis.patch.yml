@@ -110,18 +110,6 @@
     - id: kstock-chan-ui
       name: '@kstock/client-chan'
 
-    # 定时任务插件（内置收编自 dsh-kylin-automation 0.1.2，MIT）：durable
-    # 自动化定义 + 调度钟 + 全新会话执行器 + 运行历史持久化；侧边栏
-    # 「定时任务」管理页 + agent automation_* 六工具。产品默认：并发 2 /
-    # 单次超时 60min / 停机补跑宽限 15min / 历史 200 条。
-    - id: kstock-automation
-      name: '@kstock/automation'
-      config:
-        maxConcurrentRuns: 2
-        runTimeoutMinutes: 60
-        misfireGraceMinutes: 15
-        historyLimit: 200
-
     # KStock 角色 preset 选择器（只列 6 个投研角色；standard 为隐形默认
     # 基座）。上游 ui-agent-preset 选择器被下面的 disabled 行下架。
     - id: kstock-presets-ui
@@ -140,17 +128,4 @@
 # 固定角色集产品，不需要 copy/delete/default 管理）。
 - id: ui-agent-preset
   name: '@qilin/client-ui-agent-preset'
-  disabled: true
-
-# 引擎 3.0.5 默认启用 schedule/time-context 三件套（web-app 的 eca807f0ad 变更）。
-# KStock 已有内置定时任务（@kstock/automation），保留引擎侧会在侧边栏多出
-# 第二个任务面板、并在工具名册里多出一族 schedule_* 工具 —— 与固定功能集的
-# 产品口径冲突。故下架 host 能力 + 其唯一消费者 UI；time-context 是纯上下文
-# 注入、无 UI、且有助于时间感知，保留。
-- id: schedule
-  name: '@qilin/schedule'
-  disabled: true
-
-- id: ui-schedule
-  name: '@qilin/client-ui-schedule'
   disabled: true

@@ -38,25 +38,20 @@ log "发布 preset 随行技能（patch_vendor_skills，幂等）"
 "$ROOT/scripts/python.sh" "$ROOT/scripts/patch_vendor_skills.py"
 
 log "构建 KStock 插件包"
-for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui chan-ui automation; do
+for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui chan-ui; do
   if [ ! -d "$ROOT/kstock/$pkg/node_modules" ]; then
     die "kstock/$pkg 缺 node_modules——请先在仓库根执行 pnpm install"
   fi
   logf="$(mktemp)"
-  if [ "$pkg" = "automation" ]; then
-    (cd "$ROOT/kstock/$pkg" && node scripts/build.mjs > "$logf" 2>&1) || {
-      echo "!! kstock/$pkg 构建失败：" >&2; tail -20 "$logf" >&2; rm -f "$logf"; exit 1; }
-  else
-    (cd "$ROOT/kstock/$pkg" && npx tsdown > "$logf" 2>&1) || {
-      echo "!! kstock/$pkg 构建失败：" >&2; tail -20 "$logf" >&2; rm -f "$logf"; exit 1; }
-  fi
+  (cd "$ROOT/kstock/$pkg" && npx tsdown > "$logf" 2>&1) || {
+    echo "!! kstock/$pkg 构建失败：" >&2; tail -20 "$logf" >&2; rm -f "$logf"; exit 1; }
   rm -f "$logf"
 done
 
 log "组装 staging/plugins 与 staging/presets"
 rm -rf "$STAGING/plugins" "$STAGING/presets"
 mkdir -p "$STAGING/plugins" "$STAGING/presets"
-for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui chan-ui automation; do
+for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui chan-ui; do
   target="$STAGING/plugins/$pkg"
   mkdir -p "$target"
   cp "$ROOT/kstock/$pkg/package.json" "$target/"

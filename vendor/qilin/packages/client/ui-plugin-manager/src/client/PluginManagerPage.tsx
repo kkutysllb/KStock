@@ -298,15 +298,16 @@ function DetailTop({ crumbLabel, crumbText, onBack, icon, actions }: {
 }
 
 /** One package as a card that opens its page: its name, its one-liner, its tags, and its bundle switch. */
-function PackageCard({ pkg, t, busy, highlighted, onOpen, onSetEnabled }: {
+function PackageCard({ pkg, t, resolveText, busy, highlighted, onOpen, onSetEnabled }: {
   readonly pkg: PackageView
   readonly t: Translate
+  readonly resolveText: PluginManagerFace['resolveText']
   readonly busy: boolean
   readonly highlighted: boolean
   readonly onOpen: () => void
   readonly onSetEnabled: (enabled: boolean) => void
 }): ReactNode {
-  const { title, description, beta } = packageText(pkg, t)
+  const { title, description, beta } = packageText(pkg, t, resolveText)
   const status = packageStatus(pkg)
   return (
     <li
@@ -377,15 +378,16 @@ function ItemDetail({ item, t, onBack, renderSlot, form }: {
  * A row's configuration page: the crumb back to its bundle's page, the row id
  * over the module it names and the entry's one-liner, and the form the entry renders.
  */
-function RowDetail({ pkg, row, t, onBack, renderSlot, form }: {
+function RowDetail({ pkg, row, t, resolveText, onBack, renderSlot, form }: {
   readonly pkg: PackageView
-  readonly row: PackageRow
   readonly t: Translate
+  readonly resolveText: PluginManagerFace['resolveText']
+  readonly row: PackageRow
   readonly onBack: () => void
   readonly renderSlot: RenderConfig
   readonly form: ConfigPageForm | undefined
 }): ReactNode {
-  const { title } = packageText(pkg, t)
+  const { title } = packageText(pkg, t, resolveText)
   const key = rowConfigKey(pkg.name, row.rowId)
   return (
     <div className={css.detail} data-plugin-row-detail={key}>
@@ -413,11 +415,12 @@ function RowDetail({ pkg, row, t, onBack, renderSlot, form }: {
  * itself; and its rows with their switches and configure controls.
  */
 function PackageDetail({
-  pkg, t, busy, rowBusy, configured, configure, renderSlot,
+  pkg, t, resolveText, busy, rowBusy, configured, configure, renderSlot,
   onBack, onSetEnabled, onUninstall, onSetRowEnabled,
 }: {
   readonly pkg: PackageView
   readonly t: Translate
+  readonly resolveText: PluginManagerFace['resolveText']
   readonly busy: boolean
   /** Whether a row has a write in flight. */
   readonly rowBusy: (row: PackageRow) => boolean
@@ -430,7 +433,7 @@ function PackageDetail({
   readonly onUninstall: () => void
   readonly onSetRowEnabled: (row: PackageRow, enabled: boolean) => void
 }): ReactNode {
-  const { title, description, beta } = packageText(pkg, t)
+  const { title, description, beta } = packageText(pkg, t, resolveText)
   const status = packageStatus(pkg)
   return (
     <div className={css.detail} data-plugin-detail={pkg.name}>
@@ -522,6 +525,7 @@ const INPUT_PROBLEM_KEYS = {
   'not-a-bundle': 'installProblemNotBundle',
   'network': 'installProblemNetwork',
   'unknown': 'installProblemUnknown',
+  'shipped': 'installProblemShipped',
 } satisfies Record<InstallInputError['problem'], PluginManagerLocaleKey>
 
 /** One row of the install guide: a spec form's title, its example, and where the person finds it. */
@@ -532,11 +536,9 @@ interface GuideExample {
   readonly hintKey: PluginManagerLocaleKey
 }
 
-/** The spec forms the install guide shows, each with an example the person can drop into the field. */
+/** The spec form the install guide shows, with an example the person can drop into the field. */
 const GUIDE_EXAMPLES = [
   { key: 'id', titleKey: 'installGuideIdTitle', exampleKey: 'installGuideIdExample', hintKey: 'installGuideIdHint' },
-  { key: 'git', titleKey: 'installGuideGitTitle', exampleKey: 'installGuideGitExample', hintKey: 'installGuideGitHint' },
-  { key: 'path', titleKey: 'installGuidePathTitle', exampleKey: 'installGuidePathExample', hintKey: 'installGuidePathHint' },
 ] as const satisfies readonly GuideExample[]
 
 /** The one-line reading of a classified pnpm failure. */
@@ -957,13 +959,14 @@ function InstallDialog({
 }
 
 /** The confirmation an uninstall waits on. */
-function ConfirmDialog({ confirm, t, onConfirm, onCancel }: {
+function ConfirmDialog({ confirm, t, resolveText, onConfirm, onCancel }: {
   readonly confirm: ConfirmState
   readonly t: Translate
+  readonly resolveText: PluginManagerFace['resolveText']
   readonly onConfirm: () => void
   readonly onCancel: () => void
 }): ReactNode {
-  const { title: name } = packageText({ name: confirm.packageName }, t)
+  const { title: name } = packageText({ name: confirm.packageName }, t, resolveText)
   return (
     <Modal
       open
@@ -1109,7 +1112,7 @@ function CatalogPanel({ catalog, t, busy, onSearch, onMore, onInstall }: {
 
 /** Render the plugin manager: the official plugins and installed bundles, their pages, the install dialog, and the confirmation. */
 export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
-  const { t, ensure, renderSlot } = props
+  const { t, ensure, renderSlot, resolveText } = props
   const state = props.usePluginManager(snapshot => snapshot)
   const ledger = props.useConfigLedger(snapshot => snapshot)
   // A contributed page that wants the shared form gets it only for a namespace the Host serves.
@@ -1138,7 +1141,11 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
     const timer = setTimeout(clearHighlight, HIGHLIGHT_MS)
     return () => { clearTimeout(timer) }
   }, [highlight, clearHighlight])
-  const noticeLine = state.notice === null ? null : noticeText(state.notice, t)
+  // A refresh failure announces through the shell overlay toast, so the page's
+  // own toast keeps the notices about install and row actions only.
+  const noticeLine = state.notice === null || state.notice.kind === 'refresh-failed'
+    ? null
+    : noticeText(state.notice, t)
 
   // The page manages what the person installed, what the installation ships for them to switch on, what a
   // profile-installed copy can upgrade in place, and a selected name the Host cannot read; the installation's
@@ -1148,6 +1155,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
   const mine = listed.filter(pkg => pkg.installed || !pkg.optional)
   const official = listed.filter(pkg => pkg.optional && !pkg.installed)
   const loaded = state.status === 'ready' || state.status === 'error'
+  const refreshing = state.refreshStatus === 'refreshing'
   const openPkg = view.kind === 'package' || view.kind === 'row' ? listed.find(pkg => pkg.name === view.name) : undefined
   const openItem = view.kind === 'item' ? ledger.items.find(item => item.id === view.id) : undefined
   const openRow = view.kind === 'row' && openPkg !== undefined ? openPkg.rows.find(row => row.rowId === view.rowId) : undefined
@@ -1166,6 +1174,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
       key={pkg.name}
       pkg={pkg}
       t={t}
+      resolveText={resolveText}
       busy={state.busy.includes(pkg.name)}
       highlighted={state.highlight === pkg.name}
       onOpen={() => { setActivation(null); setView({ kind: 'package', name: pkg.name }) }}
@@ -1193,7 +1202,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
     )
 
   return (
-    <section className={css.page} data-plugin-panel aria-busy={state.status === 'loading'}>
+    <section className={css.page} data-plugin-panel aria-busy={state.status === 'loading' || refreshing}>
       {showsCards
         ? (
           <header className={css.pageHead} data-window-drag>
@@ -1212,8 +1221,18 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
               >
                 <span className={css.iconWrap} aria-hidden="true"><IconDownloadOutline16 /></span>
               </button>
-              <button type="button" className={css.iconButton} aria-label={t('refresh')} title={t('refresh')} disabled={!loaded} onClick={props.refresh}>
-                <span className={css.iconWrap} aria-hidden="true"><IconRefreshOutline16 /></span>
+              <button
+                type="button"
+                className={css.iconButton}
+                aria-label={t('refresh')}
+                title={t('refresh')}
+                aria-busy={refreshing}
+                disabled={!loaded || refreshing}
+                onClick={props.refresh}
+              >
+                <span className={css.iconWrap} aria-hidden="true">
+                  {refreshing ? <StateDot state="ongoing" /> : <IconRefreshOutline16 />}
+                </span>
               </button>
               <Button variant="primary" size="sm" icon={<IconPlusOutline16 size={13} />} disabled={!loaded} onClick={props.openInstall}>{t('addPlugin')}</Button>
             </div>
@@ -1222,10 +1241,10 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
         : null}
       {state.status === 'loading' ? <p className={css.status}>{t('loading')}</p> : null}
       {state.status === 'unavailable' ? <p className={css.status} role="status">{t('unavailable')}</p> : null}
-      {state.status === 'error'
+      {state.status === 'error' && !refreshing
         ? (
           <div className={css.failure}>
-            <p role="alert">{t('error')}</p>
+            <p role="alert">{t(state.refreshStatus === 'failed' ? 'refreshError' : 'error')}</p>
             <Button variant="outline" size="sm" onClick={props.refresh}>{t('retry')}</Button>
           </div>
         )
@@ -1258,6 +1277,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
             pkg={openPkg}
             row={openRow}
             t={t}
+            resolveText={resolveText}
             renderSlot={renderSlot}
             form={formFor(rowConfigKey(openPkg.name, openRow.rowId))}
             onBack={() => { setView({ kind: 'package', name: openPkg.name }) }}
@@ -1269,6 +1289,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
           <PackageDetail
             pkg={openPkg}
             t={t}
+            resolveText={resolveText}
             busy={state.busy.includes(openPkg.name)}
             rowBusy={row => row.entryId !== undefined && state.busy.includes(rowKey(row.entryId))}
             configured={ledger.bundles.has(openPkg.name)}
@@ -1334,6 +1355,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
           <ConfirmDialog
             confirm={state.confirm}
             t={t}
+            resolveText={resolveText}
             onConfirm={props.confirm}
             onCancel={props.cancelConfirm}
           />

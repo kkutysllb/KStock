@@ -1,7 +1,7 @@
 {
   "name": "@qilin/session-format-v3-to-v4",
   "description": "Streaming tool-role migration and delivery validation from Session V3 to V4",
-  "version": "3.0.5",
+  "version": "3.0.7",
   "publishConfig": {
     "access": "public"
   },
@@ -50,5 +50,17 @@
   },
   "devDependencies": {
     "@qilin/kylin": "workspace:~"
+  },
+  "qilin": {
+    "sessionFormatMigration": {
+      "from": 3,
+      "to": 4,
+      "export": ".",
+      "migration": "sessionFormatV3ToV4",
+      "sourceCodec": "releasedV3SessionFormatCodec",
+      "targetCodec": "releasedV4SessionFormatCodec",
+      "targetHeaderValidator": "assertReleasedV4Header",
+      "targetRestorer": "restoreReleasedV4Artifact"
+    }
   }
 }

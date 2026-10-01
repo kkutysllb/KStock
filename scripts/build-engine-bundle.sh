@@ -46,7 +46,7 @@ echo "==> 重放引擎本地补丁（patch_vendor_engine + patch_vendor_skills�
 "$REPO_ROOT/scripts/python.sh" "$REPO_ROOT/scripts/patch_vendor_skills.py"
 
 echo "==> 构建 KStock 插件包"
-for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui chan-ui automation; do
+for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui chan-ui; do
   # 前置：kstock/* 已并入根 workspace，一次根 pnpm install 全装。缺
   # node_modules 时 npx 静默失败 + set -e 无声中止（Windows 实机踩坑：
   # 脚本死在本步零报错，dev 侧只见「lib 未构建」无从定位），显式拦截。
@@ -55,22 +55,11 @@ for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strat
     exit 1
   fi
   log="$(mktemp)"
-  # automation 的构建是自带 esbuild 管线（node scripts/build.mjs：宿主
-  # ESM bundle + 带 ModuleLoader 头的 client CJS），不走 tsdown。
-  if [ "$pkg" = "automation" ]; then
-    if ! (cd "$REPO_ROOT/kstock/$pkg" && node scripts/build.mjs > "$log" 2>&1); then
-      echo "!! kstock/$pkg 构建失败（build.mjs 尾部输出）：" >&2
-      tail -20 "$log" >&2
-      rm -f "$log"
-      exit 1
-    fi
-  else
-    if ! (cd "$REPO_ROOT/kstock/$pkg" && npx tsdown > "$log" 2>&1); then
-      echo "!! kstock/$pkg 构建失败（tsdown 尾部输出）：" >&2
-      tail -20 "$log" >&2
-      rm -f "$log"
-      exit 1
-    fi
+  if ! (cd "$REPO_ROOT/kstock/$pkg" && npx tsdown > "$log" 2>&1); then
+    echo "!! kstock/$pkg 构建失败（tsdown 尾部输出）：" >&2
+    tail -20 "$log" >&2
+    rm -f "$log"
+    exit 1
   fi
   rm -f "$log"
 done
@@ -110,7 +99,7 @@ done
 # KStock 插件包：清单 + lib 产物 + 静态资源（不含 node_modules / ts 源配置）。
 rm -rf "$OUT_DIR/plugins"
 mkdir -p "$OUT_DIR/plugins"
-for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui chan-ui automation; do
+for pkg in accounts client-brand presets-ui datasources-ui web quant quant-strategies quant-factors quant-selections quant-reports news-ui chan-ui; do
   target="$OUT_DIR/plugins/$pkg"
   mkdir -p "$target"
   cp "$REPO_ROOT/kstock/$pkg/package.json" "$target/"

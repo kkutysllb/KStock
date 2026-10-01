@@ -2,13 +2,16 @@
  * Verify that the executable deploy manifest supplies every plugin referenced
  * by a shipped agent preset and every required workspace peer in its dependency
  * graph. With auto peer installation disabled, either omission can otherwise
- * fail only when Cordis loads the packaged plugin.
+ * fail only when Cordis loads the packaged plugin. QiLin ships agent presets as
+ * the agent-plane compositions under `packages/preset/agent-presets/presets/`,
+ * mounted once per process by `@qilin/agent-presets`; each `agent.cordis.yml`
+ * is one composition.
  */
 import { globSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { isCordisGroupEntry, loadCordisYaml, presetDefinitions } from './cordis-yaml.ts'
+import { isCordisGroupEntry, loadCordisYaml } from './cordis-yaml.ts'
 
 interface PackageManifest {
   name?: string
@@ -30,8 +33,9 @@ interface RuntimePlatform {
 
 type RuntimePlatformManifest = Record<string, RuntimePlatform>
 
-// KStock patch: preset glob 回退 + 覆盖 KStock 自有预设——上游指向的 bundle presets
-// 目录不存在，会让本门禁以 exit 1 空转失败；kstock/presets 是产品态真正随包发的那批。
+// KStock patch: preset glob 扩展——上游 glob 只覆盖引擎 shipped 预设，
+// KStock 产品态预设（kstock/presets，随包分发的真正预设面）在引擎树
+// 之外，纳入后才受本门禁保护，否则对产品预设空转假绿。
 const AGENT_PRESET_GLOB = '{packages/preset/agent-presets/presets/*/agent.cordis.yml,../../kstock/presets/*/agent.cordis.yml}'
 
 export interface RuntimeClosureResult {
@@ -69,7 +73,8 @@ export async function verifyRuntimeClosure(
   const failures: string[] = []
   if (presetPaths.length === 0) failures.push(`no agent presets matched ${AGENT_PRESET_GLOB}`)
   if (targets.length === 0) failures.push('python/sdk-runtime/platforms.json defines no runtime targets')
-  failures.push(...await missingPresetPlugins(root, runtimeDependencies, presetPaths, targets))
+  const compositions = await presetCompositions(root, presetPaths, failures)
+  failures.push(...await missingPresetPlugins(runtimeDependencies, compositions, targets))
   for (let index = 0; index < queue.length; index += 1) {
     const packageName = queue[index]
     if (packageName === undefined) continue
@@ -95,11 +100,7 @@ export async function verifyRuntimeClosure(
 
   return {
     failures,
-    presetCount: (await Promise.all(presetPaths.map(async path => {
-      const document = loadCordisYaml(await readFile(resolve(root, path), 'utf8'))
-      const definitions = presetDefinitions(document)
-      return definitions.length > 0 ? definitions.length : (Array.isArray(document) ? 1 : 0)
-    }))).reduce((a, b) => a + b, 0),
+    presetCount: compositions.length,
     workspacePackageCount: queue.length,
   }
 }
@@ -122,41 +123,55 @@ if (import.meta.main) {
   }
 }
 
-async function missingPresetPlugins(
+/** One shipped preset composition: the preset directory name and its plugin rows. */
+interface PresetComposition {
+  id: string
+  plugins: unknown[]
+}
+
+/**
+ * Load each shipped preset file as one agent-plane composition keyed by its
+ * directory name. A file whose root is not a Loader entry array is reported in
+ * {@link failures} and skipped.
+ */
+async function presetCompositions(
   root: string,
-  runtimeDependencies: Readonly<Record<string, string>>,
   presetPaths: readonly string[],
-  targets: readonly string[],
-): Promise<string[]> {
-  const missing = new Map<string, Set<string>>()
-  const failures: string[] = []
+  failures: string[],
+): Promise<PresetComposition[]> {
+  const compositions: PresetComposition[] = []
   for (const presetPath of presetPaths) {
     const document = loadCordisYaml(await readFile(resolve(root, presetPath), 'utf8'))
     if (!Array.isArray(document)) {
       failures.push(`${presetPath}: preset root must be a Loader entry array`)
       continue
     }
-    // KStock patch: 3.0.5 起「组合文件本身即 preset」——presetDefinitions 提不出
-    // @qilin/agent-preset 包装行时，回退为整文件 = 单 preset 定义（id=目录名），
-    // 否则定义数为 0，本门禁对产品预设空转假绿。
-    const definitions = presetDefinitions(document).length > 0
-      ? presetDefinitions(document)
-      : (Array.isArray(document) ? [{ id: basename(dirname(presetPath)), plugins: document }] : [])
-    for (const definition of definitions) {
-      for (const target of targets) {
-        const processPlatform = processPlatformForTarget(target)
-        for (const plugin of activeBarePluginPackages(definition.plugins, processPlatform)) {
-          const version = runtimeDependencies[plugin]
-          if (version?.startsWith('workspace:') === true) continue
-          const preset = definition.id
-          const declaration = version === undefined
-            ? ''
-            : ` [runtime dependency is ${JSON.stringify(version)}; expected workspace:]`
-          const key = `${preset} preset -> ${plugin}${declaration}`
-          const targets = missing.get(key) ?? new Set<string>()
-          targets.add(target)
-          missing.set(key, targets)
-        }
+    compositions.push({ id: basename(dirname(presetPath)), plugins: document })
+  }
+  return compositions
+}
+
+async function missingPresetPlugins(
+  runtimeDependencies: Readonly<Record<string, string>>,
+  compositions: readonly PresetComposition[],
+  targets: readonly string[],
+): Promise<string[]> {
+  const missing = new Map<string, Set<string>>()
+  const failures: string[] = []
+  for (const definition of compositions) {
+    for (const target of targets) {
+      const processPlatform = processPlatformForTarget(target)
+      for (const plugin of activeBarePluginPackages(definition.plugins, processPlatform)) {
+        const version = runtimeDependencies[plugin]
+        if (version?.startsWith('workspace:') === true) continue
+        const preset = definition.id
+        const declaration = version === undefined
+          ? ''
+          : ` [runtime dependency is ${JSON.stringify(version)}; expected workspace:]`
+        const key = `${preset} preset -> ${plugin}${declaration}`
+        const targets = missing.get(key) ?? new Set<string>()
+        targets.add(target)
+        missing.set(key, targets)
       }
     }
   }
