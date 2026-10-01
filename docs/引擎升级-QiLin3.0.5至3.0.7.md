@@ -678,3 +678,55 @@ git branch -d upgrade/qilin-3.0.7
 - **占位符扫描**：所有代码块为最终形态（补丁 22 全量替换体、yml 删除段、`withScheduleBundle` 全量实现与测试、死链清理片段、构建清单行、遮蔽条目注册体与图标组件、回滚 node 单行），无 TBD/TODO。✅
 - **一致性**：`_fix_qilin_verify_closure_glob` 函数名与 `apply_skill_patches` 注册行（patch_vendor_skills.py:2190-2193）一致；`SCHEDULE_BUNDLE` = `@qilin/experimental-schedule-bundle` 与上游 `OPTIONAL_BUNDLES`（app-boot/src/profile.ts:297）、bundle 包名（packages/experimental/schedule-bundle/package.json）一致；`withScheduleBundle` 的锚定次序（动效层优先、`@qilin/web-app` 兜底）与 `PROFILE_BUNDLES` 五层顺序一致；Task 2C 的残留断言与 S4b 症状互证；Task 2D 的 `anim-panel` id 与 dsh-animations `PANEL_ID` 实值一致、`priority:-1` 遵循槽遮蔽语义（同 priority 抛错 → 不同 priority 合法遮蔽）、order 20 落位与 7-7c 断言互证。✅
 - **方向核对**：文档中所有关于 schedule 的表述已统一为「启用原生、退役自研」——烟测 7-7/S4/S4b、决策 D1/D3/D4/D5、回滚 profile 面均已按新方向书写，无 3.0.5 旧口径残留。✅
+
+---
+
+## 执行记录（2026-10-01，upgrade/qilin-3.0.7，Mac 开发机）
+
+**结论：升级完成，全链验证通过。** 10 个提交（基线 → 补丁 22 重写 → cordis 组合面 →
+profile 调度层 → automation 退役 → 侧栏置顶 → 快照同步 → CI 断言反转 → runtime
+bundle 清单剔除），合并前烟测 12 项全过（7-3 按上游形态修正为 4 分区，见下）。
+
+**关键验证输出（实测）**：
+
+- 补丁重放：6 个引擎补丁全绿（build-exe / lefthook / ui-chat / verify-runtime-closure /
+  client-build-environment / SidebarRoot CSS），零锚点失配——重写后的补丁 22 首战命中
+- 闭包门禁：`verify-runtime-closure: 11 agent presets and 145 workspace packages form a
+  closed runtime dependency graph.`（11 = 4 shipped + 7 KStock，S3 未触发）
+- 引擎构建：284 client artifacts；分发束 dist-exe 569M（kstock-engine 406M +
+  12 插件**无 automation** + 7 presets）；staging 闭包 209M tar（解压端自检 104 条目通过）
+- check:ci 全绿（含反转后的断言：`source engine schedule bundle layer` /
+  `source engine schedule capability retired`）
+- 首启迁移（7-7b 实测）：日志「kstock profile 已更新（插件依赖 / 动效技能库层 /
+  调度 bundle 层）」；profile bundles 五层含 `@qilin/experimental-schedule-bundle`；
+  `node_modules/@kstock/automation` 死链已清理
+- 引擎 3.0.7 无头启动（打包闭包 + 系统 Node）：schedule bundle 解析成功、
+  `dsh-animations: 8 runtime skills registered`、零 `patch: ... matches nothing` 告警
+- 烟测（用户真机目检 + 无头验证）：7-1/7-2/7-4/7-5/7-6/7-7/7-7b/7-7c/7-8/7-9/7-11 ✅；
+  7-3 按上游形态修正（4 分区）；7-10 随上游测试面（未逐项目检）
+
+**计划外发现与处置（三项，均已提交）**：
+
+1. `scripts/verify_package_resources.py` 的 CI 门禁仍断言旧口径（cordis.patch.yml
+   必须含 `id: schedule` disabled 行）→ 反转为「bundle 层存在 + 退役标记零命中」
+   双断言（c375a80f）。
+2. `scripts/build-runtime-bundle.sh` 的构建/组装清单仍含 automation（Task 2C 只改了
+   build-engine-bundle.sh）→ 同步剔除（2554f2a8）。
+3. **计划流程缺口**：Task 6 `build:desktop` 依赖 `staging/` 由
+   `build-runtime-bundle.sh` 预建——计划 Task 5 只重建了 dist-exe，本地首次打包进了
+   旧闭包（症状即 S4：`cannot resolve profile bundle`）。后续升级手册需在 Task 5/6
+   之间固定「runtime bundle 重建」步骤。
+
+**上游行为变更（用户拍板接受）**：3.0.7 B5-2c sidebar-right 重写撤掉了设置页
+「侧栏右侧」分区注册（tab 管理移至右栏内联 tab 菜单）；KStock 图标映射补丁保留
+（分区若回归自动就位），设置页 KStock 分区为 4 个。
+
+**环境备注（Mac 开发机执行）**：① DSH 会话上下文启动 Electron GUI 会被
+`task_name_for_pid (os/kern) failure` 拒绝（responsible process 归因）——烟测以
+「无头引擎（打包闭包 + 系统 Node 直跑 runtime-bootstrap）+ 用户浏览器目检」完成，
+`open`/Finder 由用户发起不受影响；② 本地未签名构建（`KSTOCK_UNSIGNED_BUILD=1`）
+在 electron-builder 26 跳签 + Electron 模板残留 seal 组合下出现
+「code has no resources but signature indicates they must be present」，需
+`codesign --force --deep -s -` 手动重签后方可启动（仅本地验证形态；CI 发布链
+走正式签名不受影响）；③ lock 刷新按 Mac 适配用 `--refresh-lock`（结果与手改目标
+一致：QiLin → f91c39f6/3.0.7，KSkills 不变）。
