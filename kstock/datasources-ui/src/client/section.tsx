@@ -19,10 +19,6 @@ interface DataSourceView {
   masked: string | null
 }
 
-type DataSourcesKey =
-  | 'title' | 'desc' | 'configured' | 'notConfigured' | 'notPersisted'
-  | 'tokenPlaceholder' | 'clear' | 'save' | 'saving' | 'saved' | 'saveFailed' | 'envName'
-
 /** 分区注入面。 */
 export interface DataSourcesSectionInjected {
   /** 拉取状态视图。 */
@@ -103,7 +99,7 @@ const controller = {
 export function DataSourcesSection({ load, save, t }: DataSourcesSectionProps) {
   const [sources, setSources] = useState<readonly DataSourceView[]>([])
   const [drafts, setDrafts] = useState<Record<string, string>>({})
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
 

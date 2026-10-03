@@ -4,7 +4,7 @@
  */
 import {
   asArr, asNum, asRec, asStr, latestSignals, trendTypeCn, typeCnDir,
-  type MatrixBrief, type RadarDim, type Rec,
+  type RadarDim, type Rec,
 } from './derive.ts'
 
 /** 缠论原生雷达：七边形 + 维度值列表（title 悬浮显示计算依据）。 */

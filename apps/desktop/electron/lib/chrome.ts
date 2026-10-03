@@ -32,9 +32,6 @@ export const SHELL_TITLEBAR_HEIGHT = 48;
 /** renderer → 主进程主题上报前缀（值：dark | light）。 */
 const THEME_REPORT_PREFIX = "__kstock_theme__:";
 
-/** WCO 按钮簇右侧避让宽度（KCoder 实测值：三按钮 ≈138px）。 */
-export const TITLEBAR_PAD_RIGHT = 138;
-
 type ChromeTheme = "dark" | "light";
 
 /** 主题 → 壳配色。取值对齐 @kstock/client-brand tokens：底色=画布 token，

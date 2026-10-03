@@ -24,7 +24,6 @@ import {
 import { IconCopy, IconFlask, IconPlay } from '@kstock/quant-ui'
 import {
   CopyToast,
-  Empty,
   ErrorLine,
   LineOverlay,
   Loading,

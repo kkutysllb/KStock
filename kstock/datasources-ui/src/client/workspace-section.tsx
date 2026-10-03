@@ -12,11 +12,6 @@ import { useEffect, useState } from 'react'
 import { Button } from '@qilin/client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@qilin/client-ui-slots'
 
-type QuantWorkspaceKey =
-  | 'title' | 'desc' | 'current' | 'notConfigured'
-  | 'pick' | 'picking' | 'clear' | 'clearing'
-  | 'saved' | 'cleared' | 'pickFailed' | 'cancelled'
-
 /** 服务端视图（未配置时 path=null）。 */
 interface QuantWorkspaceView {
   path: string | null

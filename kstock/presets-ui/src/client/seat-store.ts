@@ -6,7 +6,6 @@
  * 上游的 copy/delete/设置同步/引导动画（KStock 为固定角色集产品）。
  */
 
-import type { Context as ClientContext } from '@qilin/kylin'
 import type { SnapshotStore } from '@qilin/client-store'
 
 /** KStock 角色 preset id 集（与 kstock/presets/skills.manifest.json 保持同步）。 */

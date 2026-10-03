@@ -25,7 +25,6 @@ import { IconCopy, IconGitBranch, IconPlay } from '@kstock/quant-ui'
 import {
   CopyToast,
   DrawdownChart,
-  Empty,
   ErrorLine,
   LineOverlay,
   Loading,

@@ -10,7 +10,6 @@
  * @module @kstock/quant/news-store
  */
 
-import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
@@ -130,7 +129,7 @@ export class NewsStore {
       .prepare('SELECT archived_at FROM news WHERE archived_at >= ?')
       .all(since) as Array<{ archived_at: number }>
     const buckets = Math.max(1, Math.ceil(spanMs / bucketMs))
-    const counts = new Array<number>(buckets).fill(0)
+    const counts: number[] = Array.from({ length: buckets }, () => 0)
     for (const row of rows) {
       const index = Math.min(buckets - 1, Math.max(0, Math.floor((Number(row.archived_at) - since) / bucketMs)))
       counts[index]! += 1

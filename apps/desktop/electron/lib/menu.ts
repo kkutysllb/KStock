@@ -167,7 +167,7 @@ export function buildTray(engine: EngineProcess): void {
 }
 
 /** macOS 托盘菜单：菜单栏已覆盖全部功能，只留窗口开关、更新与退出。 */
-function buildDarwinTrayMenu(engine: EngineProcess): MenuItemConstructorOptions[] {
+function buildDarwinTrayMenu(_engine: EngineProcess): MenuItemConstructorOptions[] {
   return [
     { label: "显示窗口", click: () => showMainWindow() },
     { label: "隐藏窗口", click: () => activeWindow()?.hide() },

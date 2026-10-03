@@ -146,6 +146,9 @@ function repairStagedScope(sourceNodeModules, stagedNodeModules) {
       copyPackage(`${scope}/${entry.name}`);
     }
   }
+  // 刻意先做快照：循环体内 copyPackage 会往 repaired 追加新补齐的包，
+  // 快照把本轮修复限制在「扫描到的那一层」，避免无限加深拷贝。
+  // oxlint-disable-next-line unicorn/no-useless-spread -- 上述快照语义是有意的
   for (const name of [...repaired]) {
     const manifestPath = join(stagedNodeModules, name, "package.json");
     if (!existsSync(manifestPath)) continue;

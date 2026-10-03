@@ -10,6 +10,7 @@ const ENTRY_PATH = '/workspace'
 /** 最短密码长度，与服务端账户策略一致。 */
 const PASSWORD_MINIMUM = 8
 /** 浏览器会折叠/忽略的字符与绝对 URL 形态，命中即视为不安全的 next。 */
+// oxlint-disable-next-line no-control-regex -- 控制字符正是本规则要检查的对象（见上行注释）
 const URL_NOISE = /[\u0000-\u0020\u007f]/u
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/iu
 

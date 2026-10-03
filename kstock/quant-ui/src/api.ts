@@ -32,10 +32,6 @@ function get<T>(path: string): Promise<T> {
   return request<T>(path)
 }
 
-function post<T>(path: string, body: unknown): Promise<T> {
-  return request<T>(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-}
-
 /** JSON.stringify 丢 undefined 字段，减少服务端二义性。 */
 function jsonBody(body: Record<string, unknown>): { method: 'POST' | 'PATCH'; headers: Record<string, string>; body: string } {
   return { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }

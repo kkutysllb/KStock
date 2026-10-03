@@ -107,7 +107,7 @@ export async function saveDataSources(dataRoot: string, values: unknown): Promis
 
   const path = secretsPath(dataRoot)
   const existing = existsSync(path) ? readFileSync(path, 'utf8') : ''
-  const { lines, values: current } = parseSecrets(existing)
+  const { lines } = parseSecrets(existing)
 
   const written = new Set<string>()
   const output: string[] = []

@@ -817,6 +817,17 @@ function dataSourceStatus() {
 }
 //#endregion
 //#region src/news-store.ts
+/**
+* 财经新闻档案库（sqlite 滚动留存 + 检索 + 热词/频率统计）。
+*
+* live feed 只有 60 秒缓存、刷新即失——本库把每次刷新见到的条目
+* INSERT OR IGNORE 进 `~/.kstock/news.db`（按标题去重），支撑：
+* - 历史检索（「早上那条关于 XX 的新闻」）；
+* - 热词榜（近 N 小时标题的字典词频）；
+* - 快讯频率（按小时桶计数，新闻密度作为市场情绪代理）。
+* 独立 db 文件，与 product/kstock.db（1.x 兼容库）互不干扰。
+* @module @kstock/quant/news-store
+*/
 var NewsStore = class {
 	db;
 	constructor(dataRoot) {
@@ -889,7 +900,7 @@ var NewsStore = class {
 		const since = Date.now() - spanMs;
 		const rows = this.db.prepare("SELECT archived_at FROM news WHERE archived_at >= ?").all(since);
 		const buckets = Math.max(1, Math.ceil(spanMs / bucketMs));
-		const counts = new Array(buckets).fill(0);
+		const counts = Array.from({ length: buckets }, () => 0);
 		for (const row of rows) {
 			const index = Math.min(buckets - 1, Math.max(0, Math.floor((Number(row.archived_at) - since) / bucketMs)));
 			counts[index] += 1;
@@ -1138,7 +1149,7 @@ async function saveDataSources(dataRoot, values) {
 	}
 	if (input.size === 0) throw new StoreError(422, "values 为空");
 	const path = secretsPath(dataRoot);
-	const { lines, values: current } = parseSecrets(existsSync(path) ? readFileSync(path, "utf8") : "");
+	const { lines } = parseSecrets(existsSync(path) ? readFileSync(path, "utf8") : "");
 	const written = /* @__PURE__ */ new Set();
 	const output = [];
 	for (const line of lines) {
