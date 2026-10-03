@@ -55,8 +55,12 @@ jobs:
       # 否则闭包构建第一步就断（G2）。
       # --full = 契约校验（HEAD / 基线 / 7 处补丁标记）+ install + build +
       # verify-runtime-closure；引擎侧 pnpm 由 scripts/qilin-pnpm.sh 钉版 11.7.0。
+      # 超时 45 分钟（原 30）：引擎不再随仓库检出，每个 runner 都要从零
+      # clone 分支 + 装 ~2 GB 依赖 + 构建 monorepo（无 pnpm store 缓存，
+      # 三平台并发）；分支不可达时还会走仓库内 bundle 兜底重建，再叠一段时间。
+      # 30 分钟在 windows runner 上偏紧，宁可给足也不让发版在引导步被超时打断。
       - name: 引擎克隆引导（契约校验 + 依赖 + 产物）
-        timeout-minutes: 30
+        timeout-minutes: 45
         run: scripts/engine-bootstrap.sh --full
       # macOS 双层签名 + 公证，凭据**仅 macOS 步注入**（平台化注入）：
       # 1) 闭包 Mach-O 预签：build-runtime-bundle.sh → presign-engine-macos.sh
