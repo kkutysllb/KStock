@@ -1,6 +1,5 @@
 packages:
   - "accounts"
-  - "automation"
   - "presets-ui"
   - "datasources-ui"
   - "client-brand"
