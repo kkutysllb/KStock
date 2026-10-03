@@ -46,7 +46,7 @@ for arg in "$@"; do
     --full) DO_INSTALL=1; DO_BUILD=1; DO_VERIFY=1 ;;
     --prune) DO_PRUNE=1 ;;
     -h|--help) sed -n '2,31p' "${BASH_SOURCE[0]}"; exit 0 ;;
-    *) echo "engine-bootstrap: 未知参数 $arg（-h 看用法）" >&2; exit 2 ;;
+    *) echo "engine-bootstrap: 未知参数 ${arg}（-h 看用法）" >&2; exit 2 ;;
   esac
 done
 
@@ -108,7 +108,7 @@ if [ "$DO_PRUNE" -eq 1 ]; then
   if [ -e "$ENGINE_DIR" ]; then
     git -C "$ENGINE_DIR" rev-parse --git-dir >/dev/null 2>&1 \
       || die "$ENGINE_DIR 存在但不是 git 仓库，拒绝删除（请人工确认）"
-    log "删除引擎克隆释放磁盘：$ENGINE_DIR（$(du -sh "$ENGINE_DIR" 2>/dev/null | cut -f1 || echo '?')）"
+    log "删除引擎克隆释放磁盘：${ENGINE_DIR}（$(du -sh "$ENGINE_DIR" 2>/dev/null | cut -f1 || echo '?')）"
     rm -rf "$ENGINE_DIR"
   else
     log "引擎克隆不存在，无需删除：$ENGINE_DIR"
@@ -119,8 +119,8 @@ fi
 
 if [ "$DO_FETCH" -eq 1 ]; then
   if ! git -C "$ENGINE_DIR" rev-parse --git-dir >/dev/null 2>&1; then
-    [ -e "$ENGINE_DIR" ] && die "引擎目录已存在但不是 git 仓库：$ENGINE_DIR（先移走或删掉）"
-    log "克隆引擎 fork 分支：$REPO（$BRANCH）"
+    [ -e "$ENGINE_DIR" ] && die "引擎目录已存在但不是 git 仓库：${ENGINE_DIR}（先移走或删掉）"
+    log "克隆引擎 fork 分支：${REPO}（${BRANCH}）"
     mkdir -p "$(dirname "$ENGINE_DIR")"
     # 在父目录里用相对目标名克隆：Windows（Git Bash / MSYS）下把 MSYS 形态的
     # 绝对路径交给 git clone 的目标位并不可靠，相对名则两种形态都成立。
@@ -136,26 +136,26 @@ if [ "$DO_FETCH" -eq 1 ]; then
               && git clone --quiet --single-branch "$REPO" "$(basename "$ENGINE_DIR")") \
            && git -C "$ENGINE_DIR" fetch --quiet "$ROOT/$PATCH_BUNDLE" \
                 "refs/heads/$BRANCH:refs/heads/$BRANCH"; then
-          log "bundle 重建完成（分支 $BRANCH）"
+          log "bundle 重建完成（分支 ${BRANCH}）"
         else
           rm -rf "$ENGINE_DIR"
           offline_hint
-          die "bundle 重建失败：$ROOT/$PATCH_BUNDLE（远端基线对象是否还在默认分支历史里？）"
+          die "bundle 重建失败：$ROOT/${PATCH_BUNDLE}（远端基线对象是否还在默认分支历史里？）"
         fi
       else
         offline_hint
-        die "克隆失败：$REPO（分支 $BRANCH 是否已推送？仓库内也无 $PATCH_BUNDLE）"
+        die "克隆失败：${REPO}（分支 $BRANCH 是否已推送？仓库内也无 ${PATCH_BUNDLE}）"
       fi
     fi
   else
-    log "更新引擎克隆（fetch origin $BRANCH）"
+    log "更新引擎克隆（fetch origin ${BRANCH}）"
     git -C "$ENGINE_DIR" fetch --quiet origin "$BRANCH" \
       || echo "! fetch 失败（离线或分支尚未推送），按本地已有对象继续"
   fi
 fi
 
 git -C "$ENGINE_DIR" rev-parse --git-dir >/dev/null 2>&1 \
-  || die "引擎克隆缺失且未引导：$ENGINE_DIR（去掉 --check-only 重跑，或按 docs/引擎分支工作流.md 引导）"
+  || die "引擎克隆缺失且未引导：${ENGINE_DIR}（去掉 --check-only 重跑，或按 docs/引擎分支工作流.md 引导）"
 
 CURRENT="$(git -C "$ENGINE_DIR" rev-parse HEAD)"
 if [ "$CURRENT" != "$COMMIT" ]; then
@@ -188,4 +188,4 @@ if [ "$DO_VERIFY" -eq 1 ]; then
   "$ROOT/scripts/qilin-pnpm.sh" run verify-runtime-closure
 fi
 
-log "完成：$(git -C "$ENGINE_DIR" rev-parse --short HEAD)（$BRANCH）"
+log "完成：$(git -C "$ENGINE_DIR" rev-parse --short HEAD)（${BRANCH}）"
