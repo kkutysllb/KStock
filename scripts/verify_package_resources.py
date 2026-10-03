@@ -305,14 +305,35 @@ class Verifier:
                 version = json.loads(version_file.read_text(encoding="utf-8")).get("version")
             except (OSError, ValueError):
                 version = None
-            vendor_version = json.loads(
-                (self.repo_root / "vendor" / "qilin" / "package.json").read_text(encoding="utf-8")
-            ).get("version")
-            if version and version == vendor_version:
+            # 事实源是 upstream.lock.json 的 engine.version（引擎克隆是**可弃的
+            # 工作副本**，跑过 --prune 或换了机器时不在磁盘上）。克隆在场时再
+            # 交叉核对 package.json，抓住「lock 与克隆漂移」。
+            engine_lock = {}
+            try:
+                engine_lock = json.loads(
+                    (self.repo_root / "upstream.lock.json").read_text(encoding="utf-8")
+                ).get("engine") or {}
+            except (OSError, ValueError):
+                engine_lock = {}
+            expected_version = engine_lock.get("version")
+            clone_manifest = self.repo_root / "vendor" / "qilin" / "package.json"
+            if clone_manifest.is_file():
+                try:
+                    clone_version = json.loads(clone_manifest.read_text(encoding="utf-8")).get("version")
+                except (OSError, ValueError):
+                    clone_version = None
+                if clone_version and expected_version and clone_version != expected_version:
+                    self.fail("engine clone version vs lock",
+                              f"vendor/qilin package.json {clone_version!r} "
+                              f"!= upstream.lock.json engine.version {expected_version!r}")
+                elif clone_version:
+                    expected_version = clone_version
+            if version and version == expected_version:
                 self.pass_(f"product closure engine version = {version}")
             else:
                 self.fail("product closure engine version",
-                          f".runtime-version={version!r} != vendor/qilin package.json {vendor_version!r}")
+                          f".runtime-version={version!r} != engine.version {expected_version!r}"
+                          "（upstream.lock.json）")
 
         for pkg in ("accounts", "chan-ui", "client-brand", "datasources-ui",
                     "news-ui", "presets-ui", "quant", "quant-factors", "quant-reports",

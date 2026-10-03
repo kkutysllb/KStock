@@ -32,7 +32,10 @@ pnpm dev:desktop                          # 启动桌面端（壳自动拉起引
 
 > 引擎源码不在本仓：`vendor/qilin` 是 QiLin fork 分支 `kstock/<基线>` 的
 > git 克隆（不入库），由 `scripts/engine-bootstrap.sh` 按
-> `upstream.lock.json` 引导。见 [引擎分支工作流](docs/引擎分支工作流.md)。
+> `upstream.lock.json` 引导。它是**可弃的工作副本**——`bash
+> scripts/engine-bootstrap.sh --prune` 可删掉约 3.5 GB，需要构建或跑门禁时
+> 重新引导即可（分支未推送时脚本用 `upstream/patches/*.bundle` 逐位重建）。
+> 见 [引擎分支工作流](docs/引擎分支工作流.md)。
 
 浏览器直连引擎（无 Electron）：
 
@@ -49,6 +52,7 @@ node --import tsx/esm apps/cli/src/bin.ts --profile kstock --port 18001
 bash scripts/check-ci.sh              # CI 门禁（插件构建 + 类型检查 + 契约校验）
 bash scripts/check-release.sh         # 发布链路（运行时闭包 + 桌面打包）
 bash scripts/engine-bootstrap.sh        # 引导/更新引擎克隆 + 契约校验
+bash scripts/engine-bootstrap.sh --prune  # 删除引擎克隆释放磁盘（约 3.5 GB）
 python3 scripts/sync_upstreams.py       # 上游同步（KSkills 技能包；引擎见引擎分支工作流）
 ```
 

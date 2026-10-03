@@ -13,6 +13,12 @@
 #   scripts/engine-bootstrap.sh --build           # 追加 pnpm run build
 #   scripts/engine-bootstrap.sh --verify-runtime  # 追加 verify-runtime-closure
 #   scripts/engine-bootstrap.sh --full            # install + build + verify-runtime
+#   scripts/engine-bootstrap.sh --prune           # 删除克隆释放磁盘（约 3.5 GB）
+#
+# 克隆是可弃的：删掉它不丢任何定制——7 个产品提交固化在 fork 分支与
+# upstream/patches/*.patch 里，lock 记录分支与提交口径。需要构建或跑门禁
+# （check-ci / check-release / kstock/* 类型检查都读 vendor/qilin 源码）时
+# 重新引导即可。
 #
 # 环境变量：
 #   KSTOCK_ENGINE_DIR     引擎克隆目录（默认取 lock 的 engine.clone_dir）
@@ -29,6 +35,7 @@ DO_FETCH=1
 DO_INSTALL=0
 DO_BUILD=0
 DO_VERIFY=0
+DO_PRUNE=0
 
 for arg in "$@"; do
   case "$arg" in
@@ -37,7 +44,8 @@ for arg in "$@"; do
     --build) DO_BUILD=1 ;;
     --verify-runtime) DO_VERIFY=1 ;;
     --full) DO_INSTALL=1; DO_BUILD=1; DO_VERIFY=1 ;;
-    -h|--help) sed -n '2,25p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    --prune) DO_PRUNE=1 ;;
+    -h|--help) sed -n '2,31p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "engine-bootstrap: 未知参数 $arg（-h 看用法）" >&2; exit 2 ;;
   esac
 done
@@ -60,6 +68,12 @@ BASE_TAG="$(lock_field engine.base_tag)"
 CLONE_DIR="$(lock_field engine.clone_dir)"
 REPO="${KSTOCK_ENGINE_REMOTE:-$(lock_field engine.repo)}"
 PATCH_SERIES="$(lock_field patch_series)"
+# patch_bundle 是可选字段（旧 lock 没有）：分支未推送时的逐位重建物。
+PATCH_BUNDLE="$("$ROOT/scripts/python.sh" - "$LOCK" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8")).get("patch_bundle", ""))
+PY
+)"
 ENGINE_DIR="${KSTOCK_ENGINE_DIR:-$ROOT/$CLONE_DIR}"
 export KSTOCK_ENGINE_DIR="$ENGINE_DIR"
 
@@ -70,15 +84,38 @@ offline_hint() {
   cat >&2 <<EOF
 
 离线引导路径（upstream/patches 下已存同一提交序列，无需等分支推送）：
-  git init "$ENGINE_DIR"
-  git -C "$ENGINE_DIR" remote add origin <本地 QiLin 仓或 GitHub>
-  git -C "$ENGINE_DIR" fetch origin "$BASE_TAG" "$BRANCH"
+  # ① 逐位重建（推荐；bundle 保留提交对象，HEAD 与 lock.commit 一致）
+  git clone --single-branch "$REPO" "$ENGINE_DIR"
+  git -C "$ENGINE_DIR" fetch "$ROOT/${PATCH_BUNDLE:-<upstream/patches/*.bundle>}" \\
+      "refs/heads/$BRANCH:refs/heads/$BRANCH"
+  git -C "$ENGINE_DIR" checkout "$BRANCH"
+  # ② 逐条重放（无 bundle 时的兜底；committer 时间不同 ⇒ 提交号会变，
+  #    契约断言 2 会红，此时应改为把分支推到 fork）
   git -C "$ENGINE_DIR" checkout "$BASE_COMMIT"
   git -C "$ENGINE_DIR" am "$ROOT/$PATCH_SERIES"
   scripts/engine-bootstrap.sh --check-only
 详见 docs/引擎分支工作流.md。
 EOF
 }
+
+# --prune：引擎克隆是可弃的（.git + node_modules + lib 约 3.5 GB）。
+# 删掉它不丢任何定制——7 个产品提交固化在 fork 分支、
+# upstream/patches/*.bundle（提交对象）与 *.patch（人工审阅序列里）。
+if [ "$DO_PRUNE" -eq 1 ]; then
+  case "$ENGINE_DIR" in
+    ""|"/"|"$ROOT") die "拒绝删除可疑路径：'$ENGINE_DIR'" ;;
+  esac
+  if [ -e "$ENGINE_DIR" ]; then
+    git -C "$ENGINE_DIR" rev-parse --git-dir >/dev/null 2>&1 \
+      || die "$ENGINE_DIR 存在但不是 git 仓库，拒绝删除（请人工确认）"
+    log "删除引擎克隆释放磁盘：$ENGINE_DIR（$(du -sh "$ENGINE_DIR" 2>/dev/null | cut -f1 || echo '?')）"
+    rm -rf "$ENGINE_DIR"
+  else
+    log "引擎克隆不存在，无需删除：$ENGINE_DIR"
+  fi
+  log "完成（需要构建或跑门禁时重跑 scripts/engine-bootstrap.sh）"
+  exit 0
+fi
 
 if [ "$DO_FETCH" -eq 1 ]; then
   if ! git -C "$ENGINE_DIR" rev-parse --git-dir >/dev/null 2>&1; then
@@ -89,8 +126,26 @@ if [ "$DO_FETCH" -eq 1 ]; then
     # 绝对路径交给 git clone 的目标位并不可靠，相对名则两种形态都成立。
     if ! (cd "$(dirname "$ENGINE_DIR")" \
           && git clone --quiet --branch "$BRANCH" --single-branch "$REPO" "$(basename "$ENGINE_DIR")"); then
-      offline_hint
-      die "克隆失败：$REPO（分支 $BRANCH 是否已推送？）"
+      # 分支未推送（或离线）：退到「远端默认分支的基线对象 + 仓库内 bundle」。
+      # 基线提交 lock.base_commit 通常就在远端默认分支的历史里（fork 的 tag
+      # 未必推送，提交一定在），bundle 只需带 7 个提交对象（约 10 KB）。
+      rm -rf "$ENGINE_DIR"
+      if [ -n "$PATCH_BUNDLE" ] && [ -f "$ROOT/$PATCH_BUNDLE" ]; then
+        log "分支 $BRANCH 克隆失败，改用仓库内 bundle 重建：$PATCH_BUNDLE"
+        if (cd "$(dirname "$ENGINE_DIR")" \
+              && git clone --quiet --single-branch "$REPO" "$(basename "$ENGINE_DIR")") \
+           && git -C "$ENGINE_DIR" fetch --quiet "$ROOT/$PATCH_BUNDLE" \
+                "refs/heads/$BRANCH:refs/heads/$BRANCH"; then
+          log "bundle 重建完成（分支 $BRANCH）"
+        else
+          rm -rf "$ENGINE_DIR"
+          offline_hint
+          die "bundle 重建失败：$ROOT/$PATCH_BUNDLE（远端基线对象是否还在默认分支历史里？）"
+        fi
+      else
+        offline_hint
+        die "克隆失败：$REPO（分支 $BRANCH 是否已推送？仓库内也无 $PATCH_BUNDLE）"
+      fi
     fi
   else
     log "更新引擎克隆（fetch origin $BRANCH）"
