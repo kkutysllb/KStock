@@ -1,7 +1,7 @@
 {
   "name": "kstock-desktop",
   "private": true,
-  "version": "2.0.0-rc.2",
+  "version": "2.0.0-rc.3",
   "description": "KStock — A股量化分析 Super Agent 桌面端",
   "homepage": "https://github.com/kkutysllb/KStock",
   "license": "MIT",
