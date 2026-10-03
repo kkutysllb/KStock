@@ -1,8 +1,27 @@
+# -*- coding: utf-8 -*-
+"""同步上游到 KStock 本地镜像（两个上游、两种形态）。
+
+- **QiLin 引擎**：不再是入库源码快照，而是 fork 分支 ``kstock/<基线>`` 的
+  git 克隆（KStock 对引擎的定制就是该分支上的提交，清单锚在
+  ``upstream.lock.json`` 的 ``engine.patches``）。引导与契约校验交给
+  ``scripts/engine-bootstrap.sh``——本脚本只负责刷新 lock 里的分支/提交口径，
+  ``--sync-qilin`` 即该脚本的转发别名。
+- **KSkills 技能包**：仍是「拷进 vendor/ + 补丁幂等重放」的快照形态
+  （``vendor/skills``）。技能是数据而非代码：快照形态换来可离线、可审阅、
+  按技能粒度增删，成本（体积、需重放补丁）可接受。
+
+用法
+----
+    python3 scripts/sync_upstreams.py --refresh-lock    # 刷新 upstream.lock.json
+    python3 scripts/sync_upstreams.py --sync-skills     # 同步技能包 + 重放补丁
+    python3 scripts/sync_upstreams.py --sync-qilin      # 转发到 engine-bootstrap.sh
+"""
+
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -10,59 +29,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = REPO_ROOT / "vendor/skills/approved-skills.json"
 DEFAULT_VENDOR_ROOT = REPO_ROOT / "vendor/skills"
-DEFAULT_QILIN_VENDOR_ROOT = REPO_ROOT / "vendor/qilin"
-DEFAULT_QILIN_ROOT = Path("/Users/libing/kk_Projects/QiLin")
+DEFAULT_ENGINE_DIR = REPO_ROOT / "vendor/qilin"
 DEFAULT_KSKILLS_ROOT = Path("/Users/libing/kk_Projects/KSkills")
 DEFAULT_LOCK_PATH = REPO_ROOT / "upstream.lock.json"
-# 任意深度排除：VCS/缓存/构建产物。3.x monorepo 中 lib/ 与 dist/ 均为
-# tsdown/vite 构建输出（已核实无同名源码目录），vendor/qilin 落地后由
-# `pnpm run build` 重新生成。
-COPY_IGNORE_NAMES = {
-    ".git",
-    ".DS_Store",
-    "__pycache__",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".mypy_cache",
-    ".turbo",
-    ".venv",
-    "node_modules",
-    "lib",
-    "dist",
-    "dist-exe",
-    "build",
-    "coverage",
-}
-# 仅顶层排除：3.x monorepo 中不参与引擎构建/运行的大体积或本地目录。
-# 构建链（pnpm install → pnpm run build → qilin CLI）只需要
-# packages/ apps/ scripts/ python/ native/ vendor/ + 根配置文件；
-# 注意 website/ 与 snapshots/ 必须保留：scripts/ 的 TS 编译引用
-# ../website/docs.ts 与 ../snapshots/*（git 内仅 ~100KB + 8.5MB，其本地
-# node_modules/构建产物由 COPY_IGNORE_NAMES 排除）。
-# .env / .qilin-internal-token 是上游本地密钥，严禁拷入快照。
-TOP_LEVEL_EXCLUDES = {
-    ".worktrees",
-    ".agents",
-    ".artifacts",
-    ".claude",
-    ".drops",
-    ".dsh",
-    ".env",
-    ".pnpm-store",
-    ".qilin",
-    ".qilin-build",
-    ".qilin-internal-token",
-    ".upgrade-0.1.6",
-    ".venv-fonttools",
-    "benchmarks",
-    "plans",
-    # 上游本地 gitignored 遗留：旧 Python 引擎 config_version 残留，无任何消费者
-    "config.yaml",
-}
+DEFAULT_PATCH_SERIES = ""
 
 
 @dataclass(frozen=True)
@@ -98,42 +71,68 @@ def build_skill_copy_plan(
     return plan
 
 
+def _git(repo_root: Path, *args: str) -> str:
+    return subprocess.check_output(
+        ["git", "-C", str(repo_root), *args],
+        text=True,
+        encoding="utf-8",
+    ).strip()
+
+
 def refresh_upstream_lock(
     lock_path: Path = DEFAULT_LOCK_PATH,
-    qilin_root: Path = DEFAULT_QILIN_ROOT,
+    engine_dir: Path = DEFAULT_ENGINE_DIR,
     kskills_root: Path = DEFAULT_KSKILLS_ROOT,
 ) -> dict[str, Any]:
-    import datetime
+    """刷新 lock 的 branch/commit/version 口径，保留基线与补丁清单。
 
-    def _git_head(repo_root: Path) -> str:
-        return subprocess.check_output(
-            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
-            text=True,
-        ).strip()
+    基线（``base_tag``/``base_commit``）与补丁清单（``patches``/
+    ``product_commits``）是人工维护的**契约事实**，刷新只更新「现在这个克隆
+    停在哪」；两者不一致由 ``verify_engine_contract.py`` 响亮拦下，绝不由本
+    函数静默改写。
+    """
+    lock: dict[str, Any] = {}
+    if lock_path.exists():
+        lock = json.loads(lock_path.read_text(encoding="utf-8"))
 
-    qilin_manifest = json.loads((qilin_root / "package.json").read_text(encoding="utf-8"))
-    lock = {
+    engine: dict[str, Any] = dict(lock.get("engine") or {})
+    engine.setdefault("name", "QiLin")
+    engine.setdefault("repo", "https://github.com/kkutysllb/QiLin.git")
+    engine.setdefault("clone_dir", str(DEFAULT_ENGINE_DIR.relative_to(REPO_ROOT)))
+
+    branch = _git(engine_dir, "rev-parse", "--abbrev-ref", "HEAD")
+    if branch == "HEAD":
+        # detached HEAD：保留 lock 里记录的分支名（提交才是事实源）。
+        branch = str(engine.get("branch", "HEAD"))
+    engine["branch"] = branch
+    engine["commit"] = _git(engine_dir, "rev-parse", "HEAD")
+    engine_manifest = json.loads((engine_dir / "package.json").read_text(encoding="utf-8"))
+    engine["version"] = engine_manifest.get("version", engine.get("version", "unknown"))
+
+    skills: dict[str, Any] = dict(lock.get("skills") or {})
+    skills.update(
+        {
+            "name": "KSkills",
+            "path": str(kskills_root),
+            "branch": "main",
+            "commit": _git(kskills_root, "rev-parse", "HEAD"),
+        }
+    )
+
+    new_lock = {
         "generated_at": datetime.date.today().isoformat(),
-        "repositories": {
-            "QiLin": {
-                "path": str(qilin_root),
-                "branch": "main",
-                "commit": _git_head(qilin_root),
-                "version": qilin_manifest.get("version", "unknown"),
-            },
-            "KSkills": {
-                "path": str(kskills_root),
-                "branch": "main",
-                "commit": _git_head(kskills_root),
-            },
-        },
-        "skills_manifest": "vendor/skills/approved-skills.json",
+        "engine": engine,
+        "patch_series": lock.get("patch_series", DEFAULT_PATCH_SERIES),
+        "skills": skills,
+        "skills_manifest": lock.get(
+            "skills_manifest", "vendor/skills/approved-skills.json"
+        ),
     }
     lock_path.write_text(
-        json.dumps(lock, ensure_ascii=False, indent=2) + "\n",
+        json.dumps(new_lock, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    return lock
+    return new_lock
 
 
 def sync_skill_pack(
@@ -141,7 +140,9 @@ def sync_skill_pack(
     vendor_root: Path = DEFAULT_VENDOR_ROOT,
     manifest_path: Path = DEFAULT_MANIFEST,
 ) -> list[SkillCopyItem]:
-    plan = build_skill_copy_plan(source_root=source_root, vendor_root=vendor_root, manifest_path=manifest_path)
+    plan = build_skill_copy_plan(
+        source_root=source_root, vendor_root=vendor_root, manifest_path=manifest_path
+    )
     for item in plan:
         if not item.source_dir.exists():
             raise FileNotFoundError(f"找不到技能源目录：{item.source_dir}")
@@ -153,10 +154,8 @@ def sync_skill_pack(
     # 本地修复集中在 patch_vendor_skills.py 幂等重放）。
     # 直接以 python scripts/sync_upstreams.py 运行时项目根不在 sys.path，
     # 需显式注入以保证 scripts 包可导入（python -m 方式则无需）。
-    import sys as _sys
-
-    if str(REPO_ROOT) not in _sys.path:
-        _sys.path.insert(0, str(REPO_ROOT))
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
     from scripts.patch_vendor_skills import apply_skill_patches
 
     patched = apply_skill_patches(vendor_root=vendor_root)
@@ -167,106 +166,58 @@ def sync_skill_pack(
     return plan
 
 
-def _make_ignore(source_root: Path):
-    def _ignore(dirpath: str, names: list[str]) -> set[str]:
-        ignored = {name for name in names if name in COPY_IGNORE_NAMES}
-        ignored.update(name for name in names if name.endswith(".egg-info"))
-        ignored.update(name for name in names if name.endswith(".pyc"))
-        ignored.update(name for name in names if name.endswith(".tsbuildinfo"))
-        if Path(dirpath) == source_root:
-            ignored.update(name for name in names if name in TOP_LEVEL_EXCLUDES)
-        return ignored
-
-    return _ignore
-
-
-def sync_qilin_engine(
-    source_root: Path = DEFAULT_QILIN_ROOT,
-    vendor_root: Path = DEFAULT_QILIN_VENDOR_ROOT,
-) -> None:
-    if not source_root.exists():
-        raise FileNotFoundError(f"找不到 QiLin 源目录：{source_root}")
-    if vendor_root.exists():
-        shutil.rmtree(vendor_root)
-
-    vendor_root.parent.mkdir(parents=True, exist_ok=True)
-    # symlinks=True：上游根部的 CLAUDE.md 等为相对符号链接，按链接原样保留，
-    # 不解引用（避免内容重复，也避免悬空链接导致复制失败）。
-    shutil.copytree(source_root, vendor_root, ignore=_make_ignore(source_root), symlinks=True)
-
-
-def estimate_qilin_snapshot(
-    source_root: Path = DEFAULT_QILIN_ROOT,
-) -> tuple[int, int]:
-    """按 sync_qilin_engine 相同的排除规则估算快照体积（字节）与文件数。"""
-    total_bytes = 0
-    total_files = 0
-    for dirpath, dirnames, filenames in os.walk(source_root):
-        at_top = Path(dirpath) == source_root
-        dirnames[:] = [
-            name
-            for name in dirnames
-            if name not in COPY_IGNORE_NAMES
-            and not (at_top and name in TOP_LEVEL_EXCLUDES)
-            and not name.endswith(".egg-info")
-        ]
-        for filename in filenames:
-            if filename.endswith(".pyc"):
-                continue
-            candidate = Path(dirpath) / filename
-            if candidate.is_symlink():
-                continue
-            total_bytes += candidate.stat().st_size
-            total_files += 1
-    return total_bytes, total_files
+def sync_engine() -> int:
+    """转发到 scripts/engine-bootstrap.sh（克隆/更新 + 契约校验）。"""
+    bootstrap = REPO_ROOT / "scripts" / "engine-bootstrap.sh"
+    if not bootstrap.exists():
+        print(f"找不到 {bootstrap}", file=sys.stderr)
+        return 1
+    bash = shutil.which("bash")
+    if bash is None:
+        print(
+            "未找到 bash——请直接用 Git Bash / WSL 执行 "
+            "scripts/engine-bootstrap.sh",
+            file=sys.stderr,
+        )
+        return 1
+    return subprocess.run(
+        [bash, str(bootstrap)], cwd=str(REPO_ROOT), check=False
+    ).returncode
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="同步 QiLin / KSkills 到 KStock 本地镜像。")
+    parser = argparse.ArgumentParser(
+        description="同步 QiLin 引擎锚点与 KSkills 技能包到 KStock。"
+    )
     parser.add_argument("--refresh-lock", action="store_true", help="刷新上游锁文件。")
-    parser.add_argument("--sync-qilin", action="store_true", help="同步 QiLin 引擎源码快照。")
+    parser.add_argument(
+        "--sync-qilin",
+        action="store_true",
+        help="引导 QiLin 引擎克隆（转发 scripts/engine-bootstrap.sh）。",
+    )
     parser.add_argument("--sync-skills", action="store_true", help="同步精选技能包。")
     parser.add_argument(
-        "--estimate",
-        action="store_true",
-        help="仅估算 QiLin 快照体积（按同步排除规则），不执行复制。",
+        "--engine-dir",
+        type=Path,
+        default=DEFAULT_ENGINE_DIR,
+        help="引擎克隆目录（默认 vendor/qilin）。",
     )
-    parser.add_argument("--qilin-root", type=Path, default=DEFAULT_QILIN_ROOT)
     parser.add_argument("--kskills-root", type=Path, default=DEFAULT_KSKILLS_ROOT)
     parser.add_argument("--vendor-root", type=Path, default=DEFAULT_VENDOR_ROOT)
-    parser.add_argument("--qilin-vendor-root", type=Path, default=DEFAULT_QILIN_VENDOR_ROOT)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--lock-path", type=Path, default=DEFAULT_LOCK_PATH)
     args = parser.parse_args()
 
-    if args.estimate:
-        total_bytes, total_files = estimate_qilin_snapshot(source_root=args.qilin_root)
-        print(
-            f"QiLin 快照估算：{total_files} 个文件，"
-            f"{total_bytes / 1024 / 1024:.1f} MB（排除规则与 --sync-qilin 一致）"
-        )
-        return
-
     if args.refresh_lock:
         refresh_upstream_lock(
             lock_path=args.lock_path,
-            qilin_root=args.qilin_root,
+            engine_dir=args.engine_dir,
             kskills_root=args.kskills_root,
         )
         print(f"已刷新锁文件：{args.lock_path}")
 
     if args.sync_qilin:
-        sync_qilin_engine(
-            source_root=args.qilin_root,
-            vendor_root=args.qilin_vendor_root,
-        )
-        print(f"已同步 QiLin 引擎到：{args.qilin_vendor_root}")
-        # 快照整树重建会冲掉引擎源码上的本地定制，这里立即幂等重放
-        # （引擎束构建 build-engine-bundle.sh 步骤 0 也会再兜底一次）。
-        rc = subprocess.run(
-            [sys.executable, str(REPO_ROOT / "scripts" / "patch_vendor_engine.py")],
-            check=False,
-        ).returncode
+        rc = sync_engine()
         if rc != 0:
             raise SystemExit(rc)
 

@@ -36,14 +36,14 @@ results/
 # 技能包 vendored Python 构建产物（bdist/lib），不入库
 vendor/**/build/
 
-# QiLin 3.x monorepo 快照（vendor/qilin）的本地构建产物——同步脚本拷入的是纯源码，
-# 以下均为 vendor 内执行 pnpm install/build 后生成的产物，不入库
-vendor/qilin/**/lib/
+# QiLin 引擎克隆点 —— 不再是入库源码快照。
+# vendor/qilin 是 QiLin fork 分支（kstock/<基线>，见 upstream.lock.json 的
+# branch+commit）的 git 克隆，由 scripts/engine-bootstrap.sh 引导；含 .git、
+# node_modules 与 lib/dist-exe 构建产物，一律不入库。
+# 产品对引擎的定制以分支提交表达，不再以补丁脚本重放进快照（见
+# docs/引擎分支工作流.md）。
+/vendor/qilin/
 dist-exe/
-vendor/qilin/dist-exe/
-vendor/qilin/**/.turbo/
-vendor/qilin/**/tsconfig*.tsbuildinfo
-vendor/qilin/**/vitest.*.tsbuildinfo
 
 # WorkBuddy 本地工作数据（记忆/日志），不入库
 .workbuddy/

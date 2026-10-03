@@ -1,5 +1,0 @@
-- list "Background jobs":
-  - listitem:
-    - button "Finished 1" [expanded]
-    - button "Clear"
-  - listitem: "bash sleep 45 signal: SIGTERM; web e2e cancellation {{duration}}"

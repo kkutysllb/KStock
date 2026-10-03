@@ -24,10 +24,15 @@ Electron 壳（进程托管 / token 引导 / 托盘 / 更新器）
 前置：Node ≥ 22.5（含 node:sqlite）、pnpm、Python 3（仅脚本用）。
 
 ```bash
-pnpm install                          # 根工作区（Electron 壳）
-bash scripts/build-engine-bundle.sh   # 构建引擎分发束（首次约 3-10 分钟）
-pnpm dev:desktop                      # 启动桌面端（壳自动拉起引擎并注入 token）
+pnpm install                              # 根工作区（Electron 壳）
+bash scripts/engine-bootstrap.sh --full   # 引擎克隆（fork 分支）+ 依赖 + 产物
+bash scripts/build-engine-bundle.sh       # 构建引擎分发束（首次约 3-10 分钟）
+pnpm dev:desktop                          # 启动桌面端（壳自动拉起引擎并注入 token）
 ```
+
+> 引擎源码不在本仓：`vendor/qilin` 是 QiLin fork 分支 `kstock/<基线>` 的
+> git 克隆（不入库），由 `scripts/engine-bootstrap.sh` 按
+> `upstream.lock.json` 引导。见 [引擎分支工作流](docs/引擎分支工作流.md)。
 
 浏览器直连引擎（无 Electron）：
 
@@ -42,8 +47,9 @@ node --import tsx/esm apps/cli/src/bin.ts --profile kstock --port 18001
 
 ```bash
 bash scripts/check-ci.sh              # CI 门禁（插件构建 + 类型检查 + 契约校验）
-bash scripts/check-release.sh         # 发布链路（引擎束 + 桌面打包）
-python3 scripts/sync_upstreams.py     # 上游同步（QiLin / KSkills）
+bash scripts/check-release.sh         # 发布链路（运行时闭包 + 桌面打包）
+bash scripts/engine-bootstrap.sh        # 引导/更新引擎克隆 + 契约校验
+python3 scripts/sync_upstreams.py       # 上游同步（KSkills 技能包；引擎见引擎分支工作流）
 ```
 
 ## 文档
@@ -51,7 +57,8 @@ python3 scripts/sync_upstreams.py     # 上游同步（QiLin / KSkills）
 - [运行说明](docs/运行说明.md)
 - [首次运行](docs/首次运行.md)
 - [配置说明](docs/配置说明.md)
-- [2.0 特性差异与迁移说明](docs/2.0-特性差异与迁移说明.md)
+- [引擎分支工作流](docs/引擎分支工作流.md)
 - [上游同步](docs/上游同步.md)
+- [2.0 特性差异与迁移说明](docs/2.0-特性差异与迁移说明.md)
 - [发布说明](docs/发布说明.md)
 - 历史文档：[docs/archive](docs/archive)

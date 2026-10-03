@@ -24,13 +24,18 @@ STAGING="$ROOT/staging"
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
-[ -d "$ROOT/vendor/qilin" ] || die "缺 vendor/qilin（先 sync:upstream）"
+[ -d "$ROOT/vendor/qilin" ] || die "缺 vendor/qilin 引擎克隆（先 bash scripts/engine-bootstrap.sh）"
 [ -f "$ROOT/scripts/qilin-pnpm.sh" ] || die "缺 scripts/qilin-pnpm.sh"
 
-# ── 1. KStock 插件包构建（与旧脚本同一组包与构建方式）────────────────
-log "重放引擎本地补丁（patch_vendor_engine，幂等）"
-"$ROOT/scripts/python.sh" "$ROOT/scripts/patch_vendor_engine.py"
+# ── 0. 引擎克隆契约校验（产品补丁已固化为 fork 分支提交，不再重放）──────
+# 对引擎源码的定制全部是 QiLin kstock/<基线> 分支上的提交（清单见
+# upstream.lock.json 的 engine.patches）：HEAD 必须等于锁定提交、基线必须是
+# 它的祖先、7 处补丁标记必须都在。任何偏离在这里响亮失败，而不是把
+# 「跑在未验证引擎上」的包发出去。
+log "校验引擎克隆契约（HEAD vs upstream.lock.json + 补丁标记）"
+bash "$ROOT/scripts/engine-bootstrap.sh" --check-only
 
+# ── 1. KStock 插件包构建（与旧脚本同一组包与构建方式）────────────────
 # preset 随行技能是 gitignore 的生成物（kstock/presets/*/skills/），语料源在
 # vendor/skills/public，由 patch_vendor_skills 按 skills.manifest.json 镜像
 # 发布——全新 runner 缺这步会让打包断言「presets carry skill directories」红。

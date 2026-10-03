@@ -57,6 +57,11 @@ KStock 对上游技能包的全部本地修复：同步完成后自动重放，�
    sandbox-path-guide（2.0 工作区路径纪律整体重写版，替换上游 1.x 虚拟
    路径版）。源码在 kstock/skills 下不受上游同步影响，每次补丁执行时
    与 vendor 比对并按需覆盖；ensure 后一并发布进 preset 随行目录。
+9. **引擎侧定制已迁出本脚本**：对 QiLin 引擎源码的 7 处改动（打包 staging /
+   lefthook / 外链预检 / preset glob / 版本徽章 / 设置分区图标 / 侧栏拆行）
+   现以 QiLin fork 分支 ``kstock/<基线>`` 上的提交表达，锚在
+   ``upstream.lock.json`` 的 ``engine.patches``，由 ``scripts/engine-bootstrap.sh``
+   与 ``scripts/verify_engine_contract.py`` 校验；本脚本只处理 ``vendor/skills``。
 
 幂等性：每个补丁应用前检查目标状态，已修复则跳过，可重复执行。
 """
@@ -866,30 +871,6 @@ def _patch_file(path: Path, name: str, apply_fn) -> bool:
     return True
 
 
-# 本次执行中「锚点失配」的引擎补丁（相对 REPO_ROOT 的路径）；main() 据此非零退出。
-_ENGINE_PATCH_FAILURES: list[str] = []
-
-
-def _patch_engine_file(path: Path, rel_path: str, marker: str, apply_fn) -> bool:
-    """引擎源码补丁重放：已应用=静默跳过；锚点失配=记入失败清单。
-
-    与 patch_vendor_engine.py 的 fail-loud 口径一致——宁可构建失败，
-    也不要悄悄丢掉本地定制（补丁 14/15/21/22 都是这样丢过或差点丢掉的）。
-    """
-    if not path.exists():
-        _ENGINE_PATCH_FAILURES.append(f"{rel_path}（目标文件缺失）")
-        return False
-    text = path.read_text(encoding="utf-8")
-    if marker in text:
-        return False
-    patched = apply_fn(text)
-    if patched is None or patched == text:
-        _ENGINE_PATCH_FAILURES.append(rel_path)
-        return False
-    path.write_text(patched, encoding="utf-8")
-    return True
-
-
 def _fix_ts_bug(text: str) -> str | None:
     """修复 ts import bug；已修复返回 None（幂等跳过）。"""
     if not _TS_FALLBACK_PATTERN.search(text) and not _TS_USE_PATTERN.search(text):
@@ -1276,290 +1257,6 @@ def _fix_kk_data_adapter(text: str, levels: int) -> str | None:
         + _KK_DATA_ADAPTER_ANCHOR
     )
     return text.replace(_KK_DATA_ADAPTER_ANCHOR, injection, 1)
-
-
-# ── qilin 引擎打包 staging 修复（Windows 传递 workspace 包漏带）───────────
-# 实机现象（win-x64 SEA exe 启动即死）：runtime-bootstrap.mjs 的
-# import.meta.resolve('@qilin/sandbox-windows-acl/runner') 报
-# ERR_MODULE_NOT_FOUND——包不在 pkg 快照里。根因指向 pnpm deploy --legacy
-# 在 Windows 上把传递 workspace 依赖（ACL 包经 @qilin/sandbox-local 引入）
-# 留在部署源而未落 staging；上游 restoreLegacyHoists 只兜清单**直接**依赖。
-# 补丁在 materializeStagedLinks 之后加 repairStagedScope：把部署源
-# @qilin/@deepseek-ai 两个 workspace scope 下缺失于 staging 的包补拷进去
-# （只限这两个 scope——源 node_modules 还有 @types/@yao-pkg 等 devDep
-# scope，全量拷会把开发依赖灌进 exe），再对补拷包的非 scope 运行时依赖
-# （如 ACL 的 koffi）做一次清单驱动补拷。锚点失配时静默跳过（上游结构
-# 变化需人工重放评估），已含 repairStagedScope 标记则幂等跳过。
-_QIILIN_EXE_SCRIPT_REL = "qilin/scripts/build-exe-for-python-sdk.ts"
-_REPAIR_MARKER = "repairStagedScope"
-_REPAIR_CALL_ANCHOR = "    await this.materializeStagedLinks()"
-_REPAIR_METHOD_ANCHOR = "  /** Add the executable entry and pkg assets to the staged manifest. */"
-_REPAIR_METHOD = '''  /**
-   * KStock patch: repair workspace-scope packages missing from staging.
-   *
-   * pnpm's legacy deploy on Windows can leave transitive workspace
-   * dependencies hoisted at the deploy source instead of the target;
-   * `restoreLegacyHoists` only covers the manifest's direct dependencies,
-   * so a package like `@qilin/sandbox-windows-acl` (reached through
-   * `@qilin/sandbox-local`) can be absent from the packaged payload while
-   * the SEA executable still boots into `runtime-bootstrap.mjs` and fails
-   * at its first bare import. Copy scope packages that exist at the deploy
-   * source but are missing from staging, then top up the non-scoped
-   * runtime dependencies of everything that was repaired.
-   */
-  private async repairStagedScope(): Promise<void> {
-    if (this.cli.dryRun) {
-      console.log('build-exe-for-python-sdk: [dry-run] repair staged workspace scope packages')
-      return
-    }
-    const sourceNodeModules = resolve(root, DEPLOY_SOURCE_NODE_MODULES)
-    const stagedNodeModules = join(this.staging, 'node_modules')
-    const scopes = ['@qilin', '@deepseek-ai']
-    const repaired: string[] = []
-    const copyPackage = async (name: string): Promise<void> => {
-      const destination = join(stagedNodeModules, name)
-      if (existsSync(join(destination, 'package.json'))) return
-      const source = join(sourceNodeModules, name)
-      if (!existsSync(join(source, 'package.json'))) return
-      const nestedNodeModules = join(source, 'node_modules')
-      await mkdir(dirname(destination), { recursive: true })
-      await cp(source, destination, {
-        recursive: true,
-        dereference: true,
-        filter: path => path !== nestedNodeModules && !path.startsWith(nestedNodeModules + sep),
-      })
-      repaired.push(name)
-    }
-    for (const scope of scopes) {
-      const scopeDir = join(sourceNodeModules, scope)
-      if (!existsSync(scopeDir)) continue
-      for (const entry of await readdir(scopeDir, { withFileTypes: true })) {
-        if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
-        await copyPackage(`${scope}/${entry.name}`)
-      }
-    }
-    for (const name of [...repaired]) {
-      const manifestPath = join(stagedNodeModules, name, 'package.json')
-      if (!existsSync(manifestPath)) continue
-      const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
-        dependencies?: Record<string, string>
-      }
-      for (const dependency of Object.keys(manifest.dependencies ?? {})) {
-        if (dependency.startsWith('@')) continue
-        await copyPackage(dependency)
-      }
-    }
-    if (repaired.length > 0) {
-      console.log(`build-exe-for-python-sdk: repaired staged workspace packages: ${repaired.join(', ')}`)
-    }
-  }
-
-'''
-
-
-def _fix_qilin_staging_scope(text: str) -> str | None:
-    """给 build-exe-for-python-sdk.ts 注入 repairStagedScope；已修/锚点失配返回 None。"""
-    if _REPAIR_MARKER in text:
-        return None
-    if _REPAIR_CALL_ANCHOR not in text or _REPAIR_METHOD_ANCHOR not in text:
-        return None
-    patched = text.replace(
-        _REPAIR_CALL_ANCHOR,
-        _REPAIR_CALL_ANCHOR + "\n    await this." + _REPAIR_MARKER + "()",
-        1,
-    )
-    patched = patched.replace(
-        _REPAIR_METHOD_ANCHOR,
-        _REPAIR_METHOD + _REPAIR_METHOD_ANCHOR,
-        1,
-    )
-    return patched
-
-
-# ── 补丁 15：install-lefthook 容忍缺 lefthook（production 安装不炸）────────
-# 实机（Windows）：`pnpm run build` 前 pnpm 11 的 deps 自检判定不同步，自动
-# 跑 `pnpm install --production`；vendor 根 postinstall 静态
-# `import lefthook/package.json`（lefthook 是 devDependency，--production 不
-# 安装）→ ERR_MODULE_NOT_FOUND → install exit 1 → 连带 build 失败。
-# 修法：静态导入改可选动态导入（缺失即 undefined），main() 里的守卫同步改
-# 可选链——该场景本就不装 git hooks，静默降级是正确行为。锚点失配静默跳过。
-_LEFTHOOK_SCRIPT_REL = "qilin/scripts/install-lefthook.mjs"
-_LEFTHOOK_MARKER = "KStock patch: 生产安装"
-_LEFTHOOK_IMPORT_ANCHOR = "import lefthookPackage from 'lefthook/package.json' with { type: 'json' }"
-_LEFTHOOK_IMPORT_REPLACEMENT = '''let lefthookPackage
-try {
-  lefthookPackage = (await import('lefthook/package.json', { with: { type: 'json' } })).default
-} catch {
-  // KStock patch: 生产安装（--production）省略 devDependency lefthook；
-  // 该场景不装 git hooks，静默降级而非让整次安装失败。
-  lefthookPackage = undefined
-}'''
-_LEFTHOOK_GUARD_ANCHOR = "  if (typeof lefthookPackage.bin?.lefthook !== 'string') return"
-_LEFTHOOK_GUARD_REPLACEMENT = "  if (typeof lefthookPackage?.bin?.lefthook !== 'string') return"
-
-
-def _fix_qilin_lefthook_optional(text: str) -> str | None:
-    """install-lefthook.mjs 的 lefthook 导入改可选；已修/锚点失配返回 None。"""
-    if _LEFTHOOK_MARKER in text:
-        return None
-    if _LEFTHOOK_IMPORT_ANCHOR not in text or _LEFTHOOK_GUARD_ANCHOR not in text:
-        return None
-    patched = text.replace(_LEFTHOOK_IMPORT_ANCHOR, _LEFTHOOK_IMPORT_REPLACEMENT, 1)
-    return patched.replace(_LEFTHOOK_GUARD_ANCHOR, _LEFTHOOK_GUARD_REPLACEMENT, 1)
-
-
-# ── 补丁 21：ui-chat 外链先经宿主可嵌性预检（内嵌浏览器白屏修复）──────────
-# 实测（升级 3.0.5 后真机）：会话内外链（券商研报等）在内嵌浏览器中白屏
-# 无提示——Chromium 对 X-Frame-Options / frame-ancestors 拒绝渲染的响应
-# 照常触发 iframe load，客户端与成功加载不可区分，引擎的 onError 失败
-# 路径永不触发。修法：openExternalLink 先 fetch 同源宿主路由
-# /kstock-api/frame-check（kstock/quant 的 Node 侧 HEAD 预检响应头），
-# 不可嵌直接 window.open 外部（壳转系统浏览器），预检失败退回内嵌尝试
-# （宽松降级，与 frame-check 模块口径一致）。非 kstock profile 下该路由
-# 404 → catch → 内嵌，行为与上游一致。锚点失配 fail-loud（见 `_patch_engine_file`）。
-_UI_CHAT_APPLY_REL = "qilin/packages/client/ui-chat/src/client/apply.ts"
-_UI_CHAT_PREFLIGHT_MARKER = "KStock patch: X-Frame-Options"
-# 3.0.5 起外链条件多了 linkOpening 侧栏偏好判定——锚点随之更新，
-# 替换体必须原样保留该条件，否则会改掉上游「外链在侧栏打开」的用户偏好。
-_UI_CHAT_OPEN_LINK_ANCHOR = """          openExternalLink: (url) => {
-            if (linkOpening.getSnapshot() === 'sidebar' && ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
-              ctx.sidebarRight.openTab('browser', { params: { url } })
-            } else {
-              window.open(url, '_blank', 'noopener,noreferrer')
-            }
-          },"""
-_UI_CHAT_OPEN_LINK_REPLACEMENT = """          openExternalLink: (url) => {
-            if (linkOpening.getSnapshot() === 'sidebar' && ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
-              // KStock patch: X-Frame-Options / frame-ancestors refusals still
-              // fire the iframe load event, so the embedded Browser renders a
-              // blank frame with no failure notice. Ask the KStock host route
-              // whether the URL is embeddable and open externally when it is
-              // not; preflight failure falls back to the embedded attempt.
-              void fetch(`/kstock-api/frame-check?url=${encodeURIComponent(url)}`)
-                .then(response => response.json() as Promise<{ embeddable?: boolean }>)
-                .then(result => {
-                  if (result.embeddable === true) ctx.sidebarRight.openTab('browser', { params: { url } })
-                  else window.open(url, '_blank', 'noopener,noreferrer')
-                })
-                .catch(() => { ctx.sidebarRight.openTab('browser', { params: { url } }) })
-            } else {
-              window.open(url, '_blank', 'noopener,noreferrer')
-            }
-          },"""
-
-
-def _fix_qilin_chat_link_preflight(text: str) -> str | None:
-    """ui-chat openExternalLink 先经 /kstock-api/frame-check 预检；已修/锚点失配返回 None。"""
-    if _UI_CHAT_PREFLIGHT_MARKER in text:
-        return None
-    if _UI_CHAT_OPEN_LINK_ANCHOR not in text:
-        return None
-    return text.replace(_UI_CHAT_OPEN_LINK_ANCHOR, _UI_CHAT_OPEN_LINK_REPLACEMENT, 1)
-
-
-# ── 补丁 22：verify-runtime-closure 的 preset 门禁纳入 KStock 预设（3.0.7 适配）──
-# 3.0.7 上游（B9，1104ef2d）重写本门禁：AGENT_PRESET_GLOB 原生指向 shipped
-# 预设目录 packages/preset/agent-presets/presets/*/agent.cordis.yml，「组合文件
-# 本身即 preset」（整文件 = 单定义，id = 目录名，见 presetCompositions）也已
-# 原生化——3.0.5 补丁的另外三段（path 导入补 basename/dirname、定义回退、
-# presetCount 口径）随上游实现整体退役。
-# 残留缺口：KStock 产品态预设在引擎树之外（KStock 仓 kstock/presets），上游
-# glob 覆盖不到 → 门禁对产品预设空转假绿。本补丁只扩 glob 一处。
-_VERIFY_CLOSURE_REL = "qilin/scripts/verify-runtime-closure.ts"
-_VERIFY_CLOSURE_MARKER = "KStock patch: preset glob 扩展"
-_VERIFY_CLOSURE_GLOB_ANCHOR = "const AGENT_PRESET_GLOB = 'packages/preset/agent-presets/presets/*/agent.cordis.yml'"
-_VERIFY_CLOSURE_GLOB_REPLACEMENT = (
-    "// KStock patch: preset glob 扩展——上游 glob 只覆盖引擎 shipped 预设，\n"
-    "// KStock 产品态预设（kstock/presets，随包分发的真正预设面）在引擎树\n"
-    "// 之外，纳入后才受本门禁保护，否则对产品预设空转假绿。\n"
-    "const AGENT_PRESET_GLOB = '{packages/preset/agent-presets/presets/*/agent.cordis.yml,"
-    "../../kstock/presets/*/agent.cordis.yml}'"
-)
-
-
-def _fix_qilin_verify_closure_glob(text: str) -> str | None:
-    """verify-runtime-closure 的 preset glob 纳入 KStock 预设；已修/锚点失配返回 None。"""
-    if _VERIFY_CLOSURE_MARKER in text:
-        return None
-    if _VERIFY_CLOSURE_GLOB_ANCHOR not in text:
-        return None
-    return text.replace(_VERIFY_CLOSURE_GLOB_ANCHOR, _VERIFY_CLOSURE_GLOB_REPLACEMENT, 1)
-
-
-# ── 补丁 23：品牌版本徽章改用 KStock 桌面端版本 ──
-# 引擎在客户端构建期把 QILIN_CLIENT_VERSION（= 引擎仓库版本，如 3.0.5）
-# 烤进 ui-sidebar 的品牌徽章，侧栏词标旁会挂出引擎版本号。KStock 的版本
-# 事实源是 apps/desktop/package.json（发布脚本升版），补丁为
-# repositoryClientBuildEnvironment 增加 KSTOCK_CLIENT_VERSION 覆盖口：
-# scripts/qilin-pnpm.sh 统一从桌面端清单注入「桌面端 vX.Y.Z」，未设置时
-# 行为与上游逐字一致（?? 回落），official 构建面不动。
-_VERIFY_CLOSURE_CLIENT_ENV_REL = "qilin/scripts/client-build-environment.ts"
-_KSTOCK_CLIENT_VERSION_MARKER = "KStock patch: 桌面端版本徽章"
-_KSTOCK_CLIENT_VERSION_ANCHOR = """    ...(dirty === true ? { QILIN_CLIENT_GIT_DIRTY: 'true' } : {}),
-    QILIN_CLIENT_VERSION: repositoryVersion(root),"""
-_KSTOCK_CLIENT_VERSION_REPLACEMENT = """    ...(dirty === true ? { QILIN_CLIENT_GIT_DIRTY: 'true' } : {}),
-    // KStock patch: 桌面端版本徽章——KSTOCK_CLIENT_VERSION 由
-    // scripts/qilin-pnpm.sh 从 apps/desktop/package.json 注入（桌面端 vX.Y.Z），
-    // 未设置时回落引擎仓库版本，行为与上游一致。
-    QILIN_CLIENT_VERSION: environment.KSTOCK_CLIENT_VERSION ?? repositoryVersion(root),"""
-
-
-def _fix_kstock_client_version_badge(text: str) -> str | None:
-    """品牌徽章版本允许 KSTOCK_CLIENT_VERSION 覆盖；已修/锚点失配返回 None。"""
-    if _KSTOCK_CLIENT_VERSION_MARKER in text:
-        return None
-    if _KSTOCK_CLIENT_VERSION_ANCHOR not in text:
-        return None
-    return text.replace(_KSTOCK_CLIENT_VERSION_ANCHOR, _KSTOCK_CLIENT_VERSION_REPLACEMENT, 1)
-
-
-# ── 补丁 24：侧栏品牌行与红绿灯拆成两行（对齐 KCoder 头部布局）──
-# 上游 darwin 桌面态把 logoRow 以 margin-top:-12px 拉进 topStrip（52px 拖拽
-# 条，红绿灯落位其中），品牌徽章与红绿灯挤在同一排。KStock 侧栏左上是
-# 品牌区，叠灯后拥挤且遮挡；去掉上提规则，让灯条独占一行、品牌行保持
-# 自然行距在其下——与 KCoder 桌面端头部一致。
-_SIDEBAR_TOPSTRIP_CSS_REL = "qilin/packages/client/ui-sidebar/src/client/SidebarRoot.module.css"
-_SIDEBAR_TOPSTRIP_MARKER = "KStock patch: 品牌行不再上提"
-_SIDEBAR_TOPSTRIP_PAIRS: tuple[tuple[str, str], ...] = (
-    (
-        # 灯条高度 52px → 48px（KStock 顶栏口径，KStock 壳 trafficLightPosition 同步对齐）。
-        """.topStrip {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  height: 52px;""",
-        """.topStrip {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  height: 48px;""",
-    ),
-    (
-        # 品牌行不再上提进灯条——两行布局（对齐 KCoder 桌面端头部）。
-        """.topStrip + .logoRow {
-  margin-top: -12px;
-}""",
-        """/*
- * KStock patch: 品牌行不再上提——topStrip（窗口拖拽条 + 红绿灯落位带）
- * 独占一行，logoRow 保持自然行距在其下（对齐 KCoder 桌面端头部布局），
- * 避免品牌徽章与红绿灯同排拥挤。
- */""",
-    ),
-)
-
-
-def _fix_sidebar_topstrip_logo_overlap(text: str) -> str | None:
-    """侧栏品牌行与红绿灯拆行 + 灯条 48px；已修/锚点失配返回 None。"""
-    if _SIDEBAR_TOPSTRIP_MARKER in text:
-        return None
-    patched = text
-    for anchor, replacement in _SIDEBAR_TOPSTRIP_PAIRS:
-        if anchor not in patched:
-            return None
-        patched = patched.replace(anchor, replacement, 1)
-    return patched
 
 
 # ── 补丁 16：kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界）──
@@ -2146,30 +1843,6 @@ def apply_skill_patches(vendor_root: Path = DEFAULT_VENDOR_ROOT) -> list[str]:
     # KStock 自有技能 ensure（html-report / market-linkage / sandbox-path-guide…）。
     for rel_path in _ensure_owned_skills(vendor_root):
         changed.append(rel_path)
-    # qilin 引擎打包脚本（Windows staging 修复，补丁 14）。
-    qilin_script = REPO_ROOT / "vendor" / "qilin" / "scripts" / "build-exe-for-python-sdk.ts"
-    if _patch_engine_file(qilin_script, _QIILIN_EXE_SCRIPT_REL, _REPAIR_MARKER, _fix_qilin_staging_scope):
-        changed.append(_QIILIN_EXE_SCRIPT_REL)
-    # qilin git hooks 安装脚本（production 安装容忍缺 lefthook，补丁 15）。
-    lefthook_script = REPO_ROOT / "vendor" / "qilin" / "scripts" / "install-lefthook.mjs"
-    if _patch_engine_file(lefthook_script, _LEFTHOOK_SCRIPT_REL, _LEFTHOOK_MARKER, _fix_qilin_lefthook_optional):
-        changed.append(_LEFTHOOK_SCRIPT_REL)
-    # qilin ui-chat 外链宿主预检（内嵌浏览器白屏修复，补丁 21）。
-    ui_chat_apply = REPO_ROOT / "vendor" / "qilin" / "packages" / "client" / "ui-chat" / "src" / "client" / "apply.ts"
-    if _patch_engine_file(ui_chat_apply, _UI_CHAT_APPLY_REL, _UI_CHAT_PREFLIGHT_MARKER, _fix_qilin_chat_link_preflight):
-        changed.append(_UI_CHAT_APPLY_REL)
-    # qilin runtime 闭包门禁的 preset glob 回退（补丁 22）。
-    verify_closure = REPO_ROOT / "vendor" / "qilin" / "scripts" / "verify-runtime-closure.ts"
-    if _patch_engine_file(verify_closure, _VERIFY_CLOSURE_REL, _VERIFY_CLOSURE_MARKER, _fix_qilin_verify_closure_glob):
-        changed.append(_VERIFY_CLOSURE_REL)
-    # qilin 客户端构建环境的桌面端版本徽章覆盖口（补丁 23）。
-    client_env = REPO_ROOT / "vendor" / "qilin" / "scripts" / "client-build-environment.ts"
-    if _patch_engine_file(client_env, _VERIFY_CLOSURE_CLIENT_ENV_REL, _KSTOCK_CLIENT_VERSION_MARKER, _fix_kstock_client_version_badge):
-        changed.append(_VERIFY_CLOSURE_CLIENT_ENV_REL)
-    # qilin 侧栏品牌行与红绿灯拆行（补丁 24）。
-    sidebar_css = REPO_ROOT / "vendor" / "qilin" / "packages" / "client" / "ui-sidebar" / "src" / "client" / "SidebarRoot.module.css"
-    if _patch_engine_file(sidebar_css, _SIDEBAR_TOPSTRIP_CSS_REL, _SIDEBAR_TOPSTRIP_MARKER, _fix_sidebar_topstrip_logo_overlap):
-        changed.append(_SIDEBAR_TOPSTRIP_CSS_REL)
     # kk_common tushare_client 去 set_token 化（沙箱 HOME 写边界，补丁 16）。
     for rel_path in _TUSHARE_SET_TOKEN_RELS:
         target = vendor_root / rel_path
@@ -2221,12 +1894,6 @@ def main() -> None:
             print(f"  - {rel_path}")
     else:
         print("技能补丁均已就绪，无需改动。")
-    if _ENGINE_PATCH_FAILURES:
-        print("✗ 引擎补丁锚点失配（本地定制未重放，上游可能重构了该处）：", file=sys.stderr)
-        for rel_path in _ENGINE_PATCH_FAILURES:
-            print(f"  - vendor/{rel_path}", file=sys.stderr)
-        raise SystemExit(1)
-
 
 if __name__ == "__main__":
     main()

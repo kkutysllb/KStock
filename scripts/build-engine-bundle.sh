@@ -37,12 +37,16 @@ case "$(uname -s)-$(uname -m)" in
 esac
 UPSTREAM_EXE_BASE="deepseek-harness-sdk-runtime-$TARGET"
 
+# ── 0. 引擎克隆契约校验（产品补丁已固化为 fork 分支提交，不再重放）──────
+# 对引擎源码的定制（含补丁 14 repairStagedScope、15/21-24）全部是 QiLin
+# kstock/<基线> 分支上的提交，清单见 upstream.lock.json 的 engine.patches。
+# 历史教训：补丁曾在步骤 3 才重放，导致 Windows staging 修复实际从未参与
+# 单文件构建（B3）——所以契约校验必须跑在最前，跑在未验证引擎上直接中止。
+echo "==> 校验引擎克隆契约（HEAD vs upstream.lock.json + 补丁标记）"
+bash "$REPO_ROOT/scripts/engine-bootstrap.sh" --check-only
+
 # ── 1. KStock 插件包构建（宿主 + 四库界面 + 品牌 + 账户 + 定时任务）──────
-echo "==> 重放引擎本地补丁（patch_vendor_engine + patch_vendor_skills，幂等）"
-"$REPO_ROOT/scripts/python.sh" "$REPO_ROOT/scripts/patch_vendor_engine.py"
-# 补丁 14（repairStagedScope）改的是 build-exe-for-python-sdk.ts 本身，必须
-# 先于步骤 2 的 exe 构建重放——此前只在步骤 3 重放，Windows staging 修复
-# 实际从未参与单文件构建（B3）。两条均 fail-loud，锚点失配即中止。
+# 技能侧（vendor/skills）仍是同步快照形态，补丁照旧幂等重放（fail-loud）。
 "$REPO_ROOT/scripts/python.sh" "$REPO_ROOT/scripts/patch_vendor_skills.py"
 
 echo "==> 构建 KStock 插件包"

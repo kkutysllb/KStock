@@ -34,7 +34,24 @@ case "$(uname -s)" in
     ;;
 esac
 
-cd "$REPO_ROOT/vendor/qilin"
+# 引擎克隆形态断言：HEAD 必须等于 upstream.lock.json 钉的 engine.commit。
+# 产品对引擎的定制只以 fork 分支提交表达——直接在克隆里改源码会让
+# 「树 == 分支」这条锚失效（构建产物再也追溯不到某个提交）。逃生口：
+# KSTOCK_ENGINE_ALLOW_DIRTY=1（仅诊断/临时实验，用完请还原）。
+ENGINE_DIR="${KSTOCK_ENGINE_DIR:-$REPO_ROOT/vendor/qilin}"
+if [ "${KSTOCK_ENGINE_ALLOW_DIRTY:-}" != "1" ] && git -C "$ENGINE_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  LOCKED_COMMIT="$(node -p "require('$REPO_ROOT/upstream.lock.json').engine.commit" 2>/dev/null || true)"
+  HEAD_COMMIT="$(git -C "$ENGINE_DIR" rev-parse HEAD 2>/dev/null || true)"
+  if [ -n "$LOCKED_COMMIT" ] && [ "$HEAD_COMMIT" != "$LOCKED_COMMIT" ]; then
+    {
+      echo "qilin-pnpm: 引擎克隆 HEAD ${HEAD_COMMIT:0:12} != upstream.lock.json 的 ${LOCKED_COMMIT:0:12}"
+      echo "qilin-pnpm: 先跑 bash scripts/engine-bootstrap.sh（或设 KSTOCK_ENGINE_ALLOW_DIRTY=1 跳过）"
+    } >&2
+    exit 1
+  fi
+fi
+
+cd "$ENGINE_DIR"
 
 # pnpm 11 在跑脚本前做 deps 自检（verifyDepsBeforeRun），判定不同步就用
 # **上次安装记录的 settings** 重放安装；而我们的 build-engine-bundle 步过

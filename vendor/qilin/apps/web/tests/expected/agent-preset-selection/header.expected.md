@@ -1,5 +1,0 @@
-- navigation "Session hierarchy":
-  - button "Seeded turn" [disabled]
-- text: Minimal mode
-- button "1 subagent"
-- button "Open right sidebar"

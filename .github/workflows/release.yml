@@ -49,15 +49,15 @@ jobs:
         with:
           node-version: 24
       - run: pnpm install --frozen-lockfile
-      # vendor/qilin 不在根 workspace（根 pnpm-workspace.yaml 只有 apps/*、
-      # kstock/*），全新 runner 必须显式引导引擎依赖与产物，否则闭包构建
-      # 第一步就断（G2）。引擎侧 pnpm 由 scripts/qilin-pnpm.sh 钉版 11.7.0。
-      - name: 引擎依赖与产物引导
+      # 引擎已退出仓库（vendor/qilin 是 fork 分支 kstock/<基线> 的克隆，见
+      # docs/引擎分支工作流.md），也不在根 workspace（根 pnpm-workspace.yaml
+      # 只有 apps/*、kstock/*）：全新 runner 必须先克隆分支、再装依赖建产物，
+      # 否则闭包构建第一步就断（G2）。
+      # --full = 契约校验（HEAD / 基线 / 7 处补丁标记）+ install + build +
+      # verify-runtime-closure；引擎侧 pnpm 由 scripts/qilin-pnpm.sh 钉版 11.7.0。
+      - name: 引擎克隆引导（契约校验 + 依赖 + 产物）
         timeout-minutes: 30
-        run: |
-          scripts/qilin-pnpm.sh install --frozen-lockfile
-          scripts/qilin-pnpm.sh run build
-          scripts/qilin-pnpm.sh run verify-runtime-closure
+        run: scripts/engine-bootstrap.sh --full
       # macOS 双层签名 + 公证，凭据**仅 macOS 步注入**（平台化注入）：
       # 1) 闭包 Mach-O 预签：build-runtime-bundle.sh → presign-engine-macos.sh
       #    （APPLE_SIGNING_IDENTITY）。electron-builder 不递归签 extraResources，

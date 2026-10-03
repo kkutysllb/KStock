@@ -1,17 +1,74 @@
 {
-  "generated_at": "2026-10-01",
-  "repositories": {
-    "QiLin": {
-      "path": "/Users/libing/kk_Projects/QiLin",
-      "branch": "main",
-      "commit": "f91c39f6438a56045e4622f97767fcc1ec7a5d38",
-      "version": "3.0.7"
-    },
-    "KSkills": {
-      "path": "/Users/libing/kk_Projects/KSkills",
-      "branch": "main",
-      "commit": "fd01489dc41896e0ccb6016253d8b62f02d2b424"
-    }
+  "generated_at": "2026-10-03",
+  "engine": {
+    "name": "QiLin",
+    "repo": "https://github.com/kkutysllb/QiLin.git",
+    "dev_path": "/Users/libing/kk_Projects/QiLin",
+    "clone_dir": "vendor/qilin",
+    "branch": "kstock/3.0.7",
+    "commit": "f3f928957efd48bd2db61e21c1a1085337fdbd23",
+    "base_tag": "v3.0.7",
+    "base_commit": "f91c39f6438a56045e4622f97767fcc1ec7a5d38",
+    "version": "3.0.7",
+    "product_commits": 7,
+    "patches": [
+      {
+        "id": "K01",
+        "commit": "02742224152c83d7dc9d1e4fbf5d9359ec167f70",
+        "file": "scripts/build-exe-for-python-sdk.ts",
+        "marker": "repairStagedScope",
+        "title": "pnpm legacy deploy 漏带 workspace scope 包（SEA 首个裸导入即死）"
+      },
+      {
+        "id": "K02",
+        "commit": "7ee2096faf46af9b2dcc14748032f74d8c229139",
+        "file": "scripts/install-lefthook.mjs",
+        "marker": "KStock patch: 生产安装",
+        "title": "install-lefthook 容忍缺 lefthook（production 安装不再 exit 1）"
+      },
+      {
+        "id": "K03",
+        "commit": "7bba2feef1320b28e8264ed9eabbe6f5b0576bc4",
+        "file": "scripts/verify-runtime-closure.ts",
+        "marker": "KStock patch: preset glob 扩展",
+        "title": "preset 门禁 glob 纳入产品预设目录（避免空转假绿）"
+      },
+      {
+        "id": "K04",
+        "commit": "e24bf593b66a10b5dbbb9e618e033fa444f4e9c9",
+        "file": "scripts/client-build-environment.ts",
+        "marker": "KStock patch: 桌面端版本徽章",
+        "title": "客户端品牌徽章版本允许 KSTOCK_CLIENT_VERSION 覆盖"
+      },
+      {
+        "id": "K05",
+        "commit": "03b8749800bd74e56252a44ef3fda91efe280091",
+        "file": "packages/client/ui-chat/src/client/apply.ts",
+        "marker": "KStock patch: X-Frame-Options",
+        "title": "外链先经宿主 frame-check 预检（内嵌浏览器白屏）"
+      },
+      {
+        "id": "K06",
+        "commit": "37433ee000f7494e3edac4c4de717997480ceeec",
+        "file": "packages/client/ui-settings-general/src/client/SettingsRoot.tsx",
+        "marker": "kstock-quant-workspace",
+        "title": "设置分区图标映射（产品分区不再回落齿轮）"
+      },
+      {
+        "id": "K07",
+        "commit": "f3f928957efd48bd2db61e21c1a1085337fdbd23",
+        "file": "packages/client/ui-sidebar/src/client/SidebarRoot.module.css",
+        "marker": "KStock patch: 品牌行不再上提",
+        "title": "侧栏品牌行与红绿灯拆行（topStrip 48px）"
+      }
+    ]
+  },
+  "patch_series": "upstream/patches/kstock-3.0.7.patch",
+  "skills": {
+    "name": "KSkills",
+    "path": "/Users/libing/kk_Projects/KSkills",
+    "branch": "main",
+    "commit": "fd01489dc41896e0ccb6016253d8b62f02d2b424"
   },
   "skills_manifest": "vendor/skills/approved-skills.json"
 }

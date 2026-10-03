@@ -23,6 +23,14 @@ jobs:
         with:
           node-version: 24
       - run: pnpm install --frozen-lockfile
+      # 引擎已退出仓库（vendor/qilin 是 fork 分支 kstock/<基线> 的克隆，见
+      # docs/引擎分支工作流.md）：插件构建与类型检查要经 tsconfig paths 解析
+      # @qilin/* 源码，必须显式拉分支——与旧形态（引擎源码随检出自带）等价，
+      # 且锚定到 upstream.lock.json 的提交。这一步只克隆 + 契约校验，不装依赖
+      # （CI 检出本来也不含 vendor/qilin 的 node_modules）。
+      - name: 引擎克隆引导（契约校验）
+        timeout-minutes: 10
+        run: scripts/engine-bootstrap.sh
       # 2.0 形态：插件构建 + 类型检查 + 打包资源契约 + 技能包校验。
       # （引擎单文件与桌面安装包的完整构建由 release 流水线覆盖。）
       - run: bash scripts/check-ci.sh

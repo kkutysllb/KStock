@@ -1,2 +1,0 @@
-- button "New terminal"
-- button "Choose shell" [expanded]

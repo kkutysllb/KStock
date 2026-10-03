@@ -458,7 +458,7 @@ function resolveEngineLaunch(): EngineLaunchSpec {
     const cliEntry = join(engineRepo, "apps", "cli", "src", "bin.ts");
     if (!existsSync(cliEntry)) {
       throw new Error(
-        `dev 引擎入口缺失：${cliEntry}（请确认 vendor/qilin 快照完整，或先执行引擎单文件构建）`,
+        `dev 引擎入口缺失：${cliEntry}（先 bash scripts/engine-bootstrap.sh 引导引擎克隆，或执行引擎单文件构建）`,
       );
     }
     // 源码直跑前置：vendor/qilin 需已装依赖（tsx 等）且 packages/*/lib 已
@@ -476,9 +476,8 @@ function resolveEngineLaunch(): EngineLaunchSpec {
         .join("，");
       throw new Error(
         `dev 引擎依赖未就绪：vendor/qilin ${missing}。请先执行（Git Bash / 任意 bash）：\n` +
-          `  cd vendor/qilin && ../../scripts/qilin-pnpm.sh install --frozen-lockfile\n` +
-          `  bash scripts/build-engine-bundle.sh   # 推荐：产物 dist-exe/kstock-engine(.exe) 一步到位\n` +
-          `（不建单文件而走源码直跑时，还需 ../../scripts/qilin-pnpm.sh run build 生成 lib）`,
+          `  scripts/engine-bootstrap.sh --full    # 引导/校验 + 装依赖 + 建 lib + 闭包门禁\n` +
+          `  bash scripts/build-engine-bundle.sh   # 推荐：产物 dist-exe/kstock-engine(.exe) 一步到位`,
       );
     }
     return {
@@ -495,7 +494,7 @@ function resolveEngineLaunch(): EngineLaunchSpec {
   }
 
   throw new Error(
-    `内置引擎缺失：${bundled}（打包态请重装 KStock；dev 态请执行 bash scripts/build-engine-bundle.sh 或确认 vendor/qilin 存在）`,
+    `内置引擎缺失：${bundled}（打包态请重装 KStock；dev 态请执行 bash scripts/build-engine-bundle.sh，或先 bash scripts/engine-bootstrap.sh 引导引擎克隆）`,
   );
 }
 

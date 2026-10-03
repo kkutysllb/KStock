@@ -1,0 +1,395 @@
+From 02742224152c83d7dc9d1e4fbf5d9359ec167f70 Mon Sep 17 00:00:00 2001
+From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 08:46:31 +0800
+Subject: [PATCH 1/7] =?UTF-8?q?fix(sdk-runtime):=20=E4=BF=AE=20pnpm=20lega?=
+ =?UTF-8?q?cy=20deploy=20=E6=BC=8F=E5=B8=A6=20workspace=20scope=20?=
+ =?UTF-8?q?=E5=8C=85=EF=BC=88SEA=20=E9=A6=96=E4=B8=AA=E8=A3=B8=E5=AF=BC?=
+ =?UTF-8?q?=E5=85=A5=E5=8D=B3=E6=AD=BB=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+KStock patch 14（repairStagedScope）。
+
+现象（win-x64 SEA exe 启动即死）：runtime-bootstrap.mjs 的
+import.meta.resolve('@qilin/sandbox-windows-acl/runner') 报
+ERR_MODULE_NOT_FOUND——包不在 pkg 快照里。
+
+根因：pnpm deploy --legacy 在 Windows 上把传递 workspace 依赖（ACL 包经
+@qilin/sandbox-local 引入）留在部署源而未落 staging；上游 restoreLegacyHoists
+只兜清单的直接依赖。
+
+修法：在 materializeStagedLinks 之后追加 repairStagedScope——把部署源
+@qilin/@deepseek-ai 两个 workspace scope 下缺失于 staging 的包补拷进去
+（只限这两个 scope：源 node_modules 还有 @types/@yao-pkg 等 devDep scope，
+全量拷会把开发依赖灌进 exe），再对补拷包的非 scope 运行时依赖（如 ACL 的
+koffi）做一次清单驱动补拷。
+---
+ scripts/build-exe-for-python-sdk.ts | 61 +++++++++++++++++++++++++++++
+ 1 file changed, 61 insertions(+)
+
+diff --git a/scripts/build-exe-for-python-sdk.ts b/scripts/build-exe-for-python-sdk.ts
+index cac0091a9b..780eee0794 100644
+--- a/scripts/build-exe-for-python-sdk.ts
++++ b/scripts/build-exe-for-python-sdk.ts
+@@ -304,6 +304,7 @@ class SingleExeBuild {
+     ])
+     await this.restoreLegacyHoists()
+     await this.materializeStagedLinks()
++    await this.repairStagedScope()
+     if (this.cli.dryRun) {
+       for (const name of DEPLOY_ONLY_DOCS) console.log(`build-exe-for-python-sdk: [dry-run] rm -f ${join(this.staging, name)}`)
+     } else {
+@@ -399,6 +400,66 @@ class SingleExeBuild {
+     return undefined
+   }
+ 
++  /**
++   * KStock patch: repair workspace-scope packages missing from staging.
++   *
++   * pnpm's legacy deploy on Windows can leave transitive workspace
++   * dependencies hoisted at the deploy source instead of the target;
++   * `restoreLegacyHoists` only covers the manifest's direct dependencies,
++   * so a package like `@qilin/sandbox-windows-acl` (reached through
++   * `@qilin/sandbox-local`) can be absent from the packaged payload while
++   * the SEA executable still boots into `runtime-bootstrap.mjs` and fails
++   * at its first bare import. Copy scope packages that exist at the deploy
++   * source but are missing from staging, then top up the non-scoped
++   * runtime dependencies of everything that was repaired.
++   */
++  private async repairStagedScope(): Promise<void> {
++    if (this.cli.dryRun) {
++      console.log('build-exe-for-python-sdk: [dry-run] repair staged workspace scope packages')
++      return
++    }
++    const sourceNodeModules = resolve(root, DEPLOY_SOURCE_NODE_MODULES)
++    const stagedNodeModules = join(this.staging, 'node_modules')
++    const scopes = ['@qilin', '@deepseek-ai']
++    const repaired: string[] = []
++    const copyPackage = async (name: string): Promise<void> => {
++      const destination = join(stagedNodeModules, name)
++      if (existsSync(join(destination, 'package.json'))) return
++      const source = join(sourceNodeModules, name)
++      if (!existsSync(join(source, 'package.json'))) return
++      const nestedNodeModules = join(source, 'node_modules')
++      await mkdir(dirname(destination), { recursive: true })
++      await cp(source, destination, {
++        recursive: true,
++        dereference: true,
++        filter: path => path !== nestedNodeModules && !path.startsWith(nestedNodeModules + sep),
++      })
++      repaired.push(name)
++    }
++    for (const scope of scopes) {
++      const scopeDir = join(sourceNodeModules, scope)
++      if (!existsSync(scopeDir)) continue
++      for (const entry of await readdir(scopeDir, { withFileTypes: true })) {
++        if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
++        await copyPackage(`${scope}/${entry.name}`)
++      }
++    }
++    for (const name of [...repaired]) {
++      const manifestPath = join(stagedNodeModules, name, 'package.json')
++      if (!existsSync(manifestPath)) continue
++      const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
++        dependencies?: Record<string, string>
++      }
++      for (const dependency of Object.keys(manifest.dependencies ?? {})) {
++        if (dependency.startsWith('@')) continue
++        await copyPackage(dependency)
++      }
++    }
++    if (repaired.length > 0) {
++      console.log(`build-exe-for-python-sdk: repaired staged workspace packages: ${repaired.join(', ')}`)
++    }
++  }
++
+   /** Add the executable entry and pkg assets to the staged manifest. */
+   async injectPkgConfig(): Promise<void> {
+     const patch = { bin: ENTRY_BIN, pkg: { assets: ASSET_GLOBS, ignore: OFFICE_ASSET_IGNORES } }
+
+From 7ee2096faf46af9b2dcc14748032f74d8c229139 Mon Sep 17 00:00:00 2001
+From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 08:46:31 +0800
+Subject: [PATCH 2/7] =?UTF-8?q?fix(scripts):=20install-lefthook=20?=
+ =?UTF-8?q?=E5=AE=B9=E5=BF=8D=E7=BC=BA=20lefthook=EF=BC=88production=20?=
+ =?UTF-8?q?=E5=AE=89=E8=A3=85=E4=B8=8D=E5=86=8D=20exit=201=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+KStock patch 15。
+
+现象（Windows 实机）：pnpm run build 前 pnpm 11 的 deps 自检判定不同步，
+自动跑 pnpm install --production；本仓 postinstall 静态
+import lefthook/package.json（lefthook 是 devDependency，--production 不装）
+→ ERR_MODULE_NOT_FOUND → install exit 1 → 连带 build 失败。
+
+修法：静态导入改可选动态导入（缺失即 undefined），main() 守卫同步改可选链。
+该场景本就不装 git hooks，静默降级是正确行为。
+---
+ scripts/install-lefthook.mjs | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/install-lefthook.mjs b/scripts/install-lefthook.mjs
+index adea7e5a5d..8e47b77ff3 100644
+--- a/scripts/install-lefthook.mjs
++++ b/scripts/install-lefthook.mjs
+@@ -14,7 +14,14 @@ import {
+ } from 'node:fs'
+ import { spawnSync } from 'node:child_process'
+ import { dirname, isAbsolute, join, resolve } from 'node:path'
+-import lefthookPackage from 'lefthook/package.json' with { type: 'json' }
++let lefthookPackage
++try {
++  lefthookPackage = (await import('lefthook/package.json', { with: { type: 'json' } })).default
++} catch {
++  // KStock patch: 生产安装（--production）省略 devDependency lefthook；
++  // 该场景不装 git hooks，静默降级而非让整次安装失败。
++  lefthookPackage = undefined
++}
+ 
+ const MINIMUM_GIT = [2, 26, 0]
+ const HOOKS_DIRECTORY = 'qilin-hooks'
+@@ -596,7 +603,7 @@ function refuseScopedHooksPath(entry) {
+ 
+ async function main() {
+   if (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true') return
+-  if (typeof lefthookPackage.bin?.lefthook !== 'string') return
++  if (typeof lefthookPackage?.bin?.lefthook !== 'string') return
+   const probe = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' })
+   if (probe.status !== 0) return
+   const root = stripGitLineTerminator(probe.stdout)
+
+From 7bba2feef1320b28e8264ed9eabbe6f5b0576bc4 Mon Sep 17 00:00:00 2001
+From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 08:46:32 +0800
+Subject: [PATCH 3/7] =?UTF-8?q?fix(verify):=20preset=20=E9=97=A8=E7=A6=81?=
+ =?UTF-8?q?=20glob=20=E7=BA=B3=E5=85=A5=E4=BA=A7=E5=93=81=E9=A2=84?=
+ =?UTF-8?q?=E8=AE=BE=E7=9B=AE=E5=BD=95=EF=BC=88=E9=81=BF=E5=85=8D=E5=AF=B9?=
+ =?UTF-8?q?=E4=BA=A7=E5=93=81=E9=A2=84=E8=AE=BE=E7=A9=BA=E8=BD=AC=E5=81=87?=
+ =?UTF-8?q?=E7=BB=BF=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+KStock patch 22。
+
+上游 AGENT_PRESET_GLOB 只覆盖引擎树内的 shipped 预设
+（packages/preset/agent-presets/presets/*/agent.cordis.yml）；产品态预设位于
+产品仓（../../kstock/presets/*/agent.cordis.yml，随包分发的真正预设面），
+glob 覆盖不到 → 本门禁对产品预设空转假绿。
+
+修法：glob 改为 brace 展开，两个目录一并纳入。相对深度 2 与引擎在产品仓内的
+落点无关（vendor/qilin、engine/qilin 等布局均成立）。
+---
+ scripts/verify-runtime-closure.ts | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/scripts/verify-runtime-closure.ts b/scripts/verify-runtime-closure.ts
+index 274f18dc82..30d6336344 100644
+--- a/scripts/verify-runtime-closure.ts
++++ b/scripts/verify-runtime-closure.ts
+@@ -33,7 +33,10 @@ interface RuntimePlatform {
+ 
+ type RuntimePlatformManifest = Record<string, RuntimePlatform>
+ 
+-const AGENT_PRESET_GLOB = 'packages/preset/agent-presets/presets/*/agent.cordis.yml'
++// KStock patch: preset glob 扩展——上游 glob 只覆盖引擎 shipped 预设，
++// KStock 产品态预设（kstock/presets，随包分发的真正预设面）在引擎树
++// 之外，纳入后才受本门禁保护，否则对产品预设空转假绿。
++const AGENT_PRESET_GLOB = '{packages/preset/agent-presets/presets/*/agent.cordis.yml,../../kstock/presets/*/agent.cordis.yml}'
+ 
+ export interface RuntimeClosureResult {
+   failures: string[]
+
+From e24bf593b66a10b5dbbb9e618e033fa444f4e9c9 Mon Sep 17 00:00:00 2001
+From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 08:46:32 +0800
+Subject: [PATCH 4/7] =?UTF-8?q?feat(build):=20=E5=AE=A2=E6=88=B7=E7=AB=AF?=
+ =?UTF-8?q?=E5=93=81=E7=89=8C=E5=BE=BD=E7=AB=A0=E7=89=88=E6=9C=AC=E5=85=81?=
+ =?UTF-8?q?=E8=AE=B8=E5=A4=96=E9=83=A8=E8=A6=86=E7=9B=96=EF=BC=88KSTOCK=5F?=
+ =?UTF-8?q?CLIENT=5FVERSION=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+KStock patch 23。
+
+引擎在客户端构建期把 QILIN_CLIENT_VERSION（= 引擎仓库版本，如 3.0.7）烤进
+ui-sidebar 的品牌徽章，侧栏词标旁会挂出引擎版本号；产品侧的版本事实源是
+桌面端清单（apps/desktop/package.json）。
+
+修法：为 repositoryClientBuildEnvironment 增加 KSTOCK_CLIENT_VERSION 覆盖口，
+未设置时 ?? 回落引擎仓库版本——与上游逐字一致，official 构建面不动。
+---
+ scripts/client-build-environment.ts | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/scripts/client-build-environment.ts b/scripts/client-build-environment.ts
+index bd22027a66..cc8e8cc22b 100644
+--- a/scripts/client-build-environment.ts
++++ b/scripts/client-build-environment.ts
+@@ -140,7 +140,10 @@ export function repositoryClientBuildEnvironment(
+     ...inherited,
+     QILIN_CLIENT_COMMIT_HASH: repositoryCommitHash(root, environment),
+     ...(dirty === true ? { QILIN_CLIENT_GIT_DIRTY: 'true' } : {}),
+-    QILIN_CLIENT_VERSION: repositoryVersion(root),
++    // KStock patch: 桌面端版本徽章——KSTOCK_CLIENT_VERSION 由
++    // scripts/qilin-pnpm.sh 从 apps/desktop/package.json 注入（桌面端 vX.Y.Z），
++    // 未设置时回落引擎仓库版本，行为与上游一致。
++    QILIN_CLIENT_VERSION: environment.KSTOCK_CLIENT_VERSION ?? repositoryVersion(root),
+   }
+ }
+ 
+
+From 03b8749800bd74e56252a44ef3fda91efe280091 Mon Sep 17 00:00:00 2001
+From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 08:46:35 +0800
+Subject: [PATCH 5/7] =?UTF-8?q?fix(client-ui):=20=E5=A4=96=E9=93=BE?=
+ =?UTF-8?q?=E5=85=88=E7=BB=8F=E5=AE=BF=E4=B8=BB=20frame-check=20=E9=A2=84?=
+ =?UTF-8?q?=E6=A3=80=EF=BC=8C=E9=81=BF=E5=85=8D=E5=86=85=E5=B5=8C=E6=B5=8F?=
+ =?UTF-8?q?=E8=A7=88=E5=99=A8=E7=99=BD=E5=B1=8F?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+KStock patch 21。
+
+现象：X-Frame-Options / frame-ancestors 拒载时 iframe 的 load 事件照常触发，
+侧栏嵌入浏览器渲染成空白帧且无失败提示，用户看不出发生了什么。
+
+修法：openExternalLink 在走嵌入分支前先问宿主路由 /kstock-api/frame-check
+该 URL 是否可嵌入，不可嵌入则改走外部浏览器；预检本身失败时回落原有嵌入
+尝试（不因宿主路由缺失而改变行为）。上游「外链在侧栏打开」的用户偏好
+（linkOpening）判定原样保留。
+---
+ packages/client/ui-chat/src/client/apply.ts | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/packages/client/ui-chat/src/client/apply.ts b/packages/client/ui-chat/src/client/apply.ts
+index 2811429ff7..22a96e760b 100644
+--- a/packages/client/ui-chat/src/client/apply.ts
++++ b/packages/client/ui-chat/src/client/apply.ts
+@@ -204,7 +204,18 @@ export function apply(ctx: Context): void {
+           },
+           openExternalLink: (url) => {
+             if (linkOpening.getSnapshot() === 'sidebar' && ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
+-              ctx.sidebarRight.openTab('browser', { params: { url } })
++              // KStock patch: X-Frame-Options / frame-ancestors refusals still
++              // fire the iframe load event, so the embedded Browser renders a
++              // blank frame with no failure notice. Ask the KStock host route
++              // whether the URL is embeddable and open externally when it is
++              // not; preflight failure falls back to the embedded attempt.
++              void fetch(`/kstock-api/frame-check?url=${encodeURIComponent(url)}`)
++                .then(response => response.json() as Promise<{ embeddable?: boolean }>)
++                .then(result => {
++                  if (result.embeddable === true) ctx.sidebarRight.openTab('browser', { params: { url } })
++                  else window.open(url, '_blank', 'noopener,noreferrer')
++                })
++                .catch(() => { ctx.sidebarRight.openTab('browser', { params: { url } }) })
+             } else {
+               window.open(url, '_blank', 'noopener,noreferrer')
+             }
+
+From 37433ee000f7494e3edac4c4de717997480ceeec Mon Sep 17 00:00:00 2001
+From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 08:46:35 +0800
+Subject: [PATCH 6/7] =?UTF-8?q?feat(client-ui):=20=E6=89=A9=E5=B1=95?=
+ =?UTF-8?q?=E8=AE=BE=E7=BD=AE=E5=88=86=E5=8C=BA=E5=9B=BE=E6=A0=87=E6=98=A0?=
+ =?UTF-8?q?=E5=B0=84=EF=BC=88=E4=BA=A7=E5=93=81=E5=88=86=E5=8C=BA=E4=B8=8D?=
+ =?UTF-8?q?=E5=86=8D=E5=9B=9E=E8=90=BD=E9=BD=BF=E8=BD=AE=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+KStock patch（原 scripts/patch_vendor_engine.py 的两段重放）。
+
+现象：上游 navIcon 对未知 id 一律回落 IconSettingsOutline16，产品新增的
+mcp / skills / sidebar-right / kstock-data-sources / kstock-quant-workspace
+五个分区在设置导航里全是同一个齿轮图标。
+
+修法：导入五个分区图标并补 id → 图标映射。锚点只取「值导入块闭括号 → 紧随的
+type 导入行」这一收尾序列，块内新增/重排导入不会失配。
+---
+ .../ui-settings-general/src/client/SettingsRoot.tsx      | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/packages/client/ui-settings-general/src/client/SettingsRoot.tsx b/packages/client/ui-settings-general/src/client/SettingsRoot.tsx
+index 8113600998..931af6a21d 100644
+--- a/packages/client/ui-settings-general/src/client/SettingsRoot.tsx
++++ b/packages/client/ui-settings-general/src/client/SettingsRoot.tsx
+@@ -20,6 +20,8 @@ import {
+   IconAgentPresetOutline16, IconArchiveOutline20, IconChevronLeftOutline14,
+   IconCloseOutline16, IconDataOutline16, IconPersonalizationOutline16,
+   IconQuestionOutline14, IconSettingsOutline16, useModalLayer,
++  IconApiOutline14, IconDatabaseOutline16, IconGaugeOutline16,
++  IconPanelLeftOutline16, IconSkillOutline16,
+ } from '@qilin/client-ui-primitives'
+ import type { ConnectionIndicatorState } from '@qilin/client-ui-primitives'
+ import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-contract.ts'
+@@ -130,6 +132,13 @@ function navIcon(id: string) {
+   // 20-native glyph in the rail's 16px icon slot, as on the Session row menu.
+   if (id === 'archived-sessions') return <IconArchiveOutline20 className={css.navIcon} size={16} />
+   if (id === 'about') return <IconQuestionOutline14 className={css.navIcon} size={16} />
++  // KStock：扩展分区图标映射（上游 navIcon 对未知 id 一律回落设置齿轮，见
++  // docs/design/icon-refresh/ 与 scripts/patch_vendor_engine.py 的重放记录）。
++  if (id === 'mcp') return <IconApiOutline14 className={css.navIcon} size={16} />
++  if (id === 'skills') return <IconSkillOutline16 className={css.navIcon} size={16} />
++  if (id === 'sidebar-right') return <IconPanelLeftOutline16 className={css.navIcon} size={16} />
++  if (id === 'kstock-data-sources') return <IconDatabaseOutline16 className={css.navIcon} size={16} />
++  if (id === 'kstock-quant-workspace') return <IconGaugeOutline16 className={css.navIcon} size={16} />
+   return <IconSettingsOutline16 className={css.navIcon} size={16} />
+ }
+ 
+
+From f3f928957efd48bd2db61e21c1a1085337fdbd23 Mon Sep 17 00:00:00 2001
+From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
+Date: Sat, 3 Oct 2026 08:46:35 +0800
+Subject: [PATCH 7/7] =?UTF-8?q?style(client-ui):=20=E4=BE=A7=E6=A0=8F?=
+ =?UTF-8?q?=E5=93=81=E7=89=8C=E8=A1=8C=E4=B8=8E=E7=BA=A2=E7=BB=BF=E7=81=AF?=
+ =?UTF-8?q?=E6=8B=86=E8=A1=8C=EF=BC=88topStrip=2052px=20=E2=86=92=2048px?=
+ =?UTF-8?q?=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+KStock patch 24。
+
+现象（darwin 桌面态）：上游把 logoRow 以 margin-top:-12px 拉进 topStrip
+（52px 拖拽条，红绿灯落位其中），品牌徽章与红绿灯挤在同一排且相互遮挡。
+
+修法：去掉上提规则，让灯条独占一行、logoRow 保持自然行距在其下（对齐产品
+桌面端头部布局），灯条高度同步 48px 以匹配产品侧 trafficLightPosition。
+---
+ .../ui-sidebar/src/client/SidebarRoot.module.css       | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/packages/client/ui-sidebar/src/client/SidebarRoot.module.css b/packages/client/ui-sidebar/src/client/SidebarRoot.module.css
+index ff48b31469..42cc25547c 100644
+--- a/packages/client/ui-sidebar/src/client/SidebarRoot.module.css
++++ b/packages/client/ui-sidebar/src/client/SidebarRoot.module.css
+@@ -185,7 +185,7 @@
+   display: flex;
+   align-items: center;
+   justify-content: flex-end;
+-  height: 52px;
++  height: 48px;
+   box-sizing: border-box;
+   margin: -6px calc(-1 * var(--qilin-sidebar-inline-padding)) 0;
+   padding: 0 12px;
+@@ -194,9 +194,11 @@
+ /* The strip's full 52px foot leaves the wordmark too low; the content column
+    tucks 12px back under it, still clear of the toggle (28px control centered
+    in the strip ends at y 40). */
+-.topStrip + .logoRow {
+-  margin-top: -12px;
+-}
++/*
++ * KStock patch: 品牌行不再上提——topStrip（窗口拖拽条 + 红绿灯落位带）
++ * 独占一行，logoRow 保持自然行距在其下（对齐 KCoder 桌面端头部布局），
++ * 避免品牌徽章与红绿灯同排拥挤。
++ */
+ 
+ /* Logo row (figma pad (4,8,4,8)): expanded keeps the panel toggle at the
+    right edge; the rail gives every control the same base left anchor before

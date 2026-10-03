@@ -1,2 +1,0 @@
-- button "Account"
-- button "Reconnecting, reconnect now": Reconnecting
