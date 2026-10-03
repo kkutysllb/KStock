@@ -6,57 +6,57 @@
     "dev_path": "/Users/libing/kk_Projects/QiLin",
     "clone_dir": "vendor/qilin",
     "branch": "kstock/3.0.10",
-    "commit": "2b4a533cb0fe5dd36f36bc7b1c4dd46083abd154",
+    "commit": "e2dfa514d0271c9ecdc4e4c4ba1e730ea4fdde44",
     "base_tag": "v3.0.10",
-    "base_commit": "994f8afd68a0ed4955b70d249fbc13b3fbf48092",
+    "base_commit": "206a48dab39a9cceb14e51628b27962148b28847",
     "version": "3.0.10",
     "product_commits": 7,
     "patches": [
       {
         "id": "K01",
-        "commit": "27b4a907104db8b5cf0ce6ac5dd041a2b20d2f25",
+        "commit": "b4e0878b62f78a75d3d58e781d54d891148aa2f1",
         "file": "scripts/build-exe-for-python-sdk.ts",
         "marker": "repairStagedScope",
         "title": "pnpm legacy deploy 漏带 workspace scope 包（SEA 首个裸导入即死）"
       },
       {
         "id": "K02",
-        "commit": "843977301c764846d00d80a4931f59efb3b3cb3c",
+        "commit": "115e21fae39e12645f4e626f688907056061ad0e",
         "file": "scripts/install-lefthook.mjs",
         "marker": "KStock patch: 生产安装",
         "title": "install-lefthook 容忍缺 lefthook（production 安装不再 exit 1）"
       },
       {
         "id": "K03",
-        "commit": "5ce0dc172892d4f1a08b91d08aa3b7a532d86000",
+        "commit": "173ca6b1de56540747a0d5d79a7774a523cd3eb5",
         "file": "scripts/verify-runtime-closure.ts",
         "marker": "KStock patch: preset glob 扩展",
         "title": "preset 门禁 glob 纳入产品预设目录（避免空转假绿）"
       },
       {
         "id": "K04",
-        "commit": "4530bd096727f9ed7a97413e3edff7a6f252e33d",
+        "commit": "d3c36585a2d091bf32460d31bd6b43400382ccde",
         "file": "scripts/client-build-environment.ts",
         "marker": "KStock patch: 桌面端版本徽章",
         "title": "客户端品牌徽章版本允许 KSTOCK_CLIENT_VERSION 覆盖"
       },
       {
         "id": "K05",
-        "commit": "ac857202256ef67ae2fc67e70458ef85706ec50e",
+        "commit": "2aecb595fcedb233cb54782097f9683306b4e5ad",
         "file": "packages/client/ui-chat/src/client/apply.ts",
         "marker": "KStock patch: X-Frame-Options",
         "title": "外链先经宿主 frame-check 预检（内嵌浏览器白屏）"
       },
       {
         "id": "K06",
-        "commit": "a72941485c454da099cd5226df13d46416e6ced9",
+        "commit": "7724be473a935cbc40e4ac605fb479814149b2b7",
         "file": "packages/client/ui-settings-general/src/client/SettingsRoot.tsx",
         "marker": "kstock-quant-workspace",
         "title": "设置分区图标映射（产品分区不再回落齿轮）"
       },
       {
         "id": "K07",
-        "commit": "2b4a533cb0fe5dd36f36bc7b1c4dd46083abd154",
+        "commit": "e2dfa514d0271c9ecdc4e4c4ba1e730ea4fdde44",
         "file": "packages/client/ui-sidebar/src/client/SidebarRoot.module.css",
         "marker": "KStock patch: 品牌行不再上提",
         "title": "侧栏品牌行与红绿灯拆行（topStrip 48px）"
