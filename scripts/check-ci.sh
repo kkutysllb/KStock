@@ -39,6 +39,13 @@ if [ "$MODE" = "types-only" ]; then
 fi
 
 # ── 全量段 ────────────────────────────────────────────────────────────
+# 脚本可移植性门禁：拦「只在某个 runner 的 shell / locale 下才炸」的写法。
+# 立此门的事故：v2.0.0-rc.3 首次把引擎克隆作为 CI 步骤下发，macOS 作业在
+# 该步 0.76 秒死（`$REPO（` 在 bash 3.2 + UTF-8 locale 下被解析成变量
+# REPO（），而本机 LC_CTYPE=C 永远绿——只有 CI 能发现。详见
+# scripts/verify_shell_portability.py 头注释。
+scripts/python.sh scripts/verify_shell_portability.py
+
 # quant 存储层单测（node:test + tsx）。
 pnpm -C kstock/quant test
 # accounts 包 1.x 账户迁移单测（bcrypt 兼容 / 按需导入 / 登录迁移分支）。
