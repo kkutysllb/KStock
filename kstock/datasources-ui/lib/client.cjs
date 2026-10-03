@@ -72,7 +72,7 @@ window.__ModuleLoader__.load({
 		function DataSourcesSection({ load, save, t }) {
 			const [sources, setSources] = (0, react.useState)([]);
 			const [drafts, setDrafts] = (0, react.useState)({});
-			const [status, setStatus] = (0, react.useState)("loading");
+			const [, setStatus] = (0, react.useState)("loading");
 			const [note, setNote] = (0, react.useState)(null);
 			const [busy, setBusy] = (0, react.useState)(false);
 			(0, react.useEffect)(() => {
