@@ -39,6 +39,29 @@ class Check:
     detail: str = ""
 
 
+def short_sha(value: object) -> str:
+    """提交号短写，仅用于人读消息（字段缺失/非字符串也不许炸）。"""
+    text = str(value).strip() if value else ""
+    return text[:12] if text else "(缺失)"
+
+
+def same_commit(actual: object, expected: object) -> bool:
+    """提交号等价比对：容忍任一侧写成合法缩写（≥7 位）。
+
+    事实源（``upstream.lock.json``）目前存全 40 位，``.runtime-version`` 由
+    ``git rev-parse HEAD`` 写入也是全 40 位；允许短写是为了 lock 侧手工改动时
+    不产生假红。
+    """
+    left = str(actual).strip().lower() if actual else ""
+    right = str(expected).strip().lower() if expected else ""
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    shorter, longer = sorted((left, right), key=len)
+    return len(shorter) >= 7 and longer.startswith(shorter)
+
+
 class Verifier:
     def __init__(self, repo_root: Path, *, source_only: bool = False) -> None:
         self.repo_root = repo_root.resolve()
@@ -302,9 +325,13 @@ class Verifier:
         version_file = closure / ".runtime-version"
         if self.require_path(version_file, "product closure .runtime-version"):
             try:
-                version = json.loads(version_file.read_text(encoding="utf-8")).get("version")
+                marker = json.loads(version_file.read_text(encoding="utf-8"))
             except (OSError, ValueError):
-                version = None
+                marker = {}
+            if not isinstance(marker, dict):
+                marker = {}
+            version = marker.get("version")
+            commit = marker.get("commit")
             # 事实源是 upstream.lock.json 的 engine.version（引擎克隆是**可弃的
             # 工作副本**，跑过 --prune 或换了机器时不在磁盘上）。克隆在场时再
             # 交叉核对 package.json，抓住「lock 与克隆漂移」。
@@ -334,6 +361,26 @@ class Verifier:
                 self.fail("product closure engine version",
                           f".runtime-version={version!r} != engine.version {expected_version!r}"
                           "（upstream.lock.json）")
+
+            # 产物 commit 比对：**同版本号换基座**时 version 完全相同，只有 commit
+            # 能分辨——v3.0.10 的基座就从 994f8afd 换到了 206a48da（标签落定前的
+            # 两个 fix(ci) 提交），旧基座产出的 staging 会被 version 比对静默放行，
+            # 然后打进安装包。故逐 commit 比对，事实源同样是 lock.engine.commit
+            # （克隆在场时的「克隆 HEAD == lock.commit」由 verify_engine_contract.py
+            # 断言，不在这里重复）。
+            expected_commit = engine_lock.get("commit")
+            if not commit:
+                self.fail("product closure engine commit",
+                          ".runtime-version 缺 commit 字段（早于 commit 追踪的产物？）"
+                          "——重建：bash scripts/build-runtime-bundle.sh")
+            elif same_commit(commit, expected_commit):
+                self.pass_(f"product closure engine commit = {short_sha(commit)}")
+            else:
+                self.fail("product closure engine commit",
+                          f".runtime-version commit={short_sha(commit)} "
+                          f"!= upstream.lock.json engine.commit {short_sha(expected_commit)}"
+                          "（同版本号换基座时 version 比对放行，故比对 commit；"
+                          "重建：bash scripts/build-runtime-bundle.sh）")
 
         for pkg in ("accounts", "chan-ui", "client-brand", "datasources-ui",
                     "news-ui", "presets-ui", "quant", "quant-factors", "quant-reports",
