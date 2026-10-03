@@ -1,4 +1,4 @@
-From 02742224152c83d7dc9d1e4fbf5d9359ec167f70 Mon Sep 17 00:00:00 2001
+From 27b4a907104db8b5cf0ce6ac5dd041a2b20d2f25 Mon Sep 17 00:00:00 2001
 From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
 Date: Sat, 3 Oct 2026 08:46:31 +0800
 Subject: [PATCH 1/7] =?UTF-8?q?fix(sdk-runtime):=20=E4=BF=AE=20pnpm=20lega?=
@@ -108,7 +108,7 @@ index cac0091a9b..780eee0794 100644
    async injectPkgConfig(): Promise<void> {
      const patch = { bin: ENTRY_BIN, pkg: { assets: ASSET_GLOBS, ignore: OFFICE_ASSET_IGNORES } }
 
-From 7ee2096faf46af9b2dcc14748032f74d8c229139 Mon Sep 17 00:00:00 2001
+From 843977301c764846d00d80a4931f59efb3b3cb3c Mon Sep 17 00:00:00 2001
 From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
 Date: Sat, 3 Oct 2026 08:46:31 +0800
 Subject: [PATCH 2/7] =?UTF-8?q?fix(scripts):=20install-lefthook=20?=
@@ -161,7 +161,7 @@ index adea7e5a5d..8e47b77ff3 100644
    if (probe.status !== 0) return
    const root = stripGitLineTerminator(probe.stdout)
 
-From 7bba2feef1320b28e8264ed9eabbe6f5b0576bc4 Mon Sep 17 00:00:00 2001
+From 5ce0dc172892d4f1a08b91d08aa3b7a532d86000 Mon Sep 17 00:00:00 2001
 From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
 Date: Sat, 3 Oct 2026 08:46:32 +0800
 Subject: [PATCH 3/7] =?UTF-8?q?fix(verify):=20preset=20=E9=97=A8=E7=A6=81?=
@@ -187,7 +187,7 @@ glob 覆盖不到 → 本门禁对产品预设空转假绿。
  1 file changed, 4 insertions(+), 1 deletion(-)
 
 diff --git a/scripts/verify-runtime-closure.ts b/scripts/verify-runtime-closure.ts
-index 274f18dc82..30d6336344 100644
+index 5e2ec31d55..22dbae6a35 100644
 --- a/scripts/verify-runtime-closure.ts
 +++ b/scripts/verify-runtime-closure.ts
 @@ -33,7 +33,10 @@ interface RuntimePlatform {
@@ -203,7 +203,7 @@ index 274f18dc82..30d6336344 100644
  export interface RuntimeClosureResult {
    failures: string[]
 
-From e24bf593b66a10b5dbbb9e618e033fa444f4e9c9 Mon Sep 17 00:00:00 2001
+From 4530bd096727f9ed7a97413e3edff7a6f252e33d Mon Sep 17 00:00:00 2001
 From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
 Date: Sat, 3 Oct 2026 08:46:32 +0800
 Subject: [PATCH 4/7] =?UTF-8?q?feat(build):=20=E5=AE=A2=E6=88=B7=E7=AB=AF?=
@@ -243,7 +243,7 @@ index bd22027a66..cc8e8cc22b 100644
  }
  
 
-From 03b8749800bd74e56252a44ef3fda91efe280091 Mon Sep 17 00:00:00 2001
+From ac857202256ef67ae2fc67e70458ef85706ec50e Mon Sep 17 00:00:00 2001
 From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
 Date: Sat, 3 Oct 2026 08:46:35 +0800
 Subject: [PATCH 5/7] =?UTF-8?q?fix(client-ui):=20=E5=A4=96=E9=93=BE?=
@@ -292,7 +292,7 @@ index 2811429ff7..22a96e760b 100644
                window.open(url, '_blank', 'noopener,noreferrer')
              }
 
-From 37433ee000f7494e3edac4c4de717997480ceeec Mon Sep 17 00:00:00 2001
+From a72941485c454da099cd5226df13d46416e6ced9 Mon Sep 17 00:00:00 2001
 From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
 Date: Sat, 3 Oct 2026 08:46:35 +0800
 Subject: [PATCH 6/7] =?UTF-8?q?feat(client-ui):=20=E6=89=A9=E5=B1=95?=
@@ -343,7 +343,7 @@ index 8113600998..931af6a21d 100644
  }
  
 
-From f3f928957efd48bd2db61e21c1a1085337fdbd23 Mon Sep 17 00:00:00 2001
+From 2b4a533cb0fe5dd36f36bc7b1c4dd46083abd154 Mon Sep 17 00:00:00 2001
 From: kkutysllb <46704313+kkutysllb@users.noreply.github.com>
 Date: Sat, 3 Oct 2026 08:46:35 +0800
 Subject: [PATCH 7/7] =?UTF-8?q?style(client-ui):=20=E4=BE=A7=E6=A0=8F?=
