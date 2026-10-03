@@ -15,9 +15,18 @@
     "build:desktop": "bash scripts/build-desktop.sh",
     "check:ci": "bash scripts/check-ci.sh",
     "check:release": "bash scripts/check-release.sh",
+    "check:prepush": "bash scripts/prepush.sh",
+    "audit": "node scripts/audit.mjs",
+    "lint": "oxlint kstock apps/desktop scripts",
+    "typecheck": "bash scripts/check-ci.sh --types-only",
     "engine:bootstrap": "bash scripts/engine-bootstrap.sh",
     "engine:verify": "bash scripts/engine-bootstrap.sh --check-only",
     "sync:upstream": "python3 scripts/sync_upstreams.py"
+  },
+  "devDependencies": {
+    "depcheck": "^1.4.7",
+    "oxlint": "^1.82.0",
+    "ts-prune": "^0.10.3"
   },
   "pnpm": {
     "overrides": {

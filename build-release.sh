@@ -3,6 +3,21 @@
 #
 # 本地脚本只负责准备 release commit/tag，并把真正的跨平台桌面打包、签名、
 # 上传交给 GitHub Actions 的 .github/workflows/release.yml。
+#
+# 发版要求（门禁，对齐 KCoder scripts/release.sh ship 口径）：
+#   1. release/<tag>.md 发布说明——GitHub Release 正文来源，缺失即拒绝（--allow-missing-notes 应急）；
+#   2. docs/项目审计-<版本>.md 全仓库审计报告——node scripts/audit.mjs 的处置结论，缺失即拒绝；
+#   3. run_checks → scripts/prepush.sh：审计（TYPECHECK / LINT / SECURITY 三门 +
+#      DEAD EXPORTS / UNUSED DEPS 两报告）+ 引擎契约 13 项 + 打包资源契约 + CI 全量车道；
+#   4. tag 冲突 / 远程 tag / 落后远端等前置检查（本文件）；
+#   5. 打包链门禁由 CI 承担：release.yml → check-release.sh（签名公证 fail-closed）
+#      → verify-desktop-artifacts.sh（V1–V8 产物门禁）→ 发布后 verify_release_assets 交叉比对。
+# 只有 3 可被 --skip-checks 跳过（应急）；1 / 2 是硬门。
+#
+# 常用流程：
+#   node scripts/audit.mjs               # 全仓库审计（三门 + 两报告）
+#   bash scripts/prepush.sh              # 全仓库 pre-push 门（发版前唯一入口）
+#   ./build-release.sh v2.0.0-rc.3       # 升版 + commit + tag + 推送 + 看 CI 出包
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -56,6 +71,11 @@ Examples:
   ./build-release.sh 0.1.1 --no-watch
   ./build-release.sh v0.1.1 --resume --yes
   ./build-release.sh v0.1.1 --skip-checks --no-push
+
+发版前置（硬门，不可跳过）：
+  node scripts/audit.mjs                      # 审计：TYPECHECK/LINT/SECURITY + 两报告
+  docs/项目审计-<版本>.md                      # 审计处置结论（随发版提交入库）
+  release/<tag>.md                            # 发布说明（GitHub Release 正文）
 
 Options:
   --push              Atomic-push current branch and tag. Default: true.
@@ -299,9 +319,10 @@ delete_tag() {
 }
 
 print_plan() {
-  local branch previous_tag
+  local branch previous_tag audit
   branch="$(git symbolic-ref --quiet --short HEAD || true)"
   previous_tag="$(previous_release_tag)"
+  audit="$(audit_report_path || true)"
   log "Release plan"
   cat <<EOF
   Mode:           $([[ "$RESUME" == true ]] && echo "resume existing tag" || echo "prepare new tag")
@@ -309,6 +330,7 @@ print_plan() {
   Repo:           $REPO_SLUG
   Branch:         ${branch:-<detached>}
   Previous tag:   ${previous_tag:-<none>}
+  Audit report:   ${audit:-<missing — 发版前必须补齐>}
   Refresh locks:  $([[ "$SKIP_LOCK" == true ]] && echo no || echo yes)
   Run checks:     $([[ "$SKIP_CHECKS" == true ]] && echo no || echo yes)
   Commit:         $([[ "$NO_COMMIT" == true || "$RESUME" == true ]] && echo no || echo yes)
@@ -355,15 +377,37 @@ refresh_lockfiles() {
   run pnpm install --lockfile-only --ignore-scripts
 }
 
+# 全仓库审计报告（发版前置规定，对齐 KCoder release.sh ship 的 audit-v<版本>.md 门）：
+# 命名沿用本仓既有归档口径 docs/项目审计-<版本>.md（rc.1 / rc.2 同款），
+# 另兼容 release/audit-v<tag>.md。报告随发版提交一并入库；缺失即拒绝发版。
+audit_report_path() {
+  local v="${TAG#v}" candidate
+  for candidate in "docs/项目审计-$v.md" "release/audit-$TAG.md" "release/audit-$v.md"; do
+    if [[ -f "$candidate" ]]; then printf '%s\n' "$candidate"; return 0; fi
+  done
+  return 1
+}
+
+require_audit_report() {
+  local found
+  if found="$(audit_report_path)"; then
+    log "审计报告：$found"
+    return 0
+  fi
+  die "缺全仓库审计报告 docs/项目审计-${TAG#v}.md（对齐 KCoder 的发版前置规定）。"$'\n'\
+"  先跑：node scripts/audit.mjs"$'\n'\
+"  逐条处置发现项（修复或在报告中写明豁免理由）后写报告，随发版提交入库，再发版。"
+}
+
 run_checks() {
   if [[ "$SKIP_CHECKS" == true ]]; then
     log "Skipping checks"
     return 0
   fi
   ensure_pnpm_compatible
-  log "Running release checks"
-  run_shell "scripts/python.sh scripts/verify_package_resources.py --source-only"
-  run_shell "bash scripts/check-ci.sh"
+  require_audit_report
+  log "Running release checks（prepush：审计 + 引擎契约 + 打包资源契约 + CI 全量车道）"
+  run_shell "bash scripts/prepush.sh"
 }
 
 release_notes() {

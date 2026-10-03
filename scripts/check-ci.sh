@@ -4,7 +4,19 @@ cd "$(dirname "$0")/.."
 
 # CI 检查（2.0：QiLin 3.x 引擎插件形态）。
 # 引擎与量化数据面都是 TypeScript 插件；Python 面只剩技能包与打包资源契约校验。
+#
+# 用法：bash scripts/check-ci.sh [--types-only]
+#   --types-only  只跑「插件构建 + 类型检查 + 壳主进程类型检查」段，跳过单测 /
+#                 打包资源契约 / 图标资产等重项。scripts/audit.mjs 的 TYPECHECK
+#                 门复用它——同一套 tsc 命令只有这一份事实源，审计与 CI 不会漂。
+MODE="full"
+case "${1:-}" in
+  ""|--full) ;;
+  --types-only) MODE="types-only" ;;
+  *) echo "check-ci: 未知参数 $1（可用：--types-only / --full）" >&2; exit 2 ;;
+esac
 
+# ── 类型与构建段（--types-only 也跑）──────────────────────────────────
 # KStock 插件包可构建（tsdown 产物：宿主 lib/index.js + 客户端 lib/client.cjs）。
 # quant-ui 是源码型共享包（被四个量化库界面包内联），不单独构建。
 for pkg in accounts client-brand web quant quant-strategies quant-factors quant-selections quant-reports; do
@@ -16,6 +28,17 @@ pnpm -C kstock/accounts exec tsc --noEmit -p tsconfig.json
 for pkg in quant-ui quant-strategies quant-factors quant-selections quant-reports; do
   pnpm -C "kstock/$pkg" exec tsc --noEmit -p tsconfig.json
 done
+
+# Electron 壳：主进程打包 + 类型检查。
+pnpm -C apps/desktop build:electron-main
+pnpm -C apps/desktop exec tsc -p electron/tsconfig.json --noEmit
+
+if [ "$MODE" = "types-only" ]; then
+  echo "check-ci: 类型段通过（--types-only）"
+  exit 0
+fi
+
+# ── 全量段 ────────────────────────────────────────────────────────────
 # quant 存储层单测（node:test + tsx）。
 pnpm -C kstock/quant test
 # accounts 包 1.x 账户迁移单测（bcrypt 兼容 / 按需导入 / 登录迁移分支）。
@@ -24,10 +47,6 @@ pnpm -C kstock/accounts test
 pnpm -C kstock/client-brand test
 # 壳自有静态页底色契约（登录页按钮簇白块事故的回归门：自报前缀 ↔ 路由覆盖）。
 pnpm -C apps/desktop test
-
-# Electron 壳：主进程打包 + 类型检查。
-pnpm -C apps/desktop build:electron-main
-pnpm -C apps/desktop exec tsc -p electron/tsconfig.json --noEmit
 
 # 打包资源契约（源形态）：插件清单 / bundle patch / 技能接线 / 壳模块 / 无遗留模块。
 # python 经解析器调用（Windows Store 桩问题，见 scripts/python.sh）。
